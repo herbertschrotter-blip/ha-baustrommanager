@@ -16,6 +16,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er, 
 
 from .abgleich import abgleich_planen
 from .funktionen.heizung.hochrechnung import hochrechnung_planen
+from .funktionen.heizung.prognose_schatten import prognose_v2_planen
 from .const import ALTE_PLATTFORMEN, CONF_REGEN_SENSOR, CONF_TEMP_SENSOR, CONF_WETTER, DOMAIN, PLATFORMS
 from .daten import struktur
 from .db import async_datenbank_starten, async_rueckweg, async_entfernen as async_db_entfernen, async_spiegeln, mitschreiber_starten, uebernahme_planen
@@ -120,6 +121,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BaustelleConfigEntry) ->
     entry.async_on_unload(nachholen_planen(hass, entry.entry_id))   # Plug-Namen offener Umbenennungen (BSM-031.06c)
     entry.async_on_unload(abgleich_planen(hass, steuerung))   # Inventar ↔ HA beim Start und täglich (BSM-034.04)
     entry.async_on_unload(hochrechnung_planen(hass, steuerung))   # Hochrechnung mit Signatur, Start und täglich (BSM-033.02)
+    entry.async_on_unload(prognose_v2_planen(hass, steuerung))   # Schattenprognose V2, schaltet nichts (BSM-033.09)
     # Optionen und Subentries (Bereiche, Geräte) geändert → neu laden (Muster der Kern-Helfer)
     entry.async_on_unload(entry.add_update_listener(_neu_laden))
     return True

@@ -14,6 +14,12 @@ Prognosestufe (Start, Frost, Extrapolation, Plan) kommt mit P4a; Evidenz ist kei
   (Mittag bis Mittag) mit je ≥ 3 h Plateau und zusammen ≥ 6 h (`OhneSchaetzung.naechte_b`); C ab drei Beobachtungstagen, zwei Läufen, zwölf Plateau-Stunden, H-Streuung ≤ 0,30; D mit
   Validierung. Erster Lauf höchstens B.
 - `betriebsabhaengig`: reguläres und Baseline-H mehr als `h_betriebsabweichung_max_rel` auseinander → kein Pooling.
+
+P4a (BSM-033.09) – **Prognosestufe** (§9.1): die Evidenzstufe, gekappt je Intervall (`kappen`): unbekannter oder kalter
+Start (Aufheizen nicht modelliert), relevanter unvalidierter Frost und Extrapolation → höchstens C; Planmodus (Duty)
+höchstens B. Extrapolation (`extrapoliert`): ΔT außerhalb [0,75·ΔT_min; 1,25·ΔT_max] der Evidenz oder Soll mehr als 1 K
+außerhalb des Trainingsbereichs. `stufe_mit`/`stufe_ohne` = Minimum über den Plan; „gespart“ = Minimum beider Seiten
+und nur bei Vergleichbarkeit (sonst A); die Baustelle = Minimum aller Container (`stufe_gesamt`).
 """
 
 from __future__ import annotations
@@ -24,7 +30,18 @@ import math
 from zoneinfo import ZoneInfo
 
 from .prognose_regeln import PrognoseRegeln
-from .prognose_typen import DutySchaetzung, HSchaetzung, OhneSchaetzung, Stufe, Validierung, ValidierungsPunkt
+from .prognose_typen import (
+    Anfangszustand,
+    DutySchaetzung,
+    HEvidenz,
+    HSchaetzung,
+    OhneSchaetzung,
+    PlanIntervall,
+    Stufe,
+    StufenErgebnis,
+    Validierung,
+    ValidierungsPunkt,
+)
 
 STUFEN: tuple[Stufe, ...] = ("A", "B", "C", "D")
 
@@ -113,3 +130,81 @@ def betriebsabhaengig(h_regulaer: float | None, h_baseline: float | None, regeln
     if h_regulaer is None or h_baseline is None or h_regulaer <= 0:
         return None
     return abs(h_baseline - h_regulaer) / h_regulaer > regeln.h_betriebsabweichung_max_rel
+
+
+# ---------------------------------------------------------------------- P4a: Prognosestufe (§9.1)
+def extrapoliert(ev: HEvidenz | None, delta_k: float, soll_c: float | None, regeln: PrognoseRegeln) -> bool:
+    """Liegt ein Intervall mit Bedarf außerhalb des belegten Bereichs? Ohne belegten Bereich keine Aussage (False)."""
+    if ev is None or delta_k <= 0:
+        return False
+    if ev.delta_t_min_k is not None and ev.delta_t_max_k is not None and not (
+            regeln.extrapolation_delta_min_faktor * ev.delta_t_min_k <= delta_k
+            <= regeln.extrapolation_delta_max_faktor * ev.delta_t_max_k):
+        return True
+    return (soll_c is not None and ev.soll_min_c is not None and ev.soll_max_c is not None
+            and not ev.soll_min_c - regeln.extrapolation_soll_max_k <= soll_c <= ev.soll_max_c + regeln.extrapolation_soll_max_k)
+
+
+_SCHNELL: dict[tuple[str, Stufe, bool, bool, bool, bool], StufenErgebnis] = {}
+
+
+def kappen(evidenz: Stufe, methode: str, *, start_unbekannt: bool = False, frost_unvalidiert: bool = False,
+           extrapolation: bool = False, duty: bool = False) -> StufenErgebnis:
+    """Prognosestufe eines Intervalls aus der Evidenzstufe (gleiche Ergebnisse werden geteilt – viele Intervalle)."""
+    schnell = (methode, evidenz, start_unbekannt, frost_unvalidiert, extrapolation, duty)
+    if (e := _SCHNELL.get(schnell)) is not None:
+        return e
+    p = evidenz
+    gruende: list[str] = []
+    for an, code in ((start_unbekannt, "start_unbekannt"), (frost_unvalidiert, "frost_unvalidiert"),
+                     (extrapolation, "extrapolation")):
+        if an:
+            p = stufe_min(p, "C")
+            gruende.append(code)
+    if duty:
+        p = stufe_min(p, "B")
+        gruende.append("duty")
+    e = _SCHNELL[schnell] = StufenErgebnis(evidenz, p, methode, extrapolation, tuple(gruende))
+    return e
+
+
+def stufe_gesamt(stufen: Sequence[StufenErgebnis], methode: str = "gesamt") -> StufenErgebnis | None:
+    """Minimum über Intervalle bzw. Container – viele gute verdecken keinen schlechten; Gründe vereinigt."""
+    if not stufen:
+        return None
+    gruende = tuple(dict.fromkeys(g for s in stufen for g in s.gruende))
+    methoden = {s.methode for s in stufen}
+    return StufenErgebnis(stufe_min(*(s.evidenz for s in stufen)), stufe_min(*(s.prognose for s in stufen)),
+                          methoden.pop() if len(methoden) == 1 else methode, any(s.extrapolation for s in stufen), gruende)
+
+
+def evidenz_mit(h: HSchaetzung | DutySchaetzung, validierung: Validierung | None, regeln: PrognoseRegeln) -> Stufe:
+    return evidenz_duty(h, regeln) if isinstance(h, DutySchaetzung) else evidenz_h(h, validierung, regeln)
+
+
+def stufe_mit(
+    h: HSchaetzung | DutySchaetzung, validierung: Validierung | None, plan: Sequence[PlanIntervall],
+    dynamik: object | None, regeln: PrognoseRegeln, *, anfang: Anfangszustand | None = None,
+) -> StufenErgebnis:
+    """Prognosestufe „mit Automatik“ über den Plan (Minimum der Intervalle, `prognose_modell.stufen_mit`)."""
+    from .prognose_modell import stufen_mit   # noqa: PLC0415 – Modell und Stufe kennen sich gegenseitig
+
+    return stufe_gesamt(stufen_mit(plan, h, validierung, dynamik, anfang, regeln)) or kappen(
+        evidenz_mit(h, validierung, regeln), "duty" if isinstance(h, DutySchaetzung) else h.methode,
+        duty=isinstance(h, DutySchaetzung))
+
+
+def stufe_ohne(modell: OhneSchaetzung, plan: Sequence[PlanIntervall], regeln: PrognoseRegeln) -> StufenErgebnis:
+    """Prognosestufe des Gegenmodells: eigene Plateau-Evidenz (keine Übernahme von „mit“), Extrapolation → höchstens C."""
+    ev = evidenz_ohne(modell, regeln)
+    stufen = [kappen(ev, modell.methode, extrapolation=modell.t_max_c is not None and extrapoliert(
+        modell.h.evidenz if modell.h is not None else None, modell.t_max_c - iv.aussen_c, None, regeln)) for iv in plan]
+    return stufe_gesamt(stufen) or kappen(ev, modell.methode)
+
+
+def stufe_gespart(mit: StufenErgebnis, ohne: StufenErgebnis, vergleichbar: bool) -> StufenErgebnis:
+    """„gespart“: Minimum beider Prognosestufen; nicht vergleichbar → A."""
+    p = stufe_min(mit.prognose, ohne.prognose) if vergleichbar else "A"
+    gruende = tuple(dict.fromkeys((*mit.gruende, *ohne.gruende, *(() if vergleichbar else ("nicht_vergleichbar",)))))
+    return StufenErgebnis(stufe_min(mit.evidenz, ohne.evidenz), p, "vergleich", mit.extrapolation or ohne.extrapolation,
+                          gruende)

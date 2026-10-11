@@ -403,3 +403,24 @@ def _geraet(g: Any, t: datetime, d: int, z: Any | None, einst: Mapping[str, Any]
         leistung_w=z.leistung_w, leistung_w_max=z.leistung_w_max, erreichbar=z.erreichbar, heizanforderung_s=anforderung,
         staffel_gesperrt_s=nachweis_s(z.staffel_gesperrt_s, anforderung if anforderung is not None else d),
         p_ref=p_ref, quelle=z.quelle, typ=g.typ)
+
+
+# ---------------------------------------------------------------------- P4a: Ist von heute für die Schattenprognose
+def ist_heute(v: Connection, baustelle_id: str, geraete: Mapping[str, str], von: datetime
+              ) -> tuple[dict[tuple[str, datetime], float], dict[tuple[str, datetime], float], datetime]:
+    """Ab `von` je Container (`geraete`: Gerät → Container) und UTC-Stunde: gemessene Energie (kWh) und mitgeschriebene
+    Sekunden; dazu `gemessen_bis` = Ende der gebuchten Container-Minuten (nicht „jetzt“; ohne Minute bleibt es `von`)."""
+    bm, gm = s.bereich_minute, s.geraet_minute
+    bis = von
+    erfasst: dict[tuple[str, datetime], float] = defaultdict(float)
+    for bid, zeit, dauer in v.execute(select(bm.c.bereich_id, bm.c.zeit, bm.c.dauer_s).where(
+            bm.c.baustelle_id == baustelle_id, bm.c.zeit >= von)):
+        t = _utc(zeit)
+        bis = max(bis, t + timedelta(seconds=float(dauer or 0)))
+        erfasst[(bid, t.replace(minute=0, second=0, microsecond=0))] += float(dauer or 0)
+    energie: dict[tuple[str, datetime], float] = defaultdict(float)
+    for gid, zeit, wh in v.execute(select(gm.c.geraet_id, gm.c.zeit, gm.c.energie_wh).where(
+            gm.c.baustelle_id == baustelle_id, gm.c.zeit >= von, gm.c.zeit < bis, gm.c.energie_wh.is_not(None))):
+        if (b := geraete.get(gid)) is not None:
+            energie[(b, _utc(zeit).replace(minute=0, second=0, microsecond=0))] += float(wh) / 1000
+    return dict(energie), dict(erfasst), bis

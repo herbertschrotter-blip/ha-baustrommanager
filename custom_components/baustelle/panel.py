@@ -26,7 +26,8 @@ from .daten import struktur
 from .db import DATA_DB, async_spiegeln, einstellung_merken, ereignis_merken
 from .einstellungen import ART_TEXT, EIGEN, TICKET_OFFEN, TICKET_STATUS, Meldungen
 from .funktionen.heizung import Heizung
-from .funktionen.heizung import hochrechnung as hochrechnung_heizung, prognose_v2 as prognose_v2_heizung
+from .funktionen.heizung import hochrechnung as hochrechnung_heizung, prognose_schatten, prognose_v2 as prognose_v2_heizung
+from .logik.prognose_typen import MODELL_VERSION
 from .geraete import BEFEHLE as GERAETE_BEFEHLE
 from .inventar import BEFEHLE as INVENTAR_BEFEHLE
 from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
@@ -896,12 +897,17 @@ async def ws_tagesverlauf(hass: HomeAssistant, connection: websocket_api.ActiveC
     vol.Required("type"): "baustelle/prognose_v2", vol.Required("entry_id"): str,
     vol.Optional("tage", default=7): vol.All(vol.Coerce(int), vol.Range(1, 31)),
     vol.Optional("h_tage", default=0): vol.All(vol.Coerce(int), vol.Range(0, 120)),
+    vol.Optional("prognose", default=False): cv.boolean, vol.Optional("neu", default=False): cv.boolean,
 })
 @websocket_api.async_response
 async def ws_prognose_v2(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Prognose V2, Diagnose (BSM-033.07): Tagesmerkmale der letzten Tage je Container und Evidenzbericht P3 (BSM-033.08,
     nur mit `h_tage` > 0, Vorgabe 0) – Schattenbetrieb, keine Seite."""
     if (st := _steuerung(hass, connection, msg)) is None:
+        return
+    if msg["prognose"]:   # BSM-033.09: Schattenprognose (P4a), `neu` rechnet samt Schätzungen neu
+        connection.send_result(msg["id"], {"modell_version": MODELL_VERSION, "prognose": await prognose_schatten.async_prognose(
+            hass, Heizung.von(st), neu=msg["neu"])})
         return
     connection.send_result(msg["id"], await prognose_v2_heizung.async_diagnose(hass, Heizung.von(st), msg["tage"], msg["h_tage"]))
 

@@ -23,8 +23,7 @@ def soll_temperatur(hz: Heizung, bid: str) -> float:
         return float(b["soll"] if b.get("soll") is not None else h["soll"])
     g = hz.gleit_info()
     wert = g["soll"] if g is not None else float(h["soll"])
-    if b.get("soll") is not None:
-        wert += float(b["soll"]) - float(h["soll"])
+    wert += soll_logik.versatz(b.get("soll"), float(h["soll"]))
     return round(wert + hz.versch(bid), 2)
 
 

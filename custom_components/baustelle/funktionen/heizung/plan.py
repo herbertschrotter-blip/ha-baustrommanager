@@ -12,6 +12,7 @@ from ...const import ROLLE_HEIZKOERPER
 from ...logik import bedarf as bedarf_logik, groesse, lernen
 from ...logik.arbeitszeit import Plan, WarmAb, ausnahme_am, frei_gilt, bedarf_fenster, im_fenster, tagesplan
 from ...logik.regelung import FUEHLER_HALTEN_MIN, LageContainer, Soll, SollGrund, letzter_wert, soll_container
+from ...logik.regelung import zu_warm as regel_zu_warm
 from ..basis import ev_zeit, minuten_seit, zeit
 
 from . import baseline as h_baseline
@@ -158,8 +159,7 @@ def _warm_festhalten(hz: Heizung, bid: str, warm: WarmAb | None, plan: Plan | No
 def zu_warm(hz: Heizung, wetter: WetterWerte) -> bool:
     """Heizgrenze überschritten (Tageshöchstwert oder Wert von jetzt, Einstellung `heizgrenze_basis`)."""
     h = hz.st.e["heizung"]
-    wert = wetter.aussen_max if h["heizgrenze_basis"] == "tageshoechst" else wetter.aussen
-    return wert is not None and wert > float(h["heizgrenze"])
+    return regel_zu_warm(str(h["heizgrenze_basis"]), wetter.aussen_max, wetter.aussen, float(h["heizgrenze"]))
 
 
 def soll(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> SollJeBereich:

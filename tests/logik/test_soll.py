@@ -39,3 +39,10 @@ def test_gleitend_und_kurve():
     assert gleitend(15.0, R, [(15.0, 1)] * 5) == 21.0              # nie unter die Untergrenze
     k = kurve(R, [])
     assert k[0] == [-10, 23.2, 23.2] and k[-1] == [20, 21.0, 21.0] and len(k) == 31
+
+
+def test_versatz_eigenes_soll():
+    """BSM-033.09: eigenes Soll eines Containers als Verschiebung gegenüber dem der Baustelle (Regelung und Prognose)."""
+    from logik.soll import versatz
+
+    assert versatz(22.5, 21.0) == 1.5 and versatz(None, 21.0) == 0.0

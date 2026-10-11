@@ -66,6 +66,18 @@ def modus_von(einstellung: Mapping[str, Any] | None, fuehler: bool) -> str | Non
     return "thermo" if fuehler else "plan"
 
 
+def heizgrenze_bezug(basis: str, tageshoechst: float | None, aktuell: float | None) -> float | None:
+    """Bezugswert der Heizgrenze nach der Einstellung `heizgrenze_basis`: Tageshöchstwert (`tageshoechst`) oder der Wert
+    von jetzt (jede andere Basis, Einstellung „jetzt“). Regelung und Prognose V2 nutzen dieselbe Regel (BSM-033.09)."""
+    return tageshoechst if basis == "tageshoechst" else aktuell
+
+
+def zu_warm(basis: str, tageshoechst: float | None, aktuell: float | None, grenze: float) -> bool:
+    """Heizgrenze überschritten: Bezugswert (`heizgrenze_bezug`) über der Grenze; ohne Bezugswert nie."""
+    wert = heizgrenze_bezug(basis, tageshoechst, aktuell)
+    return wert is not None and wert > grenze
+
+
 def letzter_wert(aktuell: float | None, zuletzt: tuple[datetime, float] | None, jetzt: datetime, halten_min: float) -> float | None:
     """Messwert mit Überbrückung: fehlt er, gilt der letzte gültige bis `halten_min` Minuten lang."""
     if aktuell is not None:

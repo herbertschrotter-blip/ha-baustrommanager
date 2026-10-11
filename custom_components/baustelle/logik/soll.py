@@ -58,6 +58,11 @@ def gleitend(t_m: float, r: GleitRegeln, rueck: Sequence[tuple[float, int]]) -> 
     return round(max(r.minimum, min(r.maximum, startwert(t_m, r) + gefuehl(rueck, t_m))), 2)
 
 
+def versatz(eigen: float | None, baustelle: float) -> float:
+    """Gleitendes Soll: das eigene Soll eines Containers wirkt als Verschiebung gegenüber dem der Baustelle."""
+    return float(eigen) - float(baustelle) if eigen is not None else 0.0
+
+
 def kurve(r: GleitRegeln, rueck: Sequence[tuple[float, int]]) -> list[list[float]]:
     """Für die Seite: je Grad Außenmittel `[t, Startwert, Soll]`."""
     return [[t, round(startwert(t, r), 2), gleitend(t, r, rueck)] for t in range(KURVE_VON, KURVE_BIS + 1)]

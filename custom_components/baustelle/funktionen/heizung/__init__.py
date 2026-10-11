@@ -79,6 +79,11 @@ class Heizung(Funktion):
         self._grund_beim_heizen: dict[str, str | None] = {}   # Grund der letzten Minute, in der geheizt wurde (K innen)
         self.hochrechnung: dict[str, Any] | None = None   # letzte Hochrechnung mit Signatur (BSM-033.02, hochrechnung.py)
         self.hochrechnung_lauf = 0   # Nummer der zuletzt gestarteten Rechnung
+        # BSM-033.09: Schattenprognose V2 (prognose_schatten.py) – getrennt von der Hochrechnung, schaltet nichts
+        self.prognose_v2: dict[str, Any] | None = None
+        self.prognose_v2_lauf = 0
+        self.prognose_v2_modelle: tuple[date, dict[str, Any]] | None = None   # (Tag, Schätzungen je Container)
+        self.prognose_v2_neu_angestossen = False   # Konfigurationswechsel: Neuschätzung schon angestoßen
         self._grund_letzte_minute: dict[str, str | None] = {}
         self._strom_jetzt: set[str] = set()   # AN-0011: Container, deren Heizkörper in diesem Zählschritt Strom ziehen
         self._unter_soll_seit: dict[str, datetime] = {}

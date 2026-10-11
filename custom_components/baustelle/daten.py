@@ -21,6 +21,7 @@ from .funktionen.pumpen import Pumpen
 from .logik import groesse, symbol as symbol_logik
 from .logik.abrechnung import EIGEN, firma_von
 from .logik.arbeitszeit import Plan, uhrzeit
+from .logik.regelung import heizgrenze_bezug
 from .logik.sensoren import kontakte
 from .logik.warnungen import titel as warn_titel
 from .notprogramm import DATA_NOTPROGRAMM
@@ -229,7 +230,7 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
         "warnungen": warnungen,
         "wetter": {"aussen": w.aussen, "aussen_max": w.aussen_max, "frueh_min": w.frueh, "regen_vortag": w.regen_vortag,
                    "regen_heute": w.regen_heute, "zustand": w.zustand},
-        "heizgrenze": {"bezug": w.aussen_max if h["heizgrenze_basis"] == "tageshoechst" else w.aussen,
+        "heizgrenze": {"bezug": heizgrenze_bezug(str(h["heizgrenze_basis"]), w.aussen_max, w.aussen),
                        "zu_warm": heizung.zu_warm(w)},
         "termine": list(heizung.termine),
         "protokoll": st.e["protokoll"][:PROTOKOLL_IN_STRUKTUR],

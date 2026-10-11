@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.8.137] – 2026-10-11
+
+- Prognose V2, vierter Baustein (BSM-033.09, P4a, Bauplan Hochrechnung §8): Die Integration rechnet jetzt im
+  Hintergrund eine neue Hochrechnung der Heizperiode mit – nur zum Vergleich („Schattenbetrieb“). Die Seite, das
+  Schalten und die bisherige Hochrechnung bleiben genau wie bisher; umgeschaltet wird erst später (P6).
+- So rechnet sie: Für jede Stunde bis zum Ende der Heizperiode die Außentemperatur (stündliche Vorhersage, sonst
+  Tagesvorhersage, sonst Klimamittel – mit typischem Tagesgang), daraus wie die Regelung den Plan jedes Containers
+  (Arbeitszeit, Vorheizen, Feiertage, Bedarfstermine, Heizgrenze, Soll gleitend) und dann den Verbrauch: Wärmeverlust des
+  Containers × (Soll − außen), höchstens die Leistung der Heizkörper. „Ohne Automatik“ kommt nur aus Baseline-Läufen –
+  gibt es noch keinen, bleibt „gespart“ leer statt geschätzt.
+- Statt einer Zahl gibt es neun ganze Rechnungen (Wärmeverlust niedrig/mittel/hoch × Winter wärmer/normal/kälter);
+  daraus Mitte und möglicher Bereich, auch für € (mit dem Preis des jeweiligen Tages) und „gespart“ in %. Was noch nicht
+  gemessen ist, wird ehrlich ausgewiesen: Das Aufheizen am Morgen und der Frostschutz sind noch nicht bestimmt
+  („Haltebedarf“, Bereich bis zur vollen Leistung), Container ohne Schätzung fehlen mit Namen statt als 0 mitzuzählen.
+  Jede Zahl hat eine Stufe A–D und fertige Texte („Aus Messungen geschätzt“, „Für kältere Bedingungen fehlen noch
+  Messungen.“ …).
+- Zum Nachsehen (ohne Seite): `baustelle/prognose_v2` mit `prognose: true` liefert Heizperiode, Monate, Wochen, Tage und
+  die 24 Stunden von heute; `baustelle/auswertung` hat zusätzlich den Schlüssel `prognose_v2` (Zusammenfassung). Neu
+  gerechnet wird stündlich (:52), die Schätzungen nachts um 03:20 und 10 min nach dem Start – auf dem Pi in wenigen
+  Sekunden je Rechnung, im Hintergrund.
+- Die Heizgrenzen-Regel (Tageshöchstwert bzw. Wert von jetzt über der Grenze) steht jetzt einmal in der Fachlogik;
+  Regelung und Prognose nutzen dieselbe, das Verhalten ist unverändert.
+
 ## [0.8.136] – 2026-10-11
 
 - Prognose V2, dritter Baustein (BSM-033.08, P3, Bauplan Hochrechnung §8): Die Integration schätzt jetzt aus den

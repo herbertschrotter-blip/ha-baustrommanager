@@ -448,7 +448,18 @@ async def async_auswertung(
             a.hochrechnung_werte(q.zaehler.get("energie_heizen"), _zustand(hass, q.eid(eid, "prognose_heizperiode")),
                                  _zustand(hass, q.eid(eid, "prognose_heizperiode_ohne")), preis),
             hr_werte, hr_erg, preis),
+        # BSM-033.09: Schattenprognose V2 – ausdrücklich getrennt von „hochrechnung“ (Legacy), die Seite nutzt sie noch nicht
+        "prognose_v2": _prognose_v2(q),
     }
+
+
+def _prognose_v2(q: Quelle) -> dict[str, Any] | None:
+    if q.st is None:
+        return None
+    from .funktionen.heizung import Heizung   # noqa: PLC0415  (Kreis-Import, wie oben)
+    from .funktionen.heizung.prognose_schatten import zusammenfassung   # noqa: PLC0415
+
+    return zusammenfassung(Heizung.von(q.st).prognose_v2)
 
 
 def _hochrechnung(q: Quelle) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:

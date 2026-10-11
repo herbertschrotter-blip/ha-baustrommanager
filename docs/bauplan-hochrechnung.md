@@ -6,7 +6,7 @@ Ersparnis wirkt dadurch zu groß. Ziel (Herbert 07.10.2026): nach professionelle
 Energiesignatur je Container (ASHRAE Guideline 14), eine Hochrechnung mit Heizgradtagen als Spanne (ÖNORM B 8135,
 Klimamittel GeoSphere Austria) und die Ersparnis aus einer gemessenen Baseline (IPMVP Option B).
 
-Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026), .05–.08 fertig (0.8.132–0.8.136). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
+Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026), .05–.09 fertig (0.8.132–0.8.137). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
 
 ## 1. Grundsätze
 
@@ -28,7 +28,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☑ 0.8.134 |
 | .07b | P2b: Kontext für Altdaten rekonstruiert, mit laufender Abnahmeprüfung (§8) | ☑ 0.8.135 |
 | .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☑ 0.8.136 |
-| .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☐ |
+| .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☑ 0.8.137 |
 
 ## 3. Energiesignatur (.01)
 
@@ -358,3 +358,59 @@ mit laufender Prüfung):
   Anfrage, im Executor, eine Diagnose zur Zeit. Größter Brocken ist `minuten_bauen` (Kandidat für eine spätere
   Beschleunigung).
 
+**Notiz aus dem Bau P4a (0.8.137, BSM-033.09)** – Abweichungen und Festlegungen gegenüber der Bauvorlage:
+
+- Orte: `logik/prognose_wetter.py` (`wetterreihe`, `tagesgang`, `tagesmittel`, `planen`, `ohne_intervalle`,
+  `frost_relevant`), `logik/prognose_modell.py` (`szenarien`, `berechne_mit`, `berechne_ohne`, `Aggregat`/`aggregiere`,
+  `rechne`, `waehle_mit`, `ist_tage`, `ist_stunden`, `baseline_tage`, `zeitraeume`), `soll.versatz` (eigenes Soll als
+  Verschiebung, Regelung und Prognose), `logik/prognose_stufe.py` (`kappen`, `extrapoliert`, `stufe_mit`,
+  `stufe_ohne`, `stufe_gespart`, `stufe_gesamt`), `logik/prognose_anzeige.py` (`anzeige`, `anzeige_aus`); Adapter
+  `funktionen/heizung/prognose_schatten.py`; `prognose_v2.sammeln/schaetzungen` (Evidenzbericht und Prognose nutzen
+  dieselben Schätzungen); `db/prognose.ist_heute`. Keine neue Schwelle außerhalb `PrognoseRegeln` (nur `EPS`, die
+  Lesetechnik und Zeitpläne im Adapter).
+- Heizgrenze: `regelung.heizgrenze_bezug`/`zu_warm` (aus `plan.zu_warm` gezogen; auch `hand.py` und `daten.py`), Basis
+  mit den Werten der Einstellung (`tageshoechst`/`jetzt`), Gleichheitstest gegen den alten Vergleich.
+- Typen (§2.3/§2.4) additiv in `prognose_typen`: `WetterQuelle` + `gemessen_tag` (gemessene Tagesmittel vor der
+  Tagesvorhersage); `PlanTag` + `soll_fest_c`, `soll_versatz_k`, `modus`, `fuehler`, `tuer_pause_min`; `PlanIntervall` +
+  `grund`, Frostpolitik, `fuehler`; `ZeitraumErgebnis.teil_mitte_kwh`; neu `IstIntervall` – `aggregiere` bekommt Tages-
+  und Stundensummen statt Minuten (Heizperiode × Minuten wäre auf dem Pi zu viel) sowie `gemessen_bis`, `bereich_ids`,
+  `preise`. `DynamikParameter` nur als Feld (immer None); Dynamik (C, tau, `rc_schritt`) nicht gebaut (P4b).
+- Plan: Grund nach `regelung.soll_container` ohne Frost, Tür, Boost, Taste, Baseline (nicht erfunden), je Abschnitt,
+  Heizgrenze und Bedarf einmal gerechnet; minutengenau an Plan- und Terminpunkten geschnitten. Frühstart ohne
+  Vorhersage aus dem Szenariowetter (4–8 Uhr, Code `fruehstart_aus_szenario`). `warm_ab` für künftige Tage nicht
+  gesetzt (Nominalplan; die gelernte Aufheizzeit hängt an der Raumtemperatur von jetzt). Jeder neue thermo-Block in der
+  Zukunft hat unbekanntes Defizit → Haltemitte + Blockkapazität (`aufheizen_unmodelliert`, höchstens C), bis P4b.
+- Frost relevant nur, solange außen unter der Aus-Schwelle (mit Fühler) bzw. Außengrenze + Spanne (ohne Fühler) liegt –
+  der Raum kühlt nie unter außen; sonst exakt 0 (keine Bereitschaftskapazität als Band). Planmodus mit Fühler: Frost
+  nicht modellierbar (Mitte None, `frost_unmodelliert`). Handbetrieb: Mitte None (`hand`).
+- Unbekannte Mitte: unten 0, oben Kapazität (physikalische Grenze, „Technische Grenze …“); ohne Gegenmodell sind auch
+  die Grenzen „ohne“ None. Ein Modell, das einen Zeitraum nicht ganz deckt, zählt als fehlend.
+- „mit“ in der Vergangenheit = Ist (Tagessummen `tag_bereich`, heute Stunden aus `geraet_minute` mit ≥ 95 % Abdeckung,
+  sonst Messlücke), Modell nur ab `gemessen_bis` = Ende der gebuchten Minuten von heute (anteilig je Intervall). „ohne“
+  über die ganze Heizperiode modelliert (Vergangenheit mit gemessenen Tagesmitteln + Tagesgang). Baseline-Lauftage im
+  Zeitraum (fertig/laufend ganz, abgebrochen bis zum Abbruchtag; heute je Stunde) → `vergleichbar` false, „gespart“ None. Fehlende Tagessumme zählt als Messlücke (Mitte bleibt Ist + Modell,
+  Code `messluecke`).
+- Stufe je Intervall (`kappen`): unbekannter/kalter Start, relevanter Frost, Extrapolation (nur Intervalle mit Bedarf)
+  → höchstens C, Planmodus höchstens B; Zeitraum = Minimum der Container (auch eines fehlenden: A). Reine Ist-Zeiträume
+  Methode „gemessen“ (Text „Gemessen“).
+- Adapter: Schätzungen (Evidenzbericht der Heizperiode, höchstens 120 Tage; Abnahmeprüfung P2b über dieselben 7 Tage
+  wie die Diagnose) nachts 03:20, 10 min nach dem Start, mit `neu` und – fehlte die Nachtrechnung – ab 04 Uhr beim
+  nächsten Lauf; „ohne“ braucht keine Plantage (auch nach dem Ende der Heizperiode); ein Block, der zur Messung schon
+  läuft, nimmt das gemessene Defizit; Prognose stündlich :52 im Executor mit Lauf-Zähler; Ergebnis `Heizung.prognose_v2`; WS
+  `baustelle/prognose_v2` mit `prognose` (und `neu`), `baustelle/auswertung` › `prognose_v2` = Zusammenfassung ohne die
+  langen Listen. Kein Schaltbefehl, kein Zustand der Regelung verändert (Integrationstest).
+- Nachbesserung nach Review: Messlücke im Ist nie Stufe D/„Gemessen“ (Stufe höchstens C, Methode `gemessen_luecke`,
+  Text „Teilweise gemessen“, Hinweis „Für einzelne Tage fehlen Messwerte.“, der belegte Teil bleibt als Wert);
+  Herkunftscodes der Evidenz (`ersatzpfad`, `kontext_rekonstruiert`) gehen in jedes Intervall („Ältere Messdaten …“);
+  Schätzungen gelten nur für ihre Konfiguration – nach einem Wechsel fehlt der Container, die Neuschätzung wird einmal
+  im Hintergrund angestoßen (`gueltige_modelle`); Tageshöchstwert für die Heizgrenze wie die Regelung aus Vorhersage
+  bzw. gemessenem Höchstwert (`PlanTag.tageshoechst_c`), die Szenarioreihe nur als Rückfall; als Vorhersage zählt ein
+  Tag nur mit `mittel`/`frueh` (Regen allein nicht). Ist und Preise werden im Executor zusammengesetzt, Einstellungen
+  nur im Event-Loop gelesen.
+- Bekannte Grenzen bis P4b/P6: Planmodus mit Fühler (Frost) und Handbetrieb haben im Winter keine Mitte (None), die
+  Baustellensumme dann auch nicht; schon ein Haltebedarf-Intervall im Zeitraum macht „gespart“ ohne Punktmitte (nur
+  Band) – bis das Aufheizen (P4b) bestimmt ist, gilt das für fast jeden Arbeitstag; Termine (Bedarf) und Feiertage
+  kennt der Plan nur im geladenen Kalenderfenster, spätere Tage laufen ohne sie.
+- **Messung auf dem Pi** (11.10.2026, nur Rechnen, Heizperiode 01.10.–30.04., heute 10.11., gleitendes Soll, neun Läufe):
+  2 Container 2,5 s, 5 Container 5,9 s; Ausgabe aller 213 Zeiträume 0,1 s. Die Schätzungen (Evidenzbericht) bleiben der
+  teure Teil (siehe P3) und laufen deshalb nur nachts bzw. auf Anfrage.

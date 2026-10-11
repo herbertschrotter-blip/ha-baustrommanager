@@ -5,7 +5,9 @@ brauchen. P2 (BSM-033.07): Minutenqualität, Start-, Tages- und Abkühlmerkmale 
 (Konvektor/Öl für den Nachlauf der Abkühlepisoden). P2b: `BetriebsKontext.kontext_nachweis`,
 `RekonstruktionsPruefung` (Abnahmeprüfung des rekonstruierten Kontexts). P3 (BSM-033.08): Fenster, H-Evidenz und
 -Schätzung, Duty, Gegenmodell „ohne“, Startbilanz, Validierung (§2.4) – mit wenigen additiven Diagnosefeldern (Vorgabe
-gesetzt). Spätere Lieferungen ergänzen hier additiv (öffentliche Importadresse bleibt dieses Modul).
+gesetzt). P4a (BSM-033.09): Wetter, Plan, Anfangszustand, Preise, Auftrag (§2.3), Parameter, Szenarien,
+Energie je Intervall, Zeitraum-, Vergleichs-, Stufen- und Anzeigeergebnis (§2.4); additiv `IstIntervall` (gemessene
+Energie je Container und Intervall für die Aggregation). Spätere Lieferungen ergänzen hier additiv (öffentliche Importadresse bleibt dieses Modul).
 
 Konventionen (§2.1): Zeiten timezone-aware UTC, halboffene Intervalle [von, bis); `None` = unbekannt, nie gleich 0;
 Sequenzen als Tupel; alle Datenklassen unveränderlich.
@@ -17,13 +19,16 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
 
+from .arbeitszeit import Arbeitszeit, Ausnahme, HeizRegeln, Plan, WarmAb, WetterTag
+from .soll import GleitRegeln
+
 MODELL_VERSION = "prognose-v2.1"
 
 Betriebsart = Literal["REGULAER", "FROST", "BASELINE", "SONSTIGE"]
 Regelungsart = Literal["thermo", "plan", "aus", "unbekannt"]
 Nachweis = Literal["direkt", "rekonstruiert", "ersatz", "keiner"]
 Stufe = Literal["A", "B", "C", "D"]
-WetterQuelle = Literal["vorhersage_stunde", "vorhersage_tag", "klima"]
+WetterQuelle = Literal["vorhersage_stunde", "vorhersage_tag", "klima", "gemessen_tag"]   # P4a additiv: gemessenes Tagesmittel
 MitteArt = Literal["verbrauch", "haltebedarf", "duty", "keine"]
 ThermostatNachweis = Literal["angenommen", "bestaetigt", "unbekannt", "geaendert"]
 Thermostatstellung = Literal["max", "andere", "unbekannt"]
@@ -355,3 +360,257 @@ class StartBilanz:
     x_innen_kh: float
     energie_kwh: float
     qualitaet: MinutenQualitaet
+
+
+# ---------------------------------------------------------------------- P4a (BSM-033.09, Bauvorlage §2.3, §2.4, §8)
+@dataclass(frozen=True)
+class WetterIntervall:
+    zeit: Intervall
+    aussen_c: float
+    quelle: WetterQuelle
+    synthetischer_tagesgang: bool
+
+
+@dataclass(frozen=True)
+class WetterEingabe:
+    """Stundenvorhersage, Tagesmittel der Vorhersage, 12 Klimamonatsmittel und gemessene Tagesmittel (Vortage)."""
+
+    stunden: tuple[WetterIntervall, ...]
+    tagesmittel: tuple[tuple[date, float], ...]
+    klima_monate: tuple[float, ...]
+    bekannte_vortage: tuple[tuple[date, float], ...]
+
+
+HeizgrenzeBasis = Literal["tageshoechst", "jetzt"]   # Werte der Einstellung `heizung.heizgrenze_basis`
+FreiModus = Literal["frost", "absenk", "aus"]
+
+
+@dataclass(frozen=True)
+class PlanTag:
+    """Rohdaten eines Plantags je Container (§2.3); `planen()` erzeugt den Plan je Szenario neu mit `tagesplan()`.
+
+    Abweichend/additiv: `heizgrenze_basis` mit den Werten der Einstellung („jetzt“ statt „aktuell“); `soll_fest_c` (Soll
+    ohne Gleiten, dann `gleitregeln` None), `soll_versatz_k` (eigenes Soll des Containers gegenüber dem der Baustelle bei
+    gleitendem Soll), `modus` (Modus der Heizung des Containers: thermo/plan/bedarf/hand/aus), `fuehler`,
+    `tuer_pause_min` (Reihenfolge der Regelung), `tageshoechst_c` (bekannter Höchstwert; sonst aus der Szenarioreihe).
+    """
+
+    datum: date
+    bereich_id: str
+    konfiguration_id: str
+    plan: Plan | None
+    arbeitszeiten: tuple[Arbeitszeit, ...]
+    ausnahmen: tuple[Ausnahme, ...]
+    frei: bool
+    heizregeln: HeizRegeln
+    warm_ab: WarmAb | None
+    trocknen: bool
+    plan_wetter: WetterTag
+    plan_wetterquelle: WetterQuelle
+    heizgrenze_c: float
+    heizgrenze_basis: HeizgrenzeBasis
+    auto: bool
+    bedarfscontainer: bool
+    regelungsart: Regelungsart
+    gleitregeln: GleitRegeln | None
+    rueckmeldungen: tuple[tuple[float, int], ...]
+    absenk_soll_c: float | None
+    frost_grenze_c: float
+    frost_aus_c: float
+    frost_aussen_c: float | None
+    frost_erlaubt: bool
+    frei_modus: FreiModus
+    feste_bedarfsfenster: tuple[Intervall, ...]
+    p_ref: tuple[Leistungsreferenz | None, ...]
+    fruehstart_unsicher: bool
+    kontext_belegt: bool
+    soll_fest_c: float | None = None
+    soll_versatz_k: float = 0.0
+    modus: str = "thermo"
+    fuehler: bool = True
+    tuer_pause_min: int = 3
+    tageshoechst_c: float | None = None   # bekannter Tageshöchstwert (Vorhersage/gemessen) wie in der Regelung
+
+
+@dataclass(frozen=True)
+class PlanIntervall:
+    """Geplantes Intervall eines Containers (§2.3). `startdefizit_k` None = unbekannt (Start in der Zukunft).
+
+    Additiv: `grund` (Soll-Grund der Regelung), Frostpolitik des Tages (`frost_grenze_c`, `frost_aus_c`, `frost_aussen_c`)
+    und `fuehler` (ohne Fühler Frost nach der Außen-Hysterese)."""
+
+    zeit: Intervall
+    bereich_id: str
+    konfiguration_id: str
+    regelungsart: Regelungsart
+    regulaer_freigegeben: bool
+    frost_bereit: bool
+    ziel_c: float | None
+    aussen_c: float
+    wetterquelle: WetterQuelle
+    p_max_kw: float | None
+    episode_id: str | None
+    startdefizit_k: float | None
+    gruende: Gruende
+    grund: str | None = None
+    frost_grenze_c: float | None = None
+    frost_aus_c: float | None = None
+    frost_aussen_c: float | None = None
+    fuehler: bool = True
+
+
+@dataclass(frozen=True)
+class Anfangszustand:
+    zeit: datetime
+    innen_c: float | None
+    frost_ein: bool | None
+    thermostat_ein: bool | None
+    beleg: Literal["gemessen", "modelliert", "unbekannt"]
+
+
+@dataclass(frozen=True)
+class PreisIntervall:
+    zeit: Intervall
+    eur_kwh: float
+
+
+@dataclass(frozen=True)
+class IstIntervall:
+    """Gemessene Energie eines Containers in einem Intervall (additiv zu §3: die Aggregation bekommt Stunden-/Tagessummen
+    statt Minuten). `kwh` None = Messlücke; `baseline_kwh` = Anteil aus Baseline-Läufen; `sonder_kwh` None = unbekannt."""
+
+    zeit: Intervall
+    bereich_id: str
+    kwh: float | None
+    baseline_kwh: float = 0.0
+    sonder_kwh: float | None = None
+
+
+@dataclass(frozen=True)
+class PrognoseAuftrag:
+    zeitraum: Intervall
+    zeitzone: str
+    bereich_ids: tuple[str, ...]
+    historische_minuten: tuple[BereichIntervall, ...]
+    baseline_laeufe: tuple[BaselineMetadaten, ...]
+    plantage: tuple[PlanTag, ...]
+    wetter: WetterEingabe
+    preise: tuple[PreisIntervall, ...]
+    gemessen_bis: datetime
+    anfang_mit: tuple[tuple[str, Anfangszustand], ...]
+    anfang_ohne: tuple[tuple[str, Anfangszustand], ...]
+
+
+@dataclass(frozen=True)
+class DynamikParameter:
+    """Kompatibles H/C-Paar (P4b); in P4a nur als Feld von `ParameterSatz` (immer None)."""
+
+    h_kw_k: float
+    c_kwh_k: float | None
+    tau_h: float | None
+
+
+@dataclass(frozen=True)
+class ParameterSatz:
+    index: int
+    h_mit_kw_k: float | None
+    h_ohne_kw_k: float | None
+    t_max_c: float | None
+    frost_ziel_c: float
+    dynamik_mit: DynamikParameter | None
+    dynamik_ohne: DynamikParameter | None
+
+
+@dataclass(frozen=True)
+class Szenario:
+    id: str
+    wetter_delta_k: float
+    parameter: ParameterSatz
+
+
+@dataclass(frozen=True)
+class StufenErgebnis:
+    evidenz: Stufe
+    prognose: Stufe
+    methode: str
+    extrapolation: bool
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class EnergieIntervall:
+    zeit: Intervall
+    bereich_id: str
+    mitte_kwh: float | None
+    unten_kwh: float | None
+    oben_kwh: float | None
+    haltebedarf_kwh: float | None
+    kapazitaet_kwh: float | None
+    mitte_art: MitteArt
+    stufe: StufenErgebnis
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class SzenarioLauf:
+    szenario_id: str
+    mit: tuple[EnergieIntervall, ...]
+    ohne: tuple[EnergieIntervall, ...]
+
+
+@dataclass(frozen=True)
+class ZeitraumErgebnis:
+    """Additiv: `teil_mitte_kwh` = Summe der Container mit bekannter Mitte (fehlende in `fehlende_bereiche`)."""
+
+    zeit: Intervall
+    mitte_kwh: float | None
+    unten_kwh: float | None
+    oben_kwh: float | None
+    ist_belegt_kwh: float | None
+    ist_vollstaendig: bool
+    fehlende_bereiche: tuple[str, ...]
+    mitte_art: MitteArt
+    stufe: StufenErgebnis
+    gruende: Gruende
+    teil_mitte_kwh: float | None = None
+
+
+@dataclass(frozen=True)
+class VergleichErgebnis:
+    zeit: Intervall
+    mit: ZeitraumErgebnis
+    ohne: ZeitraumErgebnis
+    gespart: ZeitraumErgebnis
+    gespart_prozent: float | None
+    ist_sonderbetrieb_kwh: float
+    ist_baseline_kwh: float
+    vergleichbar: bool
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class AnzeigeWert:
+    wert_kwh: float | None
+    unten_kwh: float | None
+    oben_kwh: float | None
+    eur: float | None
+    unten_eur: float | None
+    oben_eur: float | None
+    status_text: str
+    wert_text: str
+    band_text: str | None
+    hinweise: tuple[str, ...]
+    stufe: Stufe
+    mitte_art: MitteArt
+
+
+@dataclass(frozen=True)
+class AnzeigeVergleich:
+    mit: AnzeigeWert
+    ohne: AnzeigeWert
+    gespart: AnzeigeWert
+    gespart_prozent: float | None
+    vergleichshinweis: str | None
+    modell_version: str
+    gemessen_bis: datetime
+    aktualisiert_am: datetime

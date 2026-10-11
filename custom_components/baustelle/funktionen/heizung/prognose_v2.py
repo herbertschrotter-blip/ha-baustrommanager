@@ -225,6 +225,17 @@ def abschnitt(minuten: Mapping[str, Sequence[BereichIntervall]], laeufe: Sequenc
 async def _evidenz(hass: HomeAssistant, db: Any, hz: Heizung, rahmen: PrognoseRahmen,
                    pruefungen: Mapping[str, RekonstruktionsPruefung], von_tag: date, heute: date) -> dict[str, Any] | None:
     """Abschnittsweise lesen (Datenbanksperre je Abschnitt) und rechnen (Executor); None bei Lesefehler."""
+    erg = await sammeln(hass, db, rahmen, pruefungen, von_tag, heute)
+    if erg is None:
+        return None
+    sammlung, laeufe, training_bis = erg
+    aktuell = {b.id: hz.prognose_kontext(b.id)[1] for b in hz.bereiche()}
+    return await hass.async_add_executor_job(evidenzbericht, sammlung, aktuell, laeufe, training_bis, hass.config.time_zone)
+
+
+async def sammeln(hass: HomeAssistant, db: Any, rahmen: PrognoseRahmen, pruefungen: Mapping[str, RekonstruktionsPruefung],
+                  von_tag: date, heute: date) -> tuple[dict[str, Sammlung], tuple[BaselineMetadaten, ...], datetime] | None:
+    """Fenster, Plateaus, Tage und Starts je Container über [von_tag, heute) – in Abschnitten; None bei Lesefehler."""
     zone = dt_util.get_default_time_zone()
     zeitzone = hass.config.time_zone
     laeufe = tuple(baseline_metadaten(l, zeitzone) for l in rahmen.laeufe)
@@ -241,9 +252,7 @@ async def _evidenz(hass: HomeAssistant, db: Any, hz: Heizung, rahmen: PrognoseRa
         await hass.async_add_executor_job(_abschnitt_bauen, roh, rahmen, pruefungen, laeufe, a, e, ende_tag == heute,
                                           zeitzone, sammlung)
         tag = ende_tag
-    training_bis = dt_util.as_utc(datetime.combine(heute, time(), zone))
-    aktuell = {b.id: hz.prognose_kontext(b.id)[1] for b in hz.bereiche()}
-    return await hass.async_add_executor_job(evidenzbericht, sammlung, aktuell, laeufe, training_bis, zeitzone)
+    return sammlung, laeufe, dt_util.as_utc(datetime.combine(heute, time(), zone))
 
 
 def _abschnitt_bauen(roh: Rohdaten, rahmen: PrognoseRahmen, pruefungen: Mapping[str, RekonstruktionsPruefung],
@@ -284,6 +293,26 @@ def _zaehlung(fs: Sequence[Fenster]) -> dict[str, Any]:
             "gruende": dict(z.gruende)}
 
 
+@dataclass(frozen=True)
+class Schaetzungen:
+    """Alle Schätzungen einer Konfiguration (P3) – Evidenzbericht und Schattenprognose (P4a) nutzen dieselben."""
+
+    direkt: HSchaetzung
+    ersatz: HSchaetzung
+    h: HSchaetzung
+    h_tage: HSchaetzung
+    duty: DutySchaetzung
+    ohne: OhneSchaetzung
+
+
+def schaetzungen(b: str, kid: str, s: Sammlung, laeufe: Sequence[BaselineMetadaten], training_bis: datetime,
+                 zeitzone: str) -> Schaetzungen:
+    ktx = ModellKontext(b, kid, training_bis)
+    direkt, ersatz = schaetze_h_pfade(ktx, s.fenster, REGELN, zeitzone=zeitzone)
+    return Schaetzungen(direkt, ersatz, waehle_h(direkt, ersatz, REGELN), schaetze_h_tage(ktx, s.tage, REGELN),
+                        schaetze_duty(ktx, s.tage, REGELN), schaetze_ohne(ktx, s.plateaus, laeufe, None, REGELN, zeitzone=zeitzone))
+
+
 def evidenzbericht(sammlung: Mapping[str, Sammlung], aktuell: Mapping[str, str], laeufe: Sequence[BaselineMetadaten],
                    training_bis: datetime, zeitzone: str) -> dict[str, Any]:
     """Je Container der Evidenzbericht – nur Zusammenstellung der Fachlogik."""
@@ -294,18 +323,15 @@ def evidenzbericht(sammlung: Mapping[str, Sammlung], aktuell: Mapping[str, str],
         modelle = []
         h_je: dict[str, float] = {}
         for kid in modell_konfigurationen([*s.fenster, *s.plateaus], s.tage, aktuell.get(b)):
-            ktx = ModellKontext(b, kid, training_bis)
-            direkt, ersatz = schaetze_h_pfade(ktx, s.fenster, REGELN, zeitzone=zeitzone)
-            h = waehle_h(direkt, ersatz, REGELN)
+            m = schaetzungen(b, kid, s, laeufe, training_bis, zeitzone)
+            direkt, ersatz, h, h_tage, ohne = m.direkt, m.ersatz, m.h, m.h_tage, m.ohne
             if h.h_kw_k is not None:
                 h_je[kid] = h.h_kw_k
-            h_tage = schaetze_h_tage(ktx, s.tage, REGELN)
-            ohne = schaetze_ohne(ktx, s.plateaus, laeufe, None, REGELN, zeitzone=zeitzone)
             modelle.append({
                 "konfiguration_id": kid, "aktuell": kid == aktuell.get(b),
                 "h": _h(h, evidenz_h(h, None, REGELN)), "h_direkt": _h(direkt, evidenz_h(direkt, None, REGELN)),
                 "h_ersatz": _h(ersatz, evidenz_h(ersatz, None, REGELN)), "h_tage": _h(h_tage, evidenz_h(h_tage, None, REGELN)),
-                "duty": _duty(schaetze_duty(ktx, s.tage, REGELN)), "ohne": _ohne(ohne),
+                "duty": _duty(m.duty), "ohne": _ohne(ohne),
                 "betriebsabhaengig": betriebsabhaengig(h.h_kw_k, h_ohne(ohne), REGELN)})
         sauber = [x for x in s.bilanzen if start_sauber(x, REGELN)]
 
