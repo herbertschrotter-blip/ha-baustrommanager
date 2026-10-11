@@ -5,7 +5,7 @@ Container, Rückfall Tagesschnitt, Tag/Woche/Monat, Verlauf 24 h, Schätzung „
 Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nicht.“
 **Zeitraum:** 2026-10-11
 **Branch:** main
-**Status:** Runde 1 offen
+**Status:** Runde 3 offen
 
 ---
 
@@ -15,4 +15,22 @@ Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nic
 - **Artefakte:** [r1/](./r1/)
 - **Fokus:** Tagesschnitt flach über den Winter, Arbeitstage/freie Tage gemischt, kleine Temperaturspanne, „ohne“-Schätzung
   39 MWh (≈ 90 % gespart), Vergleichsbasis, 24-h-Verteilung
+- **Kernergebnis:** Prognose fachlich nicht belastbar: Heizbetrieb (Heizstunden, Frostschutz) fehlt im Modell, Nulltage
+  zerstören die Signatur, Tagesschnitt ignoriert den Winter, „ohne“ = Volllast rund um die Uhr (keine Messung). Vorschlag:
+  gemeinsames Modell H × Heizgradstunden (Heizzeit) + Frostschutz, Deckel 24·P, Rückfallstufen A–D, Szenarioband.
+  Herbert: Thermostate auf Maximum; P0 sofort („ohne“/„gespart“ als nicht belastbar kennzeichnen); weiter mit Runde 2.
+
+### Runde 2 — Umsetzbares Tagesmodell
+- **Artefakte:** [r2/](./r2/)
+- **Fokus:** GDH_aktiv/GDH_frost aus den Minutendaten, H je Container aus Messdaten, Gegenmodell mit Thermostat auf Max,
+  Rückfallstufen, Szenarioband, Tests, Lieferreihenfolge
+- **Kernergebnis:** Zielmodell E_mit = min(P·D, H·GDH_aktiv + Frost + Start), E_ohne = min(P·D, H·(T_eff,max − außen)·D);
+  vier Betriebsarten; H aus stationären Fenstern (robust); 9 Szenarien (Witterung ±1,5 K × H 0,65/1/1,35, ohne mit
+  T_eff 22/26/30 °C); Stufen A–D je Container; Lieferungen P0–P8. 39 MWh bei Thermostat auf Max. möglich, aber unbelegt.
+  Herbert: Fühler im Raum; erst Runde 3 (verbindliche Spezifikation).
+
+### Runde 3 — Verbindliche Spezifikation P1–P4
+- **Artefakte:** [r3/](./r3/)
+- **Fokus:** Minutenklassifikation aller Gründe, Tagesmerkmale und Schwellen, stationäre Fenster und H, Tagesmodell für
+  zukünftige Tage (auch ohne Fühler), Stufen A–D, Testfälle
 - **Kernergebnis:** offen
