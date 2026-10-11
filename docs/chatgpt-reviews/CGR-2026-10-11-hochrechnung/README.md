@@ -5,7 +5,7 @@ Container, Rückfall Tagesschnitt, Tag/Woche/Monat, Verlauf 24 h, Schätzung „
 Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nicht.“
 **Zeitraum:** 2026-10-11
 **Branch:** main
-**Status:** Runde 3 offen
+**Status:** Runde 4 offen
 
 ---
 
@@ -33,4 +33,13 @@ Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nic
 - **Artefakte:** [r3/](./r3/)
 - **Fokus:** Minutenklassifikation aller Gründe, Tagesmerkmale und Schwellen, stationäre Fenster und H, Tagesmodell für
   zukünftige Tage (auch ohne Fühler), Stufen A–D, Testfälle
+- **Kernergebnis:** Spezifikation P1–P4 vollständig übernommen (Klassifikation, Masken R/F, GDH mit gespeichertem Soll,
+  Frostziel 6 °C, Fenster 120/180 min, H als Median, Tagesregression als Rückfall, neun gepaarte Szenarien, Stufen
+  getrennt für H und Prognose, 30 Testfälle). Offene Modellgrenzen: Wiederaufheizen, Frost-Dynamik, Gegenmodell.
+  Herbert: Altdaten mit Ersatznachweis (`frische_ersatz`, höchstens C); Runde 4 vor dem Bau.
+
+### Runde 4 — Ersatznachweis, Wiederaufheizen, Gegenmodell
+- **Artefakte:** [r4/](./r4/)
+- **Fokus:** Ersatznachweis für Altdaten, neue Minutenspalten, Wärmekapazität/Startkorrektur, T_max und H_ohne aus
+  Baseline, Frost-Dynamik, Liefergrenzen
 - **Kernergebnis:** offen
