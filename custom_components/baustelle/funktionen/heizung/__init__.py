@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from ...const import ART_CONTAINER, CONF_HEIZUNG, HEIZROLLEN, ROLLE_HEIZKOERPER, ZIEHT_STROM_W
 from ...logik import bedarf as bedarf_logik, lernen, soll as soll_logik, stufen
-from ...logik import sensoren as sensor_logik, warnungen as warn_logik
+from ...logik import prognose_merkmale, sensoren as sensor_logik, warnungen as warn_logik
 from ...logik.arbeitszeit import HeizRegeln, Plan, WarmAb
 from ...logik.regelung import LageContainer, Soll, SollGrund
 from ..basis import Funktion, zeit
@@ -111,6 +111,12 @@ class Heizung(Funktion):
             return "hand"
         info = self.st.bereiche.get(bid)
         return "thermo" if info is not None and info.fuehler else "plan"
+
+    def prognose_kontext(self, bid: str) -> tuple[str, str]:
+        """Regelungsart und Konfigurations-ID eines Containers für die Prognose V2 (BSM-033.06, `logik/prognose_merkmale`)."""
+        info = self.st.bereiche.get(bid)
+        art = prognose_merkmale.regelungsart(self.modus(bid), bool(info is not None and info.fuehler))
+        return art, prognose_merkmale.konfiguration_id(art, [(g.id, g.typ) for g in self.heizer_von(bid)])
 
     def soll_temperatur(self, bid: str) -> float:
         return h_soll.soll_temperatur(self, bid)

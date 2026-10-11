@@ -40,6 +40,7 @@ def _staffeln(st: Steuerung, jetzt: datetime, soll: SollJeBereich) -> tuple[set[
     ]
     lasten: list[staffel_logik.Last] = []
     ziel: dict[str, bool | None] = {}
+    anfordern: dict[str, tuple[bool, bool]] = {}   # BSM-033.06: (will ein vor der Staffelung, erreichbar) – nur beobachtet
     for g in st.geraete.values():
         zustand = st.hass.states.get(g.schalter)
         erreichbar = zustand is not None and zustand.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
@@ -59,6 +60,9 @@ def _staffeln(st: Steuerung, jetzt: datetime, soll: SollJeBereich) -> tuple[set[
             and st.funktion_von(g).hand_seit(g) is None and erreichbar and st.geraet_aktiv(g)
             and g.id not in st.ruhe
         )
+        # Einschaltanforderung vor der Staffelung, unabhängig von der Erreichbarkeit (offline bleibt unterscheidbar)
+        anfordern[g.id] = (bool(f is not None and f.schaltbar(g) and ein and st.funktion_von(g).hand_seit(g) is None
+                                and st.geraet_aktiv(g) and g.id not in st.ruhe), erreichbar)
         seit = dt_util.as_local(zustand.last_changed) if zustand is not None else None
         if seit is not None and seit > jetzt:
             seit = None  # Uhr zurückgestellt: Zeitpunkt unbekannt
@@ -120,6 +124,10 @@ def _staffeln(st: Steuerung, jetzt: datetime, soll: SollJeBereich) -> tuple[set[
         an_set = {l.id for l in lasten if l.heizer and l.will}
         frei_nach = {a: round(f, 3) for a, f in frei_jetzt.items()}
     st._staffel_anzeige(anschluesse, lasten, frei_nach)
+    st.daten.staffel_beobachtung = {
+        gid: (will, staffel_logik.gesperrt(will, erreichbar, gid in an_set, (st.daten.warte.get(gid) or {}).get("grund")))
+        for gid, (will, erreichbar) in anfordern.items()
+    }
     return an_set, ziel
 
 

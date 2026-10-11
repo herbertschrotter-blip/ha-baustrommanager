@@ -24,7 +24,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .03 | Anzeige: Karte „Heizperiode“ (Mockup `hochrechnung.html`, abgenommen 10.10.2026) | ☑ 0.8.125 |
 | .04 | Automatische Baseline-Läufe (§6): **a** Logik und Integration ☑ 0.8.127, **b** Anzeige (Mockup zuerst) ☐ | ◐ |
 | .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☑ 0.8.132 |
-| .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☐ |
+| .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☑ 0.8.133 |
 | .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☐ |
 | .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☐ |
 | .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☐ |
@@ -188,3 +188,28 @@ Entscheidungen (Herbert und Review):
 
 Nach P3 gehen je Container die Zahlen (Fenster direkt/Ersatz, Verwerfungsgründe, Starts, Abkühlnächte) in eine neue
 Review-Runde; danach Entscheidung über P4b.
+
+**Notiz aus dem Bau P1 (0.8.133, BSM-033.06)** – Abweichungen und Festlegungen gegenüber der Bauvorlage:
+
+- Die Minutenprüfung (`pruefe_minuten`, `MinutenQualitaet`, Ersatznachweis) kommt mit P2; P1 liefert Typen, Regeln,
+  Klassifikation, Spalten, Erfassung und Baseline-Metadaten. `PrognoseRegeln` hat genau die 98 Felder aus §2.5.
+- Staffelungs-Veto (`logik/staffel.gesperrt`): angefordert, erreichbar, nach Staffelung und Anlaufstaffel nicht frei;
+  die Mindestpause zählt nicht (Schutz des Geräts), ein nicht erreichbares Gerät ist unbekannt (NULL). Die Anforderung
+  zählt unabhängig von der Erreichbarkeit (offline bleibt unterscheidbar), Hand, Ruhe und inaktive Geräte fordern nicht an.
+  Ohne Anforderung kein Veto, auch offline (sonst bliebe die Container-Sperre mit einem defekten Gerät immer NULL).
+- Kontext-Ereignis: Soll für den Änderungsvergleich auf 0,1 K gerundet; die Konfigurations-ID wird nur bei geänderter
+  Ausstattung neu gerechnet. Die Beobachtung nach der Auswertung fängt jede Ausnahme ab (Protokoll), die Steuerung
+  läuft weiter; ebenso die Konfigurations-ID beim Baseline-Start (dann None).
+- Container-Sperre: Vereinigung; ein unbekanntes Gerät macht die Zeit unbekannt, außer ein anderes ist sicher gesperrt.
+  Container ohne Geräte: NULL. Ein Bericht genau zum Minutenbeginn macht die Minute vollständig.
+- Innenalter: Bericht = Zustandsänderung oder `state_reported` (gefiltert nur auf die Innenfühler) mit `last_reported`.
+  Der Wert beim Start und die Rückkehr aus „nicht verfügbar“ (zwischengespeicherter Wert) gelten nicht als Bericht.
+- Klassifikation: `pause` ohne `tuer_offen` behält die Art des Grunds, ist aber ungültig; `import_verlauf` gültig mit
+  Code `kontext_noetig`; `import_statistik` und unbekannte Quelle ungültig. **Pflicht für P2:** die Codes
+  `kontext_noetig` (import_verlauf: Betriebskontext belegen) und `lauf_bestaetigen` (baseline: bestätigte Lauf-ID und
+  Zeit) MUSS P2 auswerten, bevor eine Minute ins Training geht – `betrieb_gueltig` allein reicht dafür nicht.
+- Konfigurations-ID (`prognose_merkmale.konfiguration_id`): Regelungsart + aktive Heizkörper (ID, Typ); Regelungsart thermo
+  nur mit Fühler (thermo/bedarf), sonst plan; hand/aus → aus. `soll_c` im Ereignis `prognose_kontext` ist dasselbe Soll
+  wie in `bereich_minute.soll`.
+- `db/schreiber.py` blieb unverändert: die Schreibarbeit `minute` gibt die Zeilen unverändert an die Tabelle; alte
+  Pufferarbeiten ohne die neuen Schlüssel schreiben NULL.

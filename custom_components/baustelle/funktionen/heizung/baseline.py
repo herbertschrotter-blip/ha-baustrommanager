@@ -10,6 +10,7 @@ ankündigen (Nachricht mit „Absagen“). Startet aus (`heizung.baseline`); ges
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+import logging
 from typing import TYPE_CHECKING, Any
 import uuid
 
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from . import Heizung
 
 LZ = "baseline"
+_LOGGER = logging.getLogger(__name__)
 
 
 def _lz(hz: Heizung) -> dict[str, Any]:
@@ -94,6 +96,15 @@ def absagen(hz: Heizung, lauf_id: str, grund: str) -> bool:
     return False
 
 
+def _konfiguration(hz: Heizung, bid: str) -> str | None:
+    """Konfigurations-ID für die Metadaten – ein Fehler dabei darf den Lauf nicht aufhalten (dann None)."""
+    try:
+        return hz.prognose_kontext(bid)[1]
+    except Exception:   # noqa: BLE001 – nur Metadaten
+        _LOGGER.exception("Konfiguration für den Baseline-Lauf nicht bestimmbar")
+        return None
+
+
 def takt(hz: Heizung, jetzt: datetime) -> None:
     st, heute = hz.st, jetzt.date()
     liste = laeufe(hz)
@@ -109,7 +120,8 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
             if heute >= l.bis:
                 liste[i] = b.abbrechen(l, heute, "verpasst")
             else:
-                liste[i] = l = b.Lauf(**{**l.__dict__, "status": "laeuft"})
+                # BSM-033.06: Konfiguration und Annahme „Thermostate unverändert“ beim Start einfrieren
+                liste[i] = l = b.starten(l, dt_util.utcnow(), _konfiguration(hz, l.bereich))
                 st.protokoll("schalten", l.bereich, f"Baseline startet: alle Heizkörper ohne Automatik bis {l.bis - timedelta(days=1):%d.%m.}")
         if liste[i].status == "laeuft":
             l = liste[i]

@@ -3,6 +3,12 @@
 Je Minute eine Zeile je Gerät (`geraet_minute`), Container (`bereich_minute`) und Baustelle (`wetter_minute`), jede
 Schaltung, Tür und Erreichbarkeit sekundengenau als Ereignis (ohne Person, §6), die Laufzeit (`zustand`, nur bei
 Änderung) und das Gelernte je Container und Tag (`lernen`, stündlich). Die Minutenbildung rechnet `logik/minute`.
+
+Prognose V2, P1 (BSM-033.06), nur beobachtet: nach jeder Auswertung der Stand der Staffelung je Gerät (Anforderung vor
+der Staffelung, Veto) und der Betriebskontext je Container – ändert er sich, ein Ereignis `prognose_kontext` mit
+Wirkzeitpunkt (die Minutenzeile kennt nur den Stand am Ende). Das Alter des Innenwerts kommt aus den Berichten der
+Fühler (`last_reported`, auch bei unverändertem Wert über die gefilterte Berichtsbeobachtung nur dieser Fühler; nie
+`last_changed`); der Wert beim Start und die Rückkehr aus „nicht verfügbar“ gelten nicht als Bericht.
 Gelesen wird in dieser Phase weiter aus Store und HA-Statistik – der Pilot merkt nichts.
 """
 
@@ -11,13 +17,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timedelta
 import json
+import logging
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Connection, delete, insert, update
 
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
-from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
-from homeassistant.helpers.event import async_track_state_change_event, async_track_time_change
+from homeassistant.core import Event, EventStateChangedData, EventStateReportedData, HomeAssistant, State, callback
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_state_report_event,
+    async_track_time_change,
+)
 from homeassistant.util import dt as dt_util
 
 from ..const import ART_CONTAINER
@@ -29,6 +40,8 @@ from .schreiber import arbeit, schreibarbeit
 if TYPE_CHECKING:
     from ..steuerung import Steuerung
     from .verbindung import Datenbank
+
+_LOGGER = logging.getLogger(__name__)
 
 LERNEN_JEDE_MINUTE = 0   # stündlich (Minute 0) das Gelernte je Container und Tag
 TAGE_JEDE_MINUTEN = 15   # Tagessummen von heute alle 15 Minuten neu (BSM-009)
@@ -61,6 +74,7 @@ class Mitschreiber:
         self._zustand_alt: dict[str, str] = {}
         self._kontakte: dict[str, list[str]] = {}
         self._lernen_alt: dict[str, str] = {}
+        self._kontext_alt: dict[str, tuple[Any, ...]] = {}   # Betriebskontext je Container (Ereignis prognose_kontext)
         self._abmelden: list[Callable[[], None]] = []
         self.start_zeit = dt_util.utcnow()
 
@@ -84,13 +98,17 @@ class Mitschreiber:
             self._kontakte[bid] = tueren
             self._bereiche[bid] = BereichSammler(
                 jetzt, _zahl(get(info.fuehler)) if info.fuehler else None, self._offen(bid) if tueren else None,
-                mit_tuer=bool(tueren))
+                mit_tuer=bool(tueren), geraete=[gid for gid, g in self.st.geraete.items() if g.bereich == bid])
             if info.fuehler:
                 self._merken(info.fuehler, "fuehler", bid)
             for eid in tueren:
                 self._merken(eid, "tuer", bid)
         if self._wer:
             self._abmelden.append(async_track_state_change_event(self.hass, list(self._wer), self._geaendert))
+        fuehler = [eid for eid, wer in self._wer.items() if any(art == "fuehler" for art, _ in wer)]
+        if fuehler:   # nur die Innenfühler, keine Beobachtung aller Berichte in HA
+            self._abmelden.append(async_track_state_report_event(self.hass, fuehler, self._berichtet))
+        self._abmelden.append(self.st.async_add_listener(self._nach_auswertung))
         self._abmelden.append(async_track_time_change(self.hass, self._minute, second=0))
 
     def _offen(self, bid: str) -> bool | None:
@@ -124,11 +142,62 @@ class Mitschreiber:
             elif art == "energie" and (g := self._geraete.get(wessen)):
                 g.zaehler(t, _zahl(neu))
             elif art == "fuehler" and (b := self._bereiche.get(wessen)):
-                b.temperatur(t, _zahl(neu))
+                wert = _zahl(neu)
+                b.temperatur(t, wert)
+                # echter Bericht nur mit Wert und nicht direkt nach „nicht verfügbar“/Start (zwischengespeicherter Wert)
+                b.bericht(t, neu.last_reported if neu is not None and wert is not None and _zahl(alt) is not None else None)
             elif art == "tuer" and (b := self._bereiche.get(wessen)):
                 b.tuer(t, self._offen(wessen))
                 if _an(neu) != _an(alt):
                     self.ereignis(t, "tuer", {"offen": _an(neu), "sensor": event.data["entity_id"]}, "automatik", bereich_id=wessen)
+
+    @callback
+    def _berichtet(self, event: Event[EventStateReportedData]) -> None:
+        """Fühler meldet denselben Wert noch einmal: neuer Bericht für das Alter (BSM-033.06)."""
+        t = event.data["last_reported"]
+        wert = _zahl(event.data["new_state"])
+        for art, wessen in self._wer.get(event.data["entity_id"], []):
+            if art == "fuehler" and (b := self._bereiche.get(wessen)):
+                b.bericht(t, t if wert is not None else None)
+
+    @callback
+    def _nach_auswertung(self) -> None:
+        """Nach jeder Auswertung: Staffelung je Gerät und Container, Betriebskontext je Container (BSM-033.06).
+
+        Läuft als Listener mitten in der Auswertung – die Beobachtung darf die Steuerung nie stören (keine Ausnahme nach
+        außen, sonst fielen spätere Listener und das erneute Auswerten aus)."""
+        try:
+            t = dt_util.utcnow()
+            for gid, (will, gesperrt) in self.st.daten.staffel_beobachtung.items():
+                if (g := self._geraete.get(gid)) is not None:
+                    g.staffel(t, will, gesperrt)
+                if (info := self.st.geraete.get(gid)) is not None and (b := self._bereiche.get(info.bereich)) is not None:
+                    b.staffel(t, gid, gesperrt)
+            self._kontext(t)
+        except Exception:   # noqa: BLE001 – Beobachtung, nie die Steuerung aufhalten
+            _LOGGER.exception("Prognose-Beobachtung nach der Auswertung fehlgeschlagen")
+
+    def _kontext(self, t: datetime) -> None:
+        if not any(i.art == ART_CONTAINER for i in self.st.bereiche.values()):
+            return
+        from ..funktionen.heizung import Heizung   # noqa: PLC0415 – vermeidet einen Kreis beim Import
+        heizung = Heizung.von(self.st)
+        if not heizung.aktiv():
+            return
+        d = self.st.daten
+        for bid, info in self.st.bereiche.items():
+            if info.art != ART_CONTAINER:
+                continue
+            art, konfiguration = heizung.prognose_kontext(bid)
+            soll = self._soll(bid)
+            # Vergleich auf 0,1 K: kleinste Schwankungen des gleitenden Solls sind kein Kontextwechsel
+            stand = (d.grund.get(bid), d.zustand.get(bid), None if soll is None else round(soll, 1), art, konfiguration)
+            if self._kontext_alt.get(bid) == stand:
+                continue
+            self._kontext_alt[bid] = stand
+            wert = {"grund": stand[0], "zustand": stand[1], "soll_c": soll, "regelungsart": art,
+                    "konfiguration_id": konfiguration, "zeit": t.isoformat()}
+            self.ereignis(t, "prognose_kontext", wert, "automatik", bereich_id=bid)
 
     def _messwert(self, gid: str, t: datetime, watt: float | None) -> None:
         """Jeder gemeldete Wert der Leistung (Aufbau 5) – für „Leistung einer Stunde“ auch nach 62 Tagen."""
@@ -189,7 +258,8 @@ class Mitschreiber:
                             "dauer_s": m.dauer_s, "sekunden_ein": m.sekunden_ein, "sekunden_strom": m.sekunden_strom,
                             "leistung_w": m.leistung_w,
                             "leistung_w_max": m.leistung_w_max, "energie_wh": m.energie_wh,
-                            "zaehlerstand_kwh": m.zaehlerstand_kwh, "erreichbar": m.erreichbar, "quelle": "ha"})
+                            "zaehlerstand_kwh": m.zaehlerstand_kwh, "erreichbar": m.erreichbar, "quelle": "ha",
+                            "heizanforderung_s": m.heizanforderung_s, "staffel_gesperrt_s": m.staffel_gesperrt_s})
         d = self.st.daten
         for bid, b_sammler in self._bereiche.items():
             bm = b_sammler.abschliessen(ende)
@@ -199,7 +269,7 @@ class Mitschreiber:
             bereiche.append({"bereich_id": bid, "zeit": ende - _sek(bm.dauer_s), "baustelle_id": self.bid,
                              "dauer_s": bm.dauer_s, "temperatur": bm.temperatur, "feuchte": None, "soll": self._soll(bid),
                              "tuer_offen_s": bm.tuer_offen_s, "zustand": d.zustand.get(bid), "grund": d.grund.get(bid),
-                             "quelle": "ha"})
+                             "quelle": "ha", "temp_alter_s": bm.temp_alter_s, "staffel_begrenzt_s": bm.staffel_begrenzt_s})
         dauer = max(dauern, default=60)
         w = d.wetter
         wetter = {"baustelle_id": self.bid, "zeit": ende - _sek(dauer), "dauer_s": dauer, "aussen_temp": w.aussen,

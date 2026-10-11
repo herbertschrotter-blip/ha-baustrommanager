@@ -4,13 +4,25 @@ Je Gerät und Minute: Sekunden eingeschaltet, mittlere und höchste Leistung (ze
 Zählerstand (Regeln aus `logik/zaehlen`, auch nach einer Lücke) bzw. ohne Zähler aus der Leistung, letzter Zählerstand
 und ob das Gerät die ganze Minute erreichbar war. Je Container: mittlere Temperatur und Sekunden mit offener Tür.
 
+Prognose V2, Lieferung P1 (BSM-033.06, Bauvorlage CGR-2026-10-11-hochrechnung r5 §5) – nur beobachtet:
+
+- je Gerät `heizanforderung_s` (Regelung will ein, vor der Staffelung) und `staffel_gesperrt_s` (angefordert, aber von
+  der Staffelung nicht freigegeben, `logik/staffel.gesperrt`);
+- je Container `staffel_begrenzt_s` als Vereinigung der Sperrzeiten seiner Geräte (A [0,20] und B [10,30] → 30 s,
+  nicht 40) und `temp_alter_s`, das höchste Alter des benutzten Innenwerts in der Minute (Alter = Zeit seit dem
+  letzten echten Bericht des Fühlers; es wächst bis zum nächsten Bericht, also zählen die Zeitpunkte direkt vor einem
+  Bericht und das Minutenende).
+
+Jede unbekannte Teilphase (vor dem ersten Bericht, Gerät nicht erreichbar, Fühler ohne Wert oder ohne echten Bericht)
+macht den jeweiligen Wert der Minute None – nie 0. Der Wert beim Start gilt nicht als Bericht.
+
 Ein Sammler bekommt jede Änderung mit Zeitpunkt; `abschliessen(ende)` liefert die Werte seit dem letzten Abschluss
 und beginnt den nächsten Abschnitt mit den aktuellen Werten.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TypeVar
@@ -82,6 +94,29 @@ class Zeitanteil:
         return ergebnis
 
 
+class Beobachtung(Zeitanteil):
+    """Wie `Zeitanteil`, aber unbekannt nur, wenn ein unbekannter Stand wirklich eine Dauer hat – ein Bericht genau zum
+    Minutenbeginn macht die Minute vollständig (P1, BSM-033.06)."""
+
+    def __init__(self, t: datetime, wert: bool | None) -> None:
+        super().__init__(t, wert)
+        self._unbekannt = False
+
+    def setzen(self, t: datetime, wert: bool | None) -> None:
+        self._bis(t)
+        self._wert = wert
+
+    def _bis(self, t: datetime) -> None:
+        if self._wert is None and (t - self._t).total_seconds() > 0:
+            self._unbekannt = True
+        super()._bis(t)
+
+    def abschliessen(self, ende: datetime) -> tuple[float, bool]:
+        ergebnis = super().abschliessen(ende)
+        self._unbekannt = False
+        return ergebnis
+
+
 @dataclass(frozen=True)
 class GeraetMinute:
     dauer_s: int
@@ -92,6 +127,8 @@ class GeraetMinute:
     zaehlerstand_kwh: float | None
     erreichbar: bool
     sekunden_strom: int = 0   # eingeschaltet und Leistung über `zieht_w` (ohne Messung: wie eingeschaltet), AN-0011
+    heizanforderung_s: int | None = None    # P1: Regelung will ein (vor der Staffelung); None = unbekannt
+    staffel_gesperrt_s: int | None = None   # P1: davon von der Staffelung nicht freigegeben
 
 
 class GeraetSammler:
@@ -108,6 +145,8 @@ class GeraetSammler:
         self._mit_zaehler = mit_zaehler
         self._stand = stand
         self._stand_alt, self._stand_alt_zeit = stand, (t if stand is not None else None)
+        self._anforderung = Beobachtung(t, None)   # unbekannt bis zum ersten Bericht der Staffelung
+        self._gesperrt = Beobachtung(t, None)
 
     def _zieht(self) -> bool:
         return bool(self._an_jetzt) and (self._w_jetzt is None or self._w_jetzt > self._zieht_w)
@@ -126,8 +165,15 @@ class GeraetSammler:
         if kwh is not None:
             self._stand = kwh
 
+    def staffel(self, t: datetime, anforderung: bool | None, gesperrt: bool | None) -> None:
+        """Stand nach einem Schritt der Staffelung (gilt bis zum nächsten)."""
+        self._anforderung.setzen(t, anforderung)
+        self._gesperrt.setzen(t, gesperrt)
+
     def abschliessen(self, ende: datetime) -> GeraetMinute:
         ein, unbekannt = self._an.abschliessen(ende)
+        anf, anf_unbekannt = self._anforderung.abschliessen(ende)
+        gesp, gesp_unbekannt = self._gesperrt.abschliessen(ende)
         strom, _ = self._strom.abschliessen(ende)
         mittel, hoechst, wattsekunden = self._leistung.abschliessen(ende)
         energie: float | None
@@ -146,7 +192,9 @@ class GeraetSammler:
         dauer = int(round((ende - self._start).total_seconds()))
         self._start = ende
         return GeraetMinute(dauer, int(round(ein)), None if mittel is None else round(mittel, 1),
-                            hoechst, None if energie is None else round(energie, 3), self._stand, not unbekannt, int(round(strom)))
+                            hoechst, None if energie is None else round(energie, 3), self._stand, not unbekannt, int(round(strom)),
+                            None if anf_unbekannt else int(round(anf)),
+                            None if anf_unbekannt or gesp_unbekannt else int(round(gesp)))
 
 
 @dataclass(frozen=True)
@@ -154,19 +202,75 @@ class BereichMinute:
     dauer_s: int
     temperatur: float | None
     tuer_offen_s: int | None
+    temp_alter_s: int | None = None         # P1: höchstes Alter des Innenwerts; None = unbekannt
+    staffel_begrenzt_s: int | None = None   # P1: Vereinigung der Sperrzeiten der Geräte
+
+
+def vereinigt(gesperrt: Iterable[bool | None]) -> bool | None:
+    """Container gesperrt, sobald eines seiner Geräte gesperrt ist; sonst unbekannt, wenn eines unbekannt ist."""
+    werte = list(gesperrt)
+    if any(werte):
+        return True
+    if not werte or any(w is None for w in werte):
+        return None
+    return False
+
+
+class Alter:
+    """Höchstes Alter eines Messwerts je Abschnitt aus den Zeitpunkten seiner echten Berichte (None = unbekannt)."""
+
+    def __init__(self, t: datetime, beobachtet: datetime | None) -> None:
+        self._t, self._beobachtet = t, beobachtet
+        self._max = 0.0
+        self._unbekannt = False   # unbekannt erst, wenn ein Stand ohne Beleg eine Dauer hat
+
+    def bericht(self, t: datetime, beobachtet: datetime | None) -> None:
+        """Neuer Stand ab `t`: zuletzt beobachtet um `beobachtet` (None = Wert ohne Beleg, z. B. nicht verfügbar)."""
+        self._bis(t)
+        self._beobachtet = beobachtet
+
+    def _bis(self, t: datetime) -> None:
+        if (t - self._t).total_seconds() <= 0:
+            return
+        if self._beobachtet is None:
+            self._unbekannt = True
+        else:   # das Alter wächst bis `t` – dort ist es im Abschnitt am größten
+            self._max = max(self._max, (t - self._beobachtet).total_seconds())
+        self._t = t
+
+    def abschliessen(self, ende: datetime) -> int | None:
+        self._bis(ende)
+        ergebnis = None if self._unbekannt else int(round(self._max))
+        self._max = 0.0
+        self._unbekannt = False
+        return ergebnis
 
 
 class BereichSammler:
-    """Temperatur und Tür eines Containers."""
+    """Temperatur und Tür eines Containers; dazu Alter des Innenwerts und Staffelungssperre seiner Geräte (P1)."""
 
-    def __init__(self, t: datetime, temperatur: float | None, tuer_offen: bool | None, *, mit_tuer: bool) -> None:
+    def __init__(self, t: datetime, temperatur: float | None, tuer_offen: bool | None, *, mit_tuer: bool,
+                 geraete: Sequence[str] = (), beobachtet: datetime | None = None) -> None:
         self._start = t
         self._temp = Zeitmittel(t, temperatur)
         self._tuer = Zeitanteil(t, tuer_offen)
         self._mit_tuer = mit_tuer
+        self._alter = Alter(t, beobachtet)
+        self._sperre: dict[str, bool | None] = dict.fromkeys(geraete)
+        self._begrenzt = Beobachtung(t, None)
 
     def temperatur(self, t: datetime, wert: float | None) -> None:
         self._temp.setzen(t, wert)
+
+    def bericht(self, t: datetime, beobachtet: datetime | None) -> None:
+        """Bericht des Fühlers (auch mit unverändertem Wert); `beobachtet` None = Wert ohne echten Bericht."""
+        self._alter.bericht(t, beobachtet)
+
+    def staffel(self, t: datetime, geraet_id: str, gesperrt: bool | None) -> None:
+        if geraet_id not in self._sperre:
+            return
+        self._sperre[geraet_id] = gesperrt
+        self._begrenzt.setzen(t, vereinigt(self._sperre.values()))
 
     def tuer(self, t: datetime, offen: bool | None) -> None:
         self._tuer.setzen(t, offen)
@@ -174,9 +278,12 @@ class BereichSammler:
     def abschliessen(self, ende: datetime) -> BereichMinute:
         mittel, _hoechst, _summe = self._temp.abschliessen(ende)
         offen, _unbekannt = self._tuer.abschliessen(ende)
+        alter = self._alter.abschliessen(ende)
+        begrenzt, begrenzt_unbekannt = self._begrenzt.abschliessen(ende)
         dauer = int(round((ende - self._start).total_seconds()))
         self._start = ende
-        return BereichMinute(dauer, None if mittel is None else round(mittel, 2), int(round(offen)) if self._mit_tuer else None)
+        return BereichMinute(dauer, None if mittel is None else round(mittel, 2), int(round(offen)) if self._mit_tuer else None,
+                             alter, None if begrenzt_unbekannt else int(round(begrenzt)))
 
 
 # ---------------------------------------------------------------------- Verlauf nachspielen (BSM-008, Altdaten)

@@ -13,13 +13,19 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
   (`monat_rest`: Rahmen − gemessene bzw. geschätzte Kosten der Läufe des Monats, abgesagte zählen nicht).
 - **Abbruch** (`abbruch_grund`): Automatik aus, Tür/Fenster länger als die Tür-Pause offen, Taste, Bedarf, Termin.
 - **Zählende Tage** (`zaehlende_tage`): alle Tage eines fertigen Laufs, bei einem abgebrochenen die Tage vor dem Abbruch.
+- **Metadaten für die Prognose V2** (BSM-033.06, Bauvorlage r5 §5.3): `starten` friert beim Laufbeginn Konfiguration
+  und Annahme ein. Die Thermostate am Heizkörper gelten als unverändert *angenommen* (Herbert: Läufe am Wochenende,
+  niemand verstellt) – eine Annahme, keine Messung; die Stellung selbst bleibt „unbekannt“. Alte Läufe ohne diese
+  Felder lesen sich als „unbekannt“.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+
+from .prognose_typen import THERMOSTAT_NACHWEISE, THERMOSTATSTELLUNGEN, ThermostatNachweis, Thermostatstellung
 
 MAX_TAGE = 2                # höchstens zwei ganze Tage je Lauf (48 h)
 SUCHE_TAGE = 14             # so weit voraus wird ein freier Block gesucht
@@ -40,6 +46,11 @@ class Lauf:
     kosten_eur: float | None = None   # gemessen, sobald fertig/abgebrochen
     grund: str | None = None          # warum abgebrochen/abgesagt
     ende: date | None = None          # Tag des Abbruchs (zählt nicht mehr)
+    thermostat_unveraendert: ThermostatNachweis = "unbekannt"   # P1: beim Start „angenommen“
+    thermostatstellung: Thermostatstellung = "unbekannt"
+    annahme_am: datetime | None = None
+    konfiguration_id: str | None = None
+    p_ref_belege: tuple[str, ...] = ()
 
     def tage(self) -> list[date]:
         return [self.von + timedelta(days=i) for i in range((self.bis - self.von).days)]
@@ -47,14 +58,23 @@ class Lauf:
     def als_dict(self) -> dict[str, object]:
         return {"id": self.id, "bereich": self.bereich, "von": self.von.isoformat(), "bis": self.bis.isoformat(),
                 "status": self.status, "schaetzung_eur": round(self.schaetzung_eur, 2), "kosten_eur": self.kosten_eur,
-                "grund": self.grund, "ende": self.ende.isoformat() if self.ende else None}
+                "grund": self.grund, "ende": self.ende.isoformat() if self.ende else None,
+                "thermostat_unveraendert": self.thermostat_unveraendert, "thermostatstellung": self.thermostatstellung,
+                "annahme_am": self.annahme_am.isoformat() if self.annahme_am else None,
+                "konfiguration_id": self.konfiguration_id, "p_ref_belege": list(self.p_ref_belege)}
 
     @staticmethod
     def aus_dict(d: dict[str, object]) -> Lauf:
+        nachweis, stellung, belege = d.get("thermostat_unveraendert"), d.get("thermostatstellung"), d.get("p_ref_belege")
         return Lauf(str(d["id"]), str(d["bereich"]), date.fromisoformat(str(d["von"])), date.fromisoformat(str(d["bis"])),
                     str(d.get("status") or "geplant"), float(d.get("schaetzung_eur") or 0.0),   # type: ignore[arg-type]
                     None if d.get("kosten_eur") is None else float(d["kosten_eur"]),   # type: ignore[arg-type]
-                    d.get("grund") or None, date.fromisoformat(str(d["ende"])) if d.get("ende") else None)   # type: ignore[arg-type]
+                    d.get("grund") or None, date.fromisoformat(str(d["ende"])) if d.get("ende") else None,   # type: ignore[arg-type]
+                    nachweis if nachweis in THERMOSTAT_NACHWEISE else "unbekannt",   # type: ignore[arg-type]
+                    stellung if stellung in THERMOSTATSTELLUNGEN else "unbekannt",   # type: ignore[arg-type]
+                    datetime.fromisoformat(str(d["annahme_am"])) if d.get("annahme_am") else None,
+                    str(d["konfiguration_id"]) if d.get("konfiguration_id") else None,
+                    tuple(str(b) for b in belege) if isinstance(belege, (list, tuple)) else ())
 
 
 @dataclass(frozen=True)
@@ -138,6 +158,12 @@ def abbruch_grund(*, automatik: bool, tuer_offen_min: float | None, tuer_pause_m
     if termin:
         return "Termin"
     return None
+
+
+def starten(l: Lauf, jetzt: datetime, konfiguration_id: str | None, p_ref_belege: Sequence[str] = ()) -> Lauf:
+    """Lauf beginnt: Status „laeuft“, Metadaten für die Prognose eingefroren (Thermostate angenommen unverändert)."""
+    return replace(l, status="laeuft", thermostat_unveraendert="angenommen", thermostatstellung="unbekannt",
+                   annahme_am=jetzt, konfiguration_id=konfiguration_id, p_ref_belege=tuple(p_ref_belege))
 
 
 def abbrechen(l: Lauf, heute: date, grund: str) -> Lauf:

@@ -117,3 +117,92 @@ def test_sekunden_strom_eigener_thermostat():
     assert g.abschliessen(s(120)).sekunden_strom <= 10
     ohne = GeraetSammler(T0, True, None, None, mit_zaehler=False).abschliessen(s(60))
     assert ohne.sekunden_strom == 60         # ohne Messung: wie eingeschaltet
+
+
+# ---------------------------------------------------------------------- Prognose V2, P1 (BSM-033.06)
+def test_temperaturalter_90_s_und_bericht_nach_30_s():
+    """Bauvorlage r5 Anhang B: Beginn 90 s alt, Bericht nach 30 s → höchstes Alter 120 s (genau 120 ist gültig)."""
+    b = BereichSammler(T0, 21.0, None, mit_tuer=False, beobachtet=s(-90))
+    b.bericht(s(30), s(30))
+    assert b.abschliessen(s(60)).temp_alter_s == 120
+    assert b.abschliessen(s(120)).temp_alter_s == 90   # nächste Minute: Alter wächst ab dem Bericht weiter
+
+
+def test_temperaturalter_unbekannt():
+    """Start ist kein Bericht; Fühler ohne Wert macht die Minute unbekannt, nicht 0."""
+    b = BereichSammler(T0, 21.0, None, mit_tuer=False)
+    b.bericht(s(20), s(20))
+    assert b.abschliessen(s(60)).temp_alter_s is None   # 20 s vor dem ersten Bericht unbekannt
+    assert b.abschliessen(s(120)).temp_alter_s == 100
+    b.bericht(s(150), None)                              # nicht verfügbar
+    assert b.abschliessen(s(180)).temp_alter_s is None
+    b.bericht(s(180), s(180))
+    assert b.abschliessen(s(240)).temp_alter_s == 60
+
+
+def test_staffel_sperre_vereinigung():
+    """Anhang B: Gerät A gesperrt [0,20], B [10,30] → Container 30 s, nicht die Gerätesumme 40 s."""
+    b = BereichSammler(T0, None, None, mit_tuer=False, geraete=["a", "b"])
+    b.staffel(T0, "a", True)
+    b.staffel(T0, "b", False)
+    b.staffel(s(10), "b", True)
+    b.staffel(s(20), "a", False)
+    b.staffel(s(30), "b", False)
+    assert b.abschliessen(s(60)).staffel_begrenzt_s == 30
+    assert b.abschliessen(s(120)).staffel_begrenzt_s == 0
+
+
+def test_staffel_sperre_unbekannt_und_ohne_geraete():
+    b = BereichSammler(T0, None, None, mit_tuer=False, geraete=["a", "b"])
+    b.staffel(s(20), "a", False)
+    b.staffel(s(20), "b", False)
+    assert b.abschliessen(s(60)).staffel_begrenzt_s is None   # 20 s unbekannt → NULL
+    b.staffel(s(70), "b", None)                                 # b nicht erreichbar, a nicht gesperrt
+    assert b.abschliessen(s(120)).staffel_begrenzt_s is None
+    b.staffel(s(120), "a", True)                                # a gesperrt: Vereinigung sicher wahr, auch mit b unbekannt
+    assert b.abschliessen(s(180)).staffel_begrenzt_s == 60
+    b.staffel(s(180), "fremd", True)                            # Gerät eines anderen Containers zählt nicht
+    assert BereichSammler(T0, None, None, mit_tuer=False).abschliessen(s(60)).staffel_begrenzt_s is None
+
+
+def test_vereinigt():
+    from logik.minute import vereinigt
+    assert vereinigt([True, None]) is True and vereinigt([False, None]) is None
+    assert vereinigt([False, False]) is False and vereinigt([]) is None
+
+
+@pytest.mark.parametrize(("anforderung", "gesperrt", "erwartet"), [
+    (False, False, (0, 0)),    # TPI-aus: keine vorstaffelige Anforderung
+    (True, False, (60, 0)),    # Thermostat am Gerät aus: freigegeben, Strom 0 – keine Staffelung
+    (True, True, (60, 60)),    # angefordert und von der Staffelung gesperrt
+])
+def test_anforderung_und_sperre(anforderung, gesperrt, erwartet):
+    g = GeraetSammler(T0, anforderung and not gesperrt, 0.0, None, mit_zaehler=False)
+    g.staffel(T0, anforderung, gesperrt)
+    m = g.abschliessen(s(60))
+    assert (m.heizanforderung_s, m.staffel_gesperrt_s) == erwartet
+    if anforderung and not gesperrt:
+        assert m.sekunden_strom == 0
+
+
+def test_anforderung_teilweise_und_unbekannt():
+    g = GeraetSammler(T0, False, None, None, mit_zaehler=False)
+    m = g.abschliessen(s(60))   # Notprogramm/kein Bericht der Staffelung: beide NULL
+    assert (m.heizanforderung_s, m.staffel_gesperrt_s) == (None, None)
+    g.staffel(s(60), True, True)
+    g.staffel(s(70), True, False)
+    m = g.abschliessen(s(120))
+    assert (m.heizanforderung_s, m.staffel_gesperrt_s) == (60, 10)
+    g.staffel(s(140), True, None)   # 40 s beobachtet, 20 s unbekannt (nicht erreichbar)
+    m = g.abschliessen(s(180))
+    assert (m.heizanforderung_s, m.staffel_gesperrt_s) == (60, None)
+    g.staffel(s(180), None, None)
+    assert g.abschliessen(s(240)).heizanforderung_s is None
+
+
+def test_wechselminute_nimmt_den_wechsel_mit():
+    """Wechsel nach 30 s: Anteil je Hälfte, kein Endstand für die ganze Minute."""
+    g = GeraetSammler(T0, False, None, None, mit_zaehler=False)
+    g.staffel(T0, False, False)
+    g.staffel(s(30), True, False)
+    assert g.abschliessen(s(60)).heizanforderung_s == 30

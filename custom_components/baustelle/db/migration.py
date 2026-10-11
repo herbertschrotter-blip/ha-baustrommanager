@@ -108,8 +108,21 @@ def _schritt_9(verbindung: Connection) -> None:
     ansichten_anlegen(verbindung)
 
 
+# Aufbau 10: Nachweise für die Prognose V2 (BSM-033.06) – nullable, ohne Standardwert und ohne Nachfüllen alter Zeilen
+NACHWEISE = (("geraet_minute", "heizanforderung_s"), ("geraet_minute", "staffel_gesperrt_s"),
+             ("bereich_minute", "temp_alter_s"), ("bereich_minute", "staffel_begrenzt_s"))
+
+
+def _schritt_10(verbindung: Connection) -> None:
+    """Minuten bekommen Anforderung/Sperre je Gerät und Alter/Sperre je Container; alte Zeilen bleiben NULL."""
+    for tabelle, spalte in NACHWEISE:
+        if spalte not in {c["name"] for c in inspect(verbindung).get_columns(tabelle)}:
+            verbindung.execute(text(f'ALTER TABLE "{tabelle}" ADD COLUMN "{spalte}" INTEGER'))
+
+
 SCHRITTE: dict[int, Callable[[Connection], None]] = {1: _schritt_1, 2: _schritt_2, 3: _schritt_3, 4: _schritt_4, 5: _schritt_5,
-                                                     6: _schritt_6, 7: _schritt_7, 8: _schritt_8, 9: _schritt_9}
+                                                     6: _schritt_6, 7: _schritt_7, 8: _schritt_8, 9: _schritt_9,
+                                                     10: _schritt_10}
 
 
 ALT_INTEGRATION = "_integration"   # bis Aufbau 7: Daten der ganzen Integration (Ticket-Zähler, Merker) ohne Instanz

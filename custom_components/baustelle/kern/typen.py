@@ -90,6 +90,8 @@ class Laufzeit:
     warnungen: list[warn_logik.Warnung] = field(default_factory=list)
     warte: dict[str, dict[str, Any]] = field(default_factory=dict)
     staffel: dict[str, Any] = field(default_factory=dict)
+    # Prognose V2 (BSM-033.06), nur beobachtet: je Gerät (Regelung will ein vor der Staffelung, Staffelungs-Veto)
+    staffel_beobachtung: dict[str, tuple[bool, bool | None]] = field(default_factory=dict)
 
 
 # Sensoren am Shelly, die nie Verbrauch sind (Shelly: Energieeinspeisung)

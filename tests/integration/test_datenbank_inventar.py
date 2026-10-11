@@ -79,11 +79,11 @@ async def test_aufbau_9_nachgezogen(hass: HomeAssistant, freezer) -> None:
                 v.execute(text(f'DROP TABLE "{name}"'))
             for tabelle, spalte in (("bereich", "container_id"), ("geraet", "ausruestung_id"), ("firma", "kuerzel")):
                 v.execute(text(f'ALTER TABLE "{tabelle}" DROP COLUMN "{spalte}"'))
-            v.execute(delete(s.schema_version).where(s.schema_version.c.version == 9))
+            v.execute(delete(s.schema_version).where(s.schema_version.c.version >= 9))
             v.execute(insert(s.instanz).values(id="i", name="Pi", angelegt=ZEIT))
             v.execute(insert(s.baustelle).values(id="b", instanz_id="i", titel="Alt", status="aktiv", angelegt=ZEIT))
             v.execute(insert(s.firma).values(baustelle_id="b", id="f", name="Huber", eigen=False))
-        assert migrieren(engine, None if TEST_PG else pfad) == 9
+        assert migrieren(engine, None if TEST_PG else pfad) == s.SCHEMA_VERSION   # 9 und die folgenden (wiederholbar)
         with engine.connect() as v:
             pruefen = inspect(v)
             assert set(s.INVENTAR) <= set(pruefen.get_table_names())
@@ -92,6 +92,6 @@ async def test_aufbau_9_nachgezogen(hass: HomeAssistant, freezer) -> None:
             assert "kuerzel" in {c["name"] for c in pruefen.get_columns("firma")}
             assert v.execute(text("SELECT COUNT(*) FROM v_inventar")).scalar() == 0
             assert v.execute(text("SELECT name FROM firma WHERE id = 'f'")).scalar() == "Huber"
-            assert [r[0] for r in v.execute(text("SELECT version FROM schema_version ORDER BY version"))] == list(range(1, 10))
+            assert [r[0] for r in v.execute(text("SELECT version FROM schema_version ORDER BY version"))] == list(range(1, s.SCHEMA_VERSION + 1))
     finally:
         engine.dispose()

@@ -157,6 +157,96 @@ async def test_minutenwerte(hass: HomeAssistant, baustelle, freezer) -> None:
     assert len(_zeilen(hass, "wetter_minute")) == 2 and _zeilen(hass, "wetter_minute")[0]["aussen_temp"] == pytest.approx(4.5)
 
 
+async def test_prognose_nachweise_je_minute(hass: HomeAssistant, baustelle, freezer) -> None:
+    """BSM-033.06 (P1): Anforderung/Sperre je Gerät, Sperre und Alter des Innenwerts je Container, Kontext als Ereignis
+    nur bei Änderung. Automatik aus: keine Anforderung, keine Sperre (0, nicht NULL)."""
+    await hass.async_block_till_done()
+    await _minute(hass, freezer)                            # erste Minute: Start ist kein Bericht → Alter unbekannt
+    hass.states.async_set("sensor.temp_c1", "19.0")         # gleicher Wert: nur Bericht (last_reported), keine Änderung
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set("sensor.temp_c1", "19.0")
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    c1 = [r for r in _zeilen(hass, "bereich_minute") if r["bereich_id"] == C1]
+    assert c1[0]["temp_alter_s"] is None and c1[1]["temp_alter_s"] == 30
+    assert c1[1]["staffel_begrenzt_s"] == 0
+    assert all(r["temp_alter_s"] is None for r in _zeilen(hass, "bereich_minute") if r["bereich_id"] == C2)   # ohne Fühler
+    hk1 = [r for r in _zeilen(hass, "geraet_minute") if r["geraet_id"] == HK1]
+    assert (hk1[1]["heizanforderung_s"], hk1[1]["staffel_gesperrt_s"]) == (0, 0)
+    kontext = [r for r in _zeilen(hass, "ereignis") if r["art"] == "prognose_kontext"]
+    assert {r["bereich_id"] for r in kontext} == {C1, C2}
+    wert = json.loads(kontext[0]["wert"])
+    assert set(wert) == {"grund", "zustand", "soll_c", "regelungsart", "konfiguration_id", "zeit"}
+    assert wert["regelungsart"] in ("thermo", "plan") and wert["konfiguration_id"].startswith("k")
+    await _minute(hass, freezer, 2)                         # nichts geändert: kein neues Kontext-Ereignis
+    assert len([r for r in _zeilen(hass, "ereignis") if r["art"] == "prognose_kontext"]) == len(kontext)
+
+
+async def test_beobachtung_stoert_die_auswertung_nicht(hass: HomeAssistant, baustelle, freezer, monkeypatch) -> None:
+    """BSM-033.06: wirft die Prognose-Beobachtung, laufen spätere Listener und die Minute trotzdem."""
+    from custom_components.baustelle.funktionen.heizung import Heizung   # noqa: PLC0415
+    st = baustelle.runtime_data
+
+    def kaputt(_self, _bid):
+        raise RuntimeError("Test")
+    monkeypatch.setattr(Heizung, "prognose_kontext", kaputt)
+    aufrufe: list[int] = []
+    st.async_add_listener(lambda: aufrufe.append(1))
+    st.auswerten()
+    await hass.async_block_till_done()
+    assert aufrufe == [1]
+    await _minute(hass, freezer)
+    assert [r for r in _zeilen(hass, "geraet_minute") if r["geraet_id"] == HK1]
+
+
+async def test_aufbau_10_nachgezogen_alte_zeilen_und_puffer(hass: HomeAssistant, freezer) -> None:
+    """Aufbau 9 → 10: vier Spalten nullable ohne Standardwert, alte Zeilen bleiben NULL, wiederholbar; eine alte
+    Schreibarbeit ohne die neuen Schlüssel (Puffer) bleibt gültig."""
+    from sqlalchemy import delete, inspect, text   # noqa: PLC0415
+
+    from custom_components.baustelle.db.migration import NACHWEISE   # noqa: PLC0415
+    from custom_components.baustelle.db.schreiber import arbeit, arbeit_von, zeile_von   # noqa: PLC0415
+
+    from .conftest import pg_url   # noqa: PLC0415
+    pfad = Path(hass.config.path(DATEI))
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(pg_url() if TEST_PG else f"sqlite:///{pfad}")
+    zeit = dt_util.parse_datetime("2026-10-11 08:00:00+00:00")
+    alt_g = {"geraet_id": "g", "zeit": zeit, "baustelle_id": "b", "dauer_s": 60, "sekunden_ein": 60, "sekunden_strom": 60,
+             "leistung_w": 2000.0, "leistung_w_max": 2000.0, "energie_wh": 33.3, "zaehlerstand_kwh": None, "erreichbar": True,
+             "quelle": "ha"}
+    alt_b = {"bereich_id": "c", "zeit": zeit, "baustelle_id": "b", "dauer_s": 60, "temperatur": 20.0, "feuchte": None,
+             "soll": 21.0, "tuer_offen_s": None, "zustand": "heizt", "grund": "arbeitszeit", "quelle": "ha"}
+    wetter = {"baustelle_id": "b", "zeit": zeit, "dauer_s": 60, "aussen_temp": 3.0, "regen_mm": 0, "hoechst_heute": 5.0, "quelle": "ha"}
+    try:
+        assert migrieren(engine, None if TEST_PG else pfad) == SCHEMA_VERSION
+        with engine.begin() as v:   # zurück auf Aufbau 9 mit einer alten Minute
+            for tabelle, spalte in NACHWEISE:
+                v.execute(text(f'ALTER TABLE "{tabelle}" DROP COLUMN "{spalte}"'))
+            v.execute(delete(s.schema_version).where(s.schema_version.c.version == 10))
+            v.execute(insert(s.geraet_minute).values(geraet_id="alt", zeit=zeit, baustelle_id="b", dauer_s=60, quelle="ha"))
+        assert migrieren(engine, None if TEST_PG else pfad) == SCHEMA_VERSION
+        with engine.begin() as v:
+            pruefen = inspect(v)
+            for tabelle, spalte in NACHWEISE:
+                spalten = {c["name"]: c for c in pruefen.get_columns(tabelle)}
+                assert spalten[spalte]["nullable"] and spalten[spalte]["default"] is None
+            assert v.execute(text("SELECT heizanforderung_s, staffel_gesperrt_s FROM geraet_minute WHERE geraet_id = 'alt'")).one() == (None, None)
+            from custom_components.baustelle.db.migration import _schritt_10   # noqa: PLC0415
+            _schritt_10(v)   # wiederholt: ändert nichts
+            # alte Schreibarbeit (vor 0.8.133, über den Puffer) ohne die neuen Schlüssel
+            arbeit_von(zeile_von(arbeit("minute", "b", [alt_g], [alt_b], wetter, [], [], zeit)))(v)
+            neu_g = {**alt_g, "geraet_id": "n", "heizanforderung_s": 60, "staffel_gesperrt_s": 20}
+            neu_b = {**alt_b, "bereich_id": "d", "temp_alter_s": 120, "staffel_begrenzt_s": 20}
+            arbeit_von(zeile_von(arbeit("minute", "b", [neu_g], [neu_b], {**wetter, "zeit": zeit + timedelta(minutes=1)}, [], [], zeit)))(v)
+            g = dict(v.execute(text("SELECT geraet_id, heizanforderung_s FROM geraet_minute WHERE geraet_id IN ('g', 'n')")).all())
+            b = dict(v.execute(text("SELECT bereich_id, temp_alter_s FROM bereich_minute WHERE bereich_id IN ('c', 'd')")).all())
+            assert g == {"g": None, "n": 60} and b == {"c": None, "d": 120}
+    finally:
+        engine.dispose()
+
+
 async def test_schalten_als_ereignis_mit_quelle(hass: HomeAssistant, baustelle, freezer) -> None:
     await hass.async_block_till_done()
     hass.states.async_set("switch.hk1", "on")                              # am Gerät (ohne Benutzer)

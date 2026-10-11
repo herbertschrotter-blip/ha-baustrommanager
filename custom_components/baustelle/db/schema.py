@@ -27,7 +27,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Dialect
 
-SCHEMA_VERSION = 9   # 9: Inventar (BSM-031); 8: Meldungen je Instanz (BSM-026 8d); 2: JSON als Text; 3: strom_min; 4: sekunden_strom; 5: messwert (BSM-014); 6: Meldung vollständig (BSM-015); 7: Ansichten (BSM-026)
+SCHEMA_VERSION = 10   # 10: Prognose-Nachweise (BSM-033.06); 9: Inventar (BSM-031); 8: Meldungen je Instanz (BSM-026 8d); 2: JSON als Text; 3: strom_min; 4: sekunden_strom; 5: messwert (BSM-014); 6: Meldung vollständig (BSM-015); 7: Ansichten (BSM-026)
 
 metadata = MetaData()
 
@@ -281,6 +281,8 @@ geraet_minute = Table(
     Column("zaehlerstand_kwh", Float),
     Column("erreichbar", Boolean),
     Column("quelle", String(20), nullable=False),        # ha | notprogramm | import_verlauf | import_statistik
+    Column("heizanforderung_s", Integer, nullable=True),    # Aufbau 10: Regelung will ein (vor der Staffelung); NULL = unbekannt
+    Column("staffel_gesperrt_s", Integer, nullable=True),   # Aufbau 10: davon von der Staffelung nicht freigegeben
 )
 
 bereich_minute = Table(
@@ -296,6 +298,8 @@ bereich_minute = Table(
     Column("zustand", String(20)),
     Column("grund", String(40)),
     Column("quelle", String(20), nullable=False),
+    Column("temp_alter_s", Integer, nullable=True),         # Aufbau 10: höchstes Alter des Innenwerts; NULL = unbekannt
+    Column("staffel_begrenzt_s", Integer, nullable=True),   # Aufbau 10: Vereinigung der Sperrzeiten der Geräte
 )
 
 wetter_minute = Table(

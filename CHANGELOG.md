@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.133] – 2026-10-11
+
+- Prognose V2, erster Baustein (BSM-033.06, Bauplan Hochrechnung §8): die Integration schreibt ab jetzt je Minute mit,
+  was die neue Prognose später als Beleg braucht – an der Seite und am Schalten ändert sich nichts. Je Heizkörper: wie
+  lange die Regelung ihn einschalten wollte (`heizanforderung_s`) und wie lange davon die Staffelung ihn nicht ließ
+  (`staffel_gesperrt_s`; die Mindestpause zählt nicht dazu). Je Container: wie lange mindestens ein Heizkörper gesperrt
+  war (`staffel_begrenzt_s`, überlappende Zeiten nur einmal) und wie alt der Messwert des Raumfühlers höchstens war
+  (`temp_alter_s`, aus den Berichten des Fühlers, auch wenn er denselben Wert noch einmal meldet). Unbekannt bleibt leer,
+  nie 0 – so auch alle älteren Minuten und das Notprogramm. Datenbank Aufbau 10 (vier neue Spalten, wird beim Start
+  nachgezogen).
+- Ändert sich in einem Container Grund, Zustand, Soll, Regelungsart oder die Heizkörper-Ausstattung, steht das sofort
+  als Ereignis „prognose_kontext“ mit Uhrzeit in der Datenbank (nicht jede Minute).
+- Baseline-Läufe merken sich beim Start die Ausstattung und die Annahme „Thermostate am Heizkörper unverändert“ (Läufe am
+  Wochenende, Herbert) – als Annahme, nicht als Messung; ältere Läufe gelten als „unbekannt“.
+- Neu in der Fachlogik: `logik/prognose_typen.py`, `prognose_regeln.py` (alle Schwellen der neuen Prognose an einer
+  Stelle) und `prognose_merkmale.py` (welche Minute ist regulär, Frost, Baseline oder Sonderbetrieb, und ob sie zählt).
+
 ## [0.8.132] – 2026-10-11
 
 - „Ohne Automatik“ und „gespart“ sind jetzt als **grobe Obergrenze, nicht belastbar** gekennzeichnet (BSM-033.05, Audit

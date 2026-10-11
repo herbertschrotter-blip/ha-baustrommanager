@@ -165,6 +165,21 @@ def last_kw(gemessen_w: float | None, nenn_kw: float, an: bool, an_seit_min: flo
     return max(gemessen, nenn_kw) if an_seit_min < ANLAUF_MIN else gemessen
 
 
+def gesperrt(will: bool, erreichbar: bool, laeuft: bool, wartegrund: str | None) -> bool | None:
+    """Tatsächliches Staffelungs-Veto eines Geräts nach einem Schritt (Prognose V2, BSM-033.06) – nur beobachtet.
+
+    Gesperrt ist ein Gerät, das die Regelung einschalten will (`will`), das aber nach Staffelung und Anlaufstaffel nicht
+    laufen darf. Ohne Wunsch kein Veto – auch offline (sonst machte ein dauerhaft offline Gerät die Sperre seines
+    Containers immer unbekannt). Mit Wunsch entscheidet die Staffelung ein nicht erreichbares Gerät nicht (None =
+    unbekannt). Die Mindestpause ist kein Veto der Staffelung, sondern Schutz des Geräts.
+    """
+    if not will:
+        return False
+    if not erreichbar:
+        return None
+    return not laeuft and wartegrund != Warten.MINDESTPAUSE
+
+
 def frei_je_anschluss(anschluesse: list[Anschluss], lasten: list[Last]) -> dict[str, float]:
     """Freier Platz je Anschluss: Grenze − Reserve − alles, was läuft (Heizer, Pumpen, Steckdosen)."""
     return {

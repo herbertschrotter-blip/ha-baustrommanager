@@ -11,6 +11,7 @@ from logik.staffel import (
     anlauf_folge,
     anschluss,
     frei_je_anschluss,
+    gesperrt,
     grenze_kw,
     staffeln,
 )
@@ -350,3 +351,19 @@ def test_einer_je_container_zuerst():
     erg = staffeln([klein(4.0)], [hz("c1_a", an=True, gruppe="c1", an_seit_min=60), hz("c1_b", an=True, gruppe="c1", an_seit_min=30),
                                   hz("c2_a", an=True, gruppe="c2", an_seit_min=1)], REGELN)
     assert "c2_a" in erg.an and erg.wartet.get("c1_b") == "anschluss_voll"
+
+
+@pytest.mark.parametrize(("will", "erreichbar", "laeuft", "grund", "erwartet"), [
+    (True, True, False, Warten.ANSCHLUSS_VOLL, True),
+    (True, True, False, Warten.RUNDLAUF, True),
+    (True, True, False, Warten.ANLAUF, True),
+    (True, True, False, Warten.MAX_GLEICHZEITIG, True),
+    (True, True, False, Warten.MINDESTPAUSE, False),   # Mindestpause schützt das Gerät, ist kein Veto
+    (True, True, True, None, False),
+    (False, True, False, None, False),                 # TPI-aus: keine Anforderung, kein Veto
+    (True, False, False, None, None),                  # offline mit Anforderung: entscheidet die Staffelung nicht
+    (False, False, False, None, False),                # offline ohne Anforderung: kein Veto (Container nicht NULL)
+])
+def test_gesperrt_nur_echtes_veto(will, erreichbar, laeuft, grund, erwartet):
+    """BSM-033.06: Staffelungs-Veto für die Prognose (nur beobachtet)."""
+    assert gesperrt(will, erreichbar, laeuft, grund and str(grund)) is erwartet

@@ -106,7 +106,7 @@ Bauplan: `docs/bauplan-hochrechnung.md`.
 - [x] **J3** (BSM-033.03, 0.8.125) Anzeige: Karte „Heizperiode“ mit Hochrechnung (Diagramm tatsächlich/Prognose mit/ohne), Signatur, Klima (Mockup `hochrechnung.html`); Wetter-Einfluss aus der Signatur 0.8.126
 - [ ] **J4** (BSM-033.04) Automatische Baseline-Läufe (startet aus, Budget, Ankündigung, Abbruch) – Teil a (Logik, Integration) 0.8.127; Prognose Tag/Woche/Monat 0.8.129; Verlauf 24 h 0.8.130; Teil b Reiter Baseline offen
 - [x] **J5** (BSM-033.05, 0.8.132) P0: „ohne Automatik“ und „gespart“ als grobe Obergrenze kennzeichnen (Audit 11.10.2026, CGR-2026-10-11-hochrechnung)
-- [ ] **J6** (BSM-033.06) P1: Minutenklassifikation, Qualitätsvertrag, vier neue Minutenspalten, Baseline-Metadaten – Bauplan §8
+- [x] **J6** (BSM-033.06, 0.8.133) P1: Minutenklassifikation, Qualitätsvertrag, vier neue Minutenspalten, Baseline-Metadaten – Bauplan §8
 - [ ] **J7** (BSM-033.07) P2: Tagesmerkmale (Exposition, Abdeckung, Starts, Abkühlnächte)
 - [ ] **J8** (BSM-033.08) P3: stationäre Fenster und H, Tagesregression, Baseline-Plateaus, Evidenzbericht → Zahlen an ChatGPT
 - [ ] **J9** (BSM-033.09) P4a: Schattenprognose V2 mit neun Szenarien und Stufen; danach P4b (Dynamik) und P6 (Umschaltung)

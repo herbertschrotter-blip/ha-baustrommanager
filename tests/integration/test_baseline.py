@@ -62,7 +62,12 @@ async def test_lauf_schaltet_alle_heizkoerper_und_endet(hass: HomeAssistant, fre
     hb._speichern(hz, [Lauf("x1", C1, SAMSTAG, MONTAG, "geplant", 10.0)])
     st.auswerten()
     await hass.async_block_till_done()
-    assert hb.laeufe(hz)[0].status == "laeuft"
+    l = hb.laeufe(hz)[0]
+    assert l.status == "laeuft"
+    # BSM-033.06: beim Start eingefroren – Thermostate angenommen unverändert, Stellung unbekannt, Konfiguration
+    assert (l.thermostat_unveraendert, l.thermostatstellung, l.annahme_am is not None) == ("angenommen", "unbekannt", True)
+    assert l.konfiguration_id == hz.prognose_kontext(C1)[1]
+    assert st.lz["baseline"]["laeufe"][0]["thermostat_unveraendert"] == "angenommen"
     st.auswerten()
     await hass.async_block_till_done()
     assert hz._lern_grund[C1] == SollGrund.BASELINE
@@ -73,6 +78,21 @@ async def test_lauf_schaltet_alle_heizkoerper_und_endet(hass: HomeAssistant, fre
     await hass.async_block_till_done()
     l = hb.laeufe(hz)[0]
     assert l.status == "abgebrochen" and l.grund == "Taste am Plug" and l.ende == SAMSTAG
+
+
+async def test_start_ohne_konfiguration_bei_fehler(hass: HomeAssistant, freezer, shellys, nachrichten, monkeypatch) -> None:
+    """BSM-033.06: kann die Konfiguration nicht bestimmt werden, startet der Lauf trotzdem (konfiguration_id None)."""
+    st, hz = await _baustelle(hass, freezer, zeit="2026-11-21 10:00:00+01:00")
+    shellys.anmelden()
+
+    def kaputt(_bid):
+        raise RuntimeError("Test")
+    monkeypatch.setattr(hz, "prognose_kontext", kaputt)
+    hb._speichern(hz, [Lauf("x3", C1, SAMSTAG, MONTAG, "geplant", 10.0)])
+    st.auswerten()
+    await hass.async_block_till_done()
+    l = hb.laeufe(hz)[0]
+    assert l.status == "laeuft" and l.konfiguration_id is None and l.thermostat_unveraendert == "angenommen"
 
 
 async def test_fertig_nach_dem_letzten_tag(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:

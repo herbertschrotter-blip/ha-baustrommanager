@@ -1,12 +1,12 @@
 """Baseline-Läufe „ohne Automatik“ (BSM-033.04)."""
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from logik.baseline import (
     ANTEIL, MAX_TAGE, Kandidat, Lauf, abbrechen, abbruch_grund, container_waehlen, freier_block, laeuft_am, monat_rest,
-    planen, schaetzung_eur, zaehlende_tage,
+    planen, schaetzung_eur, starten, zaehlende_tage,
 )
 
 FR = date(2026, 11, 13)          # Freitag
@@ -85,3 +85,19 @@ def test_abbrechen_und_zaehlende_tage():
 def test_lauf_als_dict_und_zurueck():
     l = Lauf("1", "a", SA, MO, "abgebrochen", 12.345, 3.0, "Taste am Plug", SO)
     assert Lauf.aus_dict(l.als_dict()) == Lauf("1", "a", SA, MO, "abgebrochen", 12.35, 3.0, "Taste am Plug", SO)
+
+
+def test_lauf_metadaten_alt_und_neu():
+    """BSM-033.06: alter Lauf ohne Metadaten liest sich „unbekannt“; Start friert Annahme und Konfiguration ein."""
+    alt = {"id": "1", "bereich": "a", "von": SA.isoformat(), "bis": MO.isoformat(), "status": "fertig", "schaetzung_eur": 5.0,
+           "kosten_eur": 4.0, "grund": None, "ende": None}
+    l = Lauf.aus_dict(alt)
+    assert (l.thermostat_unveraendert, l.thermostatstellung, l.annahme_am, l.konfiguration_id, l.p_ref_belege) == (
+        "unbekannt", "unbekannt", None, None, ())
+    jetzt = datetime(2026, 11, 14, 0, 0, tzinfo=UTC)
+    neu = starten(Lauf("2", "a", SA, MO), jetzt, "kabc", ["p1"])
+    assert (neu.status, neu.thermostat_unveraendert, neu.thermostatstellung) == ("laeuft", "angenommen", "unbekannt")
+    assert Lauf.aus_dict(neu.als_dict()) == neu
+    assert neu.als_dict()["annahme_am"] == "2026-11-14T00:00:00+00:00" and neu.als_dict()["p_ref_belege"] == ["p1"]
+    assert Lauf.aus_dict({**alt, "thermostat_unveraendert": "quatsch", "thermostatstellung": "max"}).thermostat_unveraendert == "unbekannt"
+    assert Lauf.aus_dict({**alt, "thermostatstellung": "max"}).thermostatstellung == "max"
