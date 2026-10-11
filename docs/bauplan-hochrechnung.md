@@ -6,7 +6,7 @@ Ersparnis wirkt dadurch zu groß. Ziel (Herbert 07.10.2026): nach professionelle
 Energiesignatur je Container (ASHRAE Guideline 14), eine Hochrechnung mit Heizgradtagen als Spanne (ÖNORM B 8135,
 Klimamittel GeoSphere Austria) und die Ersparnis aus einer gemessenen Baseline (IPMVP Option B).
 
-Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026). Aufgabe BSM-033, Unteraufgaben .01–.04 = Stufen in §2.
+Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
 
 ## 1. Grundsätze
 
@@ -23,6 +23,11 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .02 | Hochrechnung mit Heizgradtagen und Spanne, Witterungsbereinigung; Daten aus `tag_bereich` an die Signatur | ☑ 0.8.124 |
 | .03 | Anzeige: Karte „Heizperiode“ (Mockup `hochrechnung.html`, abgenommen 10.10.2026) | ☑ 0.8.125 |
 | .04 | Automatische Baseline-Läufe (§6): **a** Logik und Integration ☑ 0.8.127, **b** Anzeige (Mockup zuerst) ☐ | ◐ |
+| .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☐ |
+| .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☐ |
+| .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☐ |
+| .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☐ |
+| .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☐ |
 
 ## 3. Energiesignatur (.01)
 
@@ -147,3 +152,39 @@ Zusammenhang, starke Streuung, Gütestufen, erwarteter Verbrauch, getrennter Bet
 Klima, Rest mit Spanne und Normjahr, lernt (Tagesschnitt), ohne Tage, Summe der Baustelle.
 `tests/integration/test_hochrechnung.py`: Tage aus der Datenbank (ein Tag im Notbetrieb fällt weg) → Signatur, Sensorwert,
 ohne Tage der Tagesschnitt.
+
+## 8. Prognose V2 – Entscheidungen aus dem Review (CGR-2026-10-11-hochrechnung, 11.10.2026)
+
+**Verbindliche Bauvorlage:** `docs/chatgpt-reviews/CGR-2026-10-11-hochrechnung/r5/02-chatgpt-response.md` (Modulschnitt,
+Typverträge, `PrognoseRegeln`, Adapter-Vertrag, Schema, Anzeige-Texte, Testplan mit Zahlenkatalogen aus r3 und r4). Die
+Abschnitte 3–6 oben beschreiben das alte Modell; es läuft bis zur Umschaltung (P6) als „Bisherige Schätzung“ weiter.
+
+Befund (Audit): Tagesschnitt ohne Heizstunden, Nulltage verfälschen, Signatur flach, „ohne“ nicht gemessen (24 h
+Volllast ≈ 185 kWh/Tag), 24-h-Kurve verteilt nur einen Tageswert.
+
+Entscheidungen (Herbert und Review):
+
+1. **Modell:** E_mit je Intervall = min(P, H·max(0, Ziel − außen))·dt über die geplanten Freigaben; H aus stationären
+   Fenstern (Konvektor 60 + 120 min, Öl 120 + 180 min) als gewichteter Median je Tag → Median über Tage; Rückfall
+   Tagesregression durch den Ursprung (Stufe B); Planmodus/ohne Fühler nur Duty × Kapazität (höchstens B).
+2. **Betriebsarten** REGULAER / FROST / BASELINE / SONSTIGE aus `grund`; TPI-aus bleibt REGULAER; Frostexposition =
+   jede Bereitschaftsminute außerhalb R, Frostziel (Ein + Aus)/2 = 6 °C, kein 5-%-Aufschlag.
+3. **Wiederaufheizen und Frost-Dynamik** (C, tau) erst P4b nach den P3-Zahlen; bis dahin Haltebedarf + Band bis
+   Blockkapazität.
+4. **Gegenmodell „ohne“** nur aus Baseline-Plateaus mit sichtbaren Thermostatzyklen (T_max_eff, H_ohne); erster Lauf
+   höchstens B, C erst aus zwei Läufen. Fehlt es: „gespart“ = None, kein Ersatz aus dem alten Ohne-Zähler.
+5. **Altdaten** (Herbert): Ersatznachweis statt Sperre – Konstantfolge ≤ 1 800 s, Plugs erreichbar, Energie lückenlos,
+   Pulscheck gegen unabhängiges P_ref (nicht `nenn_kw()`); höchstens Stufe C, Band mindestens ±50 %.
+6. **Neue Minutenspalten** (P1, nullable, kein Default, kein Backfill): `bereich_minute.temp_alter_s`,
+   `bereich_minute.staffel_begrenzt_s`, `geraet_minute.heizanforderung_s`, `geraet_minute.staffel_gesperrt_s`;
+   Kontextwechsel innerhalb der Minute als `ereignis` `art="prognose_kontext"`.
+7. **Baseline-Thermostate** (Herbert): Läufe sind am Wochenende, niemand verstellt → `thermostat_unveraendert =
+   angenommen` (Annahme, keine Messung; sichtbar im Hinweis).
+8. **Szenarioband** aus neun ganzen Läufen (Klima ±1,5 K × H unten/Mitte/oben), gespart je Lauf, negative Werte
+   sichtbar, keine Wahrscheinlichkeitsangabe. Stufen A–D getrennt für Evidenz und Prognose; Texte liefert die
+   Integration (Bauvorlage §9.2).
+9. **Schattenbetrieb:** P4a rechnet parallel (`prognose_v2`), keine Mischung mit Legacy-Werten; Umschaltung P6
+   rücknehmbar.
+
+Nach P3 gehen je Container die Zahlen (Fenster direkt/Ersatz, Verwerfungsgründe, Starts, Abkühlnächte) in eine neue
+Review-Runde; danach Entscheidung über P4b.

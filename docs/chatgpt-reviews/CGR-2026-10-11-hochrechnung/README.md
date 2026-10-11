@@ -5,7 +5,7 @@ Container, Rückfall Tagesschnitt, Tag/Woche/Monat, Verlauf 24 h, Schätzung „
 Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nicht.“
 **Zeitraum:** 2026-10-11
 **Branch:** main
-**Status:** Runde 5 offen
+**Status:** Abgeschlossen (11.10.2026)
 
 ---
 
@@ -51,4 +51,12 @@ Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nic
 ### Runde 5 — Bauvorlage aus einem Guss
 - **Artefakte:** [r5/](./r5/)
 - **Fokus:** Modulschnitt in `logik/`, Adapter-Vertrag, Schema P1, Anzeige je Stufe, Testplan, Widersprüche Runden 2–4
-- **Kernergebnis:** offen
+- **Kernergebnis:** verbindliche Bauvorlage (r5/02): 10 Module `prognose_*.py`, Typverträge, `PrognoseRegeln`,
+  Adapter-Vertrag je Lieferung, vier Spalten, Anzeige-Texte A–D, Testplan, 21 aufgelöste Widersprüche. Herbert:
+  abschließen und bauen.
+
+## Ergebnis
+
+- Entscheidungen: `docs/bauplan-hochrechnung.md` §8; Stufen .05–.09 in §2
+- Fahrplan J5–J9, Aufgaben BSM-033.05 (P0) bis BSM-033.09 (P4a)
+- Offen für eine neue Serie nach P3: Fensterzahlen je Container, Starts, Abkühlnächte → Entscheidung über P4b
