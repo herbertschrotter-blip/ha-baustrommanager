@@ -102,7 +102,7 @@ eigener Seite „Baustelle“ in der Seitenleiste. Zweck, Aufbau und Auslieferun
 ## Review-Profil
 
 - Review-Ablage: `docs/chatgpt-reviews/` (Serien `CGR-<Datum>-<thema>`, Übersicht `INDEX.md`)
-- Themen: seite-lit, notprogramm, datenbank, integration
+- Themen: seite-lit, notprogramm, datenbank, integration, hochrechnung
 - GitHub-Repo: herbertschrotter-blip/ha-baustelle (Branch nach Branch-Policy, derzeit `main`)
 - Pflicht-Block: „Regeln der Integration“ – Fachlogik nur in `logik/` (mit Test), die Seite rechnet nichts Fachliches,
   ausgeliefert wird eine Datei `frontend/baustelle-panel.js`, Master-Mockup `mockups/glas.html` = echte Seite mit
