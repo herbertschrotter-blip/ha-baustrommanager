@@ -25,7 +25,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .04 | Automatische Baseline-Läufe (§6): **a** Logik und Integration ☑ 0.8.127, **b** Anzeige (Mockup zuerst) ☐ | ◐ |
 | .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☑ 0.8.132 |
 | .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☑ 0.8.133 |
-| .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☐ |
+| .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☑ 0.8.134 |
 | .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☐ |
 | .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☐ |
 
@@ -213,3 +213,52 @@ Review-Runde; danach Entscheidung über P4b.
   wie in `bereich_minute.soll`.
 - `db/schreiber.py` blieb unverändert: die Schreibarbeit `minute` gibt die Zeilen unverändert an die Tabelle; alte
   Pufferarbeiten ohne die neuen Schlüssel schreiben NULL.
+
+**Notiz aus dem Bau P2 (0.8.134, BSM-033.07)** – Abweichungen und Festlegungen gegenüber der Bauvorlage (nach Review
+der Lieferung nachgezogen):
+
+- Ort: `logik/prognose_merkmale.py` (`pruefe_minuten`, `frische_ersatz`, `tagesmerkmale`, `starts`, `abkuehlepisoden`,
+  `merkmale` = Tage und Abkühlepisoden in einem Durchgang, dazu `betriebskontext`, `frost_bereit`, `kontext_gewechselt`,
+  `bestaetigter_lauf`), Typen `MinutenQualitaet`, `StartMerkmal`, `TagesMerkmale`, `AbkuehlEpisode`; Adapter
+  `db/prognose.py` (Lesen) und `funktionen/heizung/prognose_v2.py` (Diagnose, WS `baustelle/prognose_v2`). Keine neue
+  Schwelle außerhalb `PrognoseRegeln`; einzige Konstante `MINUTE_S` = 60 (Definition der Minutenzeile).
+- `kontext_noetig`/`lauf_bestaetigen` (Notiz P1) werden ausgewertet: ohne belegten Kontext bzw. ohne bestätigte Lauf-ID
+  (Lauf laufend/fertig, abgebrochen nur vor dem Abbruchtag) ist die Minute betrieblich ungültig.
+- **Einstellungen je Zeitpunkt:** Ausgangsstand = jüngste ganze Zeile `heizung`/`geraete` (Übernahme bzw. Speichern der
+  ganzen Einstellung), darauf die Punkt-Zeilen aus `baustelle/setzen` (`heizung.frost_grenze`, `geraete.<id>.nenn_kw`)
+  und `geraet.status` nach `ab` nachgespielt. Übernahme-Zeilen (rückdatiert auf den Baustellenbeginn) belegen erst ab
+  der Übernahme.
+- **Kontext belegt** nur mit Ereignis `prognose_kontext` (letztes vor dem Zeitraum + alle darin), dessen
+  Konfigurations-ID die Heizkörper zum Zeitpunkt bestätigt, dessen Grund zum gespeicherten Grund passt (letztes
+  Ereignis bis Minutenende; ein Ereignis genau am Minutenende zählt dafür mit, ist aber kein Wechsel), und mit belegter
+  Einstellung `heizung`. Minuten vor 0.8.133 bleiben damit unbelegt. **Offen (Entscheidung Herbert):** ob ältere
+  Zeiträume aus Einsatzintervallen und Einstellungsverlauf rekonstruiert werden – nicht gebaut.
+- Kontextwechsel in der Minute = Grund, Regelungsart oder Konfiguration ändern sich (Zustand/TPI und Soll allein nicht).
+  Eine Wechselminute zählt nicht zum Training und nicht gemeinsam (Lücke von 60 s); der Tag bleibt geeignet, Code
+  `wechsel_im_intervall` als Hinweis. Geräte-/Moduswechsel schließen den Tag aus (`konfiguration_gewechselt`,
+  `modus_gewechselt`).
+- **Offene Abweichung:** `aussen_frisch` bleibt None (Wetterwert ohne Altersnachweis); Code `aussen_frische_unbelegt`
+  macht die Unsicherheit sichtbar, sperrt die direkte Frische aber nicht (nur False sperrt).
+- Frostbereitschaft: fehlen Frostschutz-Schalter oder Frostgrenze in der Einstellung, ist sie unbekannt (None), nie 0 °C.
+  Fühler = `bereich.fuehler` oder Regelungsart thermo.
+- Exposition: R (thermo) und P (Zeitplan) getrennt; die gemeinsamen Quoten `q_joint_r`, `regulaer_joint_kwh` und
+  `kapazitaet_regulaer_kwh` gelten für R∪P (ein Tag ist nach Konfiguration entweder thermo oder plan). F =
+  Frostbereitschaft außerhalb R/P nach `frost_bereit` (Frost an, nicht frei mit `frei_modus` aus, Fühler oder
+  `frost_aussen`).
+- Tagestraining thermo zusätzlich mit den Tagesfit-Regeln aus §6.4 (alle bekannten Starts ≤ 2 K, R ≥ 4 h, GDH_R ≥ 20).
+  Türkontakt fehlt → Code `tuer_unbekannt` (kein Ausschluss, im Tag wie in Abkühlepisoden); Tür > 60 s am Stück in R/P
+  → Ausschluss.
+- Starts je Container; Pause mit Datenlücke oder ungültigen Minuten → Start zählt mit Code `start_nach_luecke` („ohne R“
+  nicht bewiesen); Sollsprung > 1 K (z. B. Absenken → Arbeitszeit) → Start mit Code `sollsprung`.
+- Gerätezuordnung zum Zeitpunkt: ab Aufbau 9 aus den Inventar-Einsätzen (`ausruestung_einsatz.geraet_id` →
+  `container_einsatz.bereich_id`), sonst `geraet` (Rolle in API-Schreibweise `heizung`) mit `angelegt` ≤ t <
+  `entfernt`; aktiv nach dem Status in der Einstellung `geraete` zum Zeitpunkt; P_ref = `geraete.<id>.nenn_kw` zum
+  Zeitpunkt (Beleg = die Zeile, die den Wert gesetzt hat).
+- Minuten ohne Container-Zeile, aber mit Gerätezeilen, kommen als `zeile_vorhanden=False` (Energie bleibt); Zeit ganz
+  ohne Zeilen bleibt implizite Lücke, die Fachlogik rechnet mit der echten Tagesdauer.
+- Last: in der globalen Datenbanksperre werden nur Zeilen gelesen (`prognose_rohdaten`), zusammengesetzt und gerechnet
+  wird in einem eigenen Executor-Job; Qualität je Minute nur einmal; höchstens eine Diagnose gleichzeitig.
+- Abkühlepisoden: Nachlauf Konvektor `konvektor_vorlauf_min`, sonst (Öl oder unbekannter Typ) `oel_vorlauf_min`;
+  „ohne Heizenergie“ = `sekunden_strom` 0 (sonst Energie 0); eine Störung beendet die Episode. Typ dafür neu als
+  `GeraetIntervall.typ` (additiv, Vorgabe None).
+- `startbilanzen` kommt mit P3 (braucht H).

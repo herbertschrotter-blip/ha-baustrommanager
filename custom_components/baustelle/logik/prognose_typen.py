@@ -1,7 +1,9 @@
 """Prognose V2: gemeinsame Typen (Bauplan Hochrechnung §8, Bauvorlage CGR-2026-10-11-hochrechnung r5 §2) – ohne HA-Code.
 
 Lieferung P1 (BSM-033.06): Enums, Modellversion und die Verträge, die Erfassung, Klassifikation und Baseline-Metadaten
-brauchen. Spätere Lieferungen ergänzen hier additiv (öffentliche Importadresse bleibt dieses Modul).
+brauchen. P2 (BSM-033.07): Minutenqualität, Start-, Tages- und Abkühlmerkmale (§2.4); `GeraetIntervall.typ` additiv
+(Konvektor/Öl für den Nachlauf der Abkühlepisoden). Spätere Lieferungen ergänzen hier additiv (öffentliche
+Importadresse bleibt dieses Modul).
 
 Konventionen (§2.1): Zeiten timezone-aware UTC, halboffene Intervalle [von, bis); `None` = unbekannt, nie gleich 0;
 Sequenzen als Tupel; alle Datenklassen unveränderlich.
@@ -10,7 +12,7 @@ Sequenzen als Tupel; alle Datenklassen unveränderlich.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 MODELL_VERSION = "prognose-v2.1"
@@ -70,6 +72,7 @@ class GeraetIntervall:
     staffel_gesperrt_s: float | None  # P1: angefordert, aber von der Staffelung nicht freigegeben
     p_ref: Leistungsreferenz | None
     quelle: str
+    typ: str | None = None            # P2: Heizkörper-Typ (oelradiator | konvektor) zum Zeitpunkt; None = unbekannt
 
 
 @dataclass(frozen=True)
@@ -131,3 +134,70 @@ class BaselineMetadaten:
     annahme_am: datetime | None
     konfiguration_id: str
     p_ref_belege: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class MinutenQualitaet:
+    """Qualität einer Minute (`pruefe_minuten`) bzw. eines Fensters samt Vorlauf (`frische_ersatz`)."""
+
+    energie_je_geraet_gueltig: tuple[tuple[str, bool], ...]
+    innen_gueltig: bool
+    aussen_gueltig: bool
+    betrieb_gueltig: bool
+    frische: Nachweis
+    staffel: Nachweis
+    trainingsfaehig: bool
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class StartMerkmal:
+    episode_id: str
+    beginn: datetime
+    soll_c: float
+    innen_start_c: float | None
+    delta_start_k: float | None
+    konfiguration_id: str
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class TagesMerkmale:
+    datum: date
+    bereich_id: str
+    konfiguration_id: str
+    dauer_h: float
+    ist_belegt_kwh: float
+    ist_vollstaendig: bool
+    energie_arten_kwh: tuple[tuple[Betriebsart, float], ...]
+    regulaer_joint_kwh: float
+    gdh_aktiv_kh: float
+    gdh_frost_kh: float
+    gdh_innen_kh: float
+    aktiv_h: float
+    frost_h: float
+    plan_h: float
+    kapazitaet_regulaer_kwh: float | None
+    aussen_mittel_c: float | None
+    q_energie_je_geraet: tuple[tuple[str, float], ...]
+    q_betrieb: float
+    q_innen: float
+    q_aussen: float
+    q_joint_r: float | None
+    q_joint_f: float | None
+    laengste_joint_luecke_s: float
+    starts: tuple[StartMerkmal, ...]
+    training_thermo: bool
+    training_plan: bool
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class AbkuehlEpisode:
+    zeit: Intervall
+    bereich_id: str
+    konfiguration_id: str
+    minuten: tuple[BereichIntervall, ...]
+    innen_start_c: float
+    innen_ende_c: float
+    gruende: Gruende

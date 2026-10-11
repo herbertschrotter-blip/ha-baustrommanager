@@ -26,7 +26,7 @@ from .daten import struktur
 from .db import DATA_DB, async_spiegeln, einstellung_merken, ereignis_merken
 from .einstellungen import ART_TEXT, EIGEN, TICKET_OFFEN, TICKET_STATUS, Meldungen
 from .funktionen.heizung import Heizung
-from .funktionen.heizung import hochrechnung as hochrechnung_heizung
+from .funktionen.heizung import hochrechnung as hochrechnung_heizung, prognose_v2 as prognose_v2_heizung
 from .geraete import BEFEHLE as GERAETE_BEFEHLE
 from .inventar import BEFEHLE as INVENTAR_BEFEHLE
 from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
@@ -271,7 +271,7 @@ async def async_panel_anmelden(hass: HomeAssistant, version: str) -> None:
     hass.data[DATA_MELDUNGEN] = Meldungen(hass)
     hass.async_create_task(hass.data[DATA_MELDUNGEN].async_laden(), "baustelle_meldungen_laden")  # lesbare Kopie beim Start
     for befehl in (ws_struktur, ws_setzen, ws_liste, ws_aktion, ws_bericht, ws_protokoll, ws_meldungen, ws_meldung,
-                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_statistik, ws_verlauf, ws_notprogramm_pruefen, ws_notprogramm_probe,
+                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_verlauf, ws_notprogramm_pruefen, ws_notprogramm_probe,
                    *INVENTAR_BEFEHLE, *UMBENENNEN_BEFEHLE, *GERAETE_BEFEHLE):
         websocket_api.async_register_command(hass, befehl)
 
@@ -890,6 +890,18 @@ async def ws_tagesverlauf(hass: HomeAssistant, connection: websocket_api.ActiveC
     if (st := _steuerung(hass, connection, msg)) is None:
         return
     connection.send_result(msg["id"], await hochrechnung_heizung.async_tagesverlauf(hass, Heizung.von(st), msg["datum"]))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "baustelle/prognose_v2", vol.Required("entry_id"): str,
+    vol.Optional("tage", default=7): vol.All(vol.Coerce(int), vol.Range(1, 31)),
+})
+@websocket_api.async_response
+async def ws_prognose_v2(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Prognose V2, Diagnose (BSM-033.07): Tagesmerkmale der letzten Tage je Container – Schattenbetrieb, keine Seite."""
+    if (st := _steuerung(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], await prognose_v2_heizung.async_diagnose(hass, Heizung.von(st), msg["tage"]))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/abrechnung", **ZEITRAUM,

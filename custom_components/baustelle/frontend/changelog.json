@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.8.134",
+    "datum": "2026-10-11",
+    "punkte": [
+      "Prognose V2, zweiter Baustein (BSM-033.07, Bauplan Hochrechnung §8): Die Integration kann jetzt je Container und Tag zusammenstellen, was die neue Prognose zum Lernen braucht – an der Seite, am Schalten und an der bisherigen Hochrechnung ändert sich nichts. Je Tag (lokale Uhrzeit, mit 23/25 Stunden bei der Zeitumstellung): wie lange regulär geheizt werden durfte (mit Raumfühler bzw. nach Zeitplan) und wie lange Frostschutz bereit war, die Heizgradstunden dazu (mit dem damals gespeicherten Soll bzw. der Frostmitte aus Ein und Aus, z. B. 6 °C), der Verbrauch getrennt nach regulär, Frost, Baseline und Sonderbetrieb, wie vollständig die Daten sind (je Heizkörper und gemeinsam), die längste Lücke und die Starts (Raumtemperatur kurz vorher, Abstand zum Soll). Daraus folgt, ob der Tag zum Lernen taugt – wenn nicht, mit Gründen (z. B. „luecke_zu_lang“, „start_zu_kalt“, „sonderbetrieb“).",
+      "Ältere Minuten zählen nur mit belegtem Zusammenhang (Ereignis „prognose_kontext“ und damals gültige Einstellungen); fehlt er, wird er nicht mit den heutigen Einstellungen aufgefüllt. Stundenwerte aus der Übernahme bleiben Verbrauch, aber kein Lernstoff. Für Altdaten ohne Altersnachweis gibt es einen Ersatznachweis (Werte ändern sich, Heizkörper liefern die im Gerät eingestellte Leistung) – nie für neue Daten mit bekannt altem Messwert.",
+      "Zum Nachsehen (ohne Seite): WebSocket-Befehl `baustelle/prognose_v2` (`entry_id`, optional `tage`, 1–31, Vorgabe 7) liefert je Container die Tage mit „geeignet ja/nein“, Gründen, Quoten, Heizgradstunden, Starts und Abkühlnächten.",
+      "Neu in der Fachlogik: `logik/prognose_merkmale.py` (Minutenqualität, Ersatznachweis, Tagesmerkmale, Starts, Abkühlepisoden); Lesen aus der Datenbank in `db/prognose.py`."
+    ]
+  },
+  {
     "version": "0.8.133",
     "datum": "2026-10-11",
     "punkte": [
