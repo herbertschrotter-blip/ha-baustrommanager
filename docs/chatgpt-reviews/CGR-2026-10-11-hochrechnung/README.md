@@ -5,7 +5,7 @@ Container, Rückfall Tagesschnitt, Tag/Woche/Monat, Verlauf 24 h, Schätzung „
 Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nicht.“
 **Zeitraum:** 2026-10-11
 **Branch:** main
-**Status:** Runde 4 offen
+**Status:** Runde 5 offen
 
 ---
 
@@ -42,4 +42,13 @@ Anlass: Herbert, 11.10.2026: „Ich glaube bei dieser Prognose passt was gar nic
 - **Artefakte:** [r4/](./r4/)
 - **Fokus:** Ersatznachweis für Altdaten, neue Minutenspalten, Wärmekapazität/Startkorrektur, T_max und H_ohne aus
   Baseline, Frost-Dynamik, Liefergrenzen
+- **Kernergebnis:** Ersatznachweis präzisiert (Konstantfolge ≤ 1 800 s, ±50 %, höchstens C; Pulscheck statt
+  Fenstermittel); vier neue Minutenfelder; `C_eff_aufheizen` mit eingefrorenem H; Gegenmodell nur mit Plateau und
+  Thermostatzyklen (erster Lauf höchstens B); tau aus Abkühlnächten; Liefergrenzen P1–P4a, P4b nach P3-Zahlen.
+  Herbert: Baseline am Wochenende, Thermostate gelten als unverändert; Runde 5 vor dem Bau; Ergebnisse zum Abschluss
+  in Bauplan und Tasks.
+
+### Runde 5 — Bauvorlage aus einem Guss
+- **Artefakte:** [r5/](./r5/)
+- **Fokus:** Modulschnitt in `logik/`, Adapter-Vertrag, Schema P1, Anzeige je Stufe, Testplan, Widersprüche Runden 2–4
 - **Kernergebnis:** offen
