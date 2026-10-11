@@ -3,8 +3,9 @@
 Lieferung P1 (BSM-033.06): Enums, Modellversion und die Verträge, die Erfassung, Klassifikation und Baseline-Metadaten
 brauchen. P2 (BSM-033.07): Minutenqualität, Start-, Tages- und Abkühlmerkmale (§2.4); `GeraetIntervall.typ` additiv
 (Konvektor/Öl für den Nachlauf der Abkühlepisoden). P2b: `BetriebsKontext.kontext_nachweis`,
-`RekonstruktionsPruefung` (Abnahmeprüfung des rekonstruierten Kontexts). Spätere Lieferungen ergänzen hier additiv (öffentliche
-Importadresse bleibt dieses Modul).
+`RekonstruktionsPruefung` (Abnahmeprüfung des rekonstruierten Kontexts). P3 (BSM-033.08): Fenster, H-Evidenz und
+-Schätzung, Duty, Gegenmodell „ohne“, Startbilanz, Validierung (§2.4) – mit wenigen additiven Diagnosefeldern (Vorgabe
+gesetzt). Spätere Lieferungen ergänzen hier additiv (öffentliche Importadresse bleibt dieses Modul).
 
 Konventionen (§2.1): Zeiten timezone-aware UTC, halboffene Intervalle [von, bis); `None` = unbekannt, nie gleich 0;
 Sequenzen als Tupel; alle Datenklassen unveränderlich.
@@ -216,3 +217,141 @@ class RekonstruktionsPruefung:
     freigegeben: bool
     abweichungen: tuple[tuple[datetime, str, str], ...]   # (Zeit, echt, rekonstruiert) als "art/konfiguration"
     gruende: Gruende
+
+
+# ---------------------------------------------------------------------- P3 (BSM-033.08, Bauvorlage §2.4, §7)
+@dataclass(frozen=True)
+class Fenster:
+    """Stationäres Fenster (regulär) bzw. Baseline-Plateau – gültig oder verworfen (Gründe als Codes).
+
+    Abweichend von §2.4: `p_max_kw` None, wenn eine Leistungsreferenz fehlt (nie 0 erfunden); additiv `soll_mittel_c`
+    (Sollbereich der Evidenz), `qualitaet` (Qualität samt Vorlauf – Stufe und Mindestband nur über `stufe_hoechstens`
+    und `band_min_rel`), `lauf_id` (Plateau: Baseline-Lauf).
+    """
+
+    zeit: Intervall
+    bereich_id: str
+    konfiguration_id: str
+    art: Literal["regulaer", "baseline"]
+    energie_kwh: float
+    x_innen_kh: float
+    innen_mittel_c: float
+    aussen_mittel_c: float
+    p_max_kw: float | None
+    zyklen_je_geraet: tuple[tuple[str, int], ...]
+    frische: Nachweis
+    staffel: Nachweis
+    gueltig: bool
+    gruende: Gruende
+    soll_mittel_c: float | None = None
+    qualitaet: MinutenQualitaet | None = None
+    lauf_id: str | None = None
+
+
+@dataclass(frozen=True)
+class HEvidenz:
+    """Evidenz einer H-Schätzung; additiv `stufe_hoechstens` (aus der Qualität der benutzten Fenster)."""
+
+    fenster: int
+    tage: int
+    stunden: float
+    mad_kw_k: float | None
+    streuung_rel: float | None
+    delta_t_min_k: float | None
+    delta_t_max_k: float | None
+    aussen_min_c: float | None
+    aussen_max_c: float | None
+    soll_min_c: float | None
+    soll_max_c: float | None
+    ersatzfenster: int
+    verworfen: int
+    gruende: Gruende
+    stufe_hoechstens: Stufe = "D"
+
+
+@dataclass(frozen=True)
+class HSchaetzung:
+    """H je Container und Konfiguration; additiv `tage` = (Datum, H_d) der benutzten Tage (Diagnose)."""
+
+    bereich_id: str
+    konfiguration_id: str
+    modell_version: str
+    training_bis: datetime
+    methode: Literal["stationaer", "tagesregression", "keine"]
+    h_kw_k: float | None
+    h_unten_kw_k: float | None
+    h_oben_kw_k: float | None
+    evidenz: HEvidenz
+    tage: tuple[tuple[date, float], ...] = ()
+
+
+@dataclass(frozen=True)
+class DutySchaetzung:
+    bereich_id: str
+    konfiguration_id: str
+    duty: float | None
+    tage: int
+    kapazitaet_training_kwh: float
+    energie_training_kwh: float
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class ValidierungsPunkt:
+    zeit: Intervall
+    energie_ist_kwh: float | None
+    energie_modell_kwh: float | None
+    innen_ist_c: float | None
+    innen_modell_c: float | None
+    aussen_c: float
+    gueltig: bool
+    konfiguration_id: str
+
+
+@dataclass(frozen=True)
+class Validierung:
+    modell_id: str
+    training_bis: datetime
+    test_von: datetime
+    test_bis: datetime
+    tage: int
+    episoden: int
+    aussen_spanne_k: float
+    energie_ist_kwh: float
+    wape: float | None
+    bias_rel: float | None
+    temperatur_rmse_k: float | None
+    unabhaengig: bool
+
+
+@dataclass(frozen=True)
+class OhneSchaetzung:
+    bereich_id: str
+    konfiguration_id: str
+    methode: Literal["plateau", "elektrischer_wetterfit", "duty", "keine"]
+    h: HSchaetzung | None
+    t_max_c: float | None
+    t_max_unten_c: float | None
+    t_max_oben_c: float | None
+    duty: DutySchaetzung | None
+    a_kw: float | None
+    b_kw_k: float | None
+    laeufe: int
+    beobachtungstage: int
+    plateau_h: float
+    thermostat_nachweis: ThermostatNachweis
+    guete: Validierung | None
+    gruende: Gruende
+    naechte_b: int = 0   # additiv: höchste Zahl Nächte ≥ `baseline_b_nacht_min_h` innerhalb EINES Laufs (Stufe B)
+
+
+@dataclass(frozen=True)
+class StartBilanz:
+    """Energiebilanz eines Starts bis zum erreichten Soll samt stabiler Nachphase (§8.3) – in P3 nur Diagnose."""
+
+    start: StartMerkmal
+    zeit: Intervall
+    delta_innen_k: float
+    x_innen_kh: float
+    energie_kwh: float
+    qualitaet: MinutenQualitaet

@@ -895,13 +895,15 @@ async def ws_tagesverlauf(hass: HomeAssistant, connection: websocket_api.ActiveC
 @websocket_api.websocket_command({
     vol.Required("type"): "baustelle/prognose_v2", vol.Required("entry_id"): str,
     vol.Optional("tage", default=7): vol.All(vol.Coerce(int), vol.Range(1, 31)),
+    vol.Optional("h_tage", default=0): vol.All(vol.Coerce(int), vol.Range(0, 120)),
 })
 @websocket_api.async_response
 async def ws_prognose_v2(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Prognose V2, Diagnose (BSM-033.07): Tagesmerkmale der letzten Tage je Container – Schattenbetrieb, keine Seite."""
+    """Prognose V2, Diagnose (BSM-033.07): Tagesmerkmale der letzten Tage je Container und Evidenzbericht P3 (BSM-033.08,
+    nur mit `h_tage` > 0, Vorgabe 0) – Schattenbetrieb, keine Seite."""
     if (st := _steuerung(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], await prognose_v2_heizung.async_diagnose(hass, Heizung.von(st), msg["tage"]))
+    connection.send_result(msg["id"], await prognose_v2_heizung.async_diagnose(hass, Heizung.von(st), msg["tage"], msg["h_tage"]))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/abrechnung", **ZEITRAUM,

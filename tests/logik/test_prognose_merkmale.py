@@ -29,7 +29,10 @@ from logik.prognose_merkmale import (
     pruefe_rekonstruktion,
     quantisiere,
     regelungsart,
+    start_sauber,
+    startbilanzen,
     starts,
+    startzusatz,
     stufe_hoechstens,
     tagesmerkmale,
     wechsel_rekonstruiert,
@@ -827,3 +830,43 @@ def test_abnahmepruefung_quote():
     assert pruefe_rekonstruktion("c1", _vergleiche(1440, 1440), R).freigegeben
     ohne = pruefe_rekonstruktion("c1", [(lokal(8), ("thermo", KID), None)], R)   # Rekonstruktion selbst unbelegt
     assert ohne.verglichen == 0 and ohne.quote is None and not ohne.freigegeben and ohne.gruende == ("rekonstruktion_ungeprueft",)
+
+
+# ====================================================================== P3 (BSM-033.08): Startbilanzen
+def _start_tag(ende_min: int = 180):
+    import prognose_hilfen as ph   # noqa: PLC0415 – Bausteine der P3-Tests
+    t0 = ph.lokal(7)
+    ms = [ph.minute(t0 - timedelta(minutes=60 - i), grund="ausserhalb", zustand="aus", innen_c=18.0,
+                    k=ph.kontext(regulaer_freigegeben=False), geraete=[ph.geraet(t0 - timedelta(minutes=60 - i))])
+          for i in range(60)]
+    for i in range(ende_min):
+        t = t0 + timedelta(minutes=i)
+        innen = 18.0 + 4.0 * i / 120 if i < 120 else 22.0
+        ms.append(ph.minute(t, innen_c=innen, geraete=[ph.geraet(t, an=60.0 if i < 120 else ph.takt(i))]))
+    return ms
+
+
+def test_startbilanz_bis_soll_und_nachphase():
+    ms = _start_tag()
+    (s,) = starts(ms, R)
+    assert s.delta_start_k == pytest.approx(4.0)
+    (b,) = startbilanzen(ms, [s], R)
+    assert (b.zeit.bis - b.zeit.von) == timedelta(minutes=180)   # Soll nach 120 min, 60 min stabile Nachphase (Konvektor)
+    assert b.delta_innen_k == pytest.approx(4.0)
+    assert b.x_innen_kh == pytest.approx(2 * (6.0 + 4.0 * 59.5 / 120) + 10.0)
+    assert b.energie_kwh == pytest.approx(5.0)
+    assert start_sauber(b, R) and startzusatz(b, 0.10) == pytest.approx(5.0 - 0.1 * b.x_innen_kh)
+
+
+def test_startbilanz_fehlt_ohne_nachphase():
+    ms = _start_tag(ende_min=150)   # R endet 30 min nach dem Erreichen
+    assert startbilanzen(ms, starts(ms, R), R) == ()
+
+
+def test_c_energiebilanz_nur_diagnose():
+    """H 0,10; ΔT [2, 4, 6], X [10, 18, 26], E [2,0; 3,8; 5,6] → Z [1, 2, 3] (der C-Fit kommt mit P4b)."""
+    ms = _start_tag()
+    (b,) = startbilanzen(ms, starts(ms, R), R)
+    z = [startzusatz(replace(b, delta_innen_k=d, x_innen_kh=x, energie_kwh=e), 0.10)
+         for d, x, e in ((2, 10, 2.0), (4, 18, 3.8), (6, 26, 5.6))]
+    assert z == [pytest.approx(1.0), pytest.approx(2.0), pytest.approx(3.0)]

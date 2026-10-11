@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.8.136",
+    "datum": "2026-10-11",
+    "punkte": [
+      "Prognose V2, dritter Baustein (BSM-033.08, P3, Bauplan Hochrechnung §8): Die Integration schätzt jetzt aus den Messungen, wie viel Wärme ein Container je Grad Unterschied innen–außen verliert (H in kW/K) – an der Seite, am Schalten und an der bisherigen Hochrechnung ändert sich nichts. Dafür sucht sie ruhige Zeitabschnitte, in denen der Raum gleichmäßig auf Soll gehalten wurde: nach einer Anlaufzeit (Konvektor 1 h, Ölradiator 2 h) Blöcke von 2 bzw. 3 Stunden, ohne Tür, Sperre oder Sonderbetrieb, mit gleichmäßiger Temperatur und mindestens drei echten Ein/Aus-Takten je Heizkörper. Aus vielen solchen Blöcken wird ein robuster Mittelwert mit Spanne; erst ab 12 Blöcken an 3 Tagen gilt er als „aus Messungen geschätzt“ (Stufe C). Ältere Daten mit Ersatznachweis werden getrennt gerechnet und bleiben vorsichtig (höchstens C, Spanne mindestens ±50 %).",
+      "Daneben: eine grobe Schätzung aus ganzen Tagen (Stufe B), für Container ohne Raumfühler der Anteil der Heizzeit (Stufe B), und aus Baseline-Läufen die Werte „ohne Automatik“ – welche Raumtemperatur die Thermostate der Heizkörper halten und der Wärmeverlust dabei (erster Lauf höchstens Stufe B; die unveränderte Thermostatstellung bleibt als Annahme sichtbar).",
+      "Zum Nachsehen (ohne Seite): Der WebSocket-Befehl `baustelle/prognose_v2` liefert je Container zusätzlich einen Evidenzbericht über die laufende Heizperiode, wenn `h_tage` (1–120 Tage) mitgegeben wird (ohne bleibt der Aufruf so schnell wie bisher): Blöcke direkt/Ersatz und verworfene mit Gründen, die H-Schätzungen samt Stufe, Baseline-Werte, Starts mit Aufheiz-Bilanz und Abkühlnächte. Gelesen wird in 14-Tage-Abschnitten, damit der Pi nicht lange blockiert."
+    ]
+  },
+  {
     "version": "0.8.135",
     "datum": "2026-10-11",
     "punkte": [

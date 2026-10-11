@@ -110,8 +110,10 @@ def _uebernahme(v: Connection, bid: str) -> datetime | None:
     return dt_util.as_utc(datetime.fromisoformat(zeit)) if zeit else None
 
 
-def prognose_rohdaten(v: Connection, r: PrognoseRahmen, von: datetime, bis: datetime) -> Rohdaten:
-    """Alle Zeilen für [von, bis) lesen – nur Abfragen, keine Zuordnung (läuft in der Datenbanksperre)."""
+def prognose_rohdaten(v: Connection, r: PrognoseRahmen, von: datetime, bis: datetime, *, pruefung: bool = True) -> Rohdaten:
+    """Alle Zeilen für [von, bis) lesen – nur Abfragen, keine Zuordnung (läuft in der Datenbanksperre). `pruefung`
+    False: die Zeilen der Abnahmeprüfung nicht lesen (P3: Abschnitte eines langen Zeitraums, die Prüfung liegt schon vor
+    und geht an `minuten_bauen`)."""
     bid = r.baustelle_id
     bm, gm, wm, ev, es = s.bereich_minute, s.geraet_minute, s.wetter_minute, s.ereignis, s.einstellung
     p1 = v.execute(select(s.schema_version.c.angewendet).where(s.schema_version.c.version == P1_AUFBAU)).scalar()
@@ -131,8 +133,8 @@ def prognose_rohdaten(v: Connection, r: PrognoseRahmen, von: datetime, bis: date
         select(ev.c.bereich_id, func.min(ev.c.zeit).label("zeit")).where(
             ev.c.baustelle_id == bid, ev.c.art == "prognose_kontext", ev.c.bereich_id.in_(r.bereiche)).group_by(ev.c.bereich_id))}
     # P2b: Abnahmeprüfung ab dem ersten Ereignis – vor dem Zeitraum beginnen, wenn das erste Ereignis davor liegt
-    pruefung = timedelta(days=r.regeln.rekonstruktion_pruef_tage)
-    pruef = {b: (t, min(t + pruefung, bis)) for b, t in erstes.items() if t < bis}
+    dauer = timedelta(days=r.regeln.rekonstruktion_pruef_tage)
+    pruef = {b: (t, min(t + dauer, bis)) for b, t in erstes.items() if t < bis} if pruefung else {}
     ereignisse: dict[str, list[tuple[datetime, Mapping[str, Any]]]] = defaultdict(list)
     art = ev.c.art == "prognose_kontext"
     for b in r.bereiche:
@@ -293,9 +295,11 @@ class _Rekonstruktion:
         return art, konfiguration_id(art, hk)
 
 
-def minuten_bauen(roh: Rohdaten, r: PrognoseRahmen) -> tuple[dict[str, tuple[BereichIntervall, ...]], dict[str, RekonstruktionsPruefung]]:
+def minuten_bauen(
+    roh: Rohdaten, r: PrognoseRahmen, pruefungen_vorher: Mapping[str, RekonstruktionsPruefung] | None = None,
+) -> tuple[dict[str, tuple[BereichIntervall, ...]], dict[str, RekonstruktionsPruefung]]:
     """Je Container die Minuten als `BereichIntervall` (zeitlich sortiert) und die Abnahmeprüfung der Rekonstruktion –
-    ohne Datenbank."""
+    ohne Datenbank. `pruefungen_vorher`: schon gerechnete Abnahmeprüfung (P3, Abschnitte ohne Prüfzeilen)."""
     verlauf = {schl: _Verlauf(schl, roh.einstellungen, roh.uebernahme) for schl in VERLAEUFE}
     zuordnung = _Zuordnung(roh)
     rek = _Rekonstruktion(roh, r, verlauf, zuordnung)
@@ -314,7 +318,8 @@ def minuten_bauen(roh: Rohdaten, r: PrognoseRahmen) -> tuple[dict[str, tuple[Ber
             if echt.get("regelungsart") in (None, "unbekannt") or not echt.get("konfiguration_id"):
                 continue   # das Ereignis selbst belegt nichts – kein Vergleich, keine Abweichung
             vergleiche.append((t, (str(echt.get("regelungsart")), str(echt.get("konfiguration_id"))), rek.art_und_konfiguration(b, t)))
-        pruefungen[b] = pruefe_rekonstruktion(b, vergleiche, r.regeln)
+        vorher = (pruefungen_vorher or {}).get(b)
+        pruefungen[b] = vorher if vorher is not None else pruefe_rekonstruktion(b, vergleiche, r.regeln)
         kandidaten = [g for g in roh.heizkoerper if g.id in zuordnung.einsaetze or g.bereich_id == b]
         zeiten = set(roh.bereich_zeilen.get(b, {})) | {t for g in kandidaten for t in roh.geraet_zeilen.get(g.id, {})
                                                        if zuordnung.im_bereich(g, b, t)}

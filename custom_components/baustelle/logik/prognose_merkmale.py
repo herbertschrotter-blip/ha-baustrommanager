@@ -35,6 +35,11 @@ Lieferung P2 (BSM-033.07, §6.2–§6.4, §8.3 Abkühlen):
 - **Abkühlepisoden** (`abkuehlepisoden`): nach dem Ausschalten Nachlauf verwerfen (Konvektor/Öl), dann ohne Strom, ohne
   Tür und Sonderbetrieb, mit Mindestdauer, Anfangsabstand zu außen und Mindestabnahme.
 
+Lieferung P3 (BSM-033.08): **Startbilanzen** (`startbilanzen`, §8.3) – Energie, Innen−Außen-Integral und Anstieg je
+Start bis zum erreichten Soll samt stabiler Nachphase; `startzusatz` (Z = E − H·X) und `start_sauber` nur als Diagnose,
+der C-Fit kommt mit P4b. `bewerte_minute`/`fenster_qualitaet` geben die Bewertung je Minute an die Fenster in
+`prognose_h`/`prognose_baseline` weiter (jede Minute nur einmal geprüft).
+
 Alle Schwellen stehen in `PrognoseRegeln`; `None` bleibt unbekannt und wird nie zu 0.
 """
 
@@ -65,6 +70,7 @@ from .prognose_typen import (
     Nachweis,
     Regelungsart,
     RekonstruktionsPruefung,
+    StartBilanz,
     StartMerkmal,
     Stufe,
     TagesMerkmale,
@@ -455,9 +461,21 @@ def frische_ersatz(minuten: Sequence[BereichIntervall], regeln: PrognoseRegeln) 
     historische Unbekannte – nie für bekannt alte oder unbekannte Neudaten. Konstanz über `ersatz_konstanz_max_s` heißt
     nur „Ersatz nicht erfüllt“, kein Defekt."""
     ms = sorted(minuten, key=lambda m: m.zeit.von)
+    return fenster_qualitaet(ms, [_pruefe(m, regeln) for m in ms], regeln)
+
+
+def bewerte_minute(m: BereichIntervall, regeln: PrognoseRegeln) -> tuple[Klassifikation, MinutenQualitaet]:
+    """Klassifikation und Qualität einer Minute (wie `pruefe_minuten`), für Aufrufer, die beides je Minute einmal
+    rechnen und dann viele Fenster daraus bilden (P3)."""
+    return _pruefe(m, regeln)
+
+
+def fenster_qualitaet(
+    ms: Sequence[BereichIntervall], paare: Sequence[tuple[Klassifikation, MinutenQualitaet]], regeln: PrognoseRegeln,
+) -> MinutenQualitaet:
+    """Wie `frische_ersatz` für zeitlich sortierte Minuten, deren Bewertung (`bewerte_minute`) schon vorliegt."""
     if not ms:
         return MinutenQualitaet((), False, False, False, "keiner", "keiner", False, ("leer",))
-    paare = [_pruefe(m, regeln) for m in ms]
     g: list[str] = []
     luecke = any(a.zeit.bis != b.zeit.von for a, b in pairwise(ms))
     if luecke:
@@ -575,12 +593,27 @@ def _bewerten(minuten: Sequence[BereichIntervall], r: PrognoseRegeln) -> dict[st
     return je
 
 
-def starts(minuten: Sequence[BereichIntervall], regeln: PrognoseRegeln) -> tuple[StartMerkmal, ...]:
+def bewerten(minuten: Sequence[BereichIntervall], regeln: PrognoseRegeln) -> dict[str, list[tuple[BereichIntervall, Klassifikation, MinutenQualitaet]]]:
+    """Je Container zeitlich sortiert und je Minute einmal bewertet. Das Ergebnis kann als `bewertet` an `starts`,
+    `startbilanzen`, `merkmale` und die Fenster in `prognose_h`/`prognose_baseline` gehen (nur einmal rechnen); es
+    muss aus denselben `minuten` stammen und wird nicht verändert."""
+    return _bewerten(minuten, regeln)
+
+
+Bewertung = Mapping[str, Sequence[tuple[BereichIntervall, Klassifikation, MinutenQualitaet]]]
+
+
+def _je(minuten: Sequence[BereichIntervall], regeln: PrognoseRegeln, bewertet: Bewertung | None) -> Bewertung:
+    return bewertet if bewertet is not None else _bewerten(minuten, regeln)
+
+
+def starts(minuten: Sequence[BereichIntervall], regeln: PrognoseRegeln, *,
+           bewertet: Bewertung | None = None) -> tuple[StartMerkmal, ...]:
     """Starts (§6.4) je Container: R-Beginn nach mindestens `start_pause_min` ohne R oder Sollerhöhung über
     `start_sollsprung_k`; Vorheizen → Arbeitszeit ohne Lücke bleibt ein Start. Liegt der Beginn der Beobachtung näher
     als die Pause, ist der Start unbekannt und wird nicht gezählt. War die Pause nicht durchgehend belegt (Datenlücke
     oder ungültige Minuten), zählt der Start mit dem Code `start_nach_luecke` – „ohne R“ ist dann nicht bewiesen."""
-    return tuple(s for liste in _bewerten(minuten, regeln).values() for s in _starts_bereich(liste, regeln))
+    return tuple(s for liste in _je(minuten, regeln, bewertet).values() for s in _starts_bereich(liste, regeln))
 
 
 def _starts_bereich(liste: Sequence[_Bewertet], regeln: PrognoseRegeln) -> list[StartMerkmal]:
@@ -632,6 +665,92 @@ def _starts_bereich(liste: Sequence[_Bewertet], regeln: PrognoseRegeln) -> list[
     return aus
 
 
+def ist_gesperrt(m: BereichIntervall) -> bool:
+    """Bekannte Sperre/Abwurf in der Minute (Container- oder Gerätesperrzeit > 0 oder Sperrereignis)."""
+    return _gesperrt(m)
+
+
+def energie_ok(g: Any) -> bool:
+    """Energie des Geräts in der Minute gültig belegt."""
+    return _energie_ok(g)
+
+
+def nachlauf_min(typen: Iterable[str | None], regeln: PrognoseRegeln) -> int:
+    """Vorlauf/Nachlauf eines Containers: nur Konvektoren `konvektor_vorlauf_min`, sonst (Öl oder unbekannter Typ)
+    `oel_vorlauf_min`."""
+    return regeln.konvektor_vorlauf_min if set(typen) == {TYP_KONVEKTOR} else regeln.oel_vorlauf_min
+
+
+# ---------------------------------------------------------------------- P3: Startbilanzen (§8.3, nur Diagnose)
+def startbilanzen(
+    minuten: Sequence[BereichIntervall], starts: Sequence[StartMerkmal], regeln: PrognoseRegeln, *,
+    bewertet: Bewertung | None = None,
+) -> tuple[StartBilanz, ...]:
+    """Energiebilanz je Start mit bekanntem Innenwert (§8.3): vom Beginn lückenlos in R bis das Soll erreicht ist und
+    danach eine stabile Nachphase (Konvektor `konvektor_vorlauf_min`, sonst `oel_vorlauf_min`) jede Minute höchstens
+    `sollnaehe_max_k` vom Soll liegt. ΔT = Median der letzten `start_vorlauf_min` Minuten − Innen beim Start, X = Σ
+    max(0, Innen − Außen)·dt, E = gemessene Energie. Endet R, springt das Soll über `start_sollsprung_k` oder fehlt ein
+    Wert, gibt es keine Bilanz. In P3 nur Diagnose; der C-Fit (Z = E − H·X, `startzusatz`) kommt mit P4b."""
+    je = _je(minuten, regeln, bewertet)
+    beginne = {b: [m.zeit.von for m, _, _ in liste] for b, liste in je.items()}
+    aus: list[StartBilanz] = []
+    for s in starts:
+        if s.innen_start_c is None:
+            continue
+        bereich = s.episode_id[: -len(s.beginn.isoformat()) - 1]
+        liste = je.get(bereich, [])
+        i = bisect_left(beginne.get(bereich, []), s.beginn)
+        if i >= len(liste) or liste[i][0].zeit.von != s.beginn:
+            continue
+        if (b := _bilanz(s, liste, i, regeln)) is not None:
+            aus.append(b)
+    return tuple(aus)
+
+
+def _bilanz(s: StartMerkmal, liste: Sequence[_Bewertet], i: int, r: PrognoseRegeln) -> StartBilanz | None:
+    nach = timedelta(minutes=nachlauf_min({g.typ for g in liste[i][0].geraete}, r))
+    erreicht: datetime | None = None
+    ende: int | None = None
+    vorher: datetime | None = None
+    for j in range(i, len(liste)):
+        m, k, q = liste[j]
+        if (vorher is not None and m.zeit.von != vorher) or _exposition(m, k, q) != "R" or m.soll_c is None \
+                or m.innen_c is None or m.aussen_c is None or abs(m.soll_c - s.soll_c) > r.start_sollsprung_k:
+            return None
+        vorher = m.zeit.bis
+        if erreicht is None:
+            if m.innen_c >= m.soll_c:
+                erreicht = m.zeit.von
+            else:
+                continue
+        if abs(m.innen_c - m.soll_c) > r.sollnaehe_max_k:
+            return None
+        if m.zeit.bis - erreicht >= nach:
+            ende = j
+            break
+    if ende is None:
+        return None
+    teil = liste[i:ende + 1]
+    ms = [m for m, _, _ in teil]
+    schluss = [m.innen_c for m in ms if m.zeit.von >= ms[-1].zeit.bis - timedelta(minutes=r.start_vorlauf_min)]
+    x = sum(max(0.0, m.innen_c - m.aussen_c) * _dauer_s(m) / 3600 for m in ms)   # type: ignore[operator]
+    e = sum(g.energie_wh for m in ms for g in m.geraete if _energie_ok(g)) / 1000
+    q = fenster_qualitaet(ms, [(k, q) for _, k, q in teil], r)
+    return StartBilanz(s, Intervall(ms[0].zeit.von, ms[-1].zeit.bis), median(schluss) - s.innen_start_c,  # type: ignore[arg-type,operator]
+                       x, e, q)
+
+
+def startzusatz(b: StartBilanz, h_kw_k: float) -> float:
+    """Zusatzenergie eines Starts über dem Haltebedarf: Z = E − H·X (§8.3; nur Diagnose bis P4b)."""
+    return b.energie_kwh - h_kw_k * b.x_innen_kh
+
+
+def start_sauber(b: StartBilanz, regeln: PrognoseRegeln) -> bool:
+    """Sauberer Start für den späteren C-Fit: Qualität des ganzen Intervalls trainingsfähig, Anstieg ≥
+    `startfit_anstieg_min_k`."""
+    return b.qualitaet.trainingsfaehig and b.delta_innen_k >= regeln.startfit_anstieg_min_k
+
+
 def _quote(teil: float, ganz: float) -> float | None:
     return teil / ganz if ganz > 0 else None
 
@@ -644,13 +763,14 @@ def tagesmerkmale(
 
 
 def merkmale(
-    minuten: Sequence[BereichIntervall], heute: date, zeitzone: str, regeln: PrognoseRegeln,
+    minuten: Sequence[BereichIntervall], heute: date, zeitzone: str, regeln: PrognoseRegeln, *,
+    bewertet: Bewertung | None = None,
 ) -> tuple[tuple[TagesMerkmale, ...], tuple[AbkuehlEpisode, ...]]:
     """Tagesmerkmale und Abkühlepisoden in einem Durchgang (Qualität je Minute nur einmal gerechnet)."""
     zone = ZoneInfo(zeitzone)
     tage: list[TagesMerkmale] = []
     episoden: list[AbkuehlEpisode] = []
-    for bereich, liste in sorted(_bewerten(minuten, regeln).items()):
+    for bereich, liste in sorted(_je(minuten, regeln, bewertet).items()):
         je_tag: dict[date, list[_Bewertet]] = defaultdict(list)
         for x in liste:
             je_tag[x[0].zeit.von.astimezone(zone).date()].append(x)
@@ -895,7 +1015,7 @@ def _abkuehl_bereich(liste: Sequence[_Bewertet], regeln: PrognoseRegeln) -> list
         if aus_seit is None:
             continue
         typen = {g.typ for g in m.geraete}
-        nachlauf = regeln.konvektor_vorlauf_min if typen == {TYP_KONVEKTOR} else regeln.oel_vorlauf_min
+        nachlauf = nachlauf_min(typen, regeln)
         if m.zeit.von < aus_seit + timedelta(minutes=nachlauf):
             continue
         frisch = _frisch(m, regeln)

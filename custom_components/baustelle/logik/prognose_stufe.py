@@ -1,0 +1,115 @@
+"""Prognose V2: Validierungsmaße und Evidenzstufen (Bauvorlage CGR-2026-10-11-hochrechnung r5 §7, §9.1) – ohne HA-Code.
+
+Lieferung P3 (BSM-033.08): nur die **Evidenzstufe** (A–D) – wie gut ein Modell aus Messungen belegt ist. Die
+Prognosestufe (Start, Frost, Extrapolation, Plan) kommt mit P4a; Evidenz ist keine Prognosefreigabe (§9.1).
+
+- `validiere`: WAPE, Bias und Temperatur-RMSE gegen eine Testmenge; ΣE_ist = 0 → Güte None. Unabhängig nur, wenn alle
+  Testpunkte nach dem Trainingsschnitt liegen (Holdout im Training → kein D).
+- `evidenz_h`: A ohne Identifikation; B Tagesregression ab `tagesfit_tage_min` Tagen; C stationär ab `c_fenster_min`
+  Fenstern, `c_tage_min` Tagen, `c_stunden_min_h` Stunden und Streuung ≤ `c_streuung_max`; D zusätzlich ab
+  `d_fenster_min`/`d_tage_min`, Streuung ≤ `d_streuung_max` und bestandener unabhängiger Validierung. Höchstens
+  `HEvidenz.stufe_hoechstens` (aus `prognose_merkmale.stufe_hoechstens` der benutzten Fenster: Ersatz/rekonstruiert → C).
+- `evidenz_duty`: Planmodus höchstens B.
+- `evidenz_ohne`: Gegenmodell aus Baseline-Plateaus (§7.2) – B ab EINEM Lauf mit zwei getrennten Nächten
+  (Mittag bis Mittag) mit je ≥ 3 h Plateau und zusammen ≥ 6 h (`OhneSchaetzung.naechte_b`); C ab drei Beobachtungstagen, zwei Läufen, zwölf Plateau-Stunden, H-Streuung ≤ 0,30; D mit
+  Validierung. Erster Lauf höchstens B.
+- `betriebsabhaengig`: reguläres und Baseline-H mehr als `h_betriebsabweichung_max_rel` auseinander → kein Pooling.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import datetime
+import math
+from zoneinfo import ZoneInfo
+
+from .prognose_regeln import PrognoseRegeln
+from .prognose_typen import DutySchaetzung, HSchaetzung, OhneSchaetzung, Stufe, Validierung, ValidierungsPunkt
+
+STUFEN: tuple[Stufe, ...] = ("A", "B", "C", "D")
+
+
+def stufe_min(*stufen: Stufe) -> Stufe:
+    """Die niedrigste der Stufen (A < B < C < D)."""
+    return min(stufen, key=STUFEN.index)
+
+
+def validiere(
+    modell_id: str, training_bis: datetime, punkte: Sequence[ValidierungsPunkt], regeln: PrognoseRegeln,
+    *, zeitzone: str = "UTC",
+) -> Validierung:
+    """Güte gegen gültige Testpunkte; Verhältnisse mit Nenner 0 bleiben None. `zeitzone` zählt die lokalen Testtage."""
+    del regeln   # Schwellen wertet `validierung_bestanden` aus
+    p = [x for x in punkte if x.gueltig]
+    zone = ZoneInfo(zeitzone)
+    energie = [x for x in p if x.energie_ist_kwh is not None and x.energie_modell_kwh is not None]
+    ist = sum(x.energie_ist_kwh for x in energie)   # type: ignore[misc]
+    wape = bias = None
+    if energie and ist > 0:
+        wape = sum(abs(x.energie_modell_kwh - x.energie_ist_kwh) for x in energie) / ist   # type: ignore[operator]
+        bias = sum(x.energie_modell_kwh - x.energie_ist_kwh for x in energie) / ist          # type: ignore[operator]
+    temp = [(x.innen_modell_c - x.innen_ist_c) ** 2 for x in p if x.innen_ist_c is not None and x.innen_modell_c is not None]
+    aussen = [x.aussen_c for x in p]
+    return Validierung(
+        modell_id=modell_id, training_bis=training_bis,
+        test_von=min((x.zeit.von for x in p), default=training_bis), test_bis=max((x.zeit.bis for x in p), default=training_bis),
+        tage=len({x.zeit.von.astimezone(zone).date() for x in p}), episoden=len(p),
+        aussen_spanne_k=max(aussen) - min(aussen) if aussen else 0.0, energie_ist_kwh=ist, wape=wape, bias_rel=bias,
+        temperatur_rmse_k=math.sqrt(sum(temp) / len(temp)) if temp else None,
+        unabhaengig=bool(p) and all(x.zeit.von >= training_bis for x in p))
+
+
+def validierung_bestanden(v: Validierung | None, regeln: PrognoseRegeln) -> bool:
+    """D-Validierung (§9.1): unabhängig, ≥ `validierung_tage_min` Tage, Außenspanne ≥ `validierung_aussen_spanne_min_k`,
+    WAPE ≤ `validierung_wape_max`, |Bias| ≤ `validierung_bias_abs_max`."""
+    return (v is not None and v.unabhaengig and v.tage >= regeln.validierung_tage_min
+            and v.aussen_spanne_k >= regeln.validierung_aussen_spanne_min_k
+            and v.wape is not None and v.wape <= regeln.validierung_wape_max
+            and v.bias_rel is not None and abs(v.bias_rel) <= regeln.validierung_bias_abs_max)
+
+
+def evidenz_h(h: HSchaetzung, validierung: Validierung | None, regeln: PrognoseRegeln) -> Stufe:
+    """Evidenzstufe einer H-Schätzung (stationär oder Tagesregression)."""
+    ev = h.evidenz
+    if h.methode == "keine" or h.h_kw_k is None or h.h_kw_k <= 0:
+        return "A"
+    if h.methode == "tagesregression":
+        return stufe_min("B", ev.stufe_hoechstens) if ev.tage >= regeln.tagesfit_tage_min else "A"
+    s = ev.streuung_rel
+    if not (ev.fenster >= regeln.c_fenster_min and ev.tage >= regeln.c_tage_min and ev.stunden >= regeln.c_stunden_min_h
+            and s is not None and s <= regeln.c_streuung_max):
+        return "A"   # stationär unter der C-Schwelle: noch nicht identifiziert
+    stufe: Stufe = "C"
+    if (ev.fenster >= regeln.d_fenster_min and ev.tage >= regeln.d_tage_min and s <= regeln.d_streuung_max
+            and validierung_bestanden(validierung, regeln)):
+        stufe = "D"
+    return stufe_min(stufe, ev.stufe_hoechstens)
+
+
+def evidenz_duty(d: DutySchaetzung, regeln: PrognoseRegeln) -> Stufe:
+    """Planmodus: mit Duty aus mindestens `tagesfit_tage_min` sauberen Tagen B, sonst A – nie mehr als B."""
+    return "B" if d.duty is not None and d.tage >= regeln.tagesfit_tage_min else "A"
+
+
+def evidenz_ohne(o: OhneSchaetzung, regeln: PrognoseRegeln) -> Stufe:
+    """Evidenzstufe des Gegenmodells aus Baseline-Plateaus (gültige Plateaus haben sichtbare Thermostatzyklen)."""
+    if o.methode != "plateau" or o.h is None or o.h.h_kw_k is None or o.t_max_c is None:
+        return "A"
+    if not (o.laeufe >= 1 and o.naechte_b >= regeln.baseline_b_naechte_min and o.plateau_h >= regeln.baseline_b_gesamt_min_h):
+        return "A"
+    stufe: Stufe = "B"
+    s = o.h.evidenz.streuung_rel
+    if (o.beobachtungstage >= regeln.baseline_c_tage_min and o.laeufe >= regeln.baseline_c_laeufe_min
+            and o.plateau_h >= regeln.baseline_c_plateau_min_h and s is not None and s <= regeln.c_streuung_max):
+        stufe = "C"
+        if validierung_bestanden(o.guete, regeln):
+            stufe = "D"
+    return stufe_min(stufe, o.h.evidenz.stufe_hoechstens)
+
+
+def betriebsabhaengig(h_regulaer: float | None, h_baseline: float | None, regeln: PrognoseRegeln) -> bool | None:
+    """Unterscheiden sich reguläres und Baseline-H um mehr als `h_betriebsabweichung_max_rel` (bezogen auf das
+    reguläre H)? Dann kein Pooling, Vergleich höchstens C. None, wenn eines fehlt."""
+    if h_regulaer is None or h_baseline is None or h_regulaer <= 0:
+        return None
+    return abs(h_baseline - h_regulaer) / h_regulaer > regeln.h_betriebsabweichung_max_rel

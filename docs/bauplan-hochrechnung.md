@@ -6,7 +6,7 @@ Ersparnis wirkt dadurch zu groß. Ziel (Herbert 07.10.2026): nach professionelle
 Energiesignatur je Container (ASHRAE Guideline 14), eine Hochrechnung mit Heizgradtagen als Spanne (ÖNORM B 8135,
 Klimamittel GeoSphere Austria) und die Ersparnis aus einer gemessenen Baseline (IPMVP Option B).
 
-Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
+Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026), .05–.08 fertig (0.8.132–0.8.136). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
 
 ## 1. Grundsätze
 
@@ -27,7 +27,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☑ 0.8.133 |
 | .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☑ 0.8.134 |
 | .07b | P2b: Kontext für Altdaten rekonstruiert, mit laufender Abnahmeprüfung (§8) | ☑ 0.8.135 |
-| .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☐ |
+| .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☑ 0.8.136 |
 | .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☐ |
 
 ## 3. Energiesignatur (.01)
@@ -297,3 +297,64 @@ mit laufender Prüfung):
 - **Pflicht für P3:** Stufe und Mindestband eines H-Fensters oder Tages nur über `stufe_hoechstens` und `band_min_rel`
   bestimmen (nicht daneben neu ableiten), damit Ersatzdaten und rekonstruierter Kontext nie Stufe D erreichen und ihr
   Band mindestens ±50 % bleibt.
+
+**Notiz aus dem Bau P3 (0.8.136, BSM-033.08)** – Abweichungen und Festlegungen gegenüber der Bauvorlage:
+
+- Orte: `logik/prognose_h.py` (`stationaere_fenster`, `bewerte_fenster`, `robustes_h`, `schaetze_h_pfade`,
+  `schaetze_h`, `schaetze_h_tage`, `schaetze_duty`), `logik/prognose_baseline.py` (`plateaus`, `schaetze_ohne`,
+  `baseline_metadaten`; `fit_ohne_wetter` nicht gebaut), `logik/prognose_stufe.py` (`validiere`,
+  `validierung_bestanden`, `evidenz_h`, `evidenz_duty`, `evidenz_ohne`, `betriebsabhaengig`), `startbilanzen`,
+  `startzusatz`, `start_sauber` in `logik/prognose_merkmale.py`. Keine neue Schwelle außerhalb `PrognoseRegeln`; nur
+  `EPS` = 1e-9 für Grenzvergleiche summierter Minuten (Duty 0,90) und im Adapter die Lesetechnik (`H_TAGE_MAX` 120,
+  `ABSCHNITT_TAGE` 14).
+- Stufe und Mindestband eines Fensters nur über `stufe_hoechstens`/`band_min_rel` (Pflicht aus P2b): das Fenster trägt
+  seine Qualität samt Vorlauf (`Fenster.qualitaet`), `HEvidenz.stufe_hoechstens` = Minimum der benutzten Fenster.
+- Typverträge additiv: `Fenster.p_max_kw` None statt erfundener 0 ohne Leistungsreferenz; `Fenster.soll_mittel_c`,
+  `qualitaet`, `lauf_id`; `HEvidenz.stufe_hoechstens`; `HSchaetzung.tage` (H_d je Tag); `OhneSchaetzung.naechte_b`.
+  `schaetze_h`, `schaetze_ohne` und `validiere` bekommen zusätzlich `zeitzone` (lokales Datum der Fenstermitte bzw.
+  der Testtage).
+- Episode: reguläre thermo-Freigabe, lückenlos, alle Werte gültig, ohne Sperre/Eingriff/Wechsel, Tür ≤ 60 s am Stück
+  (kurze Öffnungen bleiben im Fenster). Neubeginn bei Lücke, Regelungsart-/Konfigurationswechsel, |Sollsprung| > 1 K
+  (auch Absenken). Eine Wechselminute, in der sich nur der Grund zwischen regulären Freigaben ändert (Nachbarn gleiche
+  Konfiguration, alle R), unterbricht nicht und zählt mit Hinweis `grundwechsel` (§7.1 „Grundwechsel allein unterbricht
+  nicht“). Beginnt die Eingabe mitten in einer Episode, entstehen daraus keine Fenster (Anker unbekannt).
+- Zyklus = Ein-Phase mit Aus-Minute davor und danach im Fenster, nur mit gemessenem Strom (`strom_belegt`); sonst
+  `zyklen_unbelegt`. Unbekannter Heizkörper-Typ zählt wie Öl (längerer Vorlauf/Block).
+- Fensterqualität: `fenster_qualitaet` (= `frische_ersatz`) über den Block und den Vorlauf direkt davor (bei späteren
+  Blöcken der vorige Block); Plateaus über den Block und `oel/konvektor_vorlauf_min` davor.
+- H ≤ 0 → nicht identifiziert. Stationär unter der C-Schwelle → Evidenzstufe A (`schaetze_h` liefert dann H None; die
+  Kandidaten je Pfad stehen im Evidenzbericht). Das Band nimmt in P3 immer das C-Mindestband (±30 %), das D-Band
+  (±15 %) braucht die Validierung (P4a). Die C-Regel „Öl 36 h“ ergibt sich aus 12 Fenstern zu 3 h von selbst.
+- Tagesregression: Band ±`h_band_ersatz_min_rel` (das B-Band ±50 %); Tage mit `training_thermo`, H_d je Tag als
+  Diagnose. Duty: Tage mit `training_plan` und bekannter Kapazität.
+- Baseline: Lauf bestätigt = Status läuft/fertig/abgebrochen (Metadaten enden am Abbruchtag), Lauf-ID der Minute
+  passt, Relay durchgehend an (`sekunden_ein` = Dauer). „Nacht“ = Mittag bis Mittag (lokales Datum von Plateau-Mitte − 12 h; 20–23 und 00–03 Uhr sind eine Nacht), auch für
+  den Tagesmedian von H_ohne. Stufe B zählt die Nächte mit ≥ 3 h je Lauf (`naechte_b` = Maximum über die Läufe). T_max-Band =
+  kälteste bis wärmste Nacht ± `tmax_band_min_k`. Thermostat: geändert > unbekannt > angenommen > bestätigt;
+  „geändert“ verhindert das Gegenmodell, „angenommen“ bleibt Hinweis.
+- Startbilanz: vom Start lückenlos in R, bis Innen ≥ Soll, dann Nachphase (Konvektor 60, sonst 120 min) jede Minute
+  ≤ `sollnaehe_max_k` vom Soll; ΔT = Median der letzten `start_vorlauf_min` Minuten − Innen beim Start. Sauber =
+  Qualität trainingsfähig und Anstieg ≥ `startfit_anstieg_min_k`. Kein C-Fit (P4b).
+- Prognosestufe (`stufe_mit`/`stufe_ohne`, Extrapolation, Rückstufung des Wintertags) kommt mit P4a.
+- Evidenzbericht (`baustelle/prognose_v2` › Container › `evidenz`, `h_tage` 0–120, Vorgabe 0 = kein Bericht): Zeitraum ab Beginn
+  der Heizperiode, höchstens 120 Tage, bis gestern. Lesen in 14-Tage-Abschnitten, je mit 58 h Vorlauf (48-h-Lauf +
+  Öl-Warm-up + längster Block), Abnahmeprüfung P2b nur einmal (`prognose_rohdaten(pruefung=False)`,
+  `minuten_bauen(pruefungen_vorher=…)`); gezählt wird nur, was im Abschnitt endet (Fenster, Plateaus, Startbilanzen,
+  Abkühlepisoden; eine genau am Abschnittsende endende Episode zählt im nächsten) bzw. beginnt (Starts, Tage). Eine
+  reguläre Episode, die am Abschnittsende noch läuft, gibt ihren Anker weiter (`offene_episoden` → `anker`), damit das
+  Raster wie in einem Durchgang liegt; die erste gelesene Minute gilt nie als beobachteter Episodenbeginn
+  (`beobachtet_ab`, Altdaten markieren sie als Wechsel). Ein Plateau-Block, dessen Verlängerung am Ende der Eingabe
+  abgeschnitten wäre, bleibt offen (weder Plateau noch Verwerfung). Z einer Startbilanz mit dem H derselben
+  Konfiguration. Zählung (`zaehle_fenster`) und Konfigurationswahl (`modell_konfigurationen`) stehen in `logik/`. Je Konfiguration: H (gewählt, direkt, Ersatz, Tage) mit Stufe, Duty,
+  Gegenmodell, `betriebsabhaengig`; je Container Fenster/Plateaus direkt/Ersatz/verworfen mit Gründen
+  (`qualitaet:<code>` für Qualitätsgründe), Starts (bekannt, Bilanzen, saubere mit Z bei aktuellem H), Abkühlnächte.
+  Jede Minute wird je Abschnitt einmal bewertet (`prognose_merkmale.bewerten` → `bewertet=` an Fenster, Plateaus,
+  Merkmale, Starts, Startbilanzen); Blockgrenzen über eine einmal je Container gebaute Zeitliste; von den
+  Abkühlepisoden bleibt über die Abschnitte nur die Zeit.
+  **Messung auf dem Pi** (11.10.2026, SQLite, synthetisch 120 Tage × 2 Container, Werktage 06–17 Uhr Arbeitszeit, sonst
+  Absenken, TPI-Takt, Minuten von Container, Heizkörper und Wetter): ganzer Bericht 89 s; Lesen je 14-Tage-Abschnitt in
+  der Datenbanksperre 1,4–1,6 s; Rechnen je Abschnitt 8,7 s, davon 5,9 s Zusammensetzen der Minuten (`minuten_bauen`,
+  P2) und 2,8 s Fachlogik. Hochgerechnet auf 5 Container rund 220 s gesamt und rund 4 s Sperre je Abschnitt – nur auf
+  Anfrage, im Executor, eine Diagnose zur Zeit. Größter Brocken ist `minuten_bauen` (Kandidat für eine spätere
+  Beschleunigung).
+

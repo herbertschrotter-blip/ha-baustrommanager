@@ -344,3 +344,139 @@ async def test_rohdaten_nur_aus_den_fenstern(hass: HomeAssistant, baustelle_nove
     assert gruende == ["erstes", "pruef", "vor_von", "im_zeitraum"]   # „dazwischen“ (10.11.) nicht gelesen
     gelesen = {d for (_, d) in roh.tag_geraet}
     assert gelesen == {tage["erstes"], tage["pruef"], tage["im_zeitraum"]}   # Prüfung 01.–08.11. und 16.–20.11.
+
+
+# ---------------------------------------------------------------------- P3 (BSM-033.08): Evidenzbericht
+EVIDENZ_TAGE = [date(2026, 11, 13) + timedelta(days=i) for i in range(6)]
+
+
+async def _takt_tage(hass: HomeAssistant, entry) -> str:
+    """Sechs Arbeitstage 07–17 Uhr, Soll/innen 22, außen 12, Öl-Heizkörper 2 kW im Takt 5 von 10 min (1 kWh/h)."""
+    st, bid = entry.runtime_data, entry.entry_id
+    _, kid = Heizung.von(st).prognose_kontext(C1)
+    bm, gm, wm, ev = [], [], [], []
+    for tag in EVIDENZ_TAGE:
+        b, g, w = _minuten(bid, tag)
+        for i, z in enumerate(g):
+            arbeit = 7 * 60 <= i < 17 * 60
+            an = 60 if arbeit and i % 10 < 5 else 0
+            z.update(sekunden_ein=60 if arbeit else 0, sekunden_strom=an, leistung_w=2000.0 * an / 60,
+                     leistung_w_max=2000.0 if an else 0.0, energie_wh=2000.0 * an / 3600, heizanforderung_s=an)
+        bm, gm, wm = bm + b, gm + g, wm + w
+        for minute, grund in ((0, "ausserhalb"), (7 * 60, "arbeitszeit"), (17 * 60, "ausserhalb")):
+            ev.append({"zeit": lokal(tag, minute), "baustelle_id": bid, "bereich_id": C1, "art": "prognose_kontext",
+                       "quelle": "automatik", "wert": {"grund": grund, "zustand": "aus", "soll_c": 22.0,
+                                                       "regelungsart": "thermo", "konfiguration_id": kid}})
+    heizung = dict(st.e["heizung"])
+
+    def schreiben(v):
+        v.execute(insert(s.bereich_minute), bm)
+        v.execute(insert(s.geraet_minute), gm)
+        v.execute(insert(s.wetter_minute), wm)
+        v.execute(insert(s.ereignis), ev)
+        v.execute(insert(s.einstellung), [
+            {"baustelle_id": bid, "schluessel": "heizung", "wert": heizung, "ab": lokal(date(2026, 11, 1)), "quelle": "seite"},
+            {"baustelle_id": bid, "schluessel": "geraete", "wert": {HK1: {"nenn_kw": 2.0}}, "ab": lokal(date(2026, 11, 1)),
+             "quelle": "seite"}])
+        v.execute(update(s.geraet).where(s.geraet.c.baustelle_id == bid).values(angelegt=lokal(date(2026, 11, 1))))
+        v.execute(update(s.schema_version).where(s.schema_version.c.version == 10).values(angewendet=lokal(date(2026, 11, 1))))
+        return True
+    assert await hass.data[DATA_DB].async_ausfuehren(schreiben) is not None
+    return kid
+
+
+async def test_evidenzbericht_aus_der_datenbank(hass: HomeAssistant, baustelle_november, hass_ws_client) -> None:
+    """Öl: 2 h Vorlauf, dann 3-h-Fenster 09–12 und 12–15 (Rest 15–17 verworfen) → 12 direkte Fenster an 6 Tagen,
+    H 0,10 kW/K mit C-Evidenz; Abschnitte (14 Tage) zählen nichts doppelt."""
+    kid = await _takt_tage(hass, baustelle_november)
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "baustelle/prognose_v2", "entry_id": baustelle_november.entry_id, "tage": 1,
+                        "h_tage": 30})
+    antwort = await ws.receive_json()
+    assert antwort["success"], antwort
+    erg = antwort["result"]
+    assert erg["evidenz"] == {"von": "2026-10-21", "bis": "2026-11-19"}
+    je = {c["bereich"]: c for c in erg["container"]}
+    ev = je[C1]["evidenz"]
+    assert ev["konfiguration_aktuell"] == kid
+    assert ev["fenster"]["direkt"] == 12 and ev["fenster"]["ersatz"] == 0 and ev["fenster"]["stunden"] == 36.0
+    (m,) = ev["modelle"]
+    assert m["aktuell"] and m["konfiguration_id"] == kid
+    h = m["h"]
+    assert h["methode"] == "stationaer" and h["h_kw_k"] == pytest.approx(0.1) and h["stufe"] == "C"
+    assert (h["unten"], h["oben"]) == (pytest.approx(0.07), pytest.approx(0.13))   # MAD 0 → Mindestband ±30 %
+    assert h["evidenz"]["fenster"] == 12 and h["evidenz"]["tage"] == 6 and "direkt" in h["evidenz"]["gruende"]
+    assert m["h_ersatz"]["methode"] == "keine" and m["ohne"]["methode"] == "keine"
+    assert m["h_tage"]["methode"] == "tagesregression" and m["h_tage"]["stufe"] == "B"
+    assert m["h_tage"]["h_kw_k"] == pytest.approx(0.1)
+    assert ev["starts"]["anzahl"] == 6 and ev["starts"]["bekannt"] == 6
+    assert ev["plateaus"] == {"direkt": 0, "ersatz": 0, "verworfen": 0, "stunden": 0.0, "gruende": {}}
+    assert je[C2]["evidenz"]["fenster"]["direkt"] == 0
+    # ohne h_tage: kein Evidenzbericht (der billige Aufruf bleibt billig)
+    await ws.send_json({"id": 2, "type": "baustelle/prognose_v2", "entry_id": baustelle_november.entry_id})   # Vorgabe 0
+    erg = (await ws.receive_json())["result"]
+    assert "evidenz" not in erg and all("evidenz" not in c for c in erg["container"])
+
+
+async def test_abschnittsgrenzen_wie_ein_durchgang(hass: HomeAssistant, baustelle_november, hass_ws_client,
+                                                  monkeypatch) -> None:
+    """Eine reguläre Episode über 84 h (länger als der Vorlauf je Abschnitt) und ein 48-h-Baseline-Lauf über Mitternacht:
+    mit Abschnitten von einem Tag dasselbe Ergebnis wie in einem Durchgang (Anker weitergegeben, nichts doppelt)."""
+    from custom_components.baustelle.funktionen.heizung import prognose_v2 as modul   # noqa: PLC0415
+    from custom_components.baustelle.logik.baseline import Lauf   # noqa: PLC0415
+
+    st, bid = baustelle_november.runtime_data, baustelle_november.entry_id
+    _, kid = Heizung.von(st).prognose_kontext(C1)
+    start, aus_ab, lauf_ab = lokal(date(2026, 11, 14)), lokal(date(2026, 11, 17), 12 * 60), lokal(date(2026, 11, 18))
+    bm, gm, wm = [], [], []
+    t = start
+    while t < lokal(HEUTE):
+        regulaer, baseline = t < aus_ab, t >= lauf_ab
+        i = int((t - start).total_seconds() // 60)
+        an = (60 if i % 10 < 5 else 0) if regulaer else (60 if i % 10 < 9 else 0) if baseline else 0
+        grund = "arbeitszeit" if regulaer else "baseline" if baseline else "ausserhalb"
+        bm.append({"bereich_id": C1, "zeit": t, "baustelle_id": bid, "dauer_s": 60, "temperatur": 30.0 if baseline else 22.0,
+                   "soll": 22.0, "tuer_offen_s": 0, "zustand": "heizt" if an else "aus", "grund": grund, "quelle": "ha",
+                   "temp_alter_s": 30, "staffel_begrenzt_s": 0})
+        gm.append({"geraet_id": HK1, "zeit": t, "baustelle_id": bid, "dauer_s": 60, "sekunden_ein": 60 if regulaer or baseline else 0,
+                   "sekunden_strom": an, "leistung_w": 2000.0 * an / 60, "leistung_w_max": 2000.0 if an else 0.0,
+                   "energie_wh": 2000.0 * an / 3600, "erreichbar": True, "quelle": "ha", "heizanforderung_s": an,
+                   "staffel_gesperrt_s": 0})
+        wm.append({"baustelle_id": bid, "zeit": t, "dauer_s": 60, "aussen_temp": 12.0, "quelle": "ha"})
+        t += timedelta(minutes=1)
+    ev = [{"zeit": zeit, "baustelle_id": bid, "bereich_id": C1, "art": "prognose_kontext", "quelle": "automatik",
+           "wert": {"grund": grund, "zustand": "aus", "soll_c": 22.0, "regelungsart": "thermo", "konfiguration_id": kid}}
+          for zeit, grund in ((start, "arbeitszeit"), (aus_ab, "ausserhalb"), (lauf_ab, "baseline"))]
+    heizung = dict(st.e["heizung"])
+
+    def schreiben(v):
+        v.execute(insert(s.bereich_minute), bm)
+        v.execute(insert(s.geraet_minute), gm)
+        v.execute(insert(s.wetter_minute), wm)
+        v.execute(insert(s.ereignis), ev)
+        v.execute(insert(s.einstellung), [
+            {"baustelle_id": bid, "schluessel": "heizung", "wert": heizung, "ab": lokal(date(2026, 11, 1)), "quelle": "seite"},
+            {"baustelle_id": bid, "schluessel": "geraete", "wert": {HK1: {"nenn_kw": 2.0}}, "ab": lokal(date(2026, 11, 1)),
+             "quelle": "seite"}])
+        v.execute(update(s.geraet).where(s.geraet.c.baustelle_id == bid).values(angelegt=lokal(date(2026, 11, 1))))
+        v.execute(update(s.schema_version).where(s.schema_version.c.version == 10).values(angewendet=lokal(date(2026, 11, 1))))
+        return True
+    assert await hass.data[DATA_DB].async_ausfuehren(schreiben) is not None
+    st.lz["baseline"] = {"laeufe": [Lauf("L1", C1, date(2026, 11, 18), HEUTE, status="fertig",
+                                         thermostat_unveraendert="angenommen").als_dict()]}
+    ws = await hass_ws_client(hass)
+
+    async def bericht(abschnitt_tage: int, nr: int) -> dict:
+        monkeypatch.setattr(modul, "ABSCHNITT_TAGE", abschnitt_tage)
+        await ws.send_json({"id": nr, "type": "baustelle/prognose_v2", "entry_id": bid, "tage": 1, "h_tage": 10})
+        antwort = await ws.receive_json()
+        assert antwort["success"], antwort
+        return next(c for c in antwort["result"]["container"] if c["bereich"] == C1)["evidenz"]
+
+    ganz, teile = await bericht(30, 1), await bericht(1, 2)
+    assert ganz["fenster"]["direkt"] == 27 and ganz["fenster"]["verworfen"] == 0   # (84 h − 2 h Vorlauf) / 3 h
+    assert ganz["plateaus"]["direkt"] == 14                                         # (48 h − 4 h Warm-up) / 3 h
+    (m,) = ganz["modelle"]
+    assert m["h"]["h_kw_k"] == pytest.approx(0.1) and m["ohne"]["h"]["h_kw_k"] == pytest.approx(0.1)
+    assert m["ohne"]["t_max_c"] == pytest.approx(30.0) and m["ohne"]["naechte_b"] >= 2 and m["ohne"]["stufe"] == "B"
+    assert teile == ganz
