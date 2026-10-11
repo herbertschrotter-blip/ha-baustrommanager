@@ -2265,11 +2265,11 @@ class BaustellePanel extends LitElement {
           dia: id => r ? flaeche(id, [{ name: 'Verbrauch', farbe: 'var(--s1)', v: r }], zr.labels, 'kWh', KK_JEDES[c.z]) : '' }; }
       case 'b-gespart': { const oa = S.ohne_automatik, r = this.kkSumme(c), alle = c.ort === 'aw' && this.s.awScope === 'alle';
         const ohne = alle ? null : this.reihe(d, this.eid(d, d.entry, 'energie_ohne_automatik'), c.z, c.v);
-        return { zahl: oa ? de(oa.gespart_eur, 0) : '–', einh: '€', wo: wann, vgl: oa ? `${f(oa.prozent, 0)} % weniger als rund um die Uhr (${f(oa.ohne_eur, 0)} €)` : 'noch keine Werte', funke: r, farbe: 'var(--s3)',
+        return { zahl: oa ? de(oa.gespart_eur, 0) : '–', einh: '€', wo: wann, vgl: oa ? `${f(oa.prozent, 0)} % weniger als rund um die Uhr (${f(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ''}` : 'noch keine Werte', funke: r, farbe: 'var(--s3)',
           kennz: [['mit Automatik', `${f(S.eur, 0)} €`], ['ohne (24/7)', `${f(oa && oa.ohne_eur, 0)} €`], ['gespart', `${f(oa && oa.gespart_eur, 0)} €`], ['weniger', `${f(oa && oa.prozent, 0)} %`]],
           dia: id => r ? flaeche(id, [{ name: 'mit Automatik', farbe: 'var(--s1)', v: r }], zr.labels, 'kWh', KK_JEDES[c.z], ohne ? { name: 'ohne Automatik', v: ohne } : null) : '' }; }
       case 'b-hoch': { const h = (A && A.hochrechnung) || {};
-        return { zahl: zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)}` : '–', einh: '€', wo: 'bis Ende Heizperiode', vgl: `bisher ${f(h.bisher_eur, 0)} € · ohne Automatik ${f(h.ohne_eur, 0)} €`,
+        return { zahl: zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)}` : '–', einh: '€', wo: 'bis Ende Heizperiode', vgl: `bisher ${f(h.bisher_eur, 0)} € · ohne Automatik ${f(h.ohne_eur, 0)} €${h.ohne_hinweis ? ` (${h.ohne_hinweis})` : ''}`,
           mini: kkBalken([['bisher', h.bisher_eur, `${f(h.bisher_eur, 0)} €`, 'var(--s3)'], ['mit', h.mit_eur, `${f(h.mit_eur, 0)} €`, 'var(--s1)'], ['ohne', h.ohne_eur, `${f(h.ohne_eur, 0)} €`, 'var(--s2)']]),
           kennz: [['bisher', `${f(h.bisher_kwh, 0)} kWh`], ['mit Automatik', `${f(h.mit_kwh, 0)} kWh`], ['ohne (24/7)', `${f(h.ohne_kwh, 0)} kWh`], ['gespart ≈', `${f(h.gespart_eur, 0)} €`]],
           dia: id => zahl(h.mit_eur) ? balken(id, [h.bisher_eur, h.mit_eur, h.ohne_eur], ['bisher', 'mit', 'ohne'], '€', 0) : '' }; }

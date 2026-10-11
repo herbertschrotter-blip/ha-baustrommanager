@@ -53,6 +53,7 @@ function legende(h) {
       <span><i class="l-prog"></i>Prognose mit Automatik <b>${eur(h.mit_eur)}</b>${zahl(h.unten_eur) ? html`<span class="leise"> (${de(h.unten_eur, 0)}–${de(h.oben_eur, 0)})</span>` : nothing}</span>
       ${zahl(h.ohne_eur) ? html`<span><i class="l-ohne"></i>Prognose ohne Automatik <b>${eur(h.ohne_eur)}</b></span>` : nothing}
       ${zahl(h.gespart_eur) ? html`<span>gespart ≈ <b>${eur(h.gespart_eur)}</b></span>` : nothing}</div>
+    ${h.ohne_hinweis ? html`<div class="hp-grob">⚠ „ohne Automatik“ und „gespart“: ${h.ohne_hinweis}</div>` : nothing}
     <div class="leise">„ohne Automatik“ ist bis zur gemessenen Baseline eine Schätzung (jeder Heizkörper rund um die Uhr).</div>`;
 }
 function herkunft(h) {
@@ -143,8 +144,9 @@ function detail(h, z, art, p) {
       ${z.prog ? zeile('', html`<i class="q-prog"></i>${restText}`, z.prog, z.prog_eur) : nothing}
       ${z.prog && z.ist ? zeile('sum', 'zusammen', z.mit, z.mit_eur) : nothing}
       ${z.prog && zahl(z.unten) && z.oben - z.unten > 0.5 ? html`<div class="leise"><span>Spanne milder–kalter Winter</span><span>${de(z.unten_eur, 0)}–${eur(z.oben_eur)}</span></div>` : nothing}
-      ${zahl(z.ohne) ? zeile('', html`<i class="q-ohne"></i>ohne Automatik ${h.ohne_methode === 'baseline' ? '(gemessen)' : '(Schätzung)'}`, z.ohne, z.ohne_eur) : nothing}
-      ${zahl(z.gespart) ? html`<div class="gesp"><span>gespart</span><b>≈ ${eur(z.gespart_eur)}</b></div>` : nothing}</div>
+      ${zahl(z.ohne) ? zeile('', html`<i class="q-ohne"></i>ohne Automatik ${h.ohne_hinweis ? '(Schätzung)' : '(gemessen)'}`, z.ohne, z.ohne_eur) : nothing}
+      ${zahl(z.gespart) ? html`<div class="gesp"><span>gespart</span><b>≈ ${eur(z.gespart_eur)}</b></div>` : nothing}
+      ${h.ohne_hinweis && (zahl(z.ohne) || zahl(z.gespart)) ? html`<div class="hp-grob">⚠ ${h.ohne_hinweis}</div>` : nothing}</div>
     ${art === 'tag' ? kurve24(p, z) : nothing}</div>`;
 }
 function zeitraeume(p, h, art) {
@@ -254,6 +256,7 @@ export const HEIZPERIODE_CSS = `
 .hp-24 path.hp-ol { fill: none; stroke: var(--s2); stroke-width: 1.8; stroke-dasharray: 2 3; } .hp-24 path.hp-tl { fill: none; stroke: var(--ink); stroke-width: 1.6; }
 .q-ol, .q-tl { background: none !important; height: 0 !important; width: 14px !important; } .q-ol { border-top: 2px dotted var(--s2); } .q-tl { border-top: 2px solid var(--ink); }
 .hp-det-z .sum { border-top: 1px solid rgba(127,127,127,.2); } .hp-det-z .gesp b { color: #30d158; }
+.hp-grob { display: block; font-size: 12px; color: var(--amber); }   /* BSM-033.05: ohne/gespart nur grobe Obergrenze */
 .hp-zeit { font-size: 12px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 .hp-reiter { margin: 4px 0 8px; } .hp-zahl { font-size: 26px; font-weight: 600; margin: 4px 0 2px; } .hp-zahl .leise { font-size: 14px; font-weight: 400; }
 .hp-dia { width: 100%; max-width: 540px; height: auto; display: block; margin: 6px auto; }

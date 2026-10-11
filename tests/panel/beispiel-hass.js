@@ -39,7 +39,7 @@ function beispielHochrechnung(b, preis) {
       for (const k of ['ist', 'prog', 'mit', 'unten', 'oben', 'ohne', 'gespart']) z[k + '_eur'] = e(z[k]);
       return z; }); };
   return { bisher_kwh: bisher, bisher_eur: bisher * preis, mit_kwh: z[2], mit_eur: z[2] * preis, ohne_kwh: z[5], ohne_eur: z[5] * preis, gespart_eur: (z[5] - z[2]) * preis,
-    methode: 'signatur', unten_kwh: z[3], unten_eur: z[3] * preis, oben_kwh: z[4], oben_eur: z[4] * preis, normjahr_kwh: z[2] * 1.03, normjahr_eur: z[2] * 1.03 * preis,
+    methode: 'signatur', ohne_methode: 'schaetzung', ohne_hinweis: 'grobe Obergrenze, nicht belastbar', unten_kwh: z[3], unten_eur: z[3] * preis, oben_kwh: z[4], oben_eur: z[4] * preis, normjahr_kwh: z[2] * 1.03, normjahr_eur: z[2] * 1.03 * preis,
     hgt_rest: 1860, vorhersage_tage: 6, container: sig.map(c => ({ ...c, rest_kwh: 400, rest_eur: 400 * preis })), reihe,
     klima: KLIMA_BSP, klima_vorgabe: true, vorhersage: [['2026-01-16', 1.5], ['2026-01-17', -0.5], ['2026-01-18', -2.0], ['2026-01-19', 0.5], ['2026-01-20', 2.5], ['2026-01-21', 3.0]],
     beginn: '2025-10-01', ende: '2026-04-30', perioden: { tag: perioden('tag'), woche: perioden('woche'), monat: perioden('monat') } };
@@ -153,7 +153,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     const ende = (b.baustelle.optionen || {}).ende;
     return { zeitraum: abr.zeitraum, preis,
       summen: { kwh, eur: kwh * preis, heizzeit: 42.5, pumpzeit: pumpen ? 3.25 : 0, ohne: kwh * 3, vorher: { kwh: kwh * .9, heizzeit: 40, pumpzeit: pumpen ? 3 : 0 },
-        veraenderung: { kwh: kwh ? 11 : null, heizzeit: 6, pumpzeit: pumpen ? 8 : null }, ohne_automatik: kwh ? { ohne_eur: kwh * 3 * preis, gespart_eur: kwh * 2 * preis, prozent: 66.7 } : null },
+        veraenderung: { kwh: kwh ? 11 : null, heizzeit: 6, pumpzeit: pumpen ? 8 : null }, ohne_automatik: kwh ? { ohne_eur: kwh * 3 * preis, gespart_eur: kwh * 2 * preis, prozent: 66.7, hinweis: 'grobe Obergrenze, nicht belastbar' } : null },
       je_geraet: (g ? g.erwartet.zeilen : b.geraete.map(x => ({ bereich: x.bereich, geraet: x.id, mittel: null, kwh: 1.5, std: null }))).map(z => ({ ...z, eur: z.kwh === null ? null : z.kwh * preis })),
       wetter: w ? { punkte: w.erwartet.punkte, gerade: w.erwartet.regression && { ...w.erwartet.regression, eur_je_grad: w.erwartet.regression.k < 0 ? -w.erwartet.regression.k * preis : null } } : { punkte: [], gerade: null },
       // AN-0008: fairer Vergleich (kWh je Gradstunde, nur Thermostat mit Fühler, ein Typ je Container)
@@ -278,7 +278,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         case 'baustelle/ohne': { const n = { Tag: 24, Woche: 7, Monat: 30, Jahr: 12 }[m.zeitraum] || 24, kw = m.basis === 'typ' ? 1.8 : 2.0;   // WU-0013
           const reihe = Array.from({ length: n }, (_, i) => m.zeitraum === 'Tag' ? (i <= 16 ? kw : 0) : kw * 24 * (i < 5 ? 1 : 0)), ohne = reihe.reduce((a, b) => a + b, 0), kwh = ohne * 0.35;
           return { zeitraum: { art: m.zeitraum, n }, basis: m.basis || 'geraet', preis: 0.28, kw, reihe, ohne_kwh: ohne, kwh,
-            ergebnis: { ohne_eur: ohne * 0.28, gespart_eur: (ohne - kwh) * 0.28, prozent: 65 }, geraete: [] }; }
+            ergebnis: { ohne_eur: ohne * 0.28, gespart_eur: (ohne - kwh) * 0.28, prozent: 65, hinweis: 'grobe Obergrenze, nicht belastbar' }, geraete: [] }; }
         case 'history/history_during_period': case 'baustelle/verlauf': return verlauf(m);   // BSM-014: Verlauf aus der Datenbank
         case 'baustelle/protokoll': { const b = welt().find(x => x.baustelle.entry_id === m.entry_id); const p = b.laufzeit.protokoll.length ? b.laufzeit.protokoll : [['2026-04-17T12:00:00+02:00', 'einstellung', null, 'Baustelle abgeschlossen – Heizung aus, Werte gespeichert'], ['2026-03-03T06:00:00+02:00', 'warnung', `${m.entry_id}-3`, 'Frostgefahr 3,8 °C trotz Frostschutz'], ['2026-03-02T11:00:00+02:00', 'ok', `${m.entry_id}-3`, 'wieder über 5 °C']];
           return [...p, ...p.map(e => [e[0].replace('2026-09-2', '2026-09-1'), ...e.slice(1)])].slice(0, m.limit); }

@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.132",
+    "datum": "2026-10-11",
+    "punkte": [
+      "„Ohne Automatik“ und „gespart“ sind jetzt als **grobe Obergrenze, nicht belastbar** gekennzeichnet (BSM-033.05, Audit der Prognose mit ChatGPT, `docs/chatgpt-reviews/CGR-2026-10-11-hochrechnung/`): in der Karte „Heizperiode“ (Legende und gewählter Zeitraum), im Block „Ohne Automatik“, beim Betrag „Gespart durch Automatik“, in der Kachel „Gespart“, bei „Was fällt auf“ und in den Kacheln „Gespart“ und „Hochrechnung“. Die Zahlen bleiben; „ohne“ rechnet bis zur gemessenen Baseline jeden Heizkörper rund um die Uhr. Den Hinweis liefert die Integration (`ohne_hinweis` bzw. `hinweis`, `logik/auswertung.ohne_hinweis`). Der Umbau der Prognose folgt in BSM-033.06–.09 (Bauplan §8)."
+    ]
+  },
+  {
     "version": "0.8.131",
     "datum": "2026-10-11",
     "punkte": [

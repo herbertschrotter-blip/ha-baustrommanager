@@ -978,6 +978,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   /* WU-0005: Auswertung aus Bausteinen – Vorschlag Mischform, Vorlagen, Anpassen, Layout, Rangliste, Was fällt auf, Details */
   { panel.s.awListe = null; await klick({ act: 'tab', v: 'auswertung' }, 30); pruefe('Auswertung Mischform');
     erwarte('WU-0005: Vorschlag Mischform mit Kosten groß, Rangliste, Was fällt auf', ['aw-betrag', 'Wer verbraucht was', 'aw-tab-zeile', 'aw-karte', 'Weitere Auswertungen'.slice(0, 0)].every(t => ui.innerHTML.includes(t)) && /€ gespart/.test(ui.innerHTML));
+    erwarte('BSM-033.05: gespart in der Auswertung als grobe Obergrenze', (ui.innerHTML.match(/grobe Obergrenze, nicht belastbar/g) || []).length >= 1);
     await klick(AW.bearb); pruefe('Auswertung anpassen');
     erwarte('WU-0005: Anpassen mit Vorlagen 1–5 und Größenstufen', litEls('.aw-vorlagen-k [data-v]').length >= 5 && !!litEl('.aw-wahl .zeile .seg [data-v]'));
     await klick('.aw-vorlagen-k [data-v="kacheln"]'); erwarte('WU-0005: Vorlage Kacheln', panel.awAuswahl()[0].k === 'k-kosten' && panel.awAuswahl().filter(x => x.an).length === 9);
@@ -1000,6 +1001,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   /* BSM-033.03: Karte „Heizperiode“ – Reiter Hochrechnung (Diagramm, Legende), Signatur, Klima; Klimamittel speichern / Vorgabe */
   { panel.awDetail('hochrechnung'); await ruhe(); pruefe('Heizperiode Hochrechnung');
     erwarte('BSM-033.03: Diagramm tatsächlich/Prognose mit/ohne', ui.innerHTML.includes('hp-dia') && ui.innerHTML.includes('Prognose mit Automatik') && ui.innerHTML.includes('Prognose ohne Automatik') && ui.innerHTML.includes('hp-band'));
+    erwarte('BSM-033.05: ohne/gespart als grobe Obergrenze gekennzeichnet', ui.innerHTML.includes('hp-grob') && ui.innerHTML.includes('grobe Obergrenze, nicht belastbar'));
     await klick('.hp-reiter [data-v="sig"]'); pruefe('Heizperiode Signatur');
     erwarte('BSM-033.03: Signatur je Container', ui.innerHTML.includes('hp-streu') && ui.innerHTML.includes('Heizgrenze') && ui.innerHTML.includes('kWh je Grad'));
     await klick('.hp-reiter [data-v="klima"]'); pruefe('Heizperiode Klima');

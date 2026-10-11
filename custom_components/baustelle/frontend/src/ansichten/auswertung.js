@@ -73,7 +73,7 @@ function geraeteBlock(p, z, A) {
 /* „Was fällt auf“: die Integration wählt aus (logik/auswertung.erkenntnisse), die Seite macht nur den Text */
 function erkenntnisse(p, A, z) {
   return ((A && A.erkenntnisse) || []).map(x => ({
-    gespart: ['💶', `${de(x.eur, 0)} € gespart`, `Die Automatik spart ${de(x.prozent, 0)} % gegenüber Dauerbetrieb.`, 'ohne'],
+    gespart: ['💶', `${de(x.eur, 0)} € gespart`, `Die Automatik spart ${de(x.prozent, 0)} % gegenüber Dauerbetrieb${x.hinweis ? ` (${x.hinweis})` : ''}.`, 'ohne'],
     groesster: ['🔥', `${x.name} verbraucht am meisten`, `${de(x.kwh, 0)} kWh · ${de(x.anteil, 0)} % des Verbrauchs.`, 'geraete'],
     sparsamster: ['⚙', `${x.name} heizt am sparsamsten`, `${de(x.kwh_h, 2)} kWh je Heizstunde.`, 'vergleich'],
     wetter: ['🌡', `Je Grad kälter +${de(x.kwh_je_grad, 1)} kWh am Tag`, [zahl(x.eur_je_grad) ? `≈ ${de(x.eur_je_grad, 2)} € je Grad` : '', zahl(x.null0) ? `unter ${de(x.null0, 0)} °C außen wird geheizt` : ''].filter(Boolean).join(' · '), 'wetter'],
@@ -154,7 +154,8 @@ function bausteine(p) {
         ${!zahl(ohne) || !zahl(kwh) ? (ohne === null || kwh === null ? LAEDT : html`<div class="leer">Noch keine Werte</div>`) : !oa ? html`<div class="leer">Noch keine Werte</div>` : html`
         <div class="hbar"><span class="hb-n">mit Automatik</span><span class="hb-spur"><i style="width:${Math.min(100, kwh / ohne * 100)}%;background:var(--s1)"></i></span><span class="hb-w">${de(S.eur, 0)} €</span></div>
         <div class="hbar"><span class="hb-n">ohne (24/7)</span><span class="hb-spur"><i style="width:100%;background:var(--s2)"></i></span><span class="hb-w">${de(oa.ohne_eur, 0)} €</span></div>
-        <div class="gespart">gespart <b>${de(oa.gespart_eur, 2)} €</b> · ${de(oa.prozent, 0)} %</div>`}
+        <div class="gespart">gespart <b>${de(oa.gespart_eur, 2)} €</b> · ${de(oa.prozent, 0)} %</div>
+        ${oa.hinweis ? html`<div class="hp-grob">⚠ ${oa.hinweis}</div>` : nothing}`}
         <div class="leise">So rechnet „ohne Automatik“: jeder Heizkörper mit seiner gemessenen Ø-Leistung im Betrieb (sobald er Strom zieht, ab 5 W) rund um die Uhr seit Beginn der Baustelle; gespart = ohne Automatik − tatsächlich verbraucht, mal Strompreis.</div></div>`,   // AN-0007: woher der Vergleich kommt
     hochrechnung: alle ? '' : heizperiodeVorlage(p, A),
     vergleich: html`<div class="glas-panel block"><div class="block-kopf"><b>Ölradiator oder Konvektor</b><span class="leise">fair: gleiche Regelung · aus eigenen Messungen</span></div>
@@ -183,7 +184,7 @@ function stueck(p, k, B, A, z, gr = { w: 4, h: 4 }) {
   switch (k) {
     case 'betrag': return laed ? html`<div class="glas-panel block">${LAEDT}</div>` : html`<div class="glas-panel aw-betrag"><div><small>KOSTEN · ${wann}</small><b>${eur}</b>
           <span>${zahl(S.kwh) ? de(S.kwh, 0) : '–'} kWh ${awDelta((S.veraenderung || {}).kwh)} <span class="leise">zu ${awVgl(p, z)}</span></span></div>
-        <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b></div>
+        <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b>${oa && oa.hinweis ? html`<span class="hp-grob">${oa.hinweis}</span>` : nothing}</div>
           <div><small>HOCHRECHNUNG HEIZPERIODE</small><b>${h && zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)} €` : '–'}</b></div></div></div>`;
     case 'rangliste': if (gr.w <= 2) return html`<div class="glas-panel block aw-klein"><div class="block-kopf"><b>Wer verbraucht was</b><span class="leise">Top 3</span></div>
           ${laed ? LAEDT : !rang.length ? html`<div class="leer">Noch kein Verbrauch</div>` : rang.slice(0, 3).map((c, i) => { const hier = hierVon(c);
@@ -197,7 +198,7 @@ function stueck(p, k, B, A, z, gr = { w: 4, h: 4 }) {
       return laed ? html`<div class="glas-panel block">${LAEDT}</div>` : !E.length ? html`<div class="glas-panel block"><div class="block-kopf"><b>Was fällt auf</b></div><div class="leer">Noch nichts Auffälliges</div></div>`
         : html`<div class="aw-karten">${E.map(([i, t, x, kk]) => html`<button class="glas-panel aw-karte" data-k=${kk} @click=${() => p.awDetail(kk)}><span>${i}</span><b>${t}</b><small>${x}</small></button>`)}</div>`; }
     case 'k-kosten': return kachel('abrechnung', html`<small>KOSTEN · ${wann}</small><b>${eur}</b><span>${zahl(S.kwh) ? de(S.kwh, 0) : '–'} kWh ${awDelta((S.veraenderung || {}).kwh)}</span>`);
-    case 'k-gespart': return kachel('ohne', html`<small>GESPART</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b><span>${oa ? `${de(oa.prozent, 0)} % durch Automatik` : 'noch keine Werte'}</span>`);
+    case 'k-gespart': return kachel('ohne', html`<small>GESPART</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b><span>${oa ? `${de(oa.prozent, 0)} % durch Automatik` : 'noch keine Werte'}</span>${oa && oa.hinweis ? html`<span class="hp-grob">${oa.hinweis}</span>` : nothing}`);
     case 'k-hoch': return kachel('hochrechnung', html`<small>HOCHRECHNUNG</small><b>${h && zahl(h.mit_eur) ? `${de(h.mit_eur, 0)} €` : '–'}</b><span>bis Ende Heizperiode</span>`);
     case 'k-wer': { const W = rang.slice(0, 4);
       return kachel('geraete', html`<small>WER VERBRAUCHT</small>${W.length ? W.map(c => html`<div class="aw-rang"><span>${c.name}</span><i style="width:${(c.kwh || 0) / max * 100}%;background:${farbeVon(hierVon(c))}"></i><em>${de(c.kwh, 0)} kWh</em></div>`) : html`<span>–</span>`}`); }

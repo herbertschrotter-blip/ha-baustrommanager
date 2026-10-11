@@ -23,7 +23,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .02 | Hochrechnung mit Heizgradtagen und Spanne, Witterungsbereinigung; Daten aus `tag_bereich` an die Signatur | ☑ 0.8.124 |
 | .03 | Anzeige: Karte „Heizperiode“ (Mockup `hochrechnung.html`, abgenommen 10.10.2026) | ☑ 0.8.125 |
 | .04 | Automatische Baseline-Läufe (§6): **a** Logik und Integration ☑ 0.8.127, **b** Anzeige (Mockup zuerst) ☐ | ◐ |
-| .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☐ |
+| .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☑ 0.8.132 |
 | .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☐ |
 | .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☐ |
 | .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☐ |

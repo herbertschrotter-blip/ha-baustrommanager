@@ -3602,6 +3602,7 @@ function legende(h3) {
       <span><i class="l-prog"></i>Prognose mit Automatik <b>${eur(h3.mit_eur)}</b>${zahl(h3.unten_eur) ? b2`<span class="leise"> (${de(h3.unten_eur, 0)}–${de(h3.oben_eur, 0)})</span>` : A}</span>
       ${zahl(h3.ohne_eur) ? b2`<span><i class="l-ohne"></i>Prognose ohne Automatik <b>${eur(h3.ohne_eur)}</b></span>` : A}
       ${zahl(h3.gespart_eur) ? b2`<span>gespart ≈ <b>${eur(h3.gespart_eur)}</b></span>` : A}</div>
+    ${h3.ohne_hinweis ? b2`<div class="hp-grob">⚠ „ohne Automatik“ und „gespart“: ${h3.ohne_hinweis}</div>` : A}
     <div class="leise">„ohne Automatik“ ist bis zur gemessenen Baseline eine Schätzung (jeder Heizkörper rund um die Uhr).</div>`;
 }
 function herkunft(h3) {
@@ -3688,8 +3689,9 @@ function detail(h3, z2, art, p4) {
       ${z2.prog ? zeile3("", b2`<i class="q-prog"></i>${restText}`, z2.prog, z2.prog_eur) : A}
       ${z2.prog && z2.ist ? zeile3("sum", "zusammen", z2.mit, z2.mit_eur) : A}
       ${z2.prog && zahl(z2.unten) && z2.oben - z2.unten > 0.5 ? b2`<div class="leise"><span>Spanne milder–kalter Winter</span><span>${de(z2.unten_eur, 0)}–${eur(z2.oben_eur)}</span></div>` : A}
-      ${zahl(z2.ohne) ? zeile3("", b2`<i class="q-ohne"></i>ohne Automatik ${h3.ohne_methode === "baseline" ? "(gemessen)" : "(Schätzung)"}`, z2.ohne, z2.ohne_eur) : A}
-      ${zahl(z2.gespart) ? b2`<div class="gesp"><span>gespart</span><b>≈ ${eur(z2.gespart_eur)}</b></div>` : A}</div>
+      ${zahl(z2.ohne) ? zeile3("", b2`<i class="q-ohne"></i>ohne Automatik ${h3.ohne_hinweis ? "(Schätzung)" : "(gemessen)"}`, z2.ohne, z2.ohne_eur) : A}
+      ${zahl(z2.gespart) ? b2`<div class="gesp"><span>gespart</span><b>≈ ${eur(z2.gespart_eur)}</b></div>` : A}
+      ${h3.ohne_hinweis && (zahl(z2.ohne) || zahl(z2.gespart)) ? b2`<div class="hp-grob">⚠ ${h3.ohne_hinweis}</div>` : A}</div>
     ${art === "tag" ? kurve24(p4, z2) : A}</div>`;
 }
 function zeitraeume(p4, h3, art) {
@@ -3810,6 +3812,7 @@ var HEIZPERIODE_CSS = `
 .hp-24 path.hp-ol { fill: none; stroke: var(--s2); stroke-width: 1.8; stroke-dasharray: 2 3; } .hp-24 path.hp-tl { fill: none; stroke: var(--ink); stroke-width: 1.6; }
 .q-ol, .q-tl { background: none !important; height: 0 !important; width: 14px !important; } .q-ol { border-top: 2px dotted var(--s2); } .q-tl { border-top: 2px solid var(--ink); }
 .hp-det-z .sum { border-top: 1px solid rgba(127,127,127,.2); } .hp-det-z .gesp b { color: #30d158; }
+.hp-grob { display: block; font-size: 12px; color: var(--amber); }   /* BSM-033.05: ohne/gespart nur grobe Obergrenze */
 .hp-zeit { font-size: 12px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 .hp-reiter { margin: 4px 0 8px; } .hp-zahl { font-size: 26px; font-weight: 600; margin: 4px 0 2px; } .hp-zahl .leise { font-size: 14px; font-weight: 400; }
 .hp-dia { width: 100%; max-width: 540px; height: auto; display: block; margin: 6px auto; }
@@ -4268,7 +4271,7 @@ function geraeteBlock(p4, z2, A2) {
 }
 function erkenntnisse(p4, A2, z2) {
   return (A2 && A2.erkenntnisse || []).map((x2) => ({
-    gespart: ["💶", `${de(x2.eur, 0)} € gespart`, `Die Automatik spart ${de(x2.prozent, 0)} % gegenüber Dauerbetrieb.`, "ohne"],
+    gespart: ["💶", `${de(x2.eur, 0)} € gespart`, `Die Automatik spart ${de(x2.prozent, 0)} % gegenüber Dauerbetrieb${x2.hinweis ? ` (${x2.hinweis})` : ""}.`, "ohne"],
     groesster: ["🔥", `${x2.name} verbraucht am meisten`, `${de(x2.kwh, 0)} kWh · ${de(x2.anteil, 0)} % des Verbrauchs.`, "geraete"],
     sparsamster: ["⚙", `${x2.name} heizt am sparsamsten`, `${de(x2.kwh_h, 2)} kWh je Heizstunde.`, "vergleich"],
     wetter: ["🌡", `Je Grad kälter +${de(x2.kwh_je_grad, 1)} kWh am Tag`, [zahl(x2.eur_je_grad) ? `≈ ${de(x2.eur_je_grad, 2)} € je Grad` : "", zahl(x2.null0) ? `unter ${de(x2.null0, 0)} °C außen wird geheizt` : ""].filter(Boolean).join(" · "), "wetter"],
@@ -4358,7 +4361,8 @@ function bausteine(p4) {
         ${!zahl(ohne) || !zahl(kwh) ? ohne === null || kwh === null ? LAEDT8 : b2`<div class="leer">Noch keine Werte</div>` : !oa ? b2`<div class="leer">Noch keine Werte</div>` : b2`
         <div class="hbar"><span class="hb-n">mit Automatik</span><span class="hb-spur"><i style="width:${Math.min(100, kwh / ohne * 100)}%;background:var(--s1)"></i></span><span class="hb-w">${de(S3.eur, 0)} €</span></div>
         <div class="hbar"><span class="hb-n">ohne (24/7)</span><span class="hb-spur"><i style="width:100%;background:var(--s2)"></i></span><span class="hb-w">${de(oa.ohne_eur, 0)} €</span></div>
-        <div class="gespart">gespart <b>${de(oa.gespart_eur, 2)} €</b> · ${de(oa.prozent, 0)} %</div>`}
+        <div class="gespart">gespart <b>${de(oa.gespart_eur, 2)} €</b> · ${de(oa.prozent, 0)} %</div>
+        ${oa.hinweis ? b2`<div class="hp-grob">⚠ ${oa.hinweis}</div>` : A}`}
         <div class="leise">So rechnet „ohne Automatik“: jeder Heizkörper mit seiner gemessenen Ø-Leistung im Betrieb (sobald er Strom zieht, ab 5 W) rund um die Uhr seit Beginn der Baustelle; gespart = ohne Automatik − tatsächlich verbraucht, mal Strompreis.</div></div>`,
     // AN-0007: woher der Vergleich kommt
     hochrechnung: alle ? "" : heizperiodeVorlage(p4, A2),
@@ -4390,7 +4394,7 @@ function stueck(p4, k2, B2, A2, z2, gr = { w: 4, h: 4 }) {
     case "betrag":
       return laed ? b2`<div class="glas-panel block">${LAEDT8}</div>` : b2`<div class="glas-panel aw-betrag"><div><small>KOSTEN · ${wann2}</small><b>${eur2}</b>
           <span>${zahl(S3.kwh) ? de(S3.kwh, 0) : "–"} kWh ${awDelta((S3.veraenderung || {}).kwh)} <span class="leise">zu ${awVgl(p4, z2)}</span></span></div>
-        <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : "–"}</b></div>
+        <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : "–"}</b>${oa && oa.hinweis ? b2`<span class="hp-grob">${oa.hinweis}</span>` : A}</div>
           <div><small>HOCHRECHNUNG HEIZPERIODE</small><b>${h3 && zahl(h3.mit_eur) ? `≈ ${de(h3.mit_eur, 0)} €` : "–"}</b></div></div></div>`;
     case "rangliste":
       if (gr.w <= 2) return b2`<div class="glas-panel block aw-klein"><div class="block-kopf"><b>Wer verbraucht was</b><span class="leise">Top 3</span></div>
@@ -4412,7 +4416,7 @@ function stueck(p4, k2, B2, A2, z2, gr = { w: 4, h: 4 }) {
     case "k-kosten":
       return kachel("abrechnung", b2`<small>KOSTEN · ${wann2}</small><b>${eur2}</b><span>${zahl(S3.kwh) ? de(S3.kwh, 0) : "–"} kWh ${awDelta((S3.veraenderung || {}).kwh)}</span>`);
     case "k-gespart":
-      return kachel("ohne", b2`<small>GESPART</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : "–"}</b><span>${oa ? `${de(oa.prozent, 0)} % durch Automatik` : "noch keine Werte"}</span>`);
+      return kachel("ohne", b2`<small>GESPART</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : "–"}</b><span>${oa ? `${de(oa.prozent, 0)} % durch Automatik` : "noch keine Werte"}</span>${oa && oa.hinweis ? b2`<span class="hp-grob">${oa.hinweis}</span>` : A}`);
     case "k-hoch":
       return kachel("hochrechnung", b2`<small>HOCHRECHNUNG</small><b>${h3 && zahl(h3.mit_eur) ? `${de(h3.mit_eur, 0)} €` : "–"}</b><span>bis Ende Heizperiode</span>`);
     case "k-wer": {
@@ -5444,7 +5448,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.131";
+var SEITE_VERSION = "0.8.132";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];
@@ -7839,7 +7843,7 @@ var BaustellePanel = class extends i4 {
           zahl: oa ? de(oa.gespart_eur, 0) : "–",
           einh: "€",
           wo: wann2,
-          vgl: oa ? `${f3(oa.prozent, 0)} % weniger als rund um die Uhr (${f3(oa.ohne_eur, 0)} €)` : "noch keine Werte",
+          vgl: oa ? `${f3(oa.prozent, 0)} % weniger als rund um die Uhr (${f3(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ""}` : "noch keine Werte",
           funke: r5,
           farbe: "var(--s3)",
           kennz: [["mit Automatik", `${f3(S3.eur, 0)} €`], ["ohne (24/7)", `${f3(oa && oa.ohne_eur, 0)} €`], ["gespart", `${f3(oa && oa.gespart_eur, 0)} €`], ["weniger", `${f3(oa && oa.prozent, 0)} %`]],
@@ -7852,7 +7856,7 @@ var BaustellePanel = class extends i4 {
           zahl: zahl(h3.mit_eur) ? `≈ ${de(h3.mit_eur, 0)}` : "–",
           einh: "€",
           wo: "bis Ende Heizperiode",
-          vgl: `bisher ${f3(h3.bisher_eur, 0)} € · ohne Automatik ${f3(h3.ohne_eur, 0)} €`,
+          vgl: `bisher ${f3(h3.bisher_eur, 0)} € · ohne Automatik ${f3(h3.ohne_eur, 0)} €${h3.ohne_hinweis ? ` (${h3.ohne_hinweis})` : ""}`,
           mini: kkBalken([["bisher", h3.bisher_eur, `${f3(h3.bisher_eur, 0)} €`, "var(--s3)"], ["mit", h3.mit_eur, `${f3(h3.mit_eur, 0)} €`, "var(--s1)"], ["ohne", h3.ohne_eur, `${f3(h3.ohne_eur, 0)} €`, "var(--s2)"]]),
           kennz: [["bisher", `${f3(h3.bisher_kwh, 0)} kWh`], ["mit Automatik", `${f3(h3.mit_kwh, 0)} kWh`], ["ohne (24/7)", `${f3(h3.ohne_kwh, 0)} kWh`], ["gespart ≈", `${f3(h3.gespart_eur, 0)} €`]],
           dia: (id) => zahl(h3.mit_eur) ? balken(id, [h3.bisher_eur, h3.mit_eur, h3.ohne_eur], ["bisher", "mit", "ohne"], "€", 0) : ""

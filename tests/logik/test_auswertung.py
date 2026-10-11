@@ -145,8 +145,9 @@ def test_csv_text_wie_seite():
 def test_veraenderung_und_ohne_automatik():
     assert a.veraenderung(115, 100) == 15 and a.veraenderung(99.5, 100) == 0 and a.veraenderung(98.5, 100) == -1
     assert a.veraenderung(5, 0) is None and a.veraenderung(None, 5) is None
-    assert a.ohne_automatik(40, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 15.0, "prozent": 60.0}
-    assert a.ohne_automatik(120, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 0.0, "prozent": 0.0}
+    grob = a.OHNE_HINWEIS
+    assert a.ohne_automatik(40, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 15.0, "prozent": 60.0, "hinweis": grob}
+    assert a.ohne_automatik(120, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 0.0, "prozent": 0.0, "hinweis": grob}
     assert a.ohne_automatik(5, 0, 0.25) is None
 
 
@@ -299,6 +300,17 @@ def test_hochrechnung_signatur():
     assert leer["container"] == [] and leer["hgt_rest"] is None
 
 
+def test_ohne_hinweis():
+    """BSM-033.05: „ohne Automatik“ und „gespart“ sind bis zur gemessenen Baseline nur eine grobe Obergrenze."""
+    assert a.OHNE_HINWEIS == "grobe Obergrenze, nicht belastbar"
+    assert a.ohne_hinweis("schaetzung") == a.OHNE_HINWEIS and a.ohne_hinweis(None) == a.OHNE_HINWEIS
+    assert a.ohne_hinweis("baseline") is None
+    basis = a.hochrechnung_werte(400.0, 2000.0, 9000.0, 0.25)
+    assert a.hochrechnung_signatur(basis, None, None, 0.25)["ohne_hinweis"] == a.OHNE_HINWEIS
+    gemessen = a.hochrechnung_signatur(basis, None, {"ohne": {"methode": "baseline"}}, 0.25)
+    assert gemessen["ohne_methode"] == "baseline" and gemessen["ohne_hinweis"] is None
+
+
 # ---------------------------------------------------------------- WU-0005: Rangliste und Erkenntnisse
 from logik.auswertung import erkenntnisse, rangliste  # noqa: E402
 
@@ -314,9 +326,10 @@ def test_rangliste_sortiert_mit_eur_anteil_und_kwh_je_stunde():
 
 def test_erkenntnisse_reihenfolge_und_schwellen():
     r = rangliste([{"bereich": "a", "name": "Polier", "kwh": 30, "heizzeit": 20}, {"bereich": "b", "name": "Magazin", "kwh": 60, "heizzeit": 25}], 0.3)
-    e = erkenntnisse(r, ohne={"gespart_eur": 120.0, "prozent": 78.0}, gerade={"k": -7.2, "eur_je_grad": 2.0, "null0": 15.5},
+    e = erkenntnisse(r, ohne={"gespart_eur": 120.0, "prozent": 78.0, "hinweis": "grob"}, gerade={"k": -7.2, "eur_je_grad": 2.0, "null0": 15.5},
                      veraenderung_kwh=31, typ_weniger=16)
     assert [x["art"] for x in e] == ["gespart", "groesster", "sparsamster", "wetter", "mehr"]      # höchstens 5
+    assert e[0]["hinweis"] == "grob"   # BSM-033.05: Hinweis „grobe Obergrenze“ reicht durch
     assert e[1]["name"] == "Magazin" and e[2]["name"] == "Polier" and e[2]["kwh_h"] == pytest.approx(1.5)
     # unter den Schwellen: nichts Auffälliges
     ruhig = erkenntnisse(r[:1], ohne=None, gerade={"k": 0.4}, veraenderung_kwh=-10, typ_weniger=3)

@@ -467,11 +467,22 @@ def ohne_kw(
     return kw
 
 
-def ohne_automatik(kwh: float, ohne: float, preis: float) -> dict[str, float] | None:
-    """„Ohne Automatik“: Kosten im Dauerbetrieb (`ohne` kWh), gespart in € und % dagegen; ohne Wert (0) None."""
+OHNE_HINWEIS = "grobe Obergrenze, nicht belastbar"   # BSM-033.05 (Audit 11.10.2026): „ohne“ = jeder Heizkörper 24 h
+
+
+def ohne_hinweis(methode: str | None) -> str | None:
+    """Hinweis zu „ohne Automatik“ und „gespart“ (BSM-033.05): aus einer gemessenen Baseline keiner, sonst ist „ohne“ die
+    Schätzung Dauerbetrieb und damit nur eine grobe Obergrenze."""
+    return None if methode == "baseline" else OHNE_HINWEIS
+
+
+def ohne_automatik(kwh: float, ohne: float, preis: float) -> dict[str, Any] | None:
+    """„Ohne Automatik“: Kosten im Dauerbetrieb (`ohne` kWh), gespart in € und % dagegen, dazu der Hinweis (der Zähler
+    rechnet immer Dauerbetrieb); ohne Wert (0) None."""
     if ohne <= 0:
         return None
-    return {"ohne_eur": ohne * preis, "gespart_eur": max(0.0, ohne - kwh) * preis, "prozent": max(0.0, 1 - kwh / ohne) * 100}
+    return {"ohne_eur": ohne * preis, "gespart_eur": max(0.0, ohne - kwh) * preis, "prozent": max(0.0, 1 - kwh / ohne) * 100,
+            "hinweis": ohne_hinweis(None)}
 
 
 def monate_zeitraum(heute: date, beginn: date | None, ende: date | None) -> tuple[date, date, list[str]]:
@@ -553,6 +564,7 @@ def hochrechnung_signatur(
     aus["perioden"] = {art: [{**z, **{f"{k}_eur": geld(z.get(k), preis) for k in ("ist", "prog", "mit", "unten", "oben", "ohne", "gespart")}}
                              for z in liste] for art, liste in (e.get("perioden") or {}).items()}
     aus["ohne_methode"] = (e.get("ohne") or {}).get("methode") or "schaetzung"   # BSM-033.04: gemessen oder 24/7 geschätzt
+    aus["ohne_hinweis"] = ohne_hinweis(aus["ohne_methode"])
     return aus
 
 
@@ -759,7 +771,7 @@ def erkenntnisse(
     gegen Konvektor. Nur Daten – den Text macht die Seite."""
     liste: list[dict[str, Any]] = []
     if ohne and ohne.get("gespart_eur", 0) > 0:
-        liste.append({"art": "gespart", "eur": ohne["gespart_eur"], "prozent": ohne.get("prozent")})
+        liste.append({"art": "gespart", "eur": ohne["gespart_eur"], "prozent": ohne.get("prozent"), "hinweis": ohne.get("hinweis")})
     mit = [c for c in rang if c["kwh"] > 0]
     if len(mit) >= 2:
         g = mit[0]
