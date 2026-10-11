@@ -18,16 +18,21 @@ from logik.prognose_merkmale import (
     betriebskontext,
     frische_ersatz,
     frost_bereit,
+    band_min_rel,
     kontext_gewechselt,
+    kontext_rekonstruiert,
     klassifiziere_minute,
     konfiguration_id,
     laengste_konstanz_s,
     nachweis_s,
     pruefe_minuten,
+    pruefe_rekonstruktion,
     quantisiere,
     regelungsart,
     starts,
+    stufe_hoechstens,
     tagesmerkmale,
+    wechsel_rekonstruiert,
 )
 from logik.prognose_regeln import PrognoseRegeln
 from logik.prognose_typen import (
@@ -39,7 +44,7 @@ from logik.prognose_typen import (
     Klassifikation,
     Leistungsreferenz,
 )
-from logik.regelung import SollGrund
+from logik.regelung import MODI, SollGrund, modus_von
 
 # Bauvorlage r5 §6.1 – bewusst ausgeschrieben, nicht aus dem Code abgeleitet
 ERWARTET = {
@@ -136,7 +141,8 @@ def test_nachweis_s_weist_unmoegliches_zurueck():
 def test_regeln_und_modellversion():
     r = PrognoseRegeln()
     assert MODELL_VERSION == "prognose-v2.1"
-    assert len(fields(r)) == 98   # vollständig nach Bauvorlage §2.5
+    assert len(fields(r)) == 101   # die 98 Felder der Bauvorlage §2.5 + 3 der Abnahmeprüfung P2b
+    assert (r.rekonstruktion_treffer_min, r.rekonstruktion_pruef_tage, r.rekonstruktion_vergleiche_min) == (0.99, 7, 1440)
     assert (r.abdeckung_min, r.messalter_max_s, r.ersatz_konstanz_max_s, r.tuer_offen_max_s) == (0.95, 120, 1800, 60)
     assert (r.konvektor_fenster_min, r.oel_fenster_min, r.mad_faktor, r.ohne_wetter_extrapolation_max_k) == (120, 180, 1.4826, 2.0)
     with pytest.raises(FrozenInstanceError):
@@ -162,7 +168,7 @@ def kontext(**kw) -> BetriebsKontext:
              "frost_grenze_c": 5.0, "frost_aus_c": 7.0, "frost_aussen_c": None, "baseline_lauf_id": None,
              "tuer_beobachtet": True, "kontext_belegt": True, "wechsel_im_intervall": False,
              "staffel_rekonstruiert_frei": None, "anschlussbelegung_belegt": True, "sperrereignis": False,
-             "sonstige_eingriffe": ()}
+             "sonstige_eingriffe": (), "kontext_nachweis": "direkt"}
     werte.update(kw)
     return BetriebsKontext(**werte)
 
@@ -722,3 +728,102 @@ def test_abkuehlen_tuer_unbekannt():
     ms = [replace(m, kontext=replace(m.kontext, tuer_beobachtet=False)) for m in nacht()]
     (e,) = abkuehlepisoden(ms, R)
     assert "tuer_unbekannt" in e.gruende
+
+
+# ---------------------------------------------------------------------- P2b: rekonstruierter Kontext für Altdaten
+@pytest.mark.parametrize(("einstellung", "fuehler", "modus"), [
+    ({"modus": "plan", "auto": True, "bedarf": False}, True, "plan"),
+    ({"modus": None, "auto": True, "bedarf": False}, True, "thermo"),
+    ({"modus": None, "auto": True, "bedarf": False}, False, "plan"),
+    ({"modus": None, "auto": False, "bedarf": False}, True, "hand"),
+    ({"modus": None, "auto": True, "bedarf": True}, True, "bedarf"),
+    ({"soll": 21}, True, None),     # nichts zum Modus belegt
+    (None, True, None),
+    ({"modus": None, "auto": None, "bedarf": False}, True, "hand"),   # wie bisher: nicht auto → Hand
+    ({"modus": None, "auto": 0, "bedarf": False}, True, "hand"),
+    ({"modus": "aus", "auto": True, "bedarf": False}, True, "aus"),
+    ({"modus": "xyz", "auto": True, "bedarf": False}, False, "plan"),   # unbekannter Modus → abgeleitet
+    ({"modus": None, "auto": False, "bedarf": True}, True, "bedarf"),   # Bedarf vor Hand
+])
+def test_modus_von(einstellung, fuehler, modus):
+    assert modus_von(einstellung, fuehler) == modus
+    assert set(MODI) == {"plan", "thermo", "bedarf", "hand", "aus"}
+
+
+def _modus_alt(e, fuehler):
+    """Die Ableitung aus Heizung.modus bis 0.8.134 (Referenz, Einstellung mit allen Schlüsseln wie STANDARD_BEREICH)."""
+    if e.get("modus") in ("plan", "thermo", "bedarf", "hand", "aus"):
+        return str(e["modus"])
+    if e["bedarf"]:
+        return "bedarf"
+    if not e["auto"]:
+        return "hand"
+    return "thermo" if fuehler else "plan"
+
+
+def test_modus_von_gleich_wie_bisher():
+    for modus in (None, "plan", "thermo", "bedarf", "hand", "aus", "xyz", ""):
+        for auto in (True, False, None, 0, 1):
+            for bedarf in (True, False, None, 0, 1):
+                for fuehler in (True, False):
+                    e = {"modus": modus, "auto": auto, "bedarf": bedarf}
+                    assert modus_von(e, fuehler) == _modus_alt(e, fuehler), e
+
+
+REK = {"grund": "arbeitszeit", "modus": "thermo", "fuehler": True, "heizung": HEIZUNG, "heizkoerper": [("hk1", "konvektor")],
+       "lauf_id": None, "staffel_bekannt": False, "tuer_beobachtet": True, "wechsel": False, "freigegeben": True}
+
+
+def test_kontext_rekonstruiert_nachweisstufe():
+    k = kontext_rekonstruiert(**REK)
+    assert k.kontext_belegt and k.kontext_nachweis == "rekonstruiert" and k.regelungsart == "thermo"
+    assert k.konfiguration_id == KID                                     # dieselbe konfiguration_id wie mit Ereignis
+    assert kontext_rekonstruiert(**{**REK, "freigegeben": False}).kontext_belegt is False   # Abnahmeprüfung nicht bestanden
+    assert kontext_rekonstruiert(**{**REK, "heizkoerper": None}).kontext_belegt is False    # Zuordnung nicht belegt
+    assert kontext_rekonstruiert(**{**REK, "modus": None}).kontext_belegt is False
+    assert kontext_rekonstruiert(**{**REK, "heizung": None}).kontext_belegt is False
+    assert kontext_rekonstruiert(**{**REK, "fuehler": False}).regelungsart == "plan"
+    nein = kontext_rekonstruiert(**{**REK, "freigegeben": False})
+    assert nein.kontext_nachweis == "keiner"
+
+
+def test_rekonstruiert_nur_im_ersatzpfad():
+    """Rekonstruierter Kontext: nie direktes Training, im Ersatzpfad höchstens Stufe C mit Band ≥ ±50 %."""
+    k = kontext_rekonstruiert(**REK)
+    q = pruefe_minuten([minute(lokal(8), k=k)], R)[0]
+    assert q.betrieb_gueltig and not q.trainingsfaehig and "kontext_rekonstruiert" in q.gruende
+    fenster = frische_ersatz(reihe(lokal(8), 45, k=k, temp_alter_s=60), R)
+    assert fenster.trainingsfaehig and fenster.frische == "ersatz" and "kontext_rekonstruiert" in fenster.gruende
+    assert stufe_hoechstens(fenster) == "C" and band_min_rel(fenster, R) == pytest.approx(0.5)
+    direkt = frische_ersatz(reihe(lokal(8), 45, temp_alter_s=60), R)
+    assert stufe_hoechstens(direkt) == "D" and band_min_rel(direkt, R) is None
+    assert "kontext_rekonstruiert" in einziger(tag([(0, 24, {**FREI, "k": replace(k, regulaer_freigegeben=False)})])).gruende
+
+
+@pytest.mark.parametrize(("vorher", "lueckenlos", "grund", "aenderung", "wechsel"), [
+    ("arbeitszeit", True, "arbeitszeit", False, False),
+    ("vorheizen", True, "arbeitszeit", False, True),     # Grundwechsel gegenüber der Vorminute
+    ("arbeitszeit", False, "arbeitszeit", False, True),  # nach einer Lücke
+    ("arbeitszeit", True, "arbeitszeit", True, True),    # Einstellungs-/Geräteänderung in der Minute
+])
+def test_wechselminuten_rekonstruiert(vorher, lueckenlos, grund, aenderung, wechsel):
+    assert wechsel_rekonstruiert(vorher, lueckenlos, grund, aenderung) is wechsel
+
+
+def _vergleiche(n: int, treffer: int):
+    echt = ("thermo", KID)
+    t0 = lokal(8)
+    return [(t0 + timedelta(minutes=i), echt, echt if i < treffer else ("plan", "kandere")) for i in range(n)]
+
+
+def test_abnahmepruefung_quote():
+    aus = pruefe_rekonstruktion("c1", _vergleiche(2000, 1978), R)   # 98,9 %
+    assert aus.quote == pytest.approx(0.989) and not aus.freigegeben and aus.gruende == ("rekonstruktion_abweichend",)
+    assert len(aus.abweichungen) == 22 and aus.abweichungen[0][1:] == (f"thermo/{KID}", "plan/kandere")
+    an = pruefe_rekonstruktion("c1", _vergleiche(1500, 1485), R)    # 99 %
+    assert an.quote == pytest.approx(0.99) and an.freigegeben and an.gruende == ()
+    wenig = pruefe_rekonstruktion("c1", _vergleiche(1439, 1439), R)  # 100 %, aber weniger als ein Tag verglichen
+    assert wenig.quote == 1.0 and not wenig.freigegeben and wenig.gruende == ("rekonstruktion_ungeprueft",)
+    assert pruefe_rekonstruktion("c1", _vergleiche(1440, 1440), R).freigegeben
+    ohne = pruefe_rekonstruktion("c1", [(lokal(8), ("thermo", KID), None)], R)   # Rekonstruktion selbst unbelegt
+    assert ohne.verglichen == 0 and ohne.quote is None and not ohne.freigegeben and ohne.gruende == ("rekonstruktion_ungeprueft",)

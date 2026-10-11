@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from datetime import time
-from ...logik.regelung import HandEnde, SollGrund
+from ...logik.regelung import MODI as MODI, HandEnde, SollGrund   # MODI: eine Quelle (logik/regelung.modus_von)
 
 HEIZ_GRUENDE = {
     SollGrund.FRUEHSTART, SollGrund.VORHEIZEN, SollGrund.ARBEITSZEIT, SollGrund.NACHHEIZEN, SollGrund.TROCKNEN,
@@ -20,7 +20,6 @@ HAND_ENDE_TEXT = {   # Protokoll, wenn die Automatik einen Heizkörper aus dem H
     HandEnde.SCHALTPUNKT: "Automatik übernimmt ({grund})",
 }
 MODUS_TEXT = {"plan": "Zeitplan", "thermo": "Thermostat", "bedarf": "Bei Bedarf", "hand": "Hand", "aus": "Aus"}
-MODI = tuple(MODUS_TEXT)
 STANDARD_HEIZ_KW = 2.0  # Heizkörper ohne Messung (Mockup: 2,0 kW)
 FRUEHSTART_NACHRICHT = time(18, 0)  # Abend vorher: „Morgen −4 °C – Vorheizen startet schon um …“
 FRUEHER_MIN = 30  # Knopf „Noch früher“

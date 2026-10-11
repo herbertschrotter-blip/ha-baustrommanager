@@ -35,16 +35,35 @@ Aus den Szenarien (Herbert 01.10.2026):
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from .arbeitszeit import Plan
 from .lernen import Tpi, tpi_anteil, tpi_ein
 
 FROST_SPANNE = 2.0
+MODI = ("plan", "thermo", "bedarf", "hand", "aus")   # Modus je Container (neu 0.7.8), wie funktionen/heizung/typen.MODI
 FUEHLER_HALTEN_MIN = 15
 AUSSEN_HALTEN_MIN = 360
+
+
+def modus_von(einstellung: Mapping[str, Any] | None, fuehler: bool) -> str | None:
+    """Modus eines Containers aus seiner Einstellung: gesetzt, sonst aus `bedarf`, `auto` und dem Fühler abgeleitet
+    (bedarf → „bedarf“, nicht auto → „hand“, sonst thermo mit Fühler, plan ohne). None, wenn nichts davon belegt ist."""
+    if einstellung is None:
+        return None
+    if einstellung.get("modus") in MODI:
+        return str(einstellung["modus"])
+    if "bedarf" not in einstellung and "auto" not in einstellung:
+        return None
+    if einstellung.get("bedarf"):
+        return "bedarf"
+    if not einstellung.get("auto", True):   # wie bisher `not e["auto"]`: auch None/0 heißt Hand
+        return "hand"
+    return "thermo" if fuehler else "plan"
 
 
 def letzter_wert(aktuell: float | None, zuletzt: tuple[datetime, float] | None, jetzt: datetime, halten_min: float) -> float | None:

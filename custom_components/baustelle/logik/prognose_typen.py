@@ -2,7 +2,8 @@
 
 Lieferung P1 (BSM-033.06): Enums, Modellversion und die Verträge, die Erfassung, Klassifikation und Baseline-Metadaten
 brauchen. P2 (BSM-033.07): Minutenqualität, Start-, Tages- und Abkühlmerkmale (§2.4); `GeraetIntervall.typ` additiv
-(Konvektor/Öl für den Nachlauf der Abkühlepisoden). Spätere Lieferungen ergänzen hier additiv (öffentliche
+(Konvektor/Öl für den Nachlauf der Abkühlepisoden). P2b: `BetriebsKontext.kontext_nachweis`,
+`RekonstruktionsPruefung` (Abnahmeprüfung des rekonstruierten Kontexts). Spätere Lieferungen ergänzen hier additiv (öffentliche
 Importadresse bleibt dieses Modul).
 
 Konventionen (§2.1): Zeiten timezone-aware UTC, halboffene Intervalle [von, bis); `None` = unbekannt, nie gleich 0;
@@ -92,6 +93,7 @@ class BetriebsKontext:
     anschlussbelegung_belegt: bool
     sperrereignis: bool
     sonstige_eingriffe: Gruende
+    kontext_nachweis: Nachweis        # P2b: "direkt" (Ereignis prognose_kontext) | "rekonstruiert" (Altdaten) | "keiner"
 
 
 @dataclass(frozen=True)
@@ -200,4 +202,17 @@ class AbkuehlEpisode:
     minuten: tuple[BereichIntervall, ...]
     innen_start_c: float
     innen_ende_c: float
+    gruende: Gruende
+
+
+@dataclass(frozen=True)
+class RekonstruktionsPruefung:
+    """P2b: rekonstruierter gegen echten Kontext (Ereignis) je Minute – Regelungsart und Konfigurations-ID."""
+
+    bereich_id: str
+    verglichen: int
+    treffer: int
+    quote: float | None
+    freigegeben: bool
+    abweichungen: tuple[tuple[datetime, str, str], ...]   # (Zeit, echt, rekonstruiert) als "art/konfiguration"
     gruende: Gruende

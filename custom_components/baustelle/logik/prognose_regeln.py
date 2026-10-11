@@ -112,3 +112,7 @@ class PrognoseRegeln:
     ohne_wetter_duty_min: float = 0.10
     ohne_wetter_duty_max: float = 0.90
     ohne_wetter_extrapolation_max_k: float = 2.0
+    # P2b (Herbert 11.10.2026): rekonstruierter Kontext für Altdaten nur mit laufender Abnahmeprüfung
+    rekonstruktion_treffer_min: float = 0.99
+    rekonstruktion_vergleiche_min: int = 1440   # mindestens ein Tag verglichener Minuten, sonst ungeprüft
+    rekonstruktion_pruef_tage: int = 7

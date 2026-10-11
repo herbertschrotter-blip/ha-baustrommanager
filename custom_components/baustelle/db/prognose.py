@@ -18,6 +18,15 @@ Zweistufig, damit die globale Datenbanksperre kurz bleibt: `prognose_rohdaten` l
 - Minuten ohne Container-Zeile, aber mit Gerätezeilen, kommen als `zeile_vorhanden=False` mit (die Energie bleibt
   erhalten); Zeit ganz ohne Zeilen bleibt Lücke – die Fachlogik rechnet mit den echten Tagesdauern.
 - Stundenimporte (`dauer_s` 3600) kommen mit ihrer Dauer; die Fachlogik schließt sie vom Training aus.
+
+**P2b – Kontext für Altdaten** (Herbert 11.10.2026): Minuten mit Quelle `ha` vor dem ersten Ereignis eines Containers
+bekommen einen rekonstruierten Kontext (`logik/prognose_merkmale.kontext_rekonstruiert`): Modus aus dem nachgespielten
+Verlauf `bereiche` (+ `bereiche.<id>.modus/auto/bedarf`), Fühler = `bereich.fuehler`, bestätigt durch Temperaturwerte am
+Tag; Heizkörper wie oben – ohne Inventar-Einsatz nur an Tagen, an denen `tag_geraet.bereich_id` jedes Heizkörpers der
+heutigen Zuordnung entspricht (und es damit Minutenzeilen hat), sonst unbelegt. Wechsel bei Grundwechsel gegenüber der
+Vorminute, nach einer Lücke und in der Minute einer Einstellungs-/Geräteänderung. **Abnahmeprüfung:** ab dem ersten
+Ereignis (`rekonstruktion_pruef_tage` lang) wird je Minute rekonstruiert und mit dem Ereignis verglichen
+(`pruefe_rekonstruktion`); unter `rekonstruktion_treffer_min` bleibt jede rekonstruierte Minute des Containers unbelegt.
 """
 
 from __future__ import annotations
@@ -27,23 +36,37 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 import copy
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 import math
 from typing import Any
 
-from sqlalchemy import Connection, or_, select
+from sqlalchemy import Connection, func, or_, select
 
 from homeassistant.util import dt as dt_util
 
 from ..logik import geraete as geraete_logik
 from ..logik.baseline import Lauf
-from ..logik.prognose_merkmale import QUELLE_VERLAUF, bestaetigter_lauf, betriebskontext, nachweis_s
-from ..logik.prognose_typen import BereichIntervall, GeraetIntervall, Intervall, Leistungsreferenz
+from ..logik.prognose_merkmale import (
+    QUELLE_HA,
+    QUELLE_VERLAUF,
+    bestaetigter_lauf,
+    betriebskontext,
+    konfiguration_id,
+    kontext_rekonstruiert,
+    nachweis_s,
+    pruefe_rekonstruktion,
+    regelungsart,
+    wechsel_rekonstruiert,
+)
+from ..logik.prognose_regeln import PrognoseRegeln
+from ..logik.prognose_typen import BereichIntervall, GeraetIntervall, Intervall, Leistungsreferenz, RekonstruktionsPruefung
+from ..logik.regelung import modus_von
 from . import schema as s
 
 ROLLEN_HEIZKOERPER = ("heizung", "heizkoerper")   # `geraet.rolle` steht in der API-Schreibweise (daten.ROLLE_API)
 P1_AUFBAU = 10                      # ab diesem Aufbau gibt es Alters- und Staffelnachweise
 GERAET_STATUS = "geraet.status"     # Gerätestatus aus der Seite (geraete.py), Wert {"geraet", "status"}
+VERLAEUFE = ("heizung", "geraete", "bereiche")   # Einstellungen mit Verlauf je Zeitpunkt
 
 
 @dataclass(frozen=True)
@@ -54,6 +77,7 @@ class PrognoseRahmen:
     zone: tzinfo
     bereiche: tuple[str, ...]        # Container
     laeufe: tuple[Lauf, ...] = ()    # Baseline-Läufe (lz) für die bestätigte Lauf-ID
+    regeln: PrognoseRegeln = field(default_factory=PrognoseRegeln)
 
 
 @dataclass
@@ -71,6 +95,9 @@ class Rohdaten:
     bereich_zeilen: dict[str, dict[datetime, Any]]
     geraet_zeilen: dict[str, dict[datetime, Any]] = field(default_factory=dict)   # je Gerät nach Zeit
     aussen: dict[datetime, float | None] = field(default_factory=dict)
+    erstes_ereignis: dict[str, datetime] = field(default_factory=dict)            # P2b: je Container
+    tag_geraet: dict[tuple[str, date], str | None] = field(default_factory=dict)   # P2b: (Gerät, Tag) → Container
+    pruef_zeilen: dict[str, list[Any]] = field(default_factory=dict)              # P2b: Minuten der Abnahmeprüfung
 
 
 def _utc(t: datetime) -> datetime:
@@ -91,8 +118,8 @@ def prognose_rohdaten(v: Connection, r: PrognoseRahmen, von: datetime, bis: date
     einstellungen = list(v.execute(
         select(es.c.id, es.c.ab, es.c.quelle, es.c.schluessel, es.c.wert, es.c.geraet_id).where(
             es.c.baustelle_id == bid, es.c.ab < bis,
-            or_(es.c.schluessel.in_(("heizung", "geraete")) & es.c.bereich_id.is_(None) & es.c.geraet_id.is_(None),
-                es.c.schluessel.like("heizung.%"), es.c.schluessel.like("geraete.%"), es.c.schluessel == GERAET_STATUS))
+            or_(es.c.schluessel.in_(VERLAEUFE) & es.c.bereich_id.is_(None) & es.c.geraet_id.is_(None),
+                *(es.c.schluessel.like(f"{k}.%") for k in VERLAEUFE), es.c.schluessel == GERAET_STATUS))
         .order_by(es.c.ab, es.c.id)))
     heizkoerper = list(v.execute(select(s.geraet.c.id, s.geraet.c.bereich_id, s.geraet.c.typ, s.geraet.c.angelegt, s.geraet.c.entfernt)
                                  .where(s.geraet.c.baustelle_id == bid, s.geraet.c.rolle.in_(ROLLEN_HEIZKOERPER)).order_by(s.geraet.c.id)))
@@ -100,19 +127,38 @@ def prognose_rohdaten(v: Connection, r: PrognoseRahmen, von: datetime, bis: date
     fuehler = {z.id: bool(z.fuehler) for z in v.execute(select(s.bereich.c.id, s.bereich.c.fuehler).where(s.bereich.c.id.in_(r.bereiche)))}
     ae = list(v.execute(select(s.ausruestung_einsatz).where(s.ausruestung_einsatz.c.geraet_id.in_(ids)))) if ids else []
     ce = list(v.execute(select(s.container_einsatz).where(s.container_einsatz.c.container_id.in_({z.container_id for z in ae})))) if ae else []
+    erstes = {z.bereich_id: _utc(z.zeit) for z in v.execute(
+        select(ev.c.bereich_id, func.min(ev.c.zeit).label("zeit")).where(
+            ev.c.baustelle_id == bid, ev.c.art == "prognose_kontext", ev.c.bereich_id.in_(r.bereiche)).group_by(ev.c.bereich_id))}
+    # P2b: Abnahmeprüfung ab dem ersten Ereignis – vor dem Zeitraum beginnen, wenn das erste Ereignis davor liegt
+    pruefung = timedelta(days=r.regeln.rekonstruktion_pruef_tage)
+    pruef = {b: (t, min(t + pruefung, bis)) for b, t in erstes.items() if t < bis}
     ereignisse: dict[str, list[tuple[datetime, Mapping[str, Any]]]] = defaultdict(list)
-    for b in r.bereiche:   # das letzte Ereignis vor `von` trägt den Kontext in den Zeitraum
-        vorher = v.execute(select(ev.c.zeit, ev.c.wert).where(
-            ev.c.baustelle_id == bid, ev.c.art == "prognose_kontext", ev.c.bereich_id == b, ev.c.zeit < von)
-            .order_by(ev.c.zeit.desc(), ev.c.id.desc()).limit(1)).first()
-        if vorher is not None:
-            ereignisse[b].append((_utc(vorher.zeit), vorher.wert if isinstance(vorher.wert, dict) else {}))
-    for z in v.execute(select(ev.c.bereich_id, ev.c.zeit, ev.c.wert).where(
-            ev.c.baustelle_id == bid, ev.c.art == "prognose_kontext", ev.c.bereich_id.in_(r.bereiche), ev.c.zeit >= von,
-            ev.c.zeit < bis).order_by(ev.c.zeit, ev.c.id)):
-        ereignisse[z.bereich_id].append((_utc(z.zeit), z.wert if isinstance(z.wert, dict) else {}))
+    art = ev.c.art == "prognose_kontext"
+    for b in r.bereiche:
+        # je Fenster ([von, bis) und die Abnahmeprüfung) das letzte Ereignis davor und alle darin – nicht dazwischen
+        gesehen: dict[tuple[datetime, int], Mapping[str, Any]] = {}
+        for a, e in [(von, bis), *([pruef[b]] if b in pruef else [])]:
+            vorher = v.execute(select(ev.c.id, ev.c.zeit, ev.c.wert).where(
+                ev.c.baustelle_id == bid, art, ev.c.bereich_id == b, ev.c.zeit < a)
+                .order_by(ev.c.zeit.desc(), ev.c.id.desc()).limit(1)).first()
+            darin = list(v.execute(select(ev.c.id, ev.c.zeit, ev.c.wert).where(
+                ev.c.baustelle_id == bid, art, ev.c.bereich_id == b, ev.c.zeit >= a, ev.c.zeit < e)))
+            for z in ([vorher] if vorher is not None else []) + darin:
+                gesehen[(_utc(z.zeit), z.id)] = z.wert if isinstance(z.wert, dict) else {}
+        ereignisse[b] = [(t, w) for (t, _), w in sorted(gesehen.items(), key=lambda x: x[0])]
     roh = Rohdaten(_utc(p1) if p1 is not None else None, _uebernahme(v, bid), einstellungen, heizkoerper, fuehler, ae, ce,
-                   ereignisse, defaultdict(dict))
+                   ereignisse, defaultdict(dict), erstes_ereignis=erstes)
+    for b, (a, e) in pruef.items():
+        roh.pruef_zeilen[b] = list(v.execute(select(bm.c.zeit, bm.c.dauer_s, bm.c.temperatur, bm.c.quelle).where(
+            bm.c.baustelle_id == bid, bm.c.bereich_id == b, bm.c.zeit >= a, bm.c.zeit < e).order_by(bm.c.zeit)))
+    if ids:   # Tagessummen je Gerät (nur für die Tage der Fenster): welchem Container es zugerechnet wurde
+        tg = s.tag_geraet
+        tage = [(a.astimezone(r.zone).date(), e.astimezone(r.zone).date()) for a, e in [(von, bis), *pruef.values()]]
+        for z in v.execute(select(tg.c.geraet_id, tg.c.datum, tg.c.bereich_id).where(
+                tg.c.baustelle_id == bid, tg.c.geraet_id.in_(ids),
+                or_(*((tg.c.datum >= a) & (tg.c.datum <= e) for a, e in tage)))):
+            roh.tag_geraet[(z.geraet_id, z.datum)] = z.bereich_id
     if ids:
         for z in v.execute(select(gm).where(gm.c.baustelle_id == bid, gm.c.geraet_id.in_(ids), gm.c.zeit >= von, gm.c.zeit < bis)):
             roh.geraet_zeilen.setdefault(z.geraet_id, {})[_utc(z.zeit)] = z
@@ -194,29 +240,98 @@ class _Zuordnung:
         return g.bereich_id == b and _deckt(g.angelegt, g.entfernt, t)
 
 
-def minuten_bauen(roh: Rohdaten, r: PrognoseRahmen) -> dict[str, tuple[BereichIntervall, ...]]:
-    """Je Container die Minuten als `BereichIntervall` (zeitlich sortiert) – ohne Datenbank."""
-    verlauf = {schl: _Verlauf(schl, roh.einstellungen, roh.uebernahme) for schl in ("heizung", "geraete")}
+class _Rekonstruktion:
+    """P2b: Kontext je Zeitpunkt ohne Ereignis – Modus, Fühler, Heizkörper aus dem Verlauf und den Stammdaten."""
+
+    def __init__(self, roh: Rohdaten, r: PrognoseRahmen, verlauf: Mapping[str, _Verlauf], zuordnung: _Zuordnung) -> None:
+        self.roh, self.r, self.verlauf, self.zuordnung = roh, r, verlauf, zuordnung
+        self.temp_tage = {(b, t.astimezone(r.zone).date()) for b, zeilen in roh.bereich_zeilen.items()
+                          for t, z in zeilen.items() if z.temperatur is not None}
+        self.temp_tage |= {(b, _utc(z.zeit).astimezone(r.zone).date()) for b, zeilen in roh.pruef_zeilen.items()
+                           for z in zeilen if z.temperatur is not None}
+        zeiten = [_utc(z.ab) for z in roh.einstellungen]
+        zeiten += [_utc(x) for g in roh.heizkoerper for x in (g.angelegt, g.entfernt) if x is not None]
+        zeiten += [_utc(x) for z in (*roh.ausruestung_einsatz, *roh.container_einsatz) for x in (z.von, z.bis) if x is not None]
+        self.aenderungen = sorted(zeiten)
+
+    def fuehler(self, b: str, t: datetime) -> bool:
+        """Fühler laut Stammdaten, bestätigt durch Temperaturwerte am lokalen Tag."""
+        return bool(self.roh.fuehler.get(b)) and (b, t.astimezone(self.r.zone).date()) in self.temp_tage
+
+    def aenderung(self, t: datetime, ende: datetime) -> bool:
+        i = bisect_left(self.aenderungen, t)
+        return i < len(self.aenderungen) and self.aenderungen[i] < ende
+
+    def heizkoerper(self, b: str, t: datetime) -> list[tuple[str, str]] | None:
+        """(ID, Typ) der aktiven Heizkörper zum Zeitpunkt; None, wenn die Zuordnung nicht belegt ist."""
+        geraete_e, _, _ = self.verlauf["geraete"].am(t)
+        if geraete_e is None:
+            return None
+        tag = t.astimezone(self.r.zone).date()
+        aus = []
+        for g in self.roh.heizkoerper:
+            drin = self.zuordnung.im_bereich(g, b, t)
+            if g.id not in self.zuordnung.einsaetze:   # vor dem Inventar: Tagessummen müssen die Zuordnung bestätigen
+                tag_b = self.roh.tag_geraet.get((g.id, tag), "<fehlt>")
+                if drin and tag_b != b:
+                    return None
+                if not drin and tag_b == b:
+                    return None
+            if drin and geraete_logik.schaltet(geraete_logik.status_von(geraete_e.get(g.id))):
+                aus.append((g.id, g.typ))
+        return aus
+
+    def art_und_konfiguration(self, b: str, t: datetime) -> tuple[str, str] | None:
+        bereiche_e, _, _ = self.verlauf["bereiche"].am(t)
+        heizung, _, _ = self.verlauf["heizung"].am(t)
+        fuehler = self.fuehler(b, t)
+        modus = modus_von((bereiche_e or {}).get(b) if bereiche_e is not None else None, fuehler)
+        hk = self.heizkoerper(b, t)
+        if modus is None or hk is None or heizung is None:   # wie kontext_rekonstruiert: nur mit belegter Heizung
+            return None
+        art = regelungsart(modus, fuehler)
+        return art, konfiguration_id(art, hk)
+
+
+def minuten_bauen(roh: Rohdaten, r: PrognoseRahmen) -> tuple[dict[str, tuple[BereichIntervall, ...]], dict[str, RekonstruktionsPruefung]]:
+    """Je Container die Minuten als `BereichIntervall` (zeitlich sortiert) und die Abnahmeprüfung der Rekonstruktion –
+    ohne Datenbank."""
+    verlauf = {schl: _Verlauf(schl, roh.einstellungen, roh.uebernahme) for schl in VERLAEUFE}
     zuordnung = _Zuordnung(roh)
+    rek = _Rekonstruktion(roh, r, verlauf, zuordnung)
     aus: dict[str, tuple[BereichIntervall, ...]] = {}
+    pruefungen: dict[str, RekonstruktionsPruefung] = {}
     for b in r.bereiche:
+        ev_b = roh.ereignisse.get(b, [])
+        ev_zeiten = [t for t, _ in ev_b]
+        vergleiche = []
+        for z in roh.pruef_zeilen.get(b, []):
+            t = _utc(z.zeit)
+            i = bisect_right(ev_zeiten, t)
+            if z.quelle != QUELLE_HA or i == 0:
+                continue
+            echt = ev_b[i - 1][1]
+            if echt.get("regelungsart") in (None, "unbekannt") or not echt.get("konfiguration_id"):
+                continue   # das Ereignis selbst belegt nichts – kein Vergleich, keine Abweichung
+            vergleiche.append((t, (str(echt.get("regelungsart")), str(echt.get("konfiguration_id"))), rek.art_und_konfiguration(b, t)))
+        pruefungen[b] = pruefe_rekonstruktion(b, vergleiche, r.regeln)
         kandidaten = [g for g in roh.heizkoerper if g.id in zuordnung.einsaetze or g.bereich_id == b]
         zeiten = set(roh.bereich_zeilen.get(b, {})) | {t for g in kandidaten for t in roh.geraet_zeilen.get(g.id, {})
                                                        if zuordnung.im_bereich(g, b, t)}
-        ev_b = roh.ereignisse.get(b, [])
-        ev_zeiten = [t for t, _ in ev_b]
-        aus[b] = tuple(_intervall(r, roh, b, t, kandidaten, zuordnung, ev_b, ev_zeiten, verlauf) for t in sorted(zeiten))
-    return aus
+        aus[b] = tuple(_intervall(r, roh, b, t, kandidaten, zuordnung, ev_b, ev_zeiten, verlauf, rek, pruefungen[b])
+                       for t in sorted(zeiten))
+    return aus, pruefungen
 
 
 def prognose_minuten(v: Connection, r: PrognoseRahmen, von: datetime, bis: datetime) -> dict[str, tuple[BereichIntervall, ...]]:
     """Lesen und Zusammensetzen in einem Schritt (Tests, kleine Zeiträume)."""
-    return minuten_bauen(prognose_rohdaten(v, r, von, bis), r)
+    return minuten_bauen(prognose_rohdaten(v, r, von, bis), r)[0]
 
 
 def _intervall(  # noqa: PLR0913 – eine Zeile aus mehreren Tabellen zusammensetzen
     r: PrognoseRahmen, roh: Rohdaten, b: str, t: datetime, kandidaten: Sequence[Any], zuordnung: _Zuordnung,
     ev_b: Sequence[tuple[datetime, Mapping[str, Any]]], ev_zeiten: Sequence[datetime], verlauf: Mapping[str, _Verlauf],
+    rek: _Rekonstruktion, pruefung: RekonstruktionsPruefung,
 ) -> BereichIntervall:
     zeile = roh.bereich_zeilen.get(b, {}).get(t)
     hk = [g for g in kandidaten if zuordnung.im_bereich(g, b, t)]
@@ -232,17 +347,31 @@ def _intervall(  # noqa: PLR0913 – eine Zeile aus mehreren Tabellen zusammense
                     for g in aktiv)
     i = bisect_right(ev_zeiten, t)
     j = bisect_left(ev_zeiten, ende)
-    ereignis = ev_b[i - 1][1] if i > 0 else None
-    am_ende = ev_b[j][1] if j < len(ev_b) and ev_zeiten[j] == ende else None
     grund = zeile.grund if zeile is not None else None
-    staffel = nachweis_s(zeile.staffel_begrenzt_s, d) if zeile is not None else None
-    kontext = betriebskontext(
-        grund=grund, ereignis=ereignis, ereignisse_im_intervall=[w for _, w in ev_b[i:j]], ereignis_am_ende=am_ende,
-        heizung=heizung, heizkoerper=[(g.id, g.typ) for g in aktiv], fuehler=roh.fuehler.get(b, False),
-        lauf_id=bestaetigter_lauf(r.laeufe, b, t.astimezone(r.zone).date()), staffel_bekannt=staffel is not None,
-        tuer_beobachtet=zeile is not None and zeile.tuer_offen_s is not None, zeile_vorhanden=zeile is not None)
-    a = roh.aussen.get(t)
     quelle = zeile.quelle if zeile is not None else None
+    staffel = nachweis_s(zeile.staffel_begrenzt_s, d) if zeile is not None else None
+    lauf_id = bestaetigter_lauf(r.laeufe, b, t.astimezone(r.zone).date())
+    tuer = zeile is not None and zeile.tuer_offen_s is not None
+    erstes = roh.erstes_ereignis.get(b)
+    if quelle == QUELLE_HA and (erstes is None or t < erstes):
+        # P2b: Altminute vor dem ersten Ereignis – rekonstruierter Kontext, nur mit bestandener Abnahmeprüfung
+        vorher = roh.bereich_zeilen.get(b, {}).get(t - timedelta(minutes=1))
+        lueckenlos = vorher is not None and _utc(vorher.zeit) + timedelta(seconds=int(vorher.dauer_s)) == t
+        bereiche_e, _, _ = verlauf["bereiche"].am(t)
+        fuehler = rek.fuehler(b, t)
+        kontext = kontext_rekonstruiert(
+            grund=grund, modus=modus_von(bereiche_e.get(b) if bereiche_e is not None else None, fuehler), fuehler=fuehler,
+            heizung=heizung, heizkoerper=rek.heizkoerper(b, t), lauf_id=lauf_id, staffel_bekannt=staffel is not None,
+            tuer_beobachtet=tuer, freigegeben=pruefung.freigegeben,
+            wechsel=wechsel_rekonstruiert(vorher.grund if vorher is not None else None, lueckenlos, grund, rek.aenderung(t, ende)))
+    else:
+        ereignis = ev_b[i - 1][1] if i > 0 else None
+        am_ende = ev_b[j][1] if j < len(ev_b) and ev_zeiten[j] == ende else None
+        kontext = betriebskontext(
+            grund=grund, ereignis=ereignis, ereignisse_im_intervall=[w for _, w in ev_b[i:j]], ereignis_am_ende=am_ende,
+            heizung=heizung, heizkoerper=[(g.id, g.typ) for g in aktiv], fuehler=roh.fuehler.get(b, False), lauf_id=lauf_id,
+            staffel_bekannt=staffel is not None, tuer_beobachtet=tuer, zeile_vorhanden=zeile is not None)
+    a = roh.aussen.get(t)
     innen = zeile.temperatur if zeile is not None else None
     return BereichIntervall(
         zeit=Intervall(t, ende), bereich_id=b, zeile_vorhanden=zeile is not None, grund=grund,

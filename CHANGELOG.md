@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.135] – 2026-10-11
+
+- Prognose V2, Altdaten (BSM-033.07, P2b, Entscheidung Herbert): Minuten aus der Zeit vor dem neuen Kontext-Ereignis
+  (vor 0.8.133) bekommen jetzt einen nachgebauten Zusammenhang – Regelungsart aus dem damaligen Modus des Containers
+  (Einstellungsverlauf samt späterer Änderungen auf der Seite), Heizkörper aus dem Inventar bzw. aus den Stammdaten,
+  wenn die Tagessummen dazu passen. Solche Minuten zählen nur vorsichtig (wie Ersatzdaten: höchstens Stufe C, Spanne
+  mindestens ±50 %), nie als direkte Messung.
+- Laufende Prüfung: Ab dem ersten echten Ereignis wird der Nachbau eine Woche lang Minute für Minute mit den echten
+  Ereignissen verglichen. Stimmen weniger als 99 % überein, bleibt der Nachbau für diesen Container aus. Quote und
+  Abweichungen stehen in der Diagnose `baustelle/prognose_v2` („rekonstruktion“).
+- Der Modus eines Containers wird jetzt an einer Stelle bestimmt (`logik/regelung.modus_von`), von der Heizung und von
+  der Prognose gleich.
+
 ## [0.8.134] – 2026-10-11
 
 - Prognose V2, zweiter Baustein (BSM-033.07, Bauplan Hochrechnung §8): Die Integration kann jetzt je Container und Tag

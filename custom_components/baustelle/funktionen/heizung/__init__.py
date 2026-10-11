@@ -24,6 +24,7 @@ from ...const import ART_CONTAINER, CONF_HEIZUNG, HEIZROLLEN, ROLLE_HEIZKOERPER,
 from ...logik import bedarf as bedarf_logik, lernen, soll as soll_logik, stufen
 from ...logik import prognose_merkmale, sensoren as sensor_logik, warnungen as warn_logik
 from ...logik.arbeitszeit import HeizRegeln, Plan, WarmAb
+from ...logik import regelung
 from ...logik.regelung import LageContainer, Soll, SollGrund
 from ..basis import Funktion, zeit
 from . import (
@@ -37,7 +38,7 @@ from . import (
     zaehlen as h_zaehlen,
 )
 from .typen import FRUEHER_MIN as FRUEHER_MIN, FRUEHSTART_NACHRICHT as FRUEHSTART_NACHRICHT
-from .typen import MODI, MODUS_TEXT, STANDARD_HEIZ_KW
+from .typen import MODUS_TEXT, STANDARD_HEIZ_KW
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -102,15 +103,8 @@ class Heizung(Funktion):
     # ------------------------------------------------------------------ Einstellungen je Container
     def modus(self, bid: str) -> str:
         """Modus eines Containers (neu 0.7.8): gesetzt oder wie bisher aus `auto`, `bedarf` und dem Fühler abgeleitet."""
-        e = self.st.einstellungen.bereich(bid)
-        if e.get("modus") in MODI:
-            return str(e["modus"])
-        if e["bedarf"]:
-            return "bedarf"
-        if not e["auto"]:
-            return "hand"
         info = self.st.bereiche.get(bid)
-        return "thermo" if info is not None and info.fuehler else "plan"
+        return regelung.modus_von(self.st.einstellungen.bereich(bid), bool(info is not None and info.fuehler)) or "plan"
 
     def prognose_kontext(self, bid: str) -> tuple[str, str]:
         """Regelungsart und Konfigurations-ID eines Containers für die Prognose V2 (BSM-033.06, `logik/prognose_merkmale`)."""

@@ -26,6 +26,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☑ 0.8.132 |
 | .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☑ 0.8.133 |
 | .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☑ 0.8.134 |
+| .07b | P2b: Kontext für Altdaten rekonstruiert, mit laufender Abnahmeprüfung (§8) | ☑ 0.8.135 |
 | .08 | P3: stationäre Fenster, H direkt/Ersatz, Tagesregression, Duty, Baseline-Plateaus, Evidenzbericht (§8) | ☐ |
 | .09 | P4a: Schattenprognose V2 – Wetter/Soll/Plan, Energie je Intervall, neun Szenarien, Stufen, Anzeigevertrag (§8) | ☐ |
 
@@ -231,8 +232,7 @@ der Lieferung nachgezogen):
 - **Kontext belegt** nur mit Ereignis `prognose_kontext` (letztes vor dem Zeitraum + alle darin), dessen
   Konfigurations-ID die Heizkörper zum Zeitpunkt bestätigt, dessen Grund zum gespeicherten Grund passt (letztes
   Ereignis bis Minutenende; ein Ereignis genau am Minutenende zählt dafür mit, ist aber kein Wechsel), und mit belegter
-  Einstellung `heizung`. Minuten vor 0.8.133 bleiben damit unbelegt. **Offen (Entscheidung Herbert):** ob ältere
-  Zeiträume aus Einsatzintervallen und Einstellungsverlauf rekonstruiert werden – nicht gebaut.
+  Einstellung `heizung`. Minuten vor 0.8.133: siehe P2b (rekonstruierter Kontext, Herbert 11.10.2026).
 - Kontextwechsel in der Minute = Grund, Regelungsart oder Konfiguration ändern sich (Zustand/TPI und Soll allein nicht).
   Eine Wechselminute zählt nicht zum Training und nicht gemeinsam (Lücke von 60 s); der Tag bleibt geeignet, Code
   `wechsel_im_intervall` als Hinweis. Geräte-/Moduswechsel schließen den Tag aus (`konfiguration_gewechselt`,
@@ -262,3 +262,38 @@ der Lieferung nachgezogen):
   „ohne Heizenergie“ = `sekunden_strom` 0 (sonst Energie 0); eine Störung beendet die Episode. Typ dafür neu als
   `GeraetIntervall.typ` (additiv, Vorgabe None).
 - `startbilanzen` kommt mit P3 (braucht H).
+
+**Notiz aus dem Bau P2b (0.8.135, BSM-033.07)** – Kontext für Altdaten (Entscheidung Herbert 11.10.2026: rekonstruieren,
+mit laufender Prüfung):
+
+- Gilt für Minuten mit Quelle `ha` vor dem ersten `prognose_kontext`-Ereignis des Containers; `import_verlauf` bleibt
+  unbelegt. Einstellungen belegen wie in P2 erst ab der Übernahme (rückdatierte Übernahme-Zeilen).
+- Regelungsart = `regelungsart(modus_von(bereiche.<id> zum Zeitpunkt, fuehler), fuehler)`; der Verlauf `bereiche` wird
+  wie `heizung`/`geraete` aus ganzer Zeile + Punkt-Pfaden (`bereiche.<id>.modus/auto/bedarf`) nachgespielt. Die
+  Modus-Ableitung ist dafür nach `logik/regelung.modus_von` gezogen (Heizung und Prognose nutzen dieselbe Regel;
+  `MODI` nur noch dort). Fühler = `bereich.fuehler`, bestätigt durch Temperaturwerte am lokalen Tag.
+- Heizkörper(t): Rolle Heizkörper, `angelegt` ≤ t < `entfernt`, Status aktiv zum Zeitpunkt; mit Inventar-Einsatz über
+  die Einsatzintervalle, sonst nur an Tagen, an denen `tag_geraet.bereich_id` jedes Heizkörpers der heutigen Zuordnung
+  entspricht (eine Tagessumme gibt es nur mit Minutenzeilen) – sonst unbelegt. Konfigurations-ID über dieselbe
+  `konfiguration_id()`.
+- `BetriebsKontext.kontext_nachweis` (additiv, Pflichtfeld): „direkt“ (Ereignis), „rekonstruiert“, „keiner“
+  (unbelegt). Regel in `logik/prognose_merkmale`: eine rekonstruierte Minute ist nie direkt trainingsfähig
+  (`kontext_rekonstruiert`); im Ersatzpfad (`frische_ersatz`) wird eine direkte Frische auf „ersatz“ begrenzt;
+  `stufe_hoechstens` → C und `band_min_rel` → `h_band_ersatz_min_rel` (±50 %), nie D. Tagesmerkmale zeigen
+  `kontext_rekonstruiert` als Hinweis (Tagesregression ist ohnehin höchstens B).
+- Wechsel (`wechsel_rekonstruiert`): Grundwechsel gegenüber der Vorminute, nach einer Lücke (auch die erste Minute
+  eines gelesenen Zeitraums) und in der Minute einer Einstellungs-, Geräte- oder Einsatzänderung.
+- Abnahmeprüfung (`pruefe_rekonstruktion`): ab dem ersten Ereignis `rekonstruktion_pruef_tage` (7) lang je Minute
+  (Quelle `ha`) rekonstruierte gegen echte (Regelungsart, Konfigurations-ID); Minuten, in denen die Rekonstruktion selbst
+  unbelegt ist oder das Ereignis selbst keine Regelungsart/Konfiguration belegt, zählen nicht. Weniger als
+  `rekonstruktion_vergleiche_min` (1 440, ein Tag) Vergleiche → ungeprüft; Quote < `rekonstruktion_treffer_min` (0,99)
+  → abweichend; in beiden Fällen für den Container aus (alle rekonstruierten Minuten unbelegt). Gelesen werden
+  Ereignisse und Tagessummen nur für den Zeitraum und das Prüffenster (je mit dem letzten Ereignis davor). Diagnose
+  `baustelle/prognose_v2` › Container › `rekonstruktion` (an, Quote, verglichen, Treffer, Abweichungen – die ersten 20
+  mit Anzahl). `PrognoseRegeln` hat damit 101 Felder (98 aus §2.5 + 3 für P2b).
+- `modus_von` gibt dieselben Modi wie die bisherige Ableitung in `Heizung.modus` (Tabellentest über alle Kombinationen
+  von Modus, auto, bedarf und Fühler; `auto` None/0 heißt Hand); neu ist nur None, wenn weder Modus noch auto/bedarf
+  belegt sind.
+- **Pflicht für P3:** Stufe und Mindestband eines H-Fensters oder Tages nur über `stufe_hoechstens` und `band_min_rel`
+  bestimmen (nicht daneben neu ableiten), damit Ersatzdaten und rekonstruierter Kontext nie Stufe D erreichen und ihr
+  Band mindestens ±50 % bleibt.

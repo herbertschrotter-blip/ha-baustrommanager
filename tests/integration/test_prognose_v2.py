@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from custom_components.baustelle.db import DATA_DB, schema as s
-from custom_components.baustelle.db.prognose import PrognoseRahmen, prognose_minuten
+from custom_components.baustelle.db.prognose import PrognoseRahmen, minuten_bauen, prognose_minuten, prognose_rohdaten
 from custom_components.baustelle.funktionen.heizung import Heizung
 
 from .conftest import C1, C2, HK1, HK2, baustelle_anlegen, zeilen_db
@@ -225,3 +225,122 @@ async def test_zuordnung_aus_dem_inventar(hass: HomeAssistant, baustelle_novembe
     assert [g.geraet_id for g in je[davor].geraete] == [HK1]          # vor dem Einsatz: nirgends zugeordnet
     assert [g.geraet_id for g in je[t].geraete] == [HK1, HK2]
     assert erg[C2] == ()                                              # HK2 steht laut Inventar nicht in Container 2
+
+
+# ---------------------------------------------------------------------- P2b: Kontext für Altdaten rekonstruiert
+ALT_GUT, ALT_FALSCH, ERSTES = date(2026, 11, 16), date(2026, 11, 17), date(2026, 11, 18)
+
+
+async def _altdaten(hass: HomeAssistant, entry, *, kid_ereignis: str | None = None) -> str:
+    """Übernahme (ganze Zeilen, rückdatiert), Punkt-Pfade für den Modus, Inventar für HK1, Tagessummen; Minuten am
+    16./17. (vor dem ersten Ereignis) und 18./19. (Abnahmeprüfung gegen die echten Ereignisse)."""
+    st, bid = entry.runtime_data, entry.entry_id
+    _, kid = Heizung.von(st).prognose_kontext(C1)
+    bm, gm, wm = [], [], []
+    for tag in (ALT_GUT, ALT_FALSCH, ERSTES, GUT):
+        b, g, w = _minuten(bid, tag)
+        bm, gm, wm = bm + b, gm + g, wm + w
+    heizung, bereiche = dict(st.e["heizung"]), {k: dict(v) for k, v in st.e["bereiche"].items()}
+
+    def schreiben(v):
+        v.execute(insert(s.bereich_minute), bm)
+        v.execute(insert(s.geraet_minute), gm)
+        v.execute(insert(s.wetter_minute), wm)
+        v.execute(update(s.geraet).where(s.geraet.c.baustelle_id == bid).values(angelegt=lokal(date(2026, 11, 1))))
+        v.execute(delete(s.zustand).where(s.zustand.c.baustelle_id == bid, s.zustand.c.schluessel == "uebernahme"))
+        v.execute(insert(s.zustand).values(baustelle_id=bid, schluessel="uebernahme", geaendert=lokal(date(2026, 11, 1)),
+                                           wert={"zeit": lokal(date(2026, 11, 1), 6 * 60).isoformat()}))
+        v.execute(insert(s.einstellung), [
+            {"baustelle_id": bid, "bereich_id": None, "schluessel": k, "wert": w, "ab": lokal(date(2026, 9, 1)), "quelle": "migration"}
+            for k, w in (("heizung", heizung), ("geraete", {}), ("bereiche", bereiche))])
+        # Punkt-Pfade wie von baustelle/setzen: am 16.11. von 12 bis 18 Uhr Zeitplan, dann wieder Thermostat
+        v.execute(insert(s.einstellung), [
+            {"baustelle_id": bid, "bereich_id": C1, "schluessel": f"bereiche.{C1}.modus", "wert": modus,
+             "ab": lokal(ALT_GUT, stunde * 60), "quelle": "seite"}
+            for stunde, modus in ((12, "plan"), (18, "thermo"))])
+        # Inventar: HK1 steht über den Container k1 in Container 1; HK2 ohne Inventar (Stammdaten: Container 2)
+        v.execute(insert(s.container_einsatz).values(container_id="k1", von=lokal(date(2026, 11, 1)), baustelle_id=bid, bereich_id=C1))
+        v.execute(insert(s.ausruestung_einsatz).values(ausruestung_id="a1", von=lokal(date(2026, 11, 1)), container_id="k1", geraet_id=HK1))
+        # Tagessummen: am 17.11. war HK2 Container 1 zugerechnet – passt nicht zur heutigen Zuordnung
+        v.execute(insert(s.tag_geraet), [
+            {"geraet_id": gid, "datum": tag, "baustelle_id": bid, "bereich_id": C1 if (gid == HK1 or tag == ALT_FALSCH) else C2}
+            for tag in (ALT_GUT, ALT_FALSCH, ERSTES, GUT) for gid in (HK1, HK2)])
+        v.execute(insert(s.ereignis).values(
+            zeit=lokal(ERSTES), baustelle_id=bid, bereich_id=C1, art="prognose_kontext", quelle="automatik",
+            wert={"grund": "ausserhalb", "zustand": "aus", "soll_c": 22.0, "regelungsart": "thermo",
+                  "konfiguration_id": kid_ereignis or kid}))
+        v.execute(update(s.schema_version).where(s.schema_version.c.version == 10).values(angewendet=lokal(date(2026, 11, 1))))
+        return True
+    assert await hass.data[DATA_DB].async_ausfuehren(schreiben) is not None
+    return kid
+
+
+async def test_rekonstruierter_kontext(hass: HomeAssistant, baustelle_november, hass_ws_client) -> None:
+    kid = await _altdaten(hass, baustelle_november)
+    bid = baustelle_november.entry_id
+    rahmen = PrognoseRahmen(bid, WIEN, (C1,))
+    minuten, pruefungen = await hass.data[DATA_DB].async_ausfuehren(
+        lambda v: minuten_bauen(prognose_rohdaten(v, rahmen, lokal(ALT_GUT), lokal(HEUTE)), rahmen))
+    p = pruefungen[C1]
+    assert p.freigegeben and p.quote == 1.0 and p.verglichen == 2 * 1440   # 18./19.: Rekonstruktion = Ereignis
+    je = {m.zeit.von: m for m in minuten[C1]}
+    vorher = je[lokal(ALT_GUT, 8 * 60)].kontext
+    assert vorher.kontext_nachweis == "rekonstruiert" and vorher.kontext_belegt
+    assert (vorher.regelungsart, vorher.konfiguration_id) == ("thermo", kid)          # dieselbe ID wie das Ereignis
+    plan = je[lokal(ALT_GUT, 13 * 60)].kontext                                       # Punkt-Pfad: Zeitplan 12–18 Uhr
+    assert plan.regelungsart == "plan" and plan.kontext_belegt and not plan.wechsel_im_intervall
+    assert je[lokal(ALT_GUT, 12 * 60)].kontext.wechsel_im_intervall                  # Minute der Einstellungsänderung
+    assert je[lokal(ALT_GUT, 7 * 60)].kontext.wechsel_im_intervall                   # Grundwechsel gegenüber der Vorminute
+    assert not je[lokal(ALT_GUT, 7 * 60 + 1)].kontext.wechsel_im_intervall
+    falsch = je[lokal(ALT_FALSCH, 8 * 60)].kontext                                    # tag_geraet passt nicht → unbelegt
+    assert not falsch.kontext_belegt and falsch.kontext_nachweis == "keiner"
+    echt = je[lokal(GUT, 6 * 60)].kontext
+    assert echt.kontext_nachweis == "direkt" and echt.kontext_belegt                 # ab dem ersten Ereignis: direkt
+    # Diagnose: Abnahmeprüfung je Container, rekonstruierter Tag mit Hinweis
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "baustelle/prognose_v2", "entry_id": bid, "tage": 4})
+    c1 = next(c for c in (await ws.receive_json())["result"]["container"] if c["bereich"] == C1)
+    assert c1["rekonstruktion"]["an"] and c1["rekonstruktion"]["quote"] == 1.0 and c1["rekonstruktion"]["abweichungen"] == []
+    tage = {t["datum"]: t for t in c1["tage"]}
+    assert "kontext_rekonstruiert" in tage["2026-11-16"]["gruende"] and tage["2026-11-16"]["quoten"]["betrieb"] == 1.0
+    assert tage["2026-11-17"]["quoten"]["betrieb"] == 0.0
+
+
+async def test_rekonstruktion_abgeschaltet_bei_abweichung(hass: HomeAssistant, baustelle_november, hass_ws_client) -> None:
+    """Das echte Ereignis meldet eine andere Konfiguration: Trefferquote 0 % → Rekonstruktion für den Container aus."""
+    await _altdaten(hass, baustelle_november, kid_ereignis="kandere0000")
+    rahmen = PrognoseRahmen(baustelle_november.entry_id, WIEN, (C1,))
+    minuten, pruefungen = await hass.data[DATA_DB].async_ausfuehren(
+        lambda v: minuten_bauen(prognose_rohdaten(v, rahmen, lokal(ALT_GUT), lokal(HEUTE)), rahmen))
+    p = pruefungen[C1]
+    assert not p.freigegeben and p.quote == 0.0 and p.gruende == ("rekonstruktion_abweichend",)
+    assert p.abweichungen[0][1] == "thermo/kandere0000"
+    alt = [m for m in minuten[C1] if m.zeit.von < lokal(ERSTES)]
+    assert alt and not any(m.kontext.kontext_belegt for m in alt)
+    ws = await hass_ws_client(hass)
+    await ws.send_json({"id": 1, "type": "baustelle/prognose_v2", "entry_id": baustelle_november.entry_id, "tage": 4})
+    c1 = next(c for c in (await ws.receive_json())["result"]["container"] if c["bereich"] == C1)
+    r = c1["rekonstruktion"]
+    assert not r["an"] and r["quote"] == 0.0 and r["abweichungen_anzahl"] == 2 * 1440 and len(r["abweichungen"]) == 20
+
+
+async def test_rohdaten_nur_aus_den_fenstern(hass: HomeAssistant, baustelle_november) -> None:
+    """Ereignisse und Tagessummen nur für [von, bis) und die Abnahmeprüfung (+ je das letzte Ereignis davor)."""
+    bid, db = baustelle_november.entry_id, hass.data[DATA_DB]
+    tage = {"erstes": date(2026, 11, 1), "pruef": date(2026, 11, 5), "dazwischen": date(2026, 11, 10),
+            "vor_von": date(2026, 11, 12), "im_zeitraum": date(2026, 11, 17)}
+
+    def schreiben(v):
+        for name, tag in tage.items():
+            v.execute(insert(s.ereignis).values(zeit=lokal(tag, 12 * 60), baustelle_id=bid, bereich_id=C1, art="prognose_kontext",
+                                                quelle="automatik", wert={"grund": name}))
+            v.execute(insert(s.tag_geraet).values(geraet_id=HK1, datum=tag, baustelle_id=bid, bereich_id=C1))
+        return True
+    assert await db.async_ausfuehren(schreiben) is not None
+    rahmen = PrognoseRahmen(bid, WIEN, (C1,))
+    roh = await db.async_ausfuehren(lambda v: prognose_rohdaten(v, rahmen, lokal(date(2026, 11, 16)), lokal(HEUTE)))
+    assert roh.erstes_ereignis[C1] == lokal(tage["erstes"], 12 * 60)
+    gruende = [w["grund"] for _, w in roh.ereignisse[C1]]
+    assert gruende == ["erstes", "pruef", "vor_von", "im_zeitraum"]   # „dazwischen“ (10.11.) nicht gelesen
+    gelesen = {d for (_, d) in roh.tag_geraet}
+    assert gelesen == {tage["erstes"], tage["pruef"], tage["im_zeitraum"]}   # Prüfung 01.–08.11. und 16.–20.11.

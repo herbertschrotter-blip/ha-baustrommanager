@@ -4,7 +4,8 @@ Nur auf Anfrage (WS `baustelle/prognose_v2`), nie im Steuerzyklus und ohne Einfl
 die Zeilen der letzten N abgeschlossenen Tage aus der Datenbank (`db/prognose.prognose_rohdaten`, kurz in der
 Datenbanksperre), dann in einem eigenen Executor-Job zusammensetzen (`minuten_bauen`) und Tagesmerkmale, Starts und
 Abkühlepisoden aus `logik/prognose_merkmale.merkmale` – der Event-Loop bleibt frei. Es läuft höchstens eine Diagnose
-gleichzeitig (eine weitere wartet). Hier wird nichts gerechnet, nur zusammengestellt.
+gleichzeitig (eine weitere wartet). Je Container steht die Abnahmeprüfung des rekonstruierten Kontexts dabei (P2b:
+an/aus, Quote, Abweichungen). Hier wird nichts gerechnet, nur zusammengestellt.
 """
 
 from __future__ import annotations
@@ -21,7 +22,14 @@ from ...db import DATA_DB
 from ...db.prognose import PrognoseRahmen, Rohdaten, minuten_bauen, prognose_rohdaten
 from ...logik.prognose_merkmale import merkmale
 from ...logik.prognose_regeln import PrognoseRegeln
-from ...logik.prognose_typen import MODELL_VERSION, AbkuehlEpisode, BereichIntervall, StartMerkmal, TagesMerkmale
+from ...logik.prognose_typen import (
+    MODELL_VERSION,
+    AbkuehlEpisode,
+    BereichIntervall,
+    RekonstruktionsPruefung,
+    StartMerkmal,
+    TagesMerkmale,
+)
 from . import baseline as h_baseline
 
 if TYPE_CHECKING:
@@ -61,8 +69,19 @@ def _episode(e: AbkuehlEpisode) -> dict[str, Any]:
             "innen_ende": _zahl(e.innen_ende_c, 2), "gruende": list(e.gruende)}
 
 
+ABWEICHUNGEN_MAX = 20   # so viele Abweichungen der Abnahmeprüfung zeigt die Diagnose (Anzahl steht daneben)
+
+
+def _pruefung(p: RekonstruktionsPruefung | None) -> dict[str, Any] | None:
+    if p is None:
+        return None
+    return {"an": p.freigegeben, "quote": _zahl(p.quote), "verglichen": p.verglichen, "treffer": p.treffer,
+            "abweichungen_anzahl": len(p.abweichungen), "gruende": list(p.gruende),
+            "abweichungen": [{"zeit": t.isoformat(), "echt": e, "rekonstruiert": r} for t, e, r in p.abweichungen[:ABWEICHUNGEN_MAX]]}
+
+
 def auswerten(minuten: Mapping[str, Sequence[BereichIntervall]], namen: Mapping[str, str], erster: date, heute: date,
-              zeitzone: str) -> list[dict[str, Any]]:
+              zeitzone: str, pruefungen: Mapping[str, RekonstruktionsPruefung] | None = None) -> list[dict[str, Any]]:
     """Je Container Tagesmerkmale (ab `erster`, bis gestern) und Abkühlepisoden – nur Zusammenstellung der Fachlogik."""
     zone = dt_util.get_time_zone(zeitzone)
     aus = []
@@ -72,7 +91,8 @@ def auswerten(minuten: Mapping[str, Sequence[BereichIntervall]], namen: Mapping[
         episoden = [e for e in alle_episoden if e.zeit.bis.astimezone(zone).date() >= erster]
         aus.append({"bereich": b, "name": namen.get(b, b), "tage": [_tag(t) for t in tage],
                     "geeignet": {"thermo": sum(t.training_thermo for t in tage), "plan": sum(t.training_plan for t in tage)},
-                    "abkuehlepisoden": [_episode(e) for e in episoden]})
+                    "abkuehlepisoden": [_episode(e) for e in episoden],
+                    "rekonstruktion": _pruefung((pruefungen or {}).get(b))})
     return aus
 
 
@@ -87,7 +107,7 @@ async def async_diagnose(hass: HomeAssistant, hz: Heizung, tage: int) -> dict[st
     if db is None or not db.bereit:
         return {**kopf, "verfuegbar": False, "container": []}
     bereiche = hz.bereiche()
-    rahmen = PrognoseRahmen(st.entry.entry_id, zone, tuple(b.id for b in bereiche), tuple(h_baseline.laeufe(hz)))
+    rahmen = PrognoseRahmen(st.entry.entry_id, zone, tuple(b.id for b in bereiche), tuple(h_baseline.laeufe(hz)), REGELN)
     # Vorlauf vor dem ersten Tag, damit ein Start um Mitternacht seine Pause und die Werte davor sieht
     vorlauf = timedelta(minutes=REGELN.start_pause_min + REGELN.start_vorlauf_min)
     von = dt_util.as_utc(datetime.combine(erster, time(), zone) - vorlauf)
@@ -106,4 +126,5 @@ async def async_diagnose(hass: HomeAssistant, hz: Heizung, tage: int) -> dict[st
 def _bauen_und_auswerten(roh: Rohdaten, rahmen: PrognoseRahmen, namen: Mapping[str, str], erster: date, heute: date,
                          zeitzone: str) -> list[dict[str, Any]]:
     """Außerhalb der Datenbanksperre: Zeilen zusammensetzen und auswerten (Executor)."""
-    return auswerten(minuten_bauen(roh, rahmen), namen, erster, heute, zeitzone)
+    minuten, pruefungen = minuten_bauen(roh, rahmen)
+    return auswerten(minuten, namen, erster, heute, zeitzone, pruefungen)

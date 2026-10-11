@@ -64,7 +64,9 @@ from .prognose_typen import (
     MinutenQualitaet,
     Nachweis,
     Regelungsart,
+    RekonstruktionsPruefung,
     StartMerkmal,
+    Stufe,
     TagesMerkmale,
 )
 from .regelung import SollGrund, frost_aus_wert
@@ -223,6 +225,15 @@ def betriebskontext(
         letzter = ereignisse_im_intervall[-1] if ereignisse_im_intervall else ereignis
         grund_passt = not zeile_vorhanden or grund in {letzter.get("grund"), (ereignis_am_ende or {}).get("grund")}
         belegt = (heizung is not None and art != "unbekannt" and kid == konfiguration_id(art, heizkoerper) and grund_passt)
+    return _kontext(grund=grund, art=art, kid=kid, belegt=belegt, heizung=heizung, fuehler=fuehler, lauf_id=lauf_id,
+                    staffel_bekannt=staffel_bekannt, tuer_beobachtet=tuer_beobachtet,
+                    wechsel=kontext_gewechselt(ereignis, ereignisse_im_intervall), nachweis="direkt" if belegt else "keiner")
+
+
+def _kontext(
+    *, grund: str | None, art: Regelungsart, kid: str, belegt: bool, heizung: Mapping[str, Any] | None, fuehler: bool,
+    lauf_id: str | None, staffel_bekannt: bool, tuer_beobachtet: bool, wechsel: bool, nachweis: Nachweis,
+) -> BetriebsKontext:
     grenze_roh = heizung.get("frost_grenze") if heizung is not None else None
     grenze = float(grenze_roh) if isinstance(grenze_roh, (int, float)) else None
     aus_roh = heizung.get("frost_aus") if heizung is not None else None
@@ -238,8 +249,61 @@ def betriebskontext(
         frost_grenze_c=grenze if grenze is not None else 0.0,
         frost_aus_c=frost_aus_wert(grenze, None if aus_roh is None else float(aus_roh)) if grenze is not None else 0.0,
         frost_aussen_c=frost_aussen, baseline_lauf_id=lauf_id, tuer_beobachtet=tuer_beobachtet, kontext_belegt=belegt,
-        wechsel_im_intervall=kontext_gewechselt(ereignis, ereignisse_im_intervall), staffel_rekonstruiert_frei=None,
-        anschlussbelegung_belegt=staffel_bekannt, sperrereignis=False, sonstige_eingriffe=())
+        wechsel_im_intervall=wechsel, staffel_rekonstruiert_frei=None, anschlussbelegung_belegt=staffel_bekannt,
+        sperrereignis=False, sonstige_eingriffe=(), kontext_nachweis=nachweis)
+
+
+# ---------------------------------------------------------------------- P2b: rekonstruierter Kontext für Altdaten
+def kontext_rekonstruiert(
+    *, grund: str | None, modus: str | None, fuehler: bool, heizung: Mapping[str, Any] | None,
+    heizkoerper: Iterable[tuple[str, str]] | None, lauf_id: str | None, staffel_bekannt: bool, tuer_beobachtet: bool,
+    wechsel: bool, freigegeben: bool,
+) -> BetriebsKontext:
+    """Betriebskontext einer Altminute ohne Ereignis (P2b, Herbert 11.10.2026): Regelungsart aus dem Modus zum
+    Zeitpunkt (`regelungsart(modus, fuehler)`), Konfiguration über dieselbe `konfiguration_id` aus den Heizkörpern zum
+    Zeitpunkt (`heizkoerper` None = Zuordnung nicht belegt). Belegt nur mit belegtem Modus, belegter Einstellung
+    `heizung`, belegter Zuordnung und bestandener Abnahmeprüfung (`freigegeben`, `pruefe_rekonstruktion`); Nachweis
+    „rekonstruiert“ – zählt nur im Ersatzpfad (`stufe_hoechstens`, `band_min_rel`)."""
+    art: Regelungsart = regelungsart(modus, fuehler)
+    kid = konfiguration_id(art, heizkoerper) if heizkoerper is not None else ""
+    belegt = (freigegeben and modus is not None and art != "unbekannt" and heizkoerper is not None and heizung is not None)
+    return _kontext(grund=grund, art=art, kid=kid, belegt=belegt, heizung=heizung, fuehler=fuehler, lauf_id=lauf_id,
+                    staffel_bekannt=staffel_bekannt, tuer_beobachtet=tuer_beobachtet, wechsel=wechsel,
+                    nachweis="rekonstruiert" if belegt else "keiner")
+
+
+def wechsel_rekonstruiert(grund_vorher: str | None, lueckenlos: bool, grund: str | None, aenderung: bool) -> bool:
+    """Wechsel in einer rekonstruierten Minute: anderer Grund als die Vorminute, nach einer Lücke (Vorminute fehlt)
+    oder in der Minute einer Einstellungs-/Geräteänderung (`ab`) – dann ist der Stand in der Minute nicht sicher."""
+    return not lueckenlos or grund_vorher != grund or aenderung
+
+
+def pruefe_rekonstruktion(
+    bereich_id: str, vergleiche: Sequence[tuple[datetime, tuple[str, str], tuple[str, str] | None]], regeln: PrognoseRegeln,
+) -> RekonstruktionsPruefung:
+    """Abnahmeprüfung (P2b): je Minute mit echtem Ereignis (Regelungsart, Konfiguration) gegen die Rekonstruktion.
+    Minuten, für die die Rekonstruktion selbst unbelegt ist (None), zählen nicht. Freigegeben ab
+    `rekonstruktion_treffer_min`; mit weniger als `rekonstruktion_vergleiche_min` Vergleichen nicht (ungeprüft)."""
+    gezaehlt = [(t, echt, rek) for t, echt, rek in vergleiche if rek is not None]
+    treffer = sum(1 for _, echt, rek in gezaehlt if echt == rek)
+    quote = treffer / len(gezaehlt) if gezaehlt else None
+    abweichungen = tuple((t, "/".join(echt), "/".join(rek)) for t, echt, rek in gezaehlt if rek is not None and echt != rek)
+    genug = len(gezaehlt) >= regeln.rekonstruktion_vergleiche_min
+    frei = genug and quote is not None and quote >= regeln.rekonstruktion_treffer_min
+    gruende = ("rekonstruktion_ungeprueft",) if not genug else () if frei else ("rekonstruktion_abweichend",)
+    return RekonstruktionsPruefung(bereich_id, len(gezaehlt), treffer, quote, frei, abweichungen, gruende)
+
+
+def stufe_hoechstens(q: MinutenQualitaet) -> Stufe:
+    """Höchste Stufe, die ein Fenster mit dieser Qualität tragen darf: Ersatz oder rekonstruierter Kontext → C, sonst D."""
+    if "ersatz" in (q.frische, q.staffel) or "kontext_rekonstruiert" in q.gruende:
+        return "C"
+    return "D"
+
+
+def band_min_rel(q: MinutenQualitaet, regeln: PrognoseRegeln) -> float | None:
+    """Mindestband (relativ) aus der Qualität: Ersatz/rekonstruiert mindestens `h_band_ersatz_min_rel` (±50 %)."""
+    return regeln.h_band_ersatz_min_rel if stufe_hoechstens(q) == "C" else None
 
 
 # ---------------------------------------------------------------------- P2: Minutenqualität (§6.3)
@@ -275,6 +339,9 @@ def _pruefe(m: BereichIntervall, r: PrognoseRegeln) -> tuple[Klassifikation, Min
     if m.zeile_vorhanden and not m.kontext.kontext_belegt:
         betrieb = False
         g.append("kontext_fehlt")   # gilt auch für kontext_noetig (import_verlauf)
+    rekonstruiert = m.kontext.kontext_nachweis == "rekonstruiert"
+    if rekonstruiert:
+        g.append("kontext_rekonstruiert")   # P2b: nur im Ersatzpfad (frische_ersatz), nie direktes Training
     if "lauf_bestaetigen" in k.gruende and m.kontext.baseline_lauf_id is None:
         betrieb = False
         g.append("lauf_unbestaetigt")
@@ -326,7 +393,7 @@ def _pruefe(m: BereichIntervall, r: PrognoseRegeln) -> tuple[Klassifikation, Min
     if m.zeile_vorhanden and not m.kontext.tuer_beobachtet:
         g.append("tuer_unbekannt")   # Unsicherheit, kein erfundenes „zu“
     g.extend(m.kontext.sonstige_eingriffe)
-    training = (betrieb and k.art != "SONSTIGE" and bool(m.geraete) and all(ok for _, ok in energie) and aussen
+    training = (betrieb and not rekonstruiert and k.art != "SONSTIGE" and bool(m.geraete) and all(ok for _, ok in energie) and aussen
                 and _dauer_s(m) <= MINUTE_S and not m.kontext.wechsel_im_intervall and staffel != "keiner"
                 and not m.kontext.sonstige_eingriffe and (not thermo or (innen and frische == "direkt")))
     return k, MinutenQualitaet(energie, innen, aussen, betrieb, frische, staffel, training, _codes(g))
@@ -446,6 +513,10 @@ def frische_ersatz(minuten: Sequence[BereichIntervall], regeln: PrognoseRegeln) 
             staffel = "keiner" if staffel == "ersatz" else staffel
         if not all(m.kontext.anschlussbelegung_belegt for m in ms):
             g.append("anschlussbelegung_unbelegt")
+    if any(m.kontext.kontext_nachweis == "rekonstruiert" for m in ms):
+        g.append("kontext_rekonstruiert")
+        if frische == "direkt":
+            frische = "ersatz"   # rekonstruierter Kontext trägt höchstens den Ersatzpfad (Stufe C, Band ≥ ±50 %)
     if frische == "ersatz":
         g.append("frische_ersatz")
     if staffel == "ersatz":
@@ -702,6 +773,8 @@ def _tag(  # noqa: C901, PLR0912, PLR0915 – eine Tagesbilanz, Schritt für Sch
             info.append("frische_ersatz_noetig")
         if exp is not None and "aussen_frische_unbelegt" in q.gruende:
             info.append("aussen_frische_unbelegt")
+        if m.kontext.kontext_nachweis == "rekonstruiert":
+            info.append("kontext_rekonstruiert")
     if bis > zuletzt:
         luecke += (bis - zuletzt).total_seconds()
     laengste = max(laengste, luecke)
