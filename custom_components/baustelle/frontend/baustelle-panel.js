@@ -1779,7 +1779,7 @@ function ueberVorlage(p4, { mitZurueck = true } = {}) {
       <div class="glas-panel liste"><div class="gruppe">Dieses System</div>
         ${gleich ? b2`<div class="zeile"><span>Integration / Seite</span><span class="leise">${V2} · baustelle</span></div>` : b2`<div class="zeile"><span>Seite</span><span class="leise">${V2}</span></div><div class="zeile"><span>Integration</span><span class="leise">${I2} · baustelle${verNeuer(V2, I2) ? " · bis zum Neustart" : ""}</span></div>`}
         <div class="zeile"><span>Home Assistant</span><span class="leise">${ha}</span></div>
-        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustelle (öffentlich, MIT-Lizenz)</span></div>
+        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustrommanager (öffentlich, MIT-Lizenz)</span></div>
         <div class="zeile"><span>Baustellen</span><span class="leise">${p4.alle.filter((b3) => b3.aktiv).length} laufend · ${p4.alle.filter((b3) => !b3.aktiv).length} abgeschlossen</span></div></div>
       <div class="glas-panel block"><div class="block-kopf"><b>Neu in ${V2}</b><span class="leise">${eigen ? datum(eigen.datum) : "geplant"}</span></div>${neu.map((n4) => b2`<div class="cl-punkt">${n4}</div>`)}</div>
       <div class="glas-panel block"><div class="block-kopf"><b>Verlauf</b><span class="leise">aus CHANGELOG.md</span></div>
@@ -5448,7 +5448,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.137";
+var SEITE_VERSION = "0.8.138";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];

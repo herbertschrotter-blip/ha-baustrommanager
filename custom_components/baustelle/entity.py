@@ -9,7 +9,7 @@ from homeassistant.helpers.entity import Entity
 from .const import DOMAIN
 from .steuerung import Steuerung
 
-HERSTELLER = "ha-baustelle"
+HERSTELLER = "ha-baustrommanager"
 MODELL = {"container": "Container", "pumpenschacht": "Pumpenschacht"}
 
 

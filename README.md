@@ -1,4 +1,4 @@
-# ha-baustelle
+# ha-baustrommanager – Baustrommanager (BSM)
 
 Eigene Home-Assistant-Integration **Baustelle**: Heizkörper in Baustellencontainern über Shellys nach Zeitplan und Wetter
 schalten und Grundwasserpumpen überwachen – je Baustelle, mit Containern und Shellys, die man in HA zuordnet.
@@ -94,18 +94,18 @@ tools/deploy.sh                Auslieferung nach /config
 mockups/                       abgenommener Entwurf
 ```
 
-Quelle der Wahrheit ist dieses Repo (`/config/projekte/ha-baustelle`). `/config` ist nur das Ziel.
+Quelle der Wahrheit ist dieses Repo (`/config/projekte/ha-baustrommanager`). `/config` ist nur das Ziel.
 
 ## Installation über HACS
 
-1. HACS → Integrationen → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/herbertschrotter-blip/ha-baustelle`,
+1. HACS → Integrationen → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/herbertschrotter-blip/ha-baustrommanager`,
    Kategorie **Integration**.
 2. **Baustelle** herunterladen, Home Assistant neu starten (ab 2026.9). Die Abhängigkeit `psycopg` (für PostgreSQL)
    installiert HA beim ersten Start selbst.
 3. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → Baustelle.
 4. Ohne weitere Angabe legt die Integration ihre Datenbank als `/config/baustelle/baustelle.db` an. Für einen
    gemeinsamen Server siehe Einrichtung → Datenbank.
-5. Seite **Baustelle** in der Seitenleiste öffnen; nach einem Update die Seite einmal neu laden (unter ⚙ → Über steht
+5. Seite **Baustrommanager (BSM)** in der Seitenleiste öffnen; nach einem Update die Seite einmal neu laden (unter ⚙ → Über steht
    die Version).
 
 Ohne HACS: Ordner `custom_components/baustelle` nach `/config/custom_components/` kopieren (hier: `tools/deploy.sh`,
@@ -122,7 +122,7 @@ siehe Auslieferung), dann neu starten.
 - **Konfigurieren** (Optionen): Status aktiv/abgeschlossen, Beginn/Ende, Funktionen, Wetter, Außentemperatur, Regen,
   Kalender für Feiertage und Urlaub, Empfänger der Meldungen, Heizperiode (Monate).
 - **Neu konfigurieren:** Baustelle umbenennen; Container und Shellys über ihren Unter-Eintrag.
-- Alles Übrige auf der Seite **Baustelle** unter ⚙ Einstellungen (Seitenleiste mit Gruppen): Baustelle (Beginn, Preise,
+- Alles Übrige auf der Seite **Baustrommanager (BSM)** unter ⚙ Einstellungen (Seitenleiste mit Gruppen): Baustelle (Beginn, Preise,
   Arbeitszeiten, Ausnahmen), Heizung (Regeln, Vor-/Nachheizen, Heizgrenze, Frostschutz, Soll), Container und Geräte,
   Stromanschlüsse und Staffelung, Firmen (mit Kürzel für Fremdcontainer), Meldungen und Bericht, Notprogramm, Automatik.
   Ändern dürfen nur Admins; vor Ort ohne Admin: Gefühl am Rad, jetzt heizen, Warnung stumm, Melden.
@@ -139,7 +139,7 @@ siehe Auslieferung), dann neu starten.
 
 ## Was die Integration liefert
 
-- **Seite „Baustelle“** in der Seitenleiste (Übersicht, Heizung, Pumpen, Auswertung, Protokoll, Einstellungen).
+- **Seite „Baustrommanager (BSM)“** in der Seitenleiste (Übersicht, Heizung, Pumpen, Auswertung, Protokoll, Einstellungen).
 - **Entitäten** je Baustelle: Schalter Automatik, Status, nächste Schaltzeit, Leistung, Zähler für Energie, Kosten,
   Ersparnis und Hochrechnung, Wetterwerte (Diagnose; Tageshöchst, Früh-Prognose und Regen zunächst aus), Erreichbar
   (Diagnose). Je Container Grund, Leistung, Energie, Kosten, Heizzeit; je Shelly Problem, Ø Leistung, bei Pumpen Pumpzeit,
@@ -242,7 +242,7 @@ Symbol: `custom_components/baustelle/brand/icon.png` (+ `icon@2x.png`), gezeichn
    `python3 tools/changelog.py && node custom_components/baustelle/frontend/bauen.mjs && node mockups/quelle/glas.js`;
    Tests grün, committen. `deploy.sh` liefert aus `frontend/` nur `baustelle-panel.js` und `changelog.json` aus und
    entfernt im Ziel, was dort nicht hingehört (Quellen, npm-Dateien).
-2. Herbert spielt ein: `! /config/projekte/ha-baustelle/tools/deploy.sh`
+2. Herbert spielt ein: `! /config/projekte/ha-baustrommanager/tools/deploy.sh`
    (kopiert die Integration samt Seite nach `/config/custom_components/baustelle/`).
 3. Konfiguration prüfen, dann **Neustart durch Herbert** (neue oder geänderte Integration braucht immer einen Neustart):
    `tools/neustart.sh` prüft die Konfiguration über die HA-API und startet nur bei gültiger neu, dann wartet es, bis HA

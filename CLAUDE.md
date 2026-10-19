@@ -1,14 +1,14 @@
-# ha-baustelle
+# ha-baustrommanager – Baustrommanager (BSM)
 
 Eigene Home-Assistant-Integration `baustelle`: Heizung in Baustellencontainern und Pumpenüberwachung mit Shellys, mit
-eigener Seite „Baustelle“ in der Seitenleiste. Zweck, Aufbau und Auslieferung stehen in `README.md`; die abgenommene Planung ist
+eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und Auslieferung stehen in `README.md`; die abgenommene Planung ist
 `mockups/baustelle.html` (Abnahme in `mockups/README.md`).
 
 ## Regeln
 
 - **Quelle der Wahrheit ist dieses Repo.** In `/config` nur über `tools/deploy.sh` ausliefern, dort nie direkt ändern.
   `custom_components/**` in `/config` ist für Claude gesperrt: Das Einspielen führt Herbert aus
-  (`! /config/projekte/ha-baustelle/tools/deploy.sh`), danach Neustart durch Herbert.
+  (`! /config/projekte/ha-baustrommanager/tools/deploy.sh`), danach Neustart durch Herbert.
 - **Bewährte Lösungen statt Eigenbau** (Herbert, 29.09.2026): Aufbau nach `integration_blueprint` und den Kern-Helfern
   (Vorbild `bayesian`: Subentries, Update-Listener mit Reload); eingebaute Integrationen nutzen, wo es sie gibt
   (Feiertage/`holiday`, lokaler Kalender, `weather.get_forecasts`, `notify.mobile_app_*`, später `history_stats`).
@@ -39,8 +39,8 @@ eigener Seite „Baustelle“ in der Seitenleiste. Zweck, Aufbau und Auslieferun
 ## Skill-Profil
 
 - Profil-Version: 1
-- Projekt-ID: ha-baustelle
-- Repo: herbertschrotter-blip/ha-baustelle
+- Projekt-ID: ha-baustrommanager
+- Repo: herbertschrotter-blip/ha-baustrommanager
 - Branch-Policy: current
 
 ### Checks
@@ -103,7 +103,7 @@ eigener Seite „Baustelle“ in der Seitenleiste. Zweck, Aufbau und Auslieferun
 
 - Review-Ablage: `docs/chatgpt-reviews/` (Serien `CGR-<Datum>-<thema>`, Übersicht `INDEX.md`)
 - Themen: seite-lit, notprogramm, datenbank, integration, hochrechnung
-- GitHub-Repo: herbertschrotter-blip/ha-baustelle (Branch nach Branch-Policy, derzeit `main`)
+- GitHub-Repo: herbertschrotter-blip/ha-baustrommanager (Branch nach Branch-Policy, derzeit `main`)
 - Pflicht-Block: „Regeln der Integration“ – Fachlogik nur in `logik/` (mit Test), die Seite rechnet nichts Fachliches,
   ausgeliefert wird eine Datei `frontend/baustelle-panel.js`, Master-Mockup `mockups/glas.html` = echte Seite mit
   Beispieldaten, Pilotbaustelle läuft produktiv (kein Risiko im Betrieb, Stufen einzeln einspielbar), Automatik startet

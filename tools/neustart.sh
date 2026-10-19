@@ -1,7 +1,7 @@
 #!/bin/sh
 # Home Assistant neu starten – nur wenn die Konfiguration gültig ist. Gegenstück zu tools/deploy.sh.
 # Prüft über die HA-API (Konfiguration prüfen), startet dann neu und wartet, bis HA wieder antwortet.
-# Braucht SUPERVISOR_TOKEN (im Claude Terminal gesetzt). Aufruf: /config/projekte/ha-baustelle/tools/neustart.sh
+# Braucht SUPERVISOR_TOKEN (im Claude Terminal gesetzt). Aufruf: /config/projekte/ha-baustrommanager/tools/neustart.sh
 set -eu
 
 API=${HA_API:-http://supervisor/core/api}

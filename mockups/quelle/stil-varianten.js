@@ -1,5 +1,5 @@
 const fs = require('fs');
-const panel = fs.readFileSync('/config/projekte/ha-baustelle/custom_components/baustelle/frontend/baustelle-panel.js', 'utf8');
+const panel = fs.readFileSync('/config/projekte/ha-baustrommanager/custom_components/baustelle/frontend/baustelle-panel.js', 'utf8');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 eval(panel.slice(panel.indexOf('/* Realistische, animierte Wettersymbole'), panel.indexOf('/* Baustellen-Illustrationen')).replace(/^(const|let) /gm, "var "));
 eval(panel.slice(panel.indexOf('/* Baustellen-Illustrationen'), panel.indexOf('\nconst CSS = `')).replace(/^(const|let) /gm, "var "));

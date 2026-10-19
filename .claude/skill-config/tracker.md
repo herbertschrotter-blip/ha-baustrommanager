@@ -1,4 +1,4 @@
-# Tracker-Konfiguration – BSM Baustrommanager (ha-baustelle)
+# Tracker-Konfiguration – BSM Baustrommanager (ha-baustrommanager)
 
 Für den Skill tracker (Skill-Profil → Tracker → Config). Übernommen am 07.10.2026 aus `projects/bsm/` des Skill-Repos
 claude-workbench (dort entfernt) und dem früheren Abschnitt `## Tracker-Profil` der `CLAUDE.md`. Quelle der Wahrheit

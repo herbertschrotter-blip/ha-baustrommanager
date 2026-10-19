@@ -3236,7 +3236,7 @@ class BaustellePanel extends HTMLElement {
       <div class="glas-panel liste"><div class="gruppe">Dieses System</div>
         <div class="zeile"><span>Integration / Seite</span><span class="leise">${esc(V)} · baustelle</span></div>
         <div class="zeile"><span>Home Assistant</span><span class="leise">${esc(ha)}</span></div>
-        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustelle (öffentlich, MIT-Lizenz)</span></div>
+        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustrommanager (öffentlich, MIT-Lizenz)</span></div>
         <div class="zeile"><span>Baustellen</span><span class="leise">${this.alle.filter(b => b.aktiv).length} laufend · ${this.alle.filter(b => !b.aktiv).length} abgeschlossen</span></div></div>
       <div class="glas-panel block"><div class="block-kopf"><b>Neu in ${esc(V)}</b><span class="leise">${eigen ? datum(eigen.datum) : 'geplant'}</span></div>${neu.map(n => `<div class="cl-punkt">${esc(n)}</div>`).join('')}</div>
       <div class="glas-panel block"><div class="block-kopf"><b>Verlauf</b><span class="leise">aus CHANGELOG.md</span></div>

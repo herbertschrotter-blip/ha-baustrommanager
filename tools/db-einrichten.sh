@@ -2,8 +2,8 @@
 # Datenbank-Server für die Baustelle einrichten (BSM-026, docs/bauplan-datenbank.md §4a) – führt Herbert selbst aus,
 # in einem Terminal-Fenster (fragt Passwörter ab, zeigt sie nie an):
 #
-#   /config/projekte/ha-baustelle/tools/db-einrichten.sh                        einrichten (wiederholbar)
-#   /config/projekte/ha-baustelle/tools/db-einrichten.sh --postgres-zuruecksetzen  postgres-Passwort vergessen
+#   /config/projekte/ha-baustrommanager/tools/db-einrichten.sh                        einrichten (wiederholbar)
+#   /config/projekte/ha-baustrommanager/tools/db-einrichten.sh --postgres-zuruecksetzen  postgres-Passwort vergessen
 #
 # Einrichten: Add-on „TimescaleDB“ starten (falls aus), das Standard-Passwort von postgres ersetzen, Benutzer
 # `baustelle` (schreibt, Eigentümer der Datenbank `baustelle`) und `baustelle_leser` (nur lesen: Excel/Power BI, Rechte

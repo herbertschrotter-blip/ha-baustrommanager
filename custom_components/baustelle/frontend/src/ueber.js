@@ -26,7 +26,7 @@ export function ueberVorlage(p, { mitZurueck = true } = {}) {
         ${gleich ? html`<div class="zeile"><span>Integration / Seite</span><span class="leise">${V} · baustelle</span></div>`
           : html`<div class="zeile"><span>Seite</span><span class="leise">${V}</span></div><div class="zeile"><span>Integration</span><span class="leise">${I} · baustelle${verNeuer(V, I) ? ' · bis zum Neustart' : ''}</span></div>`}
         <div class="zeile"><span>Home Assistant</span><span class="leise">${ha}</span></div>
-        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustelle (öffentlich, MIT-Lizenz)</span></div>
+        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustrommanager (öffentlich, MIT-Lizenz)</span></div>
         <div class="zeile"><span>Baustellen</span><span class="leise">${p.alle.filter(b => b.aktiv).length} laufend · ${p.alle.filter(b => !b.aktiv).length} abgeschlossen</span></div></div>
       <div class="glas-panel block"><div class="block-kopf"><b>Neu in ${V}</b><span class="leise">${eigen ? datum(eigen.datum) : 'geplant'}</span></div>${neu.map(n => html`<div class="cl-punkt">${n}</div>`)}</div>
       <div class="glas-panel block"><div class="block-kopf"><b>Verlauf</b><span class="leise">aus CHANGELOG.md</span></div>

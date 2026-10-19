@@ -262,7 +262,7 @@ async def async_panel_anmelden(hass: HomeAssistant, version: str) -> None:
         hass,
         frontend_url_path=URL_PANEL,
         webcomponent_name=WEBCOMPONENT,
-        sidebar_title="Baustelle",
+        sidebar_title="Baustrommanager (BSM)",
         sidebar_icon="mdi:crane",
         module_url=f"{URL_STATISCH}/baustelle-panel.js?v={version}",
         require_admin=False,

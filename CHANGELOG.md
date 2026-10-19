@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.138] – 2026-10-12
+
+- Projekt umbenannt in **Baustrommanager (BSM)**: Repo `herbertschrotter-blip/ha-baustrommanager` (vorher
+  `ha-baustelle`, GitHub leitet alte Links weiter), Ordner `/config/projekte/ha-baustrommanager` (`ha-baustelle` bleibt
+  als Verknüpfung, damit alte Gespräche und Pfade weiter gehen). In Home Assistant heißen Integration und Seite in der
+  Seitenleiste jetzt „Baustrommanager (BSM)“. Interner Name `baustelle`, Entitäten, Daten und Einstellungen bleiben
+  unverändert.
+
 ## [0.8.137] – 2026-10-11
 
 - Prognose V2, vierter Baustein (BSM-033.09, P4a, Bauplan Hochrechnung §8): Die Integration rechnet jetzt im

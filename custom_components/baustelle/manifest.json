@@ -1,6 +1,6 @@
 {
   "domain": "baustelle",
-  "name": "Baustelle",
+  "name": "Baustrommanager (BSM)",
   "after_dependencies": [
     "calendar",
     "history",
@@ -21,10 +21,10 @@
     "panel_custom",
     "websocket_api"
   ],
-  "documentation": "https://github.com/herbertschrotter-blip/ha-baustelle",
+  "documentation": "https://github.com/herbertschrotter-blip/ha-baustrommanager",
   "integration_type": "hub",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/herbertschrotter-blip/ha-baustelle/issues",
+  "issue_tracker": "https://github.com/herbertschrotter-blip/ha-baustrommanager/issues",
   "requirements": ["psycopg[binary]==3.3.6"],
-  "version": "0.8.137"
+  "version": "0.8.138"
 }

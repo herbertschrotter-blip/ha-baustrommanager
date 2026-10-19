@@ -39,7 +39,7 @@ async def ws(hass: HomeAssistant, baustelle, hass_ws_client):
 async def test_panel_und_struktur(hass: HomeAssistant, baustelle, ws, hass_client) -> None:
     assert await async_setup_component(hass, "frontend", {})
     panels = hass.data["frontend_panels"]
-    assert panels["baustelle"].sidebar_title == "Baustelle"
+    assert panels["baustelle"].sidebar_title == "Baustrommanager (BSM)"
     client = await hass_client()
     antwort = await client.get("/baustelle_static/baustelle-panel.js")
     assert antwort.status == 200

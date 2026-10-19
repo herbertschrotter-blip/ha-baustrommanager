@@ -1,7 +1,7 @@
 #!/bin/sh
-# Eigenes Fenster „Tickets“ (tmux-Sitzung „Baustelle-Dashboard“) im Claude Terminal: Claude Code im Projekt ha-baustelle für Tickets aus dem Melden-Knopf.
+# Eigenes Fenster „Tickets“ (tmux-Sitzung „Baustelle-Dashboard“) im Claude Terminal: Claude Code im Projekt ha-baustrommanager für Tickets aus dem Melden-Knopf.
 # Legt das tmux-Fenster beim ersten Aufruf an (neue Claude-Sitzung „baustelle-tickets“, bleibt offen, solange das
-# Add-on läuft) und wechselt sonst nur dorthin. Aufruf im Claude Terminal: /config/projekte/ha-baustelle/tools/tickets-fenster.sh
+# Add-on läuft) und wechselt sonst nur dorthin. Aufruf im Claude Terminal: /config/projekte/ha-baustrommanager/tools/tickets-fenster.sh
 set -eu
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)

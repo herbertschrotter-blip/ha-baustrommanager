@@ -9,7 +9,7 @@ was bei Störungen zu tun ist (BSM-027). Stand 0.8.105 (08.10.2026). Technische 
 | Was | Wo |
 |---|---|
 | Home Assistant (HA) | Raspberry Pi 5 mit HA OS, Oberfläche im Browser bzw. HA-App; Neustart: Einstellungen → System → ⏻ |
-| Quelle (Code, Doku, Werkzeuge) | Git-Repo `herbertschrotter-blip/ha-baustelle`, auf dem Pi unter `/config/projekte/ha-baustelle` |
+| Quelle (Code, Doku, Werkzeuge) | Git-Repo `herbertschrotter-blip/ha-baustrommanager`, auf dem Pi unter `/config/projekte/ha-baustrommanager` |
 | Eingespielte Integration | `/config/custom_components/baustelle` (nie dort ändern – immer aus dem Repo einspielen) |
 | Seite „Baustelle“ | Seitenleiste von HA; Version unter ⚙ → Über |
 | Datenbank | Standard: Datei `/config/baustelle/baustelle.db` (SQLite). Mit `db_url` in `/config/packages/baustelle.yaml`: Server im Add-on „TimescaleDB“ (PostgreSQL) |
@@ -29,7 +29,7 @@ nach `/config` kopieren, Konfiguration prüfen, HA neu starten.
 1. Vorher eine Sicherung (Abschnitt 3, „Jetzt sichern“) – bei größeren Änderungen Pflicht.
 2. Im Terminal:
    ```
-   cd /config/projekte/ha-baustelle
+   cd /config/projekte/ha-baustrommanager
    git pull
    tools/deploy.sh
    tools/neustart.sh
@@ -77,7 +77,7 @@ auch das Add-on TimescaleDB mit seinen Daten. Die Plugs heizen in der Zwischenze
 
 **C – Eine frühere Version der Integration** (neue Version macht Probleme), ohne Internet:
 ```
-cd /config/projekte/ha-baustelle
+cd /config/projekte/ha-baustrommanager
 git log --oneline | head            # Commit der vorigen Version suchen, z. B. 986d038
 git worktree add --detach /tmp/rueckweg 986d038
 /tmp/rueckweg/tools/deploy.sh
@@ -113,5 +113,5 @@ erste und letzte Minute, Ticket-Zähler) – stehen die Minuten nicht bei „jet
 ## 6. Meldungen (Tickets)
 
 Der Melden-Knopf auf der Seite legt Fehler (FE), Wünsche (WU) und Anregungen (AN) an. Lesen: `/config/baustelle/meldungen.md`
-oder im Terminal `python3 /config/projekte/ha-baustelle/tools/ticket.py liste`. Abgearbeitet werden sie im Projekt
+oder im Terminal `python3 /config/projekte/ha-baustrommanager/tools/ticket.py liste`. Abgearbeitet werden sie im Projekt
 (Ticket-Profil in `CLAUDE.md`).
