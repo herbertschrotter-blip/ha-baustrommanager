@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.139] – 2026-10-19
+
+- Datenbank: Ein einzelner schlechter Schreibvorgang hält das Mitschreiben nicht mehr an. Nach dem Absturz am 16.10.
+  stand die erste Minute im Puffer schon in der Datenbank („doppelter Schlüssel“); daran scheiterte das Nachschreiben
+  jede Minute, und drei Tage lang landete alles nur im Puffer (`/config/baustelle/puffer/arbeiten.jsonl`). Jetzt werden
+  schon vorhandene Minuten übersprungen; scheitert ein Stapel an einem Datenfehler, wird Vorgang für Vorgang
+  geschrieben und nur der schlechte nach `puffer/abgelehnt.jsonl` gelegt; unlesbare Pufferzeilen (abgeschnitten oder
+  mit Nullbytes nach einem harten Absturz) kommen nach `puffer/kaputt.jsonl`. Die Pufferdatei wird sofort auf die
+  Platte geschrieben (`fsync`). Ist nur die Verbindung weg, wird wie bisher gewartet und nichts verworfen.
+
 ## [0.8.138] – 2026-10-12
 
 - Projekt umbenannt in **Baustrommanager (BSM)**: Repo `herbertschrotter-blip/ha-baustrommanager` (vorher

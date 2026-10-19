@@ -6,6 +6,11 @@ mit ihren Daten (`Arbeit`) – so lässt sie sich auf die Platte legen und spät
 Warteschlange; ab `MAX_OFFEN` Arbeiten, nach `AUSLAGERN_NACH` ohne Datenbank und beim Stoppen kommen sie in die
 Pufferdatei (`puffer/arbeiten.jsonl` neben der SQLite-Datei, eine Arbeit je Zeile). Sobald wieder geschrieben werden
 kann, wird zuerst der Puffer (älter) und dann die Warteschlange nachgeschrieben, in der ursprünglichen Reihenfolge.
+
+Ein einzelner schlechter Vorgang hält nie alles an: Minuten, die schon in der Datenbank stehen (nach einem Absturz doppelt
+im Puffer), werden übersprungen; scheitert ein Stapel an einem Datenfehler, wird Vorgang für Vorgang geschrieben und nur
+der schlechte nach `puffer/abgelehnt.jsonl` gelegt; unlesbare Pufferzeilen (abgeschnitten, Nullbytes) kommen nach
+`puffer/kaputt.jsonl` – jeweils mit Warnung im Log.
 """
 
 from __future__ import annotations
@@ -16,10 +21,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import json
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Connection
+from sqlalchemy import Connection, Insert, Table
+from sqlalchemy.exc import DataError, IntegrityError
 
 from homeassistant.util import dt as dt_util
 
@@ -74,6 +81,20 @@ def einfuegen(v: Connection, tabelle: str, zeilen: list[dict[str, Any]]) -> None
     v.execute(insert(metadata.tables[tabelle]), zeilen)
 
 
+def ohne_doppelte(v: Connection, tabelle: Table) -> Insert:
+    """Einfügen, das eine schon vorhandene Zeile (gleicher Schlüssel) überspringt statt zu scheitern."""
+    if v.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert   # noqa: PLC0415
+    else:
+        from sqlalchemy.dialects.sqlite import insert   # noqa: PLC0415
+    return insert(tabelle).on_conflict_do_nothing()
+
+
+def datenfehler(err: BaseException | None) -> bool:
+    """Liegt es am Vorgang selbst (Daten), nicht an der Verbindung? Dann hilft Warten nicht – beiseitelegen."""
+    return isinstance(err, (IntegrityError, DataError, KeyError, TypeError, ValueError))
+
+
 # ---------------------------------------------------------------------- JSON mit Zeiten (Puffer)
 def _kodieren(w: Any) -> Any:
     if isinstance(w, datetime):
@@ -104,7 +125,7 @@ def zeile_von(a: Arbeit) -> str:
 
 
 def arbeit_von(zeile: str) -> Arbeit:
-    d = json.loads(zeile)
+    d = json.loads(zeile.strip("\x00"))   # Nullbytes vor einer Zeile: Datei bei einem harten Absturz nicht fertig geschrieben
     return Arbeit(d["name"], tuple(_dekodieren(d["daten"])))
 
 
@@ -168,11 +189,40 @@ class Schreiber:
             return True
 
         if await self._db.async_ausfuehren(alles) is None:
-            self._offen[:0] = stapel   # später nachschreiben, Reihenfolge bleibt
-            return await self._fehlgeschlagen()
+            rest = await self._einzeln(stapel) if datenfehler(self._db.letzter_fehler) else stapel
+            if rest:
+                self._offen[:0] = rest   # später nachschreiben, Reihenfolge bleibt
+                return await self._fehlgeschlagen()
         self.fehler_seit = None
         self._db.geschrieben()
         return True
+
+    async def _einzeln(self, werke: list[Werk]) -> list[Werk]:
+        """Nach einem Datenfehler Vorgang für Vorgang schreiben; schlechte beiseitelegen. Zurück: was wegen der
+        Verbindung (noch) nicht ging – ab dort in Reihenfolge."""
+        abgelehnt: list[Werk] = []
+        grund: BaseException | None = None
+        for i, werk in enumerate(werke):
+            if await self._db.async_ausfuehren(lambda v, w=werk: w(v) or True) is not None:
+                continue
+            if not datenfehler(self._db.letzter_fehler):   # Verbindung weg: Rest später, in Reihenfolge
+                await self._ablehnen(abgelehnt, grund)
+                return werke[i:]
+            abgelehnt.append(werk)
+            grund = grund or self._db.letzter_fehler
+        await self._ablehnen(abgelehnt, grund)
+        return []
+
+    async def _ablehnen(self, werke: list[Werk], grund: BaseException | None) -> None:
+        """Nicht schreibbare Vorgänge nach `abgelehnt.jsonl` (Callables nur aus Tests: nicht ablegbar, nur im Log)."""
+        if not werke:
+            return
+        arbeiten = [w for w in werke if isinstance(w, Arbeit)]
+        if arbeiten and self.puffer is not None:
+            zeilen = [zeile_von(a) for a in arbeiten]
+            await self._db.hass.async_add_executor_job(self._anhaengen, self.puffer.with_name("abgelehnt.jsonl"), zeilen)
+        _LOGGER.warning("Datenbank: %s Schreibvorgänge mit Datenfehler übersprungen (%s): %s", len(werke),
+                        self.puffer.with_name("abgelehnt.jsonl") if self.puffer else "verworfen", grund)
 
     async def _fehlgeschlagen(self) -> bool:
         if not self._offen and not self.ausgelagert:
@@ -192,18 +242,20 @@ class Schreiber:
         bleiben = [w for w in werke if not isinstance(w, Arbeit)] if self.puffer is not None else werke
         if arbeiten:
             zeilen = [zeile_von(a) for a in arbeiten]
-            await self._db.hass.async_add_executor_job(self._puffer_anhaengen, zeilen)
+            await self._db.hass.async_add_executor_job(self._anhaengen, self.puffer, zeilen)
             self.ausgelagert += len(arbeiten)
             _LOGGER.warning("Datenbank nicht erreichbar: %s Schreibvorgänge in %s abgelegt", len(arbeiten), self.puffer)
         if len(bleiben) > MAX_OFFEN:
             _LOGGER.warning("Datenbank: Warteschlange voll, %s alte Schreibvorgänge verworfen", len(bleiben) - MAX_OFFEN)
         self._offen = bleiben[-MAX_OFFEN:] + self._offen
 
-    def _puffer_anhaengen(self, zeilen: list[str]) -> None:
-        assert self.puffer is not None
-        self.puffer.parent.mkdir(parents=True, exist_ok=True)
-        with self.puffer.open("a", encoding="utf-8") as datei:
-            datei.writelines(z + "\n" for z in zeilen)
+    @staticmethod
+    def _anhaengen(datei: Path, zeilen: list[str]) -> None:
+        datei.parent.mkdir(parents=True, exist_ok=True)
+        with datei.open("a", encoding="utf-8") as f:
+            f.writelines(z + "\n" for z in zeilen)
+            f.flush()
+            os.fsync(f.fileno())   # harter Absturz (Strom): sonst Nullbytes statt Zeilen
 
     def puffer_zaehlen(self) -> None:
         """Beim Start: liegen noch Arbeiten in der Pufferdatei (z. B. Neustart während eines Ausfalls)?"""
@@ -216,16 +268,35 @@ class Schreiber:
         assert self.puffer is not None
         while self.ausgelagert:
             zeilen = await self._db.hass.async_add_executor_job(self._puffer_lesen)
-            stapel = [arbeit_von(z) for z in zeilen[:STAPEL]]
+            stapel: list[Werk] = []
+            gute: list[str] = []
+            kaputt: list[str] = []
+            for z in zeilen[:STAPEL]:
+                try:
+                    stapel.append(arbeit_von(z))
+                    gute.append(z)
+                except (ValueError, KeyError, TypeError):
+                    kaputt.append(z)
+            if kaputt:   # aus dem Puffer nehmen, damit sie nicht jedes Mal wieder auffallen
+                await self._db.hass.async_add_executor_job(self._anhaengen, self.puffer.with_name("kaputt.jsonl"), kaputt)
+                await self._db.hass.async_add_executor_job(self._puffer_kuerzen, gute + zeilen[STAPEL:])
+                _LOGGER.warning("Datenbank: %s unlesbare Zeilen im Puffer nach %s gelegt", len(kaputt),
+                                self.puffer.with_name("kaputt.jsonl"))
 
             def alles(verbindung: Connection) -> bool:
                 for a in stapel:
                     a(verbindung)
                 return True
 
-            if await self._db.async_ausfuehren(alles) is None:
+            rest: list[Werk] = []
+            if stapel and await self._db.async_ausfuehren(alles) is None:
+                if not datenfehler(self._db.letzter_fehler):
+                    return False
+                rest = await self._einzeln(stapel)
+            neu = [zeile_von(a) for a in rest if isinstance(a, Arbeit)] + zeilen[STAPEL:]
+            await self._db.hass.async_add_executor_job(self._puffer_kuerzen, neu)
+            if rest:
                 return False
-            await self._db.hass.async_add_executor_job(self._puffer_kuerzen, zeilen[STAPEL:])
             self._db.geschrieben()
         _LOGGER.warning("Datenbank wieder erreichbar: Puffer nachgeschrieben")
         return True
@@ -242,6 +313,9 @@ class Schreiber:
             self.puffer.unlink(missing_ok=True)
         else:
             neu = self.puffer.with_suffix(".neu")
-            neu.write_text("".join(z + "\n" for z in rest), encoding="utf-8")
+            with neu.open("w", encoding="utf-8") as f:
+                f.write("".join(z + "\n" for z in rest))
+                f.flush()
+                os.fsync(f.fileno())
             neu.replace(self.puffer)
         self.ausgelagert = len(rest)

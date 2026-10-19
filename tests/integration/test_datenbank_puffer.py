@@ -102,3 +102,48 @@ async def test_server_beim_start_weg(hass: HomeAssistant, freezer, monkeypatch) 
     await db.schreiber.async_schreiben()
     assert db.bereit and db.fehler is None and len(db.schreiber) == 0
     assert len([z for z in zeilen_db(hass, "geraet_minute") if z["geraet_id"] == HK1]) >= 3
+
+
+async def test_puffer_doppelt_und_kaputt(hass: HomeAssistant, baustelle, freezer, monkeypatch) -> None:
+    """Nach einem harten Absturz: eine Minute steht schon in der Datenbank und noch im Puffer, eine Zeile ist
+    abgeschnitten, eine beginnt mit Nullbytes. Nichts davon darf das Nachschreiben anhalten (16.10.2026)."""
+    await hass.async_block_till_done()
+    db, st = hass.data[DATA_DB], baustelle.runtime_data
+    _ausfall(db, monkeypatch)
+    await _minuten(hass, freezer, 3)
+    st.protokoll("einstellung", None, "nach den Nullbytes")
+    await db.async_stop()   # alles in die Pufferdatei
+    monkeypatch.undo()
+    zeilen = db.schreiber.puffer.read_text(encoding="utf-8").splitlines()
+    minute = next(z for z in zeilen if z.startswith('{"name": "minute"'))
+    nullbytes = next(z for z in zeilen if "nach den Nullbytes" in z)
+    zeilen = [minute] + [z for z in zeilen if z != nullbytes] + ['{"name": "einfuegen", "daten": ["proto', "\x00" * 40 + nullbytes]
+    db.schreiber.puffer.write_text("".join(z + "\n" for z in zeilen), encoding="utf-8")
+    neu = Datenbank(hass, db.pfad, db.url)
+    assert await neu.async_start()
+    try:
+        assert neu.schreiber.ausgelagert == 0 and not neu.schreiber.puffer.exists(), neu.fehler
+        hass.data[DATA_DB] = neu
+        minuten = [z for z in zeilen_db(hass, "geraet_minute") if z["geraet_id"] == HK1]
+        assert len(minuten) >= 3 and len({z["zeit"] for z in minuten}) == len(minuten)   # doppelte übersprungen
+        assert [z["text"] for z in zeilen_db(hass, "protokoll") if z["text"] == "nach den Nullbytes"] == ["nach den Nullbytes"]
+        kaputt = neu.schreiber.puffer.with_name("kaputt.jsonl")
+        assert kaputt.read_text(encoding="utf-8").splitlines() == ['{"name": "einfuegen", "daten": ["proto']
+    finally:
+        await neu.async_stop()
+
+
+async def test_datenfehler_haelt_nicht_an(hass: HomeAssistant, baustelle) -> None:
+    """Ein Vorgang mit Datenfehler wird beiseitegelegt, die anderen im selben Stapel werden geschrieben."""
+    await hass.async_block_till_done()
+    db = hass.data[DATA_DB]
+    jetzt = dt_util.utcnow().replace(microsecond=0)
+    gut = {"zeit": jetzt, "baustelle_id": baustelle.entry_id, "bereich_id": None, "art": "einstellung"}
+    db.schreiber.dazu(arbeit("einfuegen", "protokoll", [gut | {"text": "davor"}]))
+    db.schreiber.dazu(arbeit("einfuegen", "protokoll", [gut | {"text": None}]))   # text darf nicht leer sein
+    db.schreiber.dazu(arbeit("einfuegen", "protokoll", [gut | {"text": "danach"}]))
+    assert await db.schreiber.async_schreiben()
+    texte = [z["text"] for z in zeilen_db(hass, "protokoll")]
+    assert "davor" in texte and "danach" in texte and len(db.schreiber) == 0
+    abgelehnt = db.schreiber.puffer.with_name("abgelehnt.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(abgelehnt) == 1 and arbeit_von(abgelehnt[0]).daten[1][0]["text"] is None

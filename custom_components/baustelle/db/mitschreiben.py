@@ -35,7 +35,7 @@ from ..const import ART_CONTAINER
 from ..logik.minute import BereichSammler, GeraetSammler
 from ..logik.sensoren import kontakte
 from . import schema as s
-from .schreiber import arbeit, schreibarbeit
+from .schreiber import arbeit, ohne_doppelte, schreibarbeit
 
 if TYPE_CHECKING:
     from ..steuerung import Steuerung
@@ -312,12 +312,12 @@ def _sek(n: int) -> timedelta:
 def minute_schreiben(v: Connection, bid: str, geraete: list[dict[str, Any]], bereiche: list[dict[str, Any]],
                      wetter: dict[str, Any], zustand: list[list[Any]], lernen: list[dict[str, Any]], ende: datetime) -> None:
     """Eine Minute einer Baustelle: Geräte, Bereiche, Wetter, geänderte Laufzeit, Gelerntes (stündlich)."""
-    if geraete:
-        v.execute(insert(s.geraet_minute), geraete)
+    if geraete:   # schon vorhandene Minute (doppelt im Puffer nach einem Absturz) wird übersprungen
+        v.execute(ohne_doppelte(v, s.geraet_minute), geraete)
     if bereiche:
-        v.execute(insert(s.bereich_minute), bereiche)
+        v.execute(ohne_doppelte(v, s.bereich_minute), bereiche)
     if geraete or bereiche:
-        v.execute(insert(s.wetter_minute).values(**wetter))
+        v.execute(ohne_doppelte(v, s.wetter_minute).values(**wetter))
     for schluessel, wert in zustand:
         v.execute(delete(s.zustand).where(s.zustand.c.baustelle_id == bid, s.zustand.c.schluessel == schluessel))
         if wert is not None:

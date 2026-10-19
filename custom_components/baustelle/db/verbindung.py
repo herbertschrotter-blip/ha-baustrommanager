@@ -63,6 +63,7 @@ class Datenbank:
         self._gestoppt = False
         self.groesse_server: float | None = None   # PostgreSQL: Größe der Datenbank in Byte (pg_database_size)
         self._sperre = threading.Lock()
+        self.letzter_fehler: Exception | None = None
 
     # ------------------------------------------------------------------ Start/Stopp
     async def async_start(self) -> bool:
@@ -144,14 +145,17 @@ class Datenbank:
     async def async_ausfuehren(self, arbeit: Callable[[Connection], T]) -> T | None:
         """`arbeit` in einer Transaktion ausführen; bei Fehler None (und `fehler` gesetzt)."""
         if self.engine is None:
+            self.letzter_fehler = None
             return None
         try:
             ergebnis = await self.hass.async_add_executor_job(self._ausfuehren, arbeit)
         except Exception as err:   # noqa: BLE001
             self.fehler = str(err)
+            self.letzter_fehler = err   # Schreiber: Datenfehler (beiseitelegen) oder Verbindung (warten)?
             _LOGGER.warning("Datenbank: %s", err)
             return None
         self.fehler = None
+        self.letzter_fehler = None
         return ergebnis
 
     def _ausfuehren(self, arbeit: Callable[[Connection], T]) -> T:
