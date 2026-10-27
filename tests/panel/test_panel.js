@@ -1105,6 +1105,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick({ act: 'sheet', s: 'leistung', id: b.id }, 30); pruefe('Leistung einer Stunde');
     const jetztH = +panel.z.JETZT.slice(0, 2);
     erwarte('AN-0005: Leistung der aktuellen Stunde, je Messwert', ui.innerHTML.includes(`${String(jetztH).padStart(2, '0')}:00–`) && ui.innerHTML.includes('data-chart="lh-') && ui.innerHTML.includes('Messwerte'));
+    { const svg = (ui.innerHTML.match(/<svg class="chart" data-chart="lh-[^]*?<\/svg>/) || [''])[0], hh = String(jetztH).padStart(2, '0');
+      const xj = +((svg.match(/<g class="jetzt"><line x1="([\d.]+)"/) || [])[1]), xs = [...svg.matchAll(/<path d="([^"]+)"/g)].flatMap(m => [...m[1].matchAll(/H([\d.]+)/g)].map(q => +q[1]));
+      erwarte('FE-0024: laufende Stunde – Linie „jetzt hh:mm“, Achse mit Uhrzeit, keine Kurve über „jetzt“ hinaus',
+        svg.includes(`jetzt ${panel.z.JETZT.slice(0, 5)}`) && svg.includes(`>${hh}:10<`) && !svg.includes('>:10<') && Number.isFinite(xj) && xs.length > 0 && xs.every(v => v <= xj + 0.05)); }
     { const sp = (ui.innerHTML.match(/--spur:linear-gradient\(90deg, ([^"]*)\)"/) || [])[1] || '', teile = sp.split(/, (?=[rv])/);
       erwarte(`Streifen je Stunde gefärbt (${teile.length} Abschnitte)`, teile.length === 24 && teile.every(t => /^(var\(--s1\)|rgba\(127,127,127,\.25\)) [\d.]+% [\d.]+%$/.test(t))
         && (jetztH === 23 || teile.slice(jetztH + 1).every(t => t.startsWith('rgba'))));   // künftige Stunden grau
@@ -1129,6 +1133,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('WU-0011: ganzer Tag 0–24 Uhr (eine Abfrage für den Tag)', ui.innerHTML.includes('ganzer Tag') && !ui.innerHTML.includes('data-lh') && tagAuf && panel.lokal(Date.parse(tagAuf.start_time), panel.z.zone).slice(11, 16) === '00:00');
     await klick('.sheet .seg [data-v="stunde"]', 30);
     await klick('.sheet .zr-nav .zr-pf:first-child', 30); pruefe('Leistung gestern'); erwarte('AN-0005: gestern', ui.innerHTML.includes('<b>Gestern</b>'));
+    erwarte('FE-0024: vergangener Tag ohne „jetzt“', !/<svg class="chart" data-chart="lh-[^]*?class="jetzt"[^]*?<\/svg>/.test(ui.innerHTML));
     await klick({ act: 'zu' }, 5); await klick({ act: 'sheet', s: 'verbrauch', id: b.id }, 30); pruefe('Verbrauch mit ohne Automatik');
     if (b.geraete.some(g => g.heizer)) {   // WU-0013
       erwarte('WU-0013: ohne Automatik je Container', ui.innerHTML.includes('kWh ohne Automatik') && ui.innerHTML.includes('gespart') && ui.innerHTML.includes('stroke-dasharray="5 4"') && !!litEl('.sheet .vb-gruppe button[data-v="typ"]'));

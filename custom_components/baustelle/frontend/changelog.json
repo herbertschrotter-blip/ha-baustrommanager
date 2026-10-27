@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.142",
+    "datum": "2026-10-28",
+    "punkte": [
+      "Leistung eines Containers (Kachel „⚡ kW jetzt“): In der laufenden Stunde bzw. am laufenden Tag endet die Kurve jetzt bei der aktuellen Uhrzeit, eine gestrichelte Linie zeigt „jetzt hh:mm“, und die Achse der Stunden-Ansicht nennt die Uhrzeit (07:00, 07:10 … 08:00 statt :00 … :60) (FE-0024). Vorher wurde der letzte Messwert bis zum Ende der Stunde weitergezeichnet – um 07:04 sah es aus, als gäbe es Werte bis 08:00."
+    ]
+  },
+  {
     "version": "0.8.141",
     "datum": "2026-10-27",
     "punkte": [

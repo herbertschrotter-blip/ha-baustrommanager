@@ -1280,7 +1280,9 @@ class BaustellePanel extends LitElement {
     const zeige = reihen.length > 1 ? [...reihen, summeR] : reihen.map(r => ({ ...r, farbe: 'var(--s1)', summe: true }));
     const daten = { laufend, zeige, spitze: Math.max(0, ...summeR.punkte.map(p => p[1])), messwerte: reihen.reduce((a, r) => a + r.punkte.length, 0),
       mittel: summeR.punkte.length ? summeR.punkte.reduce((a, p, i) => a + p[1] * ((i + 1 < summeR.punkte.length ? summeR.punkte[i + 1][0] : ende) - p[0]), 0) / Math.max(1, ende - summeR.punkte[0][0]) : 0,
-      chart: stufen(`lh-${b.id}-${tag}-${ganzerTag ? 'tag' : h}`, zeige, von, bis, 'W', ganzerTag ? [0, 4, 8, 12, 16, 20, 24].map(k => [von + k * 36e5, hh(k)]) : null) };
+      // FE-0024: Achse mit Uhrzeit, in der laufenden Stunde bzw. am laufenden Tag endet die Kurve bei „jetzt“
+      chart: stufen(`lh-${b.id}-${tag}-${ganzerTag ? 'tag' : h}`, zeige, von, bis, 'W', ganzerTag ? [0, 4, 8, 12, 16, 20, 24].map(k => [von + k * 36e5, hh(k)])
+        : [0, 10, 20, 30, 40, 50, 60].map(m => [von + m * 6e4, m === 60 ? `${hh((h + 1) % 24)}:00` : `${hh(h)}:${hh(m)}`]), laufend ? [d.z.jetztMs, this.z.JETZT.slice(0, 5)] : null) };
     this._lhLetzt = daten;
     return { ...L, daten };
   }

@@ -724,24 +724,26 @@ function balken(id, werte, labels, einheit, d3 = 1) {
   CHARTS[id] = { art: "balken", werte, labels, einheit, d: d3 };
   return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H2}">${raster}${b3}<rect class="treffer" x="0" y="0" width="0" height="0"/></svg>`;
 }
-function stufen(id, reihen, von, bis, einheit = "W", achse = null) {
+function stufen(id, reihen, von, bis, einheit = "W", achse = null, jetzt = null) {
   const W = 320, H2 = 160, L2 = 34, R2 = 8, T2 = 10, U = 22, alle = reihen.flatMap((r5) => r5.punkte.map((p4) => p4[1])).filter(zahl);
   const hi = Math.max(...alle, 0) * 1.1 || 100, x2 = (t5) => L2 + (Math.min(bis, Math.max(von, t5)) - von) / (bis - von) * (W - L2 - R2), y3 = (v2) => T2 + (1 - v2 / hi) * (H2 - T2 - U);
   const stufe = hi > 4e3 ? 1e3 : hi > 2e3 ? 500 : hi > 800 ? 200 : hi > 300 ? 100 : 50;
   const raster = [...Array(Math.floor(hi / stufe) + 1)].map((_2, k2) => k2 * stufe).map((v2) => `<line x1="${L2}" x2="${W - R2}" y1="${y3(v2)}" y2="${y3(v2)}" class="gr"/><text x="${L2 - 5}" y="${y3(v2) + 3}" class="ax" text-anchor="end">${v2 >= 1e3 ? de(v2 / 1e3, 1) + " k" : v2}</text>`).join("");
   const marken = achse || [0, 10, 20, 30, 40, 50, 60].map((m3) => [von + m3 * 6e4, `:${String(m3 % 60).padStart(2, "0")}`]);
   const achseSvg = marken.map(([t5, l4]) => `<text x="${x2(t5)}" y="${H2 - 6}" class="ax" text-anchor="middle">${l4}</text>`).join("");
+  const ende = jetzt && jetzt[0] > von && jetzt[0] < bis ? jetzt[0] : bis;
   const pfade = reihen.map((r5) => {
     let d3 = "";
     r5.punkte.forEach(([t5, v2], i7) => {
-      const nx = i7 + 1 < r5.punkte.length ? r5.punkte[i7 + 1][0] : bis;
+      const nx = i7 + 1 < r5.punkte.length ? r5.punkte[i7 + 1][0] : ende;
       if (!zahl(v2)) return;
       d3 += `${d3 ? "L" : "M"}${x2(t5).toFixed(1)} ${y3(v2).toFixed(1)}H${x2(nx).toFixed(1)}`;
     });
     return d3 ? `<path d="${d3}" fill="none" stroke="${r5.farbe}" stroke-width="${r5.summe ? 2.4 : 1.6}" ${r5.summe ? "" : 'opacity=".75"'}/>` : "";
   }).join("");
+  const jetztSvg = ende < bis ? `<g class="jetzt"><line x1="${x2(ende).toFixed(1)}" x2="${x2(ende).toFixed(1)}" y1="${T2}" y2="${H2 - U}" stroke="var(--s1)" stroke-dasharray="3 3" opacity=".7"/><text x="${x2(ende).toFixed(1)}" y="${T2 - 1}" class="ax" text-anchor="${x2(ende) > W - R2 - 40 ? "end" : "middle"}">jetzt ${jetzt[1]}</text></g>` : "";
   CHARTS[id] = { art: "stufen", einheit, reihen, von, bis, L: L2, B: W - R2, W, x: x2, y: y3, unten: H2 - U };
-  return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H2}">${raster}${achseSvg}${pfade}<g class="hover"></g></svg>`;
+  return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H2}">${raster}${achseSvg}${pfade}${jetztSvg}<g class="hover"></g></svg>`;
 }
 function streu(id, pkt, k2, d0, grenze = null) {
   const W = 320, H2 = 170, L2 = 30, R2 = 8, T2 = 10, U = 24;
@@ -5448,7 +5450,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.141";
+var SEITE_VERSION = "0.8.142";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];
@@ -6075,7 +6077,8 @@ var BaustellePanel = class extends i4 {
       spitze: Math.max(0, ...summeR.punkte.map((p4) => p4[1])),
       messwerte: reihen.reduce((a3, r5) => a3 + r5.punkte.length, 0),
       mittel: summeR.punkte.length ? summeR.punkte.reduce((a3, p4, i7) => a3 + p4[1] * ((i7 + 1 < summeR.punkte.length ? summeR.punkte[i7 + 1][0] : ende) - p4[0]), 0) / Math.max(1, ende - summeR.punkte[0][0]) : 0,
-      chart: stufen(`lh-${b3.id}-${tag}-${ganzerTag ? "tag" : h3}`, zeige, von, bis, "W", ganzerTag ? [0, 4, 8, 12, 16, 20, 24].map((k2) => [von + k2 * 36e5, hh(k2)]) : null)
+      // FE-0024: Achse mit Uhrzeit, in der laufenden Stunde bzw. am laufenden Tag endet die Kurve bei „jetzt“
+      chart: stufen(`lh-${b3.id}-${tag}-${ganzerTag ? "tag" : h3}`, zeige, von, bis, "W", ganzerTag ? [0, 4, 8, 12, 16, 20, 24].map((k2) => [von + k2 * 36e5, hh(k2)]) : [0, 10, 20, 30, 40, 50, 60].map((m3) => [von + m3 * 6e4, m3 === 60 ? `${hh((h3 + 1) % 24)}:00` : `${hh(h3)}:${hh(m3)}`]), laufend ? [d3.z.jetztMs, this.z.JETZT.slice(0, 5)] : null)
     };
     this._lhLetzt = daten;
     return { ...L2, daten };

@@ -64,19 +64,23 @@ export function balken(id, werte, labels, einheit, d = 1) {
   return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H}">${raster}${b}<rect class="treffer" x="0" y="0" width="0" height="0"/></svg>`;
 }
 
-/* AN-0005: Leistung je Messwert über eine Stunde (Stufen, wie der Shelly meldet); reihen [{name, farbe, punkte: [[ms, W]]}] */
-export function stufen(id, reihen, von, bis, einheit = 'W', achse = null) {
+/* AN-0005: Leistung je Messwert über eine Stunde (Stufen, wie der Shelly meldet); reihen [{name, farbe, punkte: [[ms, W]]}];
+   FE-0024: jetzt [ms, 'hh:mm'] bei laufender Stunde/laufendem Tag – die Kurven enden dort, eine Linie zeigt „jetzt“ */
+export function stufen(id, reihen, von, bis, einheit = 'W', achse = null, jetzt = null) {
   const W = 320, H = 160, L = 34, R = 8, T = 10, U = 22, alle = reihen.flatMap(r => r.punkte.map(p => p[1])).filter(zahl);
   const hi = Math.max(...alle, 0) * 1.1 || 100, x = t => L + (Math.min(bis, Math.max(von, t)) - von) / (bis - von) * (W - L - R), y = v => T + (1 - v / hi) * (H - T - U);
   const stufe = hi > 4000 ? 1000 : hi > 2000 ? 500 : hi > 800 ? 200 : hi > 300 ? 100 : 50;
   const raster = [...Array(Math.floor(hi / stufe) + 1)].map((_, k) => k * stufe).map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="gr"/><text x="${L - 5}" y="${y(v) + 3}" class="ax" text-anchor="end">${v >= 1000 ? de(v / 1000, 1) + ' k' : v}</text>`).join('');
   const marken = achse || [0, 10, 20, 30, 40, 50, 60].map(m => [von + m * 6e4, `:${String(m % 60).padStart(2, '0')}`]);   // WU-0011: Tag mit Stunden
   const achseSvg = marken.map(([t, l]) => `<text x="${x(t)}" y="${H - 6}" class="ax" text-anchor="middle">${l}</text>`).join('');
-  const pfade = reihen.map(r => { let d = ''; r.punkte.forEach(([t, v], i) => { const nx = i + 1 < r.punkte.length ? r.punkte[i + 1][0] : bis; if (!zahl(v)) return;
+  const ende = jetzt && jetzt[0] > von && jetzt[0] < bis ? jetzt[0] : bis;
+  const pfade = reihen.map(r => { let d = ''; r.punkte.forEach(([t, v], i) => { const nx = i + 1 < r.punkte.length ? r.punkte[i + 1][0] : ende; if (!zahl(v)) return;
       d += `${d ? 'L' : 'M'}${x(t).toFixed(1)} ${y(v).toFixed(1)}H${x(nx).toFixed(1)}`; });
     return d ? `<path d="${d}" fill="none" stroke="${r.farbe}" stroke-width="${r.summe ? 2.4 : 1.6}" ${r.summe ? '' : 'opacity=".75"'}/>` : ''; }).join('');
+  const jetztSvg = ende < bis ? `<g class="jetzt"><line x1="${x(ende).toFixed(1)}" x2="${x(ende).toFixed(1)}" y1="${T}" y2="${H - U}" stroke="var(--s1)" stroke-dasharray="3 3" opacity=".7"/>`
+    + `<text x="${x(ende).toFixed(1)}" y="${T - 1}" class="ax" text-anchor="${x(ende) > W - R - 40 ? 'end' : 'middle'}">jetzt ${jetzt[1]}</text></g>` : '';
   CHARTS[id] = { art: 'stufen', einheit, reihen, von, bis, L, B: W - R, W, x, y, unten: H - U };
-  return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H}">${raster}${achseSvg}${pfade}<g class="hover"></g></svg>`;
+  return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H}">${raster}${achseSvg}${pfade}${jetztSvg}<g class="hover"></g></svg>`;
 }
 
 export function streu(id, pkt, k, d0, grenze = null) {   // grenze: Heizgrenze der Signatur – darüber waagrecht (BSM-033)
