@@ -20,7 +20,7 @@ import { LitElement, html, nothing, unsafeCSS } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { keyed } from 'lit/directives/keyed.js';
 import { ueberVorlage } from './ueber.js';
-import { MB_MAX, MB_PX, meldenVorlage } from './melden.js';
+import { MB_MAX, MB_PX, MB_SUMME, meldenVorlage } from './melden.js';
 import { ladenVorlage, leerVorlage } from './ansichten/allgemein.js';
 import { devVorlage } from './ansichten/dev.js';
 import { bsdetailVorlage, verlaufVorlage } from './ansichten/verlauf.js';
@@ -1959,8 +1959,14 @@ class BaustellePanel extends LitElement {
     const meldung = { art: f.art, text: f.text.trim(), kontext: f.kontext, version: this.version, geraet: f.geraet,
       seite: f.stand ? { view: this.s.view, cid: this.s.cid, baustelle: this.d ? this.d.entry : null, dialog: this.s.sheet.vorher ? this.s.sheet.vorher.art : null } : null,
       ...((f.bilder || []).length ? { bilder: f.bilder.map(x => x.url) } : {}) };   // WU-0016
-    this.s.sheet = this.s.sheet.vorher || null; this.neuZeichnen(); delete this.cache.meldungen;
-    return this.ws({ type: 'baustelle/meldung', entry_id: this.d && this.d.entry, aktion: 'neu', meldung }).then(r => { if (r) this.toast(`Danke – gemeldet als ${r.ticket || 'Ticket'}`); });
+    // FE-0027: das Fenster bleibt offen, bis die Meldung angekommen ist – bei einem Fehler sind Text und Bilder noch da
+    const fenster = this.s.sheet; if (fenster.sendet) return; fenster.sendet = true; delete this.cache.meldungen;
+    return this.ws({ type: 'baustelle/meldung', entry_id: this.d && this.d.entry, aktion: 'neu', meldung }).then(r => {
+      fenster.sendet = false;
+      if (!r) return this.neuZeichnen();
+      if (this.s.sheet === fenster) this.s.sheet = fenster.vorher || null;
+      this.neuZeichnen(); this.toast(`Danke – gemeldet als ${r.ticket || 'Ticket'}`);
+    });
   }
   meldenZu() { this.s.sheet = (this.s.sheet && this.s.sheet.vorher) || null; return this.neuZeichnen(); }
   /* Melde-Dialog öffnen (Knopf unten rechts, „Über“) */
@@ -2461,8 +2467,11 @@ class BaustellePanel extends LitElement {
     const s = this.s.sheet; if (!s || s.art !== 'melden') return;
     const f = Math.min(1, MB_PX / Math.max(b, h)), c = document.createElement('canvas'); c.width = Math.round(b * f); c.height = Math.round(h * f);
     c.getContext('2d').drawImage(quelle, 0, 0, c.width, c.height);
-    const url = c.toDataURL('image/jpeg', 0.82), B = (s.form.bilder ||= []);
+    const B = (s.form.bilder ||= []);
     if (B.length >= MB_MAX) return this.toast(`Höchstens ${MB_MAX} Bilder`);
+    // FE-0027: passt das Bild nicht mehr in die Nachricht, stärker komprimieren; reicht das nicht, ablehnen
+    const frei = MB_SUMME - B.reduce((a, x) => a + x.url.length, 0), url = [0.82, 0.6, 0.4].map(q => c.toDataURL('image/jpeg', q)).find(u => u.length <= frei);
+    if (!url) return this.toast('Bild zu groß – zusammen höchstens 3 MB, ein Bild entfernen');
     B.push({ url, b: c.width, h: c.height, kb: Math.round(url.length * 0.75 / 1024) }); this.neuZeichnen(); this.toast(`Bild ${wie}`);
   }
   mbDatei(datei, wie) {

@@ -920,7 +920,12 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     panel.s.sheet.form.bilder = [bild, { ...bild }, { ...bild, b: 1600, h: 1000 }]; panel.s.sheet.form.text = 'Test mit Bildern'; await panel.neuZeichnen(); pruefe('Melden 3 Bilder');
     erwarte('WU-0016: 3 Bilder, keine weiteren', (ui.innerHTML.match(/class="mb-bild[ "]/g) || []).length === 3 && !ui.innerHTML.includes('type="file"') && ui.innerHTML.includes('3 von 3'));
     await klick(ML.bildWeg); erwarte('WU-0016: ✕ entfernt ein Bild', panel.s.sheet.form.bilder.length === 2);
+    { const ws = hass.callWS; hass.callWS = m => m.type === 'baustelle/meldung' ? Promise.reject({ message: 'Verbindung weg' }) : ws.call(hass, m);
+      await klick(ML.senden, 10); hass.callWS = ws;
+      erwarte('FE-0027: Senden schlägt fehl – Fenster bleibt offen, Text und Bilder sind noch da',
+        panel.s.sheet && panel.s.sheet.art === 'melden' && panel.s.sheet.form.bilder.length === 2 && panel.s.sheet.form.text === 'Test mit Bildern' && !panel.s.sheet.sendet); }
     neu(); await klick(ML.senden, 10);
+    erwarte('FE-0027: nach dem Senden ist das Fenster zu', !panel.s.sheet || panel.s.sheet.art !== 'melden');
     erwarte('WU-0016: Senden mit Bildern', letzte('baustelle/meldung').some(a => a.aktion === 'neu' && a.meldung.bilder && a.meldung.bilder.length === 2));
     meldungen[0].bilder = ['FE-0001-1.jpg']; delete panel.cache.meldungen;
     await klick({ act: 'tab', v: 'einst' }, 10); await klick({ act: 'ev-gruppe', v: 'dev' }, 10); await klick({ act: 'ev-dev', v: 'meldungen' }, 30); await ruhe(20); await panel.neuZeichnen(); pruefe('Meldungen mit Bild');

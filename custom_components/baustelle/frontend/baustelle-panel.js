@@ -1819,6 +1819,7 @@ var l3 = e4(class extends i5 {
 // src/melden.js
 var MB_MAX = 3;
 var MB_PX = 1600;
+var MB_SUMME = 3e6;
 var FRAGE = { fehler: "Was ist passiert, was hättest du erwartet?", wunsch: "Was wünschst du dir?", anregung: "Deine Idee" };
 function bilderBox(p4, f3) {
   const B2 = f3.bilder || [], pc = !p4.narrow, auf = pc && typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia;
@@ -5450,7 +5451,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.142";
+var SEITE_VERSION = "0.8.143";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];
@@ -7402,11 +7403,16 @@ var BaustellePanel = class extends i4 {
       seite: f3.stand ? { view: this.s.view, cid: this.s.cid, baustelle: this.d ? this.d.entry : null, dialog: this.s.sheet.vorher ? this.s.sheet.vorher.art : null } : null,
       ...(f3.bilder || []).length ? { bilder: f3.bilder.map((x2) => x2.url) } : {}
     };
-    this.s.sheet = this.s.sheet.vorher || null;
-    this.neuZeichnen();
+    const fenster2 = this.s.sheet;
+    if (fenster2.sendet) return;
+    fenster2.sendet = true;
     delete this.cache.meldungen;
     return this.ws({ type: "baustelle/meldung", entry_id: this.d && this.d.entry, aktion: "neu", meldung }).then((r5) => {
-      if (r5) this.toast(`Danke – gemeldet als ${r5.ticket || "Ticket"}`);
+      fenster2.sendet = false;
+      if (!r5) return this.neuZeichnen();
+      if (this.s.sheet === fenster2) this.s.sheet = fenster2.vorher || null;
+      this.neuZeichnen();
+      this.toast(`Danke – gemeldet als ${r5.ticket || "Ticket"}`);
     });
   }
   meldenZu() {
@@ -8257,8 +8263,10 @@ var BaustellePanel = class extends i4 {
     c4.width = Math.round(b3 * f3);
     c4.height = Math.round(h3 * f3);
     c4.getContext("2d").drawImage(quelle, 0, 0, c4.width, c4.height);
-    const url = c4.toDataURL("image/jpeg", 0.82), B2 = s4.form.bilder ||= [];
+    const B2 = s4.form.bilder ||= [];
     if (B2.length >= MB_MAX) return this.toast(`Höchstens ${MB_MAX} Bilder`);
+    const frei = MB_SUMME - B2.reduce((a3, x2) => a3 + x2.url.length, 0), url = [0.82, 0.6, 0.4].map((q) => c4.toDataURL("image/jpeg", q)).find((u3) => u3.length <= frei);
+    if (!url) return this.toast("Bild zu groß – zusammen höchstens 3 MB, ein Bild entfernen");
     B2.push({ url, b: c4.width, h: c4.height, kb: Math.round(url.length * 0.75 / 1024) });
     this.neuZeichnen();
     this.toast(`Bild ${wie}`);

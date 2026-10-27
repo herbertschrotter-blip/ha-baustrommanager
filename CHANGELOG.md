@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.143] – 2026-10-28
+
+- Melden mit Screenshots robuster (FE-0027): Das Melde-Fenster bleibt offen, bis die Meldung angekommen ist – schlägt
+  das Senden fehl, sind Text und Bilder noch da und es kann noch einmal gesendet werden (vorher schloss es sofort, und
+  alles war weg). Alle Bilder zusammen dürfen höchstens 3 MB groß sein (Home Assistant nimmt je Nachricht höchstens
+  4 MB): Ein Bild, das nicht mehr passt, wird stärker komprimiert, sonst abgelehnt mit Hinweis; die Integration prüft
+  die Summe ebenfalls. Im Code der Seite und der Integration fand sich sonst kein Fehler auf dem Weg zur Datei – bitte
+  ein Bild mitschicken und prüfen, ob es im Ticket ankommt.
+
 ## [0.8.142] – 2026-10-28
 
 - Leistung eines Containers (Kachel „⚡ kW jetzt“): In der laufenden Stunde bzw. am laufenden Tag endet die Kurve jetzt

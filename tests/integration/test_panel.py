@@ -321,6 +321,10 @@ async def test_meldung_mit_bildern(hass: HomeAssistant, baustelle, ws, hass_stor
     gif = "data:image/gif;base64," + base64.b64encode(b"GIF89a").decode()
     assert not (await ws.rufe("baustelle/meldung", mit_entry=False, aktion="neu", meldung={"art": "fehler", "text": "x", "bilder": [gif]}))["success"]
     assert not (await ws.rufe("baustelle/meldung", mit_entry=False, aktion="neu", meldung={"art": "fehler", "text": "x", "bilder": [jpg] * 4}))["success"]
+    # FE-0027: zusammen über 3 MB (HA nimmt je Nachricht höchstens 4 MiB) → abgelehnt mit verständlicher Meldung
+    gross = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8" + b"z" * 1_200_000).decode()
+    msg = await ws.rufe("baustelle/meldung", mit_entry=False, aktion="neu", meldung={"art": "fehler", "text": "x", "bilder": [gross, gross]})
+    assert not msg["success"] and "zusammen zu groß" in msg["error"]["message"]
 
 
 async def test_dialoge_wie_die_seite(hass: HomeAssistant, baustelle, hass_client) -> None:

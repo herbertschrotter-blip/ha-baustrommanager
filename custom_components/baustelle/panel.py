@@ -208,7 +208,16 @@ MELDUNG = vol.Schema({
 # WU-0016: bis zu 3 Bilder je Meldung (von der Seite verkleinert), als Datei neben meldungen.json
 BILD_ARTEN = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 BILD_MAX_BYTES = 1_500_000
-BILDER = vol.All(list, vol.Length(max=3), [vol.All(cv.string, vol.Length(max=2_100_000))])
+BILDER_MAX_SUMME = 3_000_000   # FE-0027: alle zusammen (Zeichen der Data-URLs) – HA nimmt je WebSocket-Nachricht höchstens 4 MiB
+
+
+def _summe_ok(bilder: list[str]) -> list[str]:
+    if sum(len(b) for b in bilder) > BILDER_MAX_SUMME:
+        raise vol.Invalid("bilder: zusammen zu groß (höchstens 3 MB) – ein Bild weniger oder kleiner")
+    return bilder
+
+
+BILDER = vol.All(list, vol.Length(max=3), [vol.All(cv.string, vol.Length(max=2_100_000))], _summe_ok)
 
 
 def _bild_lesen(url: str) -> tuple[str, bytes]:

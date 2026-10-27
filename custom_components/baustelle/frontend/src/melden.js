@@ -7,6 +7,8 @@ import { live } from 'lit/directives/live.js';
 import { kurzDatum, wtag } from './hilfen.js';
 
 export const MB_MAX = 3, MB_PX = 1600;   // WU-0016: Bilder je Meldung, größte Kante
+// FE-0027: alle Bilder zusammen höchstens so viele Zeichen (Data-URL) – HA nimmt je WebSocket-Nachricht höchstens 4 MiB
+export const MB_SUMME = 3_000_000;
 const FRAGE = { fehler: 'Was ist passiert, was hättest du erwartet?', wunsch: 'Was wünschst du dir?', anregung: 'Deine Idee' };
 
 function bilderBox(p, f) {
