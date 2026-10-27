@@ -76,6 +76,10 @@ class Heizung(Funktion):
         self._trotzdem_geladen = False
         self._frost: dict[str, bool] = {}
         self._tuer_pause: dict[str, bool] = {}   # war zuletzt wegen offener Tür pausiert
+        # FE-0025: „Tür vermutlich offen“ auch ohne Lernen – Verlauf der letzten Minuten, Vermutung, Pause bis
+        self._tuer_verlauf: dict[str, list[list[Any]]] = {}
+        self._vermutet: dict[str, bool] = {}
+        self._vermutet_bis: dict[str, datetime] = {}
         self._grund_beim_heizen: dict[str, str | None] = {}   # Grund der letzten Minute, in der geheizt wurde (K innen)
         self.hochrechnung: dict[str, Any] | None = None   # letzte Hochrechnung mit Signatur (BSM-033.02, hochrechnung.py)
         self.hochrechnung_lauf = 0   # Nummer der zuletzt gestarteten Rechnung
@@ -289,6 +293,9 @@ class Heizung(Funktion):
 
     def _lernen(self, jetzt: datetime, wetter: WetterWerte) -> None:
         h_lernregelung._lernen(self, jetzt, wetter)
+
+    def _tuer_vermuten(self, jetzt: datetime, wetter: WetterWerte) -> None:
+        h_lernregelung._tuer_vermuten(self, jetzt, wetter)
 
     def _tuer_offen(self, bid: str) -> bool:
         """Eine Tür oder ein Fenster des Containers offen (WU-0009: schützt das Lernen; BSM-034.03)."""

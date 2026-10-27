@@ -19,10 +19,13 @@ Dazu lernt jeder Container selbst:
   braucht – der Heizplan beginnt dann selbst so früh, dass das Soll rechtzeitig erreicht ist (`arbeitszeit.WarmAb`).
   Die Kälte steckt in der Rate, darum braucht ein lernender Container keinen Kälte-Frühstart.
 
-**Tür offen** (WU-0009): Ein offener Türkontakt oder ein Raum, der beim durchgehenden Heizen in `OFFEN_FENSTER_MIN`
-Minuten um mindestens `OFFEN_ABFALL` °C kälter wird, obwohl es draußen kaum kälter wird („Tür vermutlich offen“, wie die
-Fenster-offen-Erkennung von Versatile Thermostat), verwirft die laufenden Messungen (Aufheizen, Nachlauf, K außen); bis
-`OFFEN_RUHE_MIN` Minuten danach beginnt keine neue.
+**Tür offen** (WU-0009): Ein offener Türkontakt oder ein Raum, der beim Heizen in `OFFEN_FENSTER_MIN` Minuten um
+mindestens `OFFEN_ABFALL` °C (oder in `OFFEN_LANG_MIN` Minuten um `OFFEN_LANG_ABFALL` °C) kälter wird, obwohl es draußen
+kaum kälter wird („Tür vermutlich offen“, wie die Fenster-offen-Erkennung von Versatile Thermostat), verwirft die
+laufenden Messungen (Aufheizen, Nachlauf, K außen); bis `OFFEN_RUHE_MIN` Minuten danach beginnt keine neue. „Beim
+Heizen“ heißt (FE-0025): der Plug ist jede Minute an und ein Heizkörper zieht mindestens einmal Strom – ein Radiator mit
+eigenem Thermostat taktet (etwa 3 min an, 4 min aus), ohne dass der Raum dadurch kälter werden dürfte. Die Heizung
+pausiert dann `VERMUTET_PAUSE_MIN` Minuten (Aufrufer).
 
 Alle Werte sind begrenzt; ohne Messung gilt Nachlauf 0 und die Startwerte – dann verhält sich die Regelung wie TPI.
 Zeiten sind `datetime` (mit Zone), Temperaturen °C.
@@ -63,10 +66,14 @@ AUF_MAX_MIN = 240
 AUF_N = 3                      # ab so vielen Messungen je Außenband rechnet der Container den Beginn selbst
 AUF_GRENZEN = (0.2, 20.0)      # °C je Stunde
 AUF_RASTER_MIN = 5             # Aufheizdauer auf 5 min aufgerundet (ruhiger Plan)
-OFFEN_FENSTER_MIN = 10         # Tür vermutlich offen: in so vielen Minuten durchgehenden Heizens …
+OFFEN_FENSTER_MIN = 10         # Tür vermutlich offen: in so vielen Minuten Heizen …
 OFFEN_ABFALL = 0.3             # … so viel °C kälter geworden …
 OFFEN_AUSSEN = 0.2             # … während es draußen höchstens so viel kälter wurde
+OFFEN_LANG_MIN = 30            # FE-0025: oder in so vielen Minuten Heizen …
+OFFEN_LANG_ABFALL = 0.6        # … so viel °C kälter (langsamer Abfall bei taktenden Radiatoren) …
+OFFEN_LANG_AUSSEN = 0.4        # … draußen höchstens so viel kälter
 OFFEN_RUHE_MIN = 10            # danach so lange nichts lernen
+VERMUTET_PAUSE_MIN = 10        # FE-0025: so lange pausiert die Heizung bei „Tür vermutlich offen“, dann neuer Versuch
 
 
 # ---------------------------------------------------------------------------------------------------------- Regeln
@@ -187,6 +194,7 @@ def _iso(zeit: datetime) -> str:
 def takt(
     stand: dict[str, Any], *, jetzt: datetime, heizt: bool, innen: float | None, soll: float, aussen: float | None,
     art: str, regelt: bool, anzahl: int = 1, tuer_offen: bool = False, hand: bool = False, kint_ok: bool = True,
+    an: bool | None = None, vermutet: bool | None = None,
 ) -> dict[str, Any]:
     """Eine Minute Lernen: Ein-Zeiten mitschreiben, Nachlauf nach dem Ausschalten beobachten, K-Werte anpassen.
 
@@ -195,13 +203,15 @@ def takt(
     gelernt. `anzahl`: so viele Heizkörper ziehen gerade Strom (Aufheizen je Anzahl). `tuer_offen`: Türkontakt offen.
     `hand`: von Hand geschaltet – dann wird nichts gelernt (Szenarien, Herbert 01.10.2026). `kint_ok`: False, wenn
     nicht die Regelung ausschaltet (z. B. Ende von „Schnell aufheizen“) – dann kein K innen aus diesem Ausschalten.
+    `an`: ein Heizkörper ist eingeschaltet (ohne Angabe: `heizt`). `vermutet`: „Tür vermutlich offen“, wenn der Aufrufer
+    es schon erkannt hat (FE-0025: auch ohne Lernen); ohne Angabe rechnet `takt` es selbst aus dem Verlauf.
     Gibt den neuen Stand zurück (der alte bleibt unverändert).
     """
     s = {**neuer_stand(), **stand}
     # Tür offen (WU-0009): Verlauf der letzten Minuten, Erkennung am Temperaturabfall, Ruhezeit
-    grenze_v = jetzt.timestamp() - (OFFEN_FENSTER_MIN + 1) * 60
-    s["verlauf"] = [v for v in s["verlauf"] if _zeit(v[0]).timestamp() > grenze_v] + [[_iso(jetzt), innen, aussen, heizt]]
-    vermutet = tuer_vermutet(s["verlauf"], jetzt)
+    s["verlauf"] = tuer_verlauf(s["verlauf"], jetzt=jetzt, innen=innen, aussen=aussen, heizt=heizt, an=an)
+    if vermutet is None:
+        vermutet = tuer_vermutet(s["verlauf"], jetzt)
     if tuer_offen or vermutet:
         if s["offen"] is None:
             s["offen"] = {"art": "kontakt" if tuer_offen else "vermutet", "seit": _iso(jetzt)}
@@ -268,18 +278,36 @@ def takt(
     return s
 
 
+def tuer_verlauf(
+    verlauf: list[list[Any]], *, jetzt: datetime, innen: float | None, aussen: float | None, heizt: bool, an: bool | None = None,
+) -> list[list[Any]]:
+    """Verlauf für `tuer_vermutet` um die Minute `jetzt` fortschreiben: `[Zeit, innen, außen, zieht Strom, ist an]`,
+    nur die letzten `OFFEN_LANG_MIN` Minuten. `an` ohne Angabe: wie `heizt`."""
+    grenze = jetzt.timestamp() - (OFFEN_LANG_MIN + 1) * 60
+    return [v for v in verlauf if _zeit(v[0]).timestamp() > grenze] + [[_iso(jetzt), innen, aussen, heizt, heizt if an is None else an]]
+
+
 def tuer_vermutet(verlauf: list[list[Any]], jetzt: datetime) -> bool:
-    """Raum in den letzten `OFFEN_FENSTER_MIN` Minuten durchgehend geheizt und dabei um `OFFEN_ABFALL` °C kälter,
-    draußen höchstens `OFFEN_AUSSEN` °C kälter (ohne Außenwert: nur der Raum)."""
-    fenster = [v for v in verlauf if (jetzt - _zeit(v[0])).total_seconds() / 60 <= OFFEN_FENSTER_MIN]
-    if len(fenster) < 2 or (jetzt - _zeit(fenster[0][0])).total_seconds() / 60 < OFFEN_FENSTER_MIN - 1:
+    """Raum in den letzten `OFFEN_FENSTER_MIN` Minuten beim Heizen um `OFFEN_ABFALL` °C kälter, draußen höchstens
+    `OFFEN_AUSSEN` °C kälter – oder in `OFFEN_LANG_MIN` Minuten um `OFFEN_LANG_ABFALL` °C, draußen höchstens
+    `OFFEN_LANG_AUSSEN` (ohne Außenwert: nur der Raum). Beim Heizen: jede Minute an, mindestens einmal Strom (FE-0025)."""
+    return (_kaelter_beim_heizen(verlauf, jetzt, OFFEN_FENSTER_MIN, OFFEN_ABFALL, OFFEN_AUSSEN)
+            or _kaelter_beim_heizen(verlauf, jetzt, OFFEN_LANG_MIN, OFFEN_LANG_ABFALL, OFFEN_LANG_AUSSEN))
+
+
+def _kaelter_beim_heizen(verlauf: list[list[Any]], jetzt: datetime, minuten: int, abfall: float, aussen_max: float) -> bool:
+    fenster = [v for v in verlauf if (jetzt - _zeit(v[0])).total_seconds() / 60 <= minuten]
+    if len(fenster) < 2 or (jetzt - _zeit(fenster[0][0])).total_seconds() / 60 < minuten - 1:
         return False
-    if not all(v[3] for v in fenster) or fenster[0][1] is None or fenster[-1][1] is None:
+    # Einträge vor FE-0025 haben kein „an“ – dann gilt „zieht Strom“
+    if not all(v[4] if len(v) > 4 else v[3] for v in fenster) or not any(v[3] for v in fenster):
+        return False
+    if fenster[0][1] is None or fenster[-1][1] is None:
         return False
     innen_ab = fenster[0][1] - fenster[-1][1]
     aussen = [v[2] for v in fenster if v[2] is not None]
     aussen_ab = aussen[0] - aussen[-1] if len(aussen) >= 2 else 0.0
-    return innen_ab >= OFFEN_ABFALL and aussen_ab <= OFFEN_AUSSEN
+    return innen_ab >= abfall and aussen_ab <= aussen_max
 
 
 def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None) -> dict[str, Any]:

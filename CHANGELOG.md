@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.140] – 2026-10-27
+
+- „Tür vermutlich offen“ erkennt jetzt auch Radiatoren mit eigenem Thermostat und pausiert die Heizung (FE-0025).
+  Bisher musste der Heizkörper jede der letzten 10 Minuten Strom ziehen; ein Ölradiator, der selbst taktet (etwa 3 min
+  an, 4 min aus), erfüllte das nie – am 06.10. kühlte 004_C_MAN bei offener Tür von 19,1 auf 16,5 °C ab, ohne Hinweis.
+  Jetzt zählt „Plug an“ jede Minute und mindestens einmal Strom; dazu prüft ein zweites, längeres Fenster
+  (30 min, ≥ 0,6 °C kälter) den langsamen Abfall. Die Erkennung läuft für jeden Container mit Fühler, auch ohne
+  lernende Regelung. Bei Verdacht pausiert die Heizung 10 min (Grund „Tür offen“, Eintrag im Protokoll) und versucht es
+  danach neu; vorher schützte die Vermutung nur das Lernen. Von Hand geschaltet geht die Hand vor (anders als beim
+  Türkontakt, weil es nur eine Vermutung ist).
+
 ## [0.8.139] – 2026-10-19
 
 - Datenbank: Ein einzelner schlechter Schreibvorgang hält das Mitschreiben nicht mehr an. Nach dem Absturz am 16.10.

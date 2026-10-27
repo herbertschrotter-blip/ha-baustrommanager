@@ -549,10 +549,10 @@ async def test_tuer_vermutet_offen_dann_weiter_lernen(hass: HomeAssistant, freez
         await uhr.minute(round(16.2 - 0.04 * i, 2))
     stand = st.lz["lernen"][C1]
     assert stand["offen"]["art"] == "vermutet" and stand["auf"] is None and stand["aufheizen"] == {}
-    assert _an(hass, "switch.hk1")
+    assert not _an(hass, "switch.hk1")                    # FE-0025: Heizung pausiert 10 min
     # Tür zu: Raum wird wieder wärmer
     temp = 15.8
-    for _ in range(12):
+    for _ in range(22):   # FE-0025: 10 min Pause, danach 10 min Ruhe
         temp = round(temp + 0.05, 2)
         await uhr.minute(temp)
     stand = st.lz["lernen"][C1]

@@ -8,6 +8,7 @@ from logik.lernen import (
     KEXT_START,
     KINT_START,
     AUF_N,
+    OFFEN_LANG_MIN,
     OFFEN_RUHE_MIN,
     STOPP_AB_MIN,
     Tpi,
@@ -20,6 +21,7 @@ from logik.lernen import (
     nachlauf_erwartet,
     neuer_stand,
     takt,
+    tuer_verlauf,
     tuer_vermutet,
     tpi_anteil,
     tpi_ein,
@@ -205,6 +207,33 @@ def test_draussen_kaelter_ist_keine_offene_tuer():
     assert tuer_vermutet(v2, T0 + timedelta(minutes=10)) is True
     v3 = [[x[0], x[1], 5.0, i != 4] for i, x in enumerate(v)]
     assert tuer_vermutet(v3, T0 + timedelta(minutes=10)) is False                      # nicht durchgehend geheizt
+
+
+def test_tuer_vermutet_bei_taktendem_radiator():
+    """FE-0025: Plug durchgehend an, der Radiator taktet mit eigenem Thermostat (3 min Strom, 4 min nicht), der Raum
+    fällt um 0,27 °C je 10 min (zu wenig für 10 min) – über 30 min ist die Tür vermutlich offen."""
+    t, v = T0, []
+    for i in range(31):
+        v = tuer_verlauf(v, jetzt=t, innen=19.1 - 0.027 * i, aussen=5.0, heizt=i % 7 < 3, an=True)
+        t += timedelta(minutes=1)
+    jetzt = t - timedelta(minutes=1)
+    assert tuer_vermutet(v, jetzt) is True
+    assert len(v) == OFFEN_LANG_MIN + 1                                                # nur die letzten 30 min
+    # Plug eine Minute aus (Pause der Regelung): kein Heizen über das ganze Fenster → keine Vermutung
+    assert tuer_vermutet([x[:4] + [x[4] and i != 15] for i, x in enumerate(v)], jetzt) is False
+    # Radiator zieht gar keinen Strom (Thermostat zufrieden) → keine Vermutung
+    assert tuer_vermutet([x[:3] + [False, True] for x in v], jetzt) is False
+    # draußen 1 °C kälter → keine Vermutung
+    assert tuer_vermutet([[x[0], x[1], 5.0 - 0.033 * i, x[3], x[4]] for i, x in enumerate(v)], jetzt) is False
+
+
+def test_vermutung_vom_aufrufer():
+    """FE-0025: die Vermutung kommt vom Aufrufer (auch ohne Lernen erkannt) – takt übernimmt sie."""
+    s, t = _heizen(neuer_stand(), T0, [16.0 + 0.05 * i for i in range(10)])
+    s = takt(s, jetzt=t, heizt=True, innen=16.5, soll=20.0, aussen=5.0, art="oel", regelt=True, vermutet=True)
+    assert s["offen"]["art"] == "vermutet" and s["auf"] is None
+    s2 = takt(neuer_stand(), jetzt=t, heizt=True, innen=16.5, soll=20.0, aussen=5.0, art="oel", regelt=True, vermutet=False)
+    assert s2["offen"] is None
 
 
 def test_tuerkontakt_verwirft_nachlauf_und_zyklus():

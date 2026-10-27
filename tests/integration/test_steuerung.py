@@ -977,7 +977,8 @@ async def test_zusatz_heizkoerper_nur_bei_bedarf(hass: HomeAssistant, freezer, s
 
 async def test_lernen_tuer_offen(hass: HomeAssistant, baustelle, freezer, shellys) -> None:
     """WU-0009: kühlt der Raum beim Heizen ab (draußen nicht kälter), ist die Tür vermutlich offen – Lernen pausiert,
-    Hinweis im Protokoll und für die Seite; ein offener Türkontakt schützt das Lernen ebenso."""
+    Hinweis im Protokoll und für die Seite, die Heizung pausiert kurz (FE-0025); ein offener Türkontakt schützt das
+    Lernen ebenso."""
     st = baustelle.runtime_data
     st.e["staffel"]["an"] = False
     st.einstellungen.bereich(C1)["soll"] = 20.0
@@ -1005,7 +1006,7 @@ async def test_lernen_tuer_offen(hass: HomeAssistant, baustelle, freezer, shelly
     assert stand["offen"]["art"] == "vermutet" and stand["auf"] is None
     assert any("Tür vermutlich offen" in p[3] for p in st.e["protokoll"])
     assert struktur(hass, baustelle)["laufzeit"]["container"][C1]["lernen"]["offen"]["art"] == "vermutet"
-    assert hass.states.get("switch.hk1").state == "on"         # die Heizung läuft weiter
+    assert hass.states.get("switch.hk1").state == "off"        # FE-0025: die Heizung pausiert 10 min
     # Türkontakt
     st.lz["lernen"].pop(C1)
     st.einstellungen.bereich(C1)["tuer"] = "binary_sensor.tuer_c1"

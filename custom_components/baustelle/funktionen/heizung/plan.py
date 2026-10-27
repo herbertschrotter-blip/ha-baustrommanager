@@ -200,6 +200,12 @@ def soll(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> SollJeBereich:
             if bid in hz.tuer_trotzdem:
                 hz.tuer_trotzdem.discard(bid)
                 hz.trotzdem_merken()
+            if (bis := hz._vermutet_bis.get(bid)) is not None:   # FE-0025: Tür vermutlich offen – kurz pausieren
+                hand = any(g.id in st.lz["hand"] for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER)
+                if jetzt < bis and not hand:   # von Hand geschaltet: nur eine Vermutung, die Hand geht vor
+                    tuer_min = float(h["tuer_pause_min"])
+                else:
+                    del hz._vermutet_bis[bid]
         fenster = hz.termin_fenster(bid)
         aktive = [f for f in fenster if im_fenster(bedarf_fenster([(f[0], f[1])], int(h["vorheizen_min"])), jetzt)]
         bedarf_aktiv = hz.bis("bedarf_bis", bid, jetzt) is not None or bool(aktive) or jetzt_bis is not None

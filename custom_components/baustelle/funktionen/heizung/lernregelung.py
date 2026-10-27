@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from homeassistant.const import STATE_ON
 from homeassistant.util import dt as dt_util
 
 from ...const import TYP_OELRADIATOR, ROLLE_HEIZKOERPER
@@ -89,6 +90,32 @@ def _tpi(hz: Heizung, info: BereichInfo, e: Mapping[str, Any], temp: float | Non
     return t
 
 
+def _tuer_vermuten(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
+    """Einmal je Minute, für jeden Container mit Fühler (FE-0025, auch ohne Lernen): kühlt der Raum beim Heizen ab,
+    obwohl es draußen kaum kälter wird, ist eine Tür oder ein Fenster vermutlich offen – die Heizung pausiert dann
+    `lernen.VERMUTET_PAUSE_MIN` Minuten (plan.py) und versucht es danach neu. Von Hand geschaltet: keine Vermutung."""
+    for info in hz.bereiche():
+        heizer = [g for g in hz.st.geraete_in(info.id) if g.rolle == ROLLE_HEIZKOERPER]
+        if not info.fuehler or not heizer or any(g.id in hz.st.lz["hand"] for g in heizer):
+            hz._tuer_verlauf.pop(info.id, None)
+            hz._vermutet.pop(info.id, None)
+            hz._vermutet_bis.pop(info.id, None)   # von Hand geschaltet: auch keine laufende Pause
+            continue
+        verlauf = hz._tuer_verlauf.get(info.id, [])
+        if verlauf and zeit(verlauf[-1][0]) == jetzt.replace(second=0, microsecond=0):
+            continue   # diese Minute schon gesehen
+        an = any((z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON for g in heizer)
+        verlauf = lernen.tuer_verlauf(verlauf, jetzt=jetzt.replace(second=0, microsecond=0), innen=hz.st.temperatur(info.fuehler),
+                                      aussen=wetter.aussen, heizt=any(hz._zieht_strom(g) for g in heizer), an=an)
+        hz._tuer_verlauf[info.id] = verlauf
+        vorher, vermutet = hz._vermutet.get(info.id, False), lernen.tuer_vermutet(verlauf, jetzt.replace(second=0, microsecond=0))
+        hz._vermutet[info.id] = vermutet
+        if vermutet and not vorher and hz.st.kontakt_offen_seit(info.id) is None:
+            hz._vermutet_bis[info.id] = jetzt + timedelta(minutes=lernen.VERMUTET_PAUSE_MIN)
+            hz.st.protokoll("warnung", info.id, "Tür vermutlich offen – der Raum kühlt beim Heizen ab, Heizung "
+                                                f"pausiert {lernen.VERMUTET_PAUSE_MIN} min")
+
+
 def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
     """Einmal je Minute: Ein-Zeiten, Nachlauf nach dem Ausschalten und K-Werte fortschreiben."""
     minute = int(jetzt.timestamp() // 60)
@@ -112,11 +139,12 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
             hand=any(g.id in hz.st.lz["hand"] for g in heizer),
             kint_ok=hz._grund_beim_heizen.get(info.id) != SollGrund.BOOST,   # Grund der letzten Heizminute
             soll=hz.soll_temperatur(info.id), aussen=wetter.aussen, art=hz._lern_art(info.id), regelt=regelt,
+            an=any((z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON for g in heizer),
+            # FE-0025: erkannt in _tuer_vermuten (Warnung steht dort); während der Pause bleibt die Vermutung stehen
+            vermutet=hz._vermutet.get(info.id, False) or ((bis := hz._vermutet_bis.get(info.id)) is not None and jetzt < bis),
         )
         vorher, jetzt_offen = (alt.get("offen") or {}).get("art"), (neu.get("offen") or {}).get("art")
-        if jetzt_offen == "vermutet" and vorher != "vermutet":   # WU-0009
-            hz.st.protokoll("warnung", info.id, "Tür vermutlich offen – der Raum kühlt beim Heizen ab, die lernende Regelung lernt so lange nicht")
-        elif vorher == "vermutet" and jetzt_offen is None:
+        if vorher == "vermutet" and jetzt_offen is None:   # WU-0009
             hz.st.protokoll("ok", info.id, "Raum wird wieder wärmer – die lernende Regelung lernt weiter")
         if neu != alt:
             hz.lern_staende[info.id] = neu

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 def nach_schalten(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
     """Einmal am Morgen die Wetter-Entscheidung ins Protokoll (Mockup „05:00 wetter …“), dazu jeder Wechsel."""
     hz._aussen_merken(jetzt, wetter.aussen)   # Soll gleitend: Tagesmittel außen
+    hz._tuer_vermuten(jetzt, wetter)   # FE-0025: vor dem Lernen, das die Vermutung übernimmt
     hz._lernen(jetzt, wetter)
     st = hz.st
     zu_warm = hz.zu_warm(wetter)

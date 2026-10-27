@@ -590,36 +590,79 @@ async def test_lernen_trotzdem_heizen_lernt_nicht(hass: HomeAssistant, baustelle
 
 async def test_tuer_vermutet_ohne_kontakt(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
     """Ohne Kontakt: Raum fällt beim Heizen um ≥ 0,3 °C in 10 min, draußen konstant → „vermutet“, Protokoll-Warnung,
-    Heizung läuft weiter (keine Pause, keine Nachricht); Raum wieder wärmer → nach der Ruhe „lernt weiter“."""
+    die Heizung pausiert 10 min (FE-0025, keine Nachricht) und versucht es danach neu; Raum wieder wärmer → nach der
+    Ruhe „lernt weiter“."""
     st = baustelle.runtime_data
     await _lernend(hass, freezer, st)
     hass.states.async_set("sensor.temp_c1", "16.0")
     await _start(hass, freezer, st, tuer=None)
     minute = _minuten(hass, freezer, st, "10:00:00")
-    for i in range(12):
+    for i in range(13):
         await minute(16.5 - 0.04 * i)
     stand = st.lz["lernen"][C1]
     assert stand["offen"]["art"] == "vermutet"
-    assert "Tür vermutlich offen – der Raum kühlt beim Heizen ab, die lernende Regelung lernt so lange nicht" in _texte(st, "warnung")
-    assert _an(hass, "switch.hk1") and st.daten.grund[C1] == "arbeitszeit" and nachrichten == []
+    assert "Tür vermutlich offen – der Raum kühlt beim Heizen ab, Heizung pausiert 10 min" in _texte(st, "warnung")
+    assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "tuer_offen" and nachrichten == []
     assert _tuer_warnungen(st) == []
+    for _ in range(9):    # während der Pause: Vermutung bleibt, kein „lernt weiter“
+        await minute(16.0)
+    assert st.lz["lernen"][C1]["offen"]["art"] == "vermutet" and "Raum wird wieder wärmer – die lernende Regelung lernt weiter" not in _texte(st, "ok")
+    await minute(16.0)    # Pause vorbei: heizt wieder
+    assert _an(hass, "switch.hk1") and st.daten.grund[C1] == "arbeitszeit"
     for i in range(25):
         await minute(16.2 + 0.05 * i)
     assert st.lz["lernen"][C1]["offen"] is None
     assert "Raum wird wieder wärmer – die lernende Regelung lernt weiter" in _texte(st, "ok")
+    assert _texte(st, "warnung").count("Tür vermutlich offen – der Raum kühlt beim Heizen ab, Heizung pausiert 10 min") == 1
+
+
+async def test_tuer_vermutet_ohne_lernen_bei_taktendem_radiator(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
+    """FE-0025: Lernen aus, Plug durchgehend an, der Radiator taktet selbst (3 min Strom, 4 min nicht), der Raum wird
+    in 30 min 0,8 °C kälter → Tür vermutlich offen, Heizung pausiert."""
+    st = baustelle.runtime_data
+    st.einstellungen.bereich(C1)["soll"] = 20.0
+    hass.states.async_set("sensor.aussen", "5.0")
+    hass.states.async_set("sensor.temp_c1", "19.1")
+    await _start(hass, freezer, st, tuer=None)
+    minute = _minuten(hass, freezer, st, "10:00:00")
+    for i in range(33):
+        hass.states.async_set("sensor.hk1_power", "2300" if i % 7 < 3 else "0")
+        await minute(19.1 - 0.027 * i)
+        if i < 29:
+            assert _an(hass, "switch.hk1"), i
+    assert "Tür vermutlich offen – der Raum kühlt beim Heizen ab, Heizung pausiert 10 min" in _texte(st, "warnung")
+    assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "tuer_offen"
 
 
 async def test_tuer_vermutet_mit_geschlossenem_kontakt(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
-    """Kontakt zu (z. B. Fenster offen): die Vermutung greift trotzdem (art „vermutet“, nicht „kontakt“)."""
+    """Kontakt zu (z. B. Fenster ohne Sensor offen): die Vermutung greift trotzdem (art „vermutet“, nicht „kontakt“)
+    und pausiert die Heizung (FE-0025)."""
     st = baustelle.runtime_data
     await _lernend(hass, freezer, st)
     hass.states.async_set("sensor.temp_c1", "16.0")
     await _start(hass, freezer, st)
     minute = _minuten(hass, freezer, st, "10:00:00")
-    for i in range(12):
+    for i in range(13):
         await minute(16.5 - 0.04 * i)
     assert not _an(hass, TUER1)
-    assert st.lz["lernen"][C1]["offen"]["art"] == "vermutet" and _an(hass, "switch.hk1")
+    assert st.lz["lernen"][C1]["offen"]["art"] == "vermutet" and not _an(hass, "switch.hk1")
+
+
+async def test_hand_beendet_vermutet_pause(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
+    """FE-0025: wird während der Pause „Tür vermutlich offen“ von Hand geschaltet, endet die Pause – anders als beim
+    Türkontakt bleibt die Hand (nur eine Vermutung)."""
+    st = baustelle.runtime_data
+    await _lernend(hass, freezer, st)
+    hass.states.async_set("sensor.temp_c1", "16.0")
+    await _start(hass, freezer, st, tuer=None)
+    minute = _minuten(hass, freezer, st, "10:00:00")
+    for i in range(13):
+        await minute(16.5 - 0.04 * i)
+    hz = Heizung.von(st)
+    assert C1 in hz._vermutet_bis
+    st.lz["hand"][HK1] = dt_util.now().isoformat()
+    await minute(16.0)
+    assert C1 not in hz._vermutet_bis and HK1 in st.lz["hand"] and st.daten.grund[C1] != "tuer_offen"
 
 
 async def test_draussen_kaelter_keine_vermutung(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:

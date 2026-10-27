@@ -255,7 +255,9 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   intern), Außenwert weg: Wetter-Entität, sonst der letzte bis 6 h. Tür offen pausiert nur, wenn geheizt würde oder ein
   Heizkörper läuft; sonst Warnung `tuer_offen` mit `werte.pausiert = false` (Hinweis ohne „Trotzdem heizen“).
 - Tür offen schützt das Lernen (WU-0009): `lernen.offen` = `{art: "vermutet"|"kontakt", seit}` oder `null`, `lernen.ruhe_bis`
-  (bis dahin keine neue Messung). Vermutet: beim durchgehenden Heizen in 10 min ≥ 0,3 °C kälter, außen ≤ 0,2 °C kälter.
+  (bis dahin keine neue Messung). Vermutet: beim Heizen in 10 min ≥ 0,3 °C kälter (außen ≤ 0,2 °C kälter) oder in
+  30 min ≥ 0,6 °C (außen ≤ 0,4 °C); „beim Heizen“ = Plug jede Minute an, mindestens einmal Strom (FE-0025, taktende
+  Radiatoren). Erkannt wird auch ohne Lernen; die Heizung pausiert dann 10 min (Grund `tuer_offen`) und versucht es neu.
 - Gerät aktiv/inaktiv (WU-0004): `baustelle/aktion` `aktiv` mit `geraet` und `an` (bool) – ab 0.8.116 dasselbe wie
   `baustelle/geraet` Status aktiv bzw. inaktiv (§11). Nicht aktiv: einmal ausschalten, danach schaltet die Automatik es
   nicht, es zählt nicht in der Staffelung, keine Warnungen; gespeichert unter `einstellungen.geraete.<id>.status` (bis
