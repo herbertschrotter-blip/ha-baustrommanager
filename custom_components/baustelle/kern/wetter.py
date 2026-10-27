@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 from ..const import CONF_REGEN_SENSOR, CONF_TEMP_SENSOR, CONF_WETTER
 from ..funktionen.basis import ZAEHLER_SPEICHERN_S, zahl as _zahl
 from ..logik import regelung as regel_logik
+from ..logik.regen import regen_des_tages, regen_vorhersage, stunden_merken
 from ..logik.arbeitszeit import WetterTag
 from .typen import WetterWerte
 
@@ -38,7 +39,7 @@ async def _async_prognose(st: Steuerung, _now: datetime | None = None) -> None:
 
 async def _async_prognose_holen(st: Steuerung, wetter: str) -> None:
     jetzt = dt_util.now()
-    tage: dict[date, dict[str, float | None]] = {}
+    tage: dict[date, dict[str, Any]] = {}
     for art in ("daily", "hourly"):
         try:
             antwort = await st.hass.services.async_call(
@@ -59,19 +60,26 @@ async def _async_prognose_holen(st: Steuerung, wetter: str) -> None:
         st._wetter_tage_merken(tage, jetzt)
 
 
-def _wetter_tage_merken(st: Steuerung, tage: dict[date, dict[str, float | None]], jetzt: datetime) -> None:
-    """Vorhersage je Tag im Store merken; vergangene Morgen/Regen von heute bleiben (die Vorhersage vergisst sie)."""
+def _wetter_tage_merken(st: Steuerung, tage: dict[date, dict[str, Any]], jetzt: datetime) -> None:
+    """Vorhersage je Tag im Store merken; vergangene Morgen und Höchstwerte von heute bleiben (die Vorhersage vergisst
+    sie). Regen je Stunde: vergangene Stunden bleiben, kommende nimmt die neueste Vorhersage (FE-0026, logik/regen)."""
     gemerkt = st.lz.setdefault("wetter_tage", {})
     heute = jetzt.date()
     for tag, werte in tage.items():
         alt = gemerkt.setdefault(tag.isoformat(), {})
         for key, wert in werte.items():
+            if key in ("regen", "regen_h"):
+                continue
             if tag == heute and alt.get(key) is not None:
                 if key == "frueh" and jetzt.hour >= 8:
                     continue
-                if key in ("regen", "max"):
+                if key == "max":
                     wert = max(wert, alt[key])
             alt[key] = wert
+        if werte.get("regen_h") is not None:
+            alt["regen_h"] = stunden_merken(alt.get("regen_h"), werte["regen_h"], jetzt)
+        if "regen" in werte or alt.get("regen_h"):
+            alt["regen"] = regen_vorhersage(alt.get("regen_h"), werte.get("regen"))
     grenze = (heute - timedelta(days=10)).isoformat()
     for iso in [k for k in gemerkt if k < grenze]:
         del gemerkt[iso]
@@ -102,10 +110,10 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     if regen is not None:
         # gemessen (Wetterstation): für „nach Regen früher“ am nächsten Tag merken
         gemerkt = st.lz.setdefault("wetter_tage", {}).setdefault(heute.isoformat(), {})
-        if gemerkt.get("regen") is None or regen > gemerkt["regen"]:
-            gemerkt["regen"] = regen
+        if gemerkt.get("regen_mess") is None or regen > gemerkt["regen_mess"]:
+            gemerkt["regen_mess"] = regen
     else:
-        regen = tag.get("regen")
+        regen = regen_des_tages(tag)
     aussen_max = tag.get("max")
     if aussen is not None and o.get(CONF_TEMP_SENSOR) and _zahl(st.hass.states.get(o[CONF_TEMP_SENSOR])) is not None:
         # gemessener Tageshöchstwert (Szenarien): ein warmer Mittag bleibt bis Mitternacht „zu warm“
@@ -118,7 +126,7 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     frueh = st._wetter_tag(heute if jetzt.hour < 8 else heute + timedelta(days=1)).get("frueh")
     return WetterWerte(
         aussen=aussen, aussen_max=aussen_max, frueh=frueh,
-        regen_vortag=st._wetter_tag(heute - timedelta(days=1)).get("regen"),
+        regen_vortag=regen_des_tages(st._wetter_tag(heute - timedelta(days=1))),
         regen_heute=regen, zustand=zustand,
     )
 
@@ -128,8 +136,8 @@ def wetter_tag_plan(st: Steuerung, tag: date) -> WetterTag:
     heute = st._wetter_tag(tag)
     return WetterTag(
         frueh_min_temp=heute.get("frueh"),
-        regen_vortag_mm=st._wetter_tag(tag - timedelta(days=1)).get("regen"),
-        regen_heute_mm=heute.get("regen"),
+        regen_vortag_mm=regen_des_tages(st._wetter_tag(tag - timedelta(days=1))),   # FE-0026: gemessen vor Vorhersage
+        regen_heute_mm=regen_des_tages(heute),
     )
 
 
@@ -151,10 +159,10 @@ def _stunden(liste: list[dict[str, Any]], jetzt: datetime) -> dict[str, float]:
     return aus
 
 
-def _prognose_je_tag(liste: list[dict[str, Any]], art: str) -> dict[date, dict[str, float | None]]:
-    """Je Tag: tiefster Wert 4–8 Uhr („frueh“), Tageshöchstwert („max“), Niederschlag („regen“), Tagesmittel („mittel“:
-    stündlich das Mittel der Stunden, täglich (Höchst + Tiefst) ÷ 2)."""
-    tage: dict[date, dict[str, float | None]] = {}
+def _prognose_je_tag(liste: list[dict[str, Any]], art: str) -> dict[date, dict[str, Any]]:
+    """Je Tag: tiefster Wert 4–8 Uhr („frueh“), Tageshöchstwert („max“), Niederschlag („regen“; stündlich dazu je
+    Stunde „regen_h“), Tagesmittel („mittel“: stündlich das Mittel der Stunden, täglich (Höchst + Tiefst) ÷ 2)."""
+    tage: dict[date, dict[str, Any]] = {}
     stunden: dict[date, list[float]] = {}
     for eintrag in liste:
         zeit = dt_util.parse_datetime(str(eintrag.get("datetime", "")))
@@ -172,6 +180,8 @@ def _prognose_je_tag(liste: list[dict[str, Any]], art: str) -> dict[date, dict[s
                     tag["frueh"] = temp if tag["frueh"] is None else min(tag["frueh"], temp)
             if regen is not None:
                 tag["regen"] = (tag["regen"] or 0.0) + float(regen)
+                stunde = zeit.replace(minute=0, second=0, microsecond=0).isoformat()
+                tag.setdefault("regen_h", {})[stunde] = tag.get("regen_h", {}).get(stunde, 0.0) + float(regen)
         else:
             tag["max"] = temp
             tag["frueh"] = eintrag.get("templow")

@@ -207,7 +207,9 @@ Entscheidungen aus Stufe 2 (Integration, 30.09.2026, im Sinne des Mockups):
   früher“ startet 30 min früher (Store `laufzeit.frueher`), „Morgen nicht heizen“ trägt eine Ausnahme „frei“ ein.
 - Wetter je Tag (Frühwert 4–8 Uhr, Höchstwert, Regen) aus `weather.get_forecasts` wird im Store gemerkt
   (`laufzeit.wetter_tage`), damit „nach Regen früher“ am Folgetag und der Frühstart nach 8 Uhr noch stimmen; gemessener
-  Regen (Wetterstation) geht vor.
+  Regen (Wetterstation, `regen_mess`) geht vor. Regen heute (FE-0026, `logik/regen.py`): je Stunde gemerkt
+  (`regen_h`) – vergangene Stunden bleiben, die laufende und kommende nimmt die neueste Vorhersage; nicht mehr der
+  höchste Wert des Tages.
 - Standardwerte der Einstellungen wie Mockup; abweichend: Bericht per Mail aus (ohne Adresse und Mail-Dienst), eine erste
   Arbeitszeit „Arbeitszeit“ ab dem Tag der Umstellung (Mo–Do 07:00–16:30, Fr 07:00–12:30 wie „Herbst 2026“), Empfänger
   aus den bisherigen Optionen übernommen.

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.141] – 2026-10-27
+
+- Der Heizplan bleibt nicht mehr den ganzen Tag bei „Kleidung trocknen“, wenn die Regenvorhersage sinkt (FE-0026). Am
+  08.10. sagte die Vorhersage morgens 6,8 mm, gefallen sind nur 0,3 mm in der Früh – trotzdem heizte der Plan 45 min
+  länger und am Tag danach 15 min früher, weil für heute immer der höchste je vorhergesagte Wert galt. Jetzt merkt sich
+  die Integration den Regen je Stunde: Vergangene Stunden bleiben, wie sie zuletzt vorhergesagt waren, die laufende und
+  alle kommenden nimmt die neueste Vorhersage. Ein Regensensor (gemessen) geht vor jeder Vorhersage, wie im Bauplan
+  vorgesehen – bisher gewann auch gegen ihn die höhere Vorhersage.
+
 ## [0.8.140] – 2026-10-27
 
 - „Tür vermutlich offen“ erkennt jetzt auch Radiatoren mit eigenem Thermostat und pausiert die Heizung (FE-0025).

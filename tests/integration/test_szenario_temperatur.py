@@ -426,7 +426,7 @@ async def test_regen_gestern_frueher_nur_mit_trocknen(hass: HomeAssistant, freez
     st.einstellungen.bereich(C1)["trocknen"] = True
     hass.states.async_set("sensor.regen", "6")                 # gemessen: wird für morgen gemerkt
     await _automatik(hass, st)
-    assert st.lz["wetter_tage"]["2026-09-29"]["regen"] == 6.0
+    assert st.lz["wetter_tage"]["2026-09-29"]["regen_mess"] == 6.0
     ab = _lz(hass, entry)["abschnitte"]
     assert ab[C1][MI][0] == [360, 375, "fruehstart"]
     assert ab[C2][MI][0] == [375, 420, "vorheizen"]
@@ -455,11 +455,40 @@ async def test_regen_heute_kleidung_trocknen_laenger(hass: HomeAssistant, freeze
     assert not _an(hass, "switch.hk1")
 
 
+async def test_regen_vorhersage_wird_kleiner(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """FE-0026: Morgens sagt die Vorhersage 6,8 mm für heute, mittags nur noch 0,5 mm für den Rest des Tages – gilt
+    die neueste Vorhersage für die kommenden Stunden (plus den schon vorhergesagten Morgen), kein „trocknen“ mehr.
+    Ein gemessener Wert geht vor jeder Vorhersage."""
+    entry, st = await _neu(hass, freezer, shellys)
+    st.einstellungen.bereich(C1)["trocknen"] = True
+    hass.states.async_remove("sensor.regen")                     # ohne Regensensor: nur die Vorhersage
+    st.lz["wetter_tage"].get("2026-09-29", {}).pop("regen_mess", None)   # die 0 mm vom Start vergessen
+    heute = dt_util.parse_datetime("2026-09-29T12:00:00+02:00").date()
+    def h(uhr: str) -> str:
+        return f"2026-09-29T{uhr}:00+02:00"
+    morgens = dt_util.parse_datetime("2026-09-29T07:00:00+02:00")
+    st._wetter_tage_merken({heute: {"regen": 6.8, "regen_h": {h("07:00"): 0.2, h("08:00"): 0.1, h("13:00"): 3.0,
+                                                             h("14:00"): 3.5}}}, morgens)
+    assert st.wetter_tag_plan(heute).regen_heute_mm == 6.8
+    mittag = dt_util.parse_datetime("2026-09-29T12:10:00+02:00")
+    st._wetter_tage_merken({heute: {"regen": 0.5, "regen_h": {h("12:00"): 0.0, h("13:00"): 0.3, h("14:00"): 0.2}}}, mittag)
+    assert st.wetter_tag_plan(heute).regen_heute_mm == 0.8        # 0,2 + 0,1 (Morgen) + 0,5 (Rest)
+    await _automatik(hass, st)
+    plan = st.funktion("heizung").plan_bereich(heute, C1)
+    assert "trocknen" not in plan.gruende
+    # gemessen 0,4 mm, die Vorhersage sagt wieder 6,8 mm: der Messwert gilt
+    hass.states.async_set("sensor.regen", "0.4")
+    st._wetter_tage_merken({heute: {"regen": 6.8, "regen_h": {h("13:00"): 3.3, h("14:00"): 3.5}}}, mittag)
+    await _automatik(hass, st)
+    assert st.wetter_tag_plan(heute).regen_heute_mm == 0.4
+    assert "trocknen" not in st.funktion("heizung").plan_bereich(heute, C1).gruende
+
+
 async def test_summe_der_verlaengerungen(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
     """AN-0003: Kälte (30) + Regen gestern (15) + „Noch früher“ (30) zählen zusammen → ab 05:00; Regen heute +45 min."""
     entry, st = await _neu(hass, freezer, shellys)
     st.einstellungen.bereich(C1)["trocknen"] = True
-    st.lz["wetter_tage"] = {"2026-09-29": {"regen": 6.0}, MI: {"frueh": -4.0, "regen": 6.0}}
+    st.lz["wetter_tage"] = {"2026-09-29": {"regen_mess": 6.0}, MI: {"frueh": -4.0, "regen": 6.0}}   # gestern gemessen
     st.lz.setdefault("frueher", {})[MI] = 30
     await _automatik(hass, st)
     ab = _lz(hass, entry)["abschnitte"]
