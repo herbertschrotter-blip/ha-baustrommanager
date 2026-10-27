@@ -67,6 +67,7 @@ Entscheidung: jetzt, auf main) ohnehin viel ändert, wird erst alles Große geba
 ## Etappe G – Stabilisieren
 
 - [ ] **G1** (BSM-025) Pilotbetrieb mindestens einen kalten Monat mit dem fertigen Aufbau – nur Tickets, keine neuen Funktionen
+- [ ] **G2** (BSM-035) Wackelige Tests stabilisieren: Laufzeit-Grenze im Lasttest `test_ein_tag_aus_einem_monat_minuten` (im vollen Lauf rot, allein grün), PG-Test `test_seite_einstellung_mit_benutzer_vor_ort_ohne` gelegentlich rot
 
 ## Etappe H – Betrieb in der Firma
 

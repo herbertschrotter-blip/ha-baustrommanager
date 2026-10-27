@@ -26,7 +26,7 @@ BSM-<NNN> | <KÜRZEL> | <Schritt> <Kurztitel>
 ```
 
 - `BSM-NNN` dreistellig, global über die Liste, nie wiederverwendet.
-- **Nächste freie Nummer: BSM-035** (nach jedem `tracker neu` +1, mit committen)
+- **Nächste freie Nummer: BSM-036** (nach jedem `tracker neu` +1, mit committen)
 - `<Schritt>` = Nummer im Fahrplan (`A1` … `H4`); neue Aufgaben bekommen einen Schritt im Fahrplan (dort eintragen).
 - Kürzel: `DB` (eigene Datenbank, db/, Datenbank-Phasen), `NOTPROG` (Notprogramm in den Shellys), `SHELLY` (Geräte,
   Hardware, Firmware, Router), `SEITE` (frontend, Mockups), `KERN` (Integration: steuerung, funktionen, logik),
