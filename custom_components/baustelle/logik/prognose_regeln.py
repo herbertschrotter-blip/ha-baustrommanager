@@ -16,7 +16,7 @@ class PrognoseRegeln:
 
     abdeckung_min: float = 0.95
     gemeinsame_luecke_max_s: int = 300
-    messalter_max_s: int = 120
+    messalter_max_s: int = 1800   # Herbert 28.10.2026: Lebenszeichen des Fühler-Geräts innerhalb 30 min (war 120 s)
     ersatz_konstanz_max_s: int = 1800
     sensor_aufloesung_k: float = 0.1
     puls_minuten_min: int = 5

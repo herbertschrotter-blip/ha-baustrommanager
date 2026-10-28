@@ -10,8 +10,10 @@ Prognose V2, Lieferung P1 (BSM-033.06, Bauvorlage CGR-2026-10-11-hochrechnung r5
   der Staffelung nicht freigegeben, `logik/staffel.gesperrt`);
 - je Container `staffel_begrenzt_s` als Vereinigung der Sperrzeiten seiner Geräte (A [0,20] und B [10,30] → 30 s,
   nicht 40) und `temp_alter_s`, das höchste Alter des benutzten Innenwerts in der Minute (Alter = Zeit seit dem
-  letzten echten Bericht des Fühlers; es wächst bis zum nächsten Bericht, also zählen die Zeitpunkte direkt vor einem
-  Bericht und das Minutenende).
+  letzten Lebenszeichen des Fühlers; es wächst bis zum nächsten, also zählen die Zeitpunkte direkt vor einem Bericht
+  und das Minutenende). Lebenszeichen (Herbert, 28.10.2026, Befund Evidenzbericht): ein echter Bericht des Fühlers oder
+  eine Meldung irgendeiner anderen Entität seines Geräts (Feuchte, Batterie, Signal …), solange der Fühler einen
+  gültigen Wert hat – BLE-Fühler melden die Temperatur nur bei Änderung.
 
 Jede unbekannte Teilphase (vor dem ersten Bericht, Gerät nicht erreichbar, Fühler ohne Wert oder ohne echten Bericht)
 macht den jeweiligen Wert der Minute None – nie 0. Der Wert beim Start gilt nicht als Bericht.
@@ -256,15 +258,23 @@ class BereichSammler:
         self._tuer = Zeitanteil(t, tuer_offen)
         self._mit_tuer = mit_tuer
         self._alter = Alter(t, beobachtet)
+        self._wert_da = temperatur is not None
         self._sperre: dict[str, bool | None] = dict.fromkeys(geraete)
         self._begrenzt = Beobachtung(t, None)
 
     def temperatur(self, t: datetime, wert: float | None) -> None:
         self._temp.setzen(t, wert)
+        self._wert_da = wert is not None
 
     def bericht(self, t: datetime, beobachtet: datetime | None) -> None:
         """Bericht des Fühlers (auch mit unverändertem Wert); `beobachtet` None = Wert ohne echten Bericht."""
         self._alter.bericht(t, beobachtet)
+
+    def lebenszeichen(self, t: datetime) -> None:
+        """Eine andere Entität des Fühler-Geräts hat um `t` gemeldet: der Innenwert gilt ab `t` als frisch – nur,
+        solange der Fühler einen gültigen Wert hat (ohne Wert bleibt das Alter unbekannt)."""
+        if self._wert_da:
+            self._alter.bericht(t, t)
 
     def staffel(self, t: datetime, geraet_id: str, gesperrt: bool | None) -> None:
         if geraet_id not in self._sperre:

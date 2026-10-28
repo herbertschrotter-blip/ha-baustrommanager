@@ -3697,7 +3697,7 @@ function geraetEdit(p4, s4) {
     f3.status = v2;
     p4.neuZeichnen();
   }}>${t5}</button>`)}</div></div>
-        ${!g2.leistung ? b2`<div class="zeile"><div><b>Leistung ohne Messung</b><div class="leise">zählt so in der Staffelung, wenn das Gerät an ist${f3.nennKw === null ? " · Standard" : ""}</div></div><span class="stepper klein"><button data-d="-0.1" @click=${() => p4.geraetNennKw(f3, g2, -0.1)}>−</button><b class=${f3.nennKw !== null ? "eigen" : ""}>${de(f3.nennKw ?? g2.kw, 1)} kW</b><button data-d="0.1" @click=${() => p4.geraetNennKw(f3, g2, 0.1)}>+</button></span></div>` : A}
+        ${g2.heizer || !g2.leistung ? b2`<div class="zeile" data-zeile="nenn"><div>${g2.heizer ? b2`<b>Nennleistung (Typenschild)</b><div class="leise">Referenz für die Prognose; zählt in der Staffelung, wenn keine Messung da ist${f3.nennKw === null ? " · nicht eingetragen" : ""}</div>` : b2`<b>Leistung ohne Messung</b><div class="leise">zählt so in der Staffelung, wenn das Gerät an ist${f3.nennKw === null ? " · Standard" : ""}</div>`}</div><span class="stepper klein"><button data-d="-0.1" @click=${() => p4.geraetNennKw(f3, g2, -0.1)}>−</button><b class=${f3.nennKw !== null ? "eigen" : ""}>${de(f3.nennKw ?? g2.kw, 1)} kW</b><button data-d="0.1" @click=${() => p4.geraetNennKw(f3, g2, 0.1)}>+</button></span></div>` : A}
         ${g2.heizer && b3.stufen ? b2`<div class="zeile" data-zeile="rolle"><div><b>Rolle im Container: ${b3.stufen.haupt.includes(g2.id) ? "★ Primär" : "🔥 Zusatz"}</b><div class="leise">${!b3.stufenAn ? "alle heizen gemeinsam" : b3.stufen.haupt.includes(g2.id) ? "heizt zuerst" : `heizt dazu, wenn ${(b3.geraete.find((x3) => b3.stufen.haupt.includes(x3.id)) || {}).n || "der Primäre"} nicht reicht`} · festgelegt im Container unter „Bearbeiten“</div></div></div>` : A}
         <div class="leise">Neuer Shelly: die Werte des alten bleiben im Verlauf. Anderer Container: der Verbrauch zählt ab jetzt dort.</div>
         ${x2 ? inventarVorlage(p4, x2) : A}
@@ -5610,7 +5610,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.146";
+var SEITE_VERSION = "0.8.147";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];

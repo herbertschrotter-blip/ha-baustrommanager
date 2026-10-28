@@ -143,10 +143,10 @@ def test_nachweis_s_weist_unmoegliches_zurueck():
 
 def test_regeln_und_modellversion():
     r = PrognoseRegeln()
-    assert MODELL_VERSION == "prognose-v2.1"
+    assert MODELL_VERSION == "prognose-v2.2"
     assert len(fields(r)) == 101   # die 98 Felder der Bauvorlage §2.5 + 3 der Abnahmeprüfung P2b
     assert (r.rekonstruktion_treffer_min, r.rekonstruktion_pruef_tage, r.rekonstruktion_vergleiche_min) == (0.99, 7, 1440)
-    assert (r.abdeckung_min, r.messalter_max_s, r.ersatz_konstanz_max_s, r.tuer_offen_max_s) == (0.95, 120, 1800, 60)
+    assert (r.abdeckung_min, r.messalter_max_s, r.ersatz_konstanz_max_s, r.tuer_offen_max_s) == (0.95, 1800, 1800, 60)
     assert (r.konvektor_fenster_min, r.oel_fenster_min, r.mad_faktor, r.ohne_wetter_extrapolation_max_k) == (120, 180, 1.4826, 2.0)
     with pytest.raises(FrozenInstanceError):
         r.abdeckung_min = 0.5   # type: ignore[misc]
@@ -321,13 +321,21 @@ def test_stundenimport_und_wechsel_kein_training():
 
 
 def test_frische_kein_downgrade_und_unbekannt():
-    alt = pruefe_minuten([minute(lokal(8), temp_alter_s=300)], R)[0]
+    alt = pruefe_minuten([minute(lokal(8), temp_alter_s=1801)], R)[0]
     assert alt.frische == "keiner" and "messalter_ueberschritten" in alt.gruende and not alt.trainingsfaehig
-    assert pruefe_minuten([minute(lokal(8), temp_alter_s=120)], R)[0].frische == "direkt"   # genau 120 s gültig
+    assert pruefe_minuten([minute(lokal(8), temp_alter_s=1800)], R)[0].frische == "direkt"   # genau 30 min gültig
     neu_unbekannt = pruefe_minuten([minute(lokal(8), temp_alter_s=None, staffel_begrenzt_s=None)], R)[0]
     assert {"messalter_unbekannt", "staffel_unbekannt"} <= set(neu_unbekannt.gruende)
     historisch = pruefe_minuten([minute(lokal(8), temp_alter_s=None, staffel_begrenzt_s=None, altersnachweis_alt=True)], R)[0]
     assert {"frische_ersatz_noetig", "staffel_ersatz_noetig"} <= set(historisch.gruende) and not historisch.trainingsfaehig
+
+
+def test_frische_lebenszeichen_29_und_31_min():
+    """Herbert 28.10.2026 (Befund Evidenzbericht): frisch, solange das Fühler-Gerät innerhalb 30 min gemeldet hat."""
+    frisch = pruefe_minuten([minute(lokal(8), temp_alter_s=29 * 60)], R)[0]
+    assert frisch.frische == "direkt" and "messalter_ueberschritten" not in frisch.gruende and frisch.trainingsfaehig
+    alt = pruefe_minuten([minute(lokal(8), temp_alter_s=31 * 60)], R)[0]
+    assert alt.frische == "keiner" and "messalter_ueberschritten" in alt.gruende and not alt.trainingsfaehig
 
 
 def test_bekannte_sperre_schliesst_aus():
@@ -380,7 +388,7 @@ def test_stabiler_sensor_alt_verworfen_neu_direkt():
 
 def test_kein_frische_downgrade():
     werte = [22.0, 22.1, 22.2, 22.1] * 10
-    neu_alt = [replace(m, temp_alter_s=300) for m in historisch(lokal(8), werte)]
+    neu_alt = [replace(m, temp_alter_s=1860) for m in historisch(lokal(8), werte)]
     q = frische_ersatz(neu_alt, R)
     assert q.frische == "keiner" and "messalter_ueberschritten" in q.gruende and "frische_ersatz" not in q.gruende
 

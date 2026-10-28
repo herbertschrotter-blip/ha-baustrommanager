@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.147",
+    "datum": "2026-10-28",
+    "punkte": [
+      "Prognose V2 (Schattenbetrieb): Der Evidenzbericht vom 28.10. zeigte für keinen Container einen Wärmeverlust H – zwei Prüfregeln sperrten jedes Messfenster. Korrigiert nach Entscheidung Herbert (Bauplan Hochrechnung §8, Notiz 28.10.2026), Modellversion `prognose-v2.2`: - **Innenwert frisch = Lebenszeichen des Fühlers:** Die BLE-Fühler melden nur, wenn sich die Temperatur ändert; bisher galt ein Wert nach 120 s als zu alt – gerade in ruhigen Phasen, die gemessen werden sollen. Jetzt gilt er, solange der Fühler einen Wert hat und sein Gerät (Temperatur, Feuchte, Batterie …) in den letzten 30 min etwas gemeldet hat. - **Nennleistung (Typenschild) für jeden Heizkörper:** Im ✎ Gerät jetzt auch bei Heizkörpern mit Leistungsmessung einstellbar. Sie ist die unabhängige Leistungsreferenz der Prognose; in der Staffelung geht die gemessene Leistung weiter vor. **Bitte je Heizkörper die kW vom Typenschild eintragen** – ohne sie bleibt die Prognose bei „grob“."
+    ]
+  },
+  {
     "version": "0.8.146",
     "datum": "2026-10-28",
     "punkte": [

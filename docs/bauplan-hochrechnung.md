@@ -414,3 +414,21 @@ mit laufender Prüfung):
 - **Messung auf dem Pi** (11.10.2026, nur Rechnen, Heizperiode 01.10.–30.04., heute 10.11., gleitendes Soll, neun Läufe):
   2 Container 2,5 s, 5 Container 5,9 s; Ausgabe aller 213 Zeiträume 0,1 s. Die Schätzungen (Evidenzbericht) bleiben der
   teure Teil (siehe P3) und laufen deshalb nur nachts bzw. auf Anfrage.
+
+**Notiz 28.10.2026 (Befund Evidenzbericht)** – Evidenzbericht 01.–27.10.2026 aus dem Betrieb: für keinen Container ein
+Fenster, also kein H. Zwei Prüfregeln sperrten alles; Entscheidung Herbert:
+
+- **Messalter = Lebenszeichen des Geräts** (`messalter_ueberschritten`): Die BLE-Fühler (Shelly BLU H&T) melden die
+  Temperatur nur bei Änderung, in ruhigen – genau den stationären – Phasen lag `temp_alter_s` weit über 120 s. Der
+  Innenwert gilt jetzt als frisch, solange der Fühler einen gültigen Wert hat und irgendeine Entität seines HA-Geräts
+  (Temperatur, Feuchte, Batterie, Signal …) innerhalb von 30 min gemeldet hat (`last_reported`, Änderung oder gleicher
+  Wert): `temp_alter_s` = Zeit seit dem jüngsten Lebenszeichen (Mitschreiben über Entity-Registry, `logik/minute`
+  `BereichSammler.lebenszeichen`), ohne Gerät wie bisher nur die Fühler-Entität; `PrognoseRegeln.messalter_max_s` =
+  1 800 s. Start und Rückkehr aus „nicht verfügbar“ bleiben kein Bericht; ohne gültigen Fühlerwert zählt kein
+  Lebenszeichen. Alte Zeilen behalten ihr gespeichertes Alter (kein Backfill) und gelten mit der neuen Grenze.
+- **P_ref = Nennleistung laut Typenschild** (`p_ref_fehlt`): P_ref kam nur aus `geraete.<id>.nenn_kw`, und das war im
+  ✎ Gerät nur ohne Leistungssensor einstellbar. Jetzt hat jeder Heizkörper (auch mit Leistungssensor) das Feld
+  „Nennleistung (Typenschild)“ („Referenz für die Prognose; zählt in der Staffelung, wenn keine Messung da ist“),
+  gespeichert über `geraete.<id>.nenn_kw` erst bei „Speichern“. Staffelung (`kern/staffelung.nenn_kw`): das gemessene
+  Mittel geht weiter vor, laufend zählt die gemessene Leistung (`logik/staffel.last_kw`); der Typenschildwert ersetzt
+  nur den Standard, solange kein Mittel gelernt ist. Geräte ohne Messung wie bisher.

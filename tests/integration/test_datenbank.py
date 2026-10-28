@@ -10,9 +10,9 @@ import pytest
 from sqlalchemy import create_engine, insert, select
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import dt as dt_util
-from pytest_homeassistant_custom_component.common import async_fire_time_changed
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.baustelle import backup
 from custom_components.baustelle.const import DOMAIN
@@ -181,6 +181,39 @@ async def test_prognose_nachweise_je_minute(hass: HomeAssistant, baustelle, free
     assert wert["regelungsart"] in ("thermo", "plan") and wert["konfiguration_id"].startswith("k")
     await _minute(hass, freezer, 2)                         # nichts geändert: kein neues Kontext-Ereignis
     assert len([r for r in _zeilen(hass, "ereignis") if r["art"] == "prognose_kontext"]) == len(kontext)
+
+
+async def test_alter_innenwert_lebenszeichen_des_geraets(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Herbert 28.10.2026 (Befund Evidenzbericht): BLE-Fühler melden die Temperatur nur bei Änderung – eine Meldung der
+    Batterie-Entität desselben HA-Geräts (gleicher Wert = Bericht, oder Änderung) hält den Innenwert frisch."""
+    ble = MockConfigEntry(domain="bthome")
+    ble.add_to_hass(hass)
+    geraet = dr.async_get(hass).async_get_or_create(config_entry_id=ble.entry_id, identifiers={("bthome", "blu-ht-c1")})
+    reg = er.async_get(hass)
+    for uid, objekt in (("temp", "temp_c1"), ("batterie", "temp_c1_batterie")):
+        assert reg.async_get_or_create("sensor", "bthome", uid, suggested_object_id=objekt, config_entry=ble,
+                                       device_id=geraet.id).entity_id == f"sensor.{objekt}"
+    entry = await baustelle_anlegen(hass, freezer)
+    hass.states.async_set("sensor.temp_c1_batterie", "90")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    shellys.anmelden()
+    entry.runtime_data.auswerten()
+    await hass.async_block_till_done()
+    await _minute(hass, freezer)                            # Start ist kein Bericht
+    hass.states.async_set("sensor.temp_c1", "19.1")         # echter Bericht (Änderung) zu Beginn der Minute
+    freezer.tick(timedelta(seconds=50))
+    hass.states.async_set("sensor.temp_c1_batterie", "90")  # Batterie meldet denselben Wert: Lebenszeichen
+    freezer.tick(timedelta(seconds=10))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=20))
+    hass.states.async_set("sensor.temp_c1_batterie", "89")  # Batterie ändert sich: Lebenszeichen
+    freezer.tick(timedelta(seconds=40))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    c1 = [r for r in _zeilen(hass, "bereich_minute") if r["bereich_id"] == C1]
+    assert [r["temp_alter_s"] for r in c1[1:3]] == [50, 40]   # ohne Lebenszeichen 60 und 120
 
 
 async def test_beobachtung_stoert_die_auswertung_nicht(hass: HomeAssistant, baustelle, freezer, monkeypatch) -> None:

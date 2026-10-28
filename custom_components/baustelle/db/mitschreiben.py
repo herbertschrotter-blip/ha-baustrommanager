@@ -8,7 +8,10 @@ Prognose V2, P1 (BSM-033.06), nur beobachtet: nach jeder Auswertung der Stand de
 der Staffelung, Veto) und der Betriebskontext je Container – ändert er sich, ein Ereignis `prognose_kontext` mit
 Wirkzeitpunkt (die Minutenzeile kennt nur den Stand am Ende). Das Alter des Innenwerts kommt aus den Berichten der
 Fühler (`last_reported`, auch bei unverändertem Wert über die gefilterte Berichtsbeobachtung nur dieser Fühler; nie
-`last_changed`); der Wert beim Start und die Rückkehr aus „nicht verfügbar“ gelten nicht als Bericht.
+`last_changed`); der Wert beim Start und die Rückkehr aus „nicht verfügbar“ gelten nicht als Bericht. Dazu zählt jede
+Meldung einer anderen Entität desselben HA-Geräts (Feuchte, Batterie, Signal …) als Lebenszeichen, solange der Fühler
+einen gültigen Wert hat (Herbert, 28.10.2026: BLE-Fühler melden die Temperatur nur bei Änderung); ohne Gerät wie bisher
+nur die Fühler-Entität.
 Gelesen wird in dieser Phase weiter aus Store und HA-Statistik – der Pilot merkt nichts.
 """
 
@@ -24,6 +27,7 @@ from sqlalchemy import Connection, delete, insert, update
 
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, EventStateChangedData, EventStateReportedData, HomeAssistant, State, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_state_report_event,
@@ -54,6 +58,11 @@ def _zahl(zustand: State | None) -> float | None:
         return float(zustand.state)
     except ValueError:
         return None
+
+
+def _gemeldet(zustand: State | None) -> bool:
+    """Entität hat einen echten Stand (nicht fehlend, „nicht verfügbar“ oder „unbekannt“)."""
+    return zustand is not None and zustand.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
 
 
 def _an(zustand: State | None) -> bool | None:
@@ -101,12 +110,14 @@ class Mitschreiber:
                 mit_tuer=bool(tueren), geraete=[gid for gid, g in self.st.geraete.items() if g.bereich == bid])
             if info.fuehler:
                 self._merken(info.fuehler, "fuehler", bid)
+                for eid in self._geschwister(info.fuehler):   # Lebenszeichen des Fühler-Geräts (28.10.2026)
+                    self._merken(eid, "lebenszeichen", bid)
             for eid in tueren:
                 self._merken(eid, "tuer", bid)
         if self._wer:
             self._abmelden.append(async_track_state_change_event(self.hass, list(self._wer), self._geaendert))
-        fuehler = [eid for eid, wer in self._wer.items() if any(art == "fuehler" for art, _ in wer)]
-        if fuehler:   # nur die Innenfühler, keine Beobachtung aller Berichte in HA
+        fuehler = [eid for eid, wer in self._wer.items() if any(art in ("fuehler", "lebenszeichen") for art, _ in wer)]
+        if fuehler:   # nur die Innenfühler und ihre Geräte, keine Beobachtung aller Berichte in HA
             self._abmelden.append(async_track_state_report_event(self.hass, fuehler, self._berichtet))
         self._abmelden.append(self.st.async_add_listener(self._nach_auswertung))
         self._abmelden.append(async_track_time_change(self.hass, self._minute, second=0))
@@ -115,6 +126,14 @@ class Mitschreiber:
         """Irgendein Kontakt des Containers offen; None, wenn keiner etwas meldet."""
         werte = [_an(self.hass.states.get(eid)) for eid in self._kontakte.get(bid, [])]
         return True if any(werte) else (False if any(w is False for w in werte) else None)
+
+    def _geschwister(self, fuehler: str) -> list[str]:
+        """Die anderen Entitäten des HA-Geräts eines Fühlers (leer ohne Registereintrag oder ohne Gerät)."""
+        reg = er.async_get(self.hass)
+        eintrag = reg.async_get(fuehler)
+        if eintrag is None or eintrag.device_id is None:
+            return []
+        return [e.entity_id for e in er.async_entries_for_device(reg, eintrag.device_id) if e.entity_id != fuehler]
 
     def _merken(self, entity_id: str, art: str, wessen: str) -> None:
         self._wer.setdefault(entity_id, []).append((art, wessen))
@@ -146,6 +165,10 @@ class Mitschreiber:
                 b.temperatur(t, wert)
                 # echter Bericht nur mit Wert und nicht direkt nach „nicht verfügbar“/Start (zwischengespeicherter Wert)
                 b.bericht(t, neu.last_reported if neu is not None and wert is not None and _zahl(alt) is not None else None)
+            elif art == "lebenszeichen" and (b := self._bereiche.get(wessen)):
+                # wie beim Fühler: Rückkehr aus „nicht verfügbar“/Start ist keine Meldung
+                if neu is not None and _gemeldet(neu) and _gemeldet(alt):
+                    b.lebenszeichen(neu.last_reported)
             elif art == "tuer" and (b := self._bereiche.get(wessen)):
                 b.tuer(t, self._offen(wessen))
                 if _an(neu) != _an(alt):
@@ -153,12 +176,14 @@ class Mitschreiber:
 
     @callback
     def _berichtet(self, event: Event[EventStateReportedData]) -> None:
-        """Fühler meldet denselben Wert noch einmal: neuer Bericht für das Alter (BSM-033.06)."""
+        """Fühler (oder eine Entität seines Geräts) meldet denselben Wert noch einmal: neuer Bericht für das Alter."""
         t = event.data["last_reported"]
         wert = _zahl(event.data["new_state"])
         for art, wessen in self._wer.get(event.data["entity_id"], []):
             if art == "fuehler" and (b := self._bereiche.get(wessen)):
                 b.bericht(t, t if wert is not None else None)
+            elif art == "lebenszeichen" and (b := self._bereiche.get(wessen)) and _gemeldet(event.data["new_state"]):
+                b.lebenszeichen(t)
 
     @callback
     def _nach_auswertung(self) -> None:

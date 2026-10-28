@@ -33,7 +33,7 @@ async def test_schattenprognose(hass: HomeAssistant, baustelle_november, hass_ws
     antwort = await ws.receive_json()
     assert antwort["success"], antwort
     erg = antwort["result"]["prognose"]
-    assert erg["modell_version"] == "prognose-v2.1" and erg["schatten"] and erg["modellwahl"] == "v2"
+    assert erg["modell_version"] == "prognose-v2.2" and erg["schatten"] and erg["modellwahl"] == "v2"
     assert erg["laeufe"] == 9 and erg["gemessen_bis"] and erg["dauer_s"] >= 0
     c1 = erg["container"][C1]
     assert c1["mit"]["methode"] == "stationaer" and c1["mit"]["h_kw_k"] == pytest.approx(0.1)
@@ -60,7 +60,7 @@ async def test_schattenprognose(hass: HomeAssistant, baustelle_november, hass_ws
     # Auswertung: zusätzlicher Schlüssel, getrennt von der bisherigen Hochrechnung
     await ws.send_json({"id": 3, "type": "baustelle/auswertung", "entry_id": entry.entry_id, "zeitraum": "Woche"})
     aw = (await ws.receive_json())["result"]
-    assert aw["prognose_v2"]["modell_version"] == "prognose-v2.1" and "tag" not in aw["prognose_v2"]
+    assert aw["prognose_v2"]["modell_version"] == "prognose-v2.2" and "tag" not in aw["prognose_v2"]
     assert "hochrechnung" in aw and "prognose_v2" not in aw["hochrechnung"]
 
 

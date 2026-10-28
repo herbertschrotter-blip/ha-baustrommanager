@@ -1185,11 +1185,16 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       erwarte('AN-0015: Chip zeigt „★ Primär“ und „Zusatz – wartet“', ui.innerHTML.includes('Zusatz – wartet, einer reicht') && ui.innerHTML.includes(' · ★ Primär') && !ui.innerHTML.includes(' · Haupt'));
       await klick({ act: 'g-bearbeiten', i: String(i2) }, 10);
       erwarte('AN-0015: ✎ Gerät zeigt nur die Rolle, kein Zusatz-Schalter mehr', ui.innerHTML.includes('Rolle im Container: ★ Primär') && !ui.innerHTML.includes('data-zeile="zusatz"'));
-      if (!g2.leistung) { neu(); await klick('.sheet .stepper [data-d=\"0.1\"]', 10); }
+      // 28.10.2026 (Befund Evidenzbericht): Typenschild-Nennleistung für jeden Heizkörper, auch mit Leistungssensor (P_ref)
+      erwarte('28.10.: ✎ Heizkörper mit Leistungssensor zeigt „Nennleistung (Typenschild)“', !!g2.leistung && ui.innerHTML.includes('Nennleistung (Typenschild)')
+        && ui.innerHTML.includes('Referenz für die Prognose; zählt in der Staffelung, wenn keine Messung da ist') && !!litEl('.sheet [data-zeile="nenn"] [data-d="0.1"]'));
+      neu(); await klick('.sheet [data-zeile="nenn"] [data-d="0.1"]', 10);
       const ws = k => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `geraete.${g2.id}.${k}`);
+      const nennWert = Math.round((g2.kw + 0.1) * 10) / 10;
       erwarte('BSM-034.01: ✎ sendet erst bei „Speichern“', !ws('nenn_kw'));
       await klick({ act: 'gf-speichern' }, 60);
-      if (!g2.leistung) erwarte('Szenarien: Nennleistung ohne Messung einstellbar', ws('nenn_kw'));
+      erwarte('28.10.: Typenschild speichert geraete.<id>.nenn_kw bei „Speichern“',
+        aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `geraete.${g2.id}.nenn_kw` && m.wert === nennWert));
       erwarte('AN-0015: ✎ Gerät speichert kein „zusatz“ mehr', !ws('zusatz'));
       Object.keys(c).forEach(k => delete c[k]); Object.assign(c, alt); panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen();
       await klick({ act: 'tab', v: 'uebersicht' }, 10);

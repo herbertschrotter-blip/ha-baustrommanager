@@ -140,6 +140,27 @@ def test_temperaturalter_unbekannt():
     assert b.abschliessen(s(240)).temp_alter_s == 60
 
 
+def test_lebenszeichen_des_geraets_haelt_innenwert_frisch():
+    """Herbert 28.10.2026: Meldung einer anderen Entität des Fühler-Geräts (z. B. Batterie) zählt als Lebenszeichen,
+    aber nur, solange der Fühler einen gültigen Wert hat."""
+    b = BereichSammler(T0, 21.0, None, mit_tuer=False, beobachtet=s(-600))
+    b.lebenszeichen(s(30))
+    assert b.abschliessen(s(60)).temp_alter_s == 630   # bis zum Lebenszeichen 630 s alt
+    assert b.abschliessen(s(120)).temp_alter_s == 90   # danach wächst das Alter ab dem Lebenszeichen
+    b.temperatur(s(130), None)
+    b.bericht(s(130), None)                            # Fühler nicht verfügbar
+    b.lebenszeichen(s(150))                            # Batterie meldet weiter: ohne Wert kein Lebenszeichen
+    assert b.abschliessen(s(180)).temp_alter_s is None
+    b.temperatur(s(190), 21.5)
+    b.bericht(s(190), None)                            # Rückkehr aus „nicht verfügbar“ ist kein Bericht
+    b.lebenszeichen(s(200))
+    assert b.abschliessen(s(240)).temp_alter_s is None  # 190–200 unbelegt
+    assert b.abschliessen(s(300)).temp_alter_s == 100
+    ohne = BereichSammler(T0, None, None, mit_tuer=False)
+    ohne.lebenszeichen(s(10))
+    assert ohne.abschliessen(s(60)).temp_alter_s is None
+
+
 def test_staffel_sperre_vereinigung():
     """Anhang B: Gerät A gesperrt [0,20], B [10,30] → Container 30 s, nicht die Gerätesumme 40 s."""
     b = BereichSammler(T0, None, None, mit_tuer=False, geraete=["a", "b"])

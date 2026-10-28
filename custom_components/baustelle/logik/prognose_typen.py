@@ -22,7 +22,7 @@ from typing import Literal
 from .arbeitszeit import Arbeitszeit, Ausnahme, HeizRegeln, Plan, WarmAb, WetterTag
 from .soll import GleitRegeln
 
-MODELL_VERSION = "prognose-v2.1"
+MODELL_VERSION = "prognose-v2.2"
 
 Betriebsart = Literal["REGULAER", "FROST", "BASELINE", "SONSTIGE"]
 Regelungsart = Literal["thermo", "plan", "aus", "unbekannt"]

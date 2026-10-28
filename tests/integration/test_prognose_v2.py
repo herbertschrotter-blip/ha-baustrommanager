@@ -130,7 +130,7 @@ async def test_ws_prognose_v2(hass: HomeAssistant, baustelle_november, hass_ws_c
     antwort = await ws.receive_json()
     assert antwort["success"], antwort
     erg = antwort["result"]
-    assert erg["verfuegbar"] and erg["modell_version"] == "prognose-v2.1"
+    assert erg["verfuegbar"] and erg["modell_version"] == "prognose-v2.2"
     assert (erg["von"], erg["bis"]) == ("2026-11-17", "2026-11-19")
     je = {c["bereich"]: c for c in erg["container"]}
     assert je[C2]["tage"] == []

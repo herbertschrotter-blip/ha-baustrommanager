@@ -163,7 +163,7 @@ SETZEN_BEREICH: dict[str, Any] = {
 }
 SETZEN_GERAET: dict[str, Any] = {   # AN-0006, Szenarien
     "zusatz": cv.boolean,
-    "nenn_kw": vol.Any(None, vol.All(ZAHL, vol.Range(0, 10))),   # Leistung ohne Messung (Staffelung)
+    "nenn_kw": vol.Any(None, vol.All(ZAHL, vol.Range(0, 10))),   # Nennleistung (Typenschild): P_ref der Prognose, Staffelung ohne Messung
 }
 
 ARBEITSZEIT = vol.Schema({
