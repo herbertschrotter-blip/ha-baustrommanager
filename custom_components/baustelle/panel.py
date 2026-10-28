@@ -34,7 +34,7 @@ from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
 from .logik import preise as preise_logik
 from .logik.arbeitszeit import arbeitszeit_loeschen, arbeitszeiten_speichern
 from .logik.auswertung import ARTEN
-from .logik import hochrechnung as hochrechnung_logik, symbol as symbol_logik
+from .logik import hochrechnung as hochrechnung_logik, oeffnungen as oeffnungen_logik, sensoren as sensor_logik, symbol as symbol_logik
 from .logik.rechte import AKTIONEN_ALLE, darf, rechte
 from .notprogramm import DATA_NOTPROGRAMM
 from .logik.warnungen import Art
@@ -282,7 +282,7 @@ async def async_panel_anmelden(hass: HomeAssistant, version: str) -> None:
     hass.data[DATA_MELDUNGEN] = Meldungen(hass)
     hass.async_create_task(hass.data[DATA_MELDUNGEN].async_laden(), "baustelle_meldungen_laden")  # lesbare Kopie beim Start
     for befehl in (ws_struktur, ws_setzen, ws_liste, ws_aktion, ws_bericht, ws_protokoll, ws_meldungen, ws_meldung,
-                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_verlauf, ws_notprogramm_pruefen, ws_notprogramm_probe,
+                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_verlauf, ws_oeffnungen, ws_notprogramm_pruefen, ws_notprogramm_probe,
                    *INVENTAR_BEFEHLE, *UMBENENNEN_BEFEHLE, *GERAETE_BEFEHLE):
         websocket_api.async_register_command(hass, befehl)
 
@@ -1019,6 +1019,42 @@ async def ws_verlauf(hass: HomeAssistant, connection: websocket_api.ActiveConnec
         _fehler(connection, msg, "start_time/end_time: ISO-Zeit erwartet")
         return
     connection.send_result(msg["id"], await async_verlauf(hass, msg["entity_ids"], start, ende))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "baustelle/oeffnungen", vol.Required("entry_id"): str, vol.Required("bereich"): str,
+    vol.Optional("tag"): vol.Any(None, vol.All(cv.string, cv.date)),
+})
+@websocket_api.async_response
+async def ws_oeffnungen(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Tür und Fenster offen an einem Tag (Tagesdiagramm des Containers, Mockup tuer-diagramm Variante A): aus dem
+    Verlauf aller Kontakte des Containers (logik/sensoren), Öffnungen nach logik/oeffnungen. Lesen dürfen alle."""
+    from .db.verlauf import async_verlauf  # noqa: PLC0415
+    if (st := _steuerung(hass, connection, msg)) is None:
+        return
+    if msg["bereich"] not in st.bereiche:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Bereich nicht gefunden")
+        return
+    jetzt = dt_util.now()
+    tag: date = msg.get("tag") or jetzt.date()
+    von, tagesende = dt_util.start_of_local_day(tag), dt_util.start_of_local_day(tag + timedelta(days=1))
+    ende, laufend = min(tagesende, jetzt), tagesende > jetzt
+    kontakte = [s for s in st.sensoren(msg["bereich"]) if s.art in sensor_logik.KONTAKTE]
+    ergebnis: dict[str, Any] = {"tag": tag.isoformat(), "laufend": laufend, "oeffnungen": []}
+    if not kontakte or ende <= von:
+        connection.send_result(msg["id"], ergebnis)
+        return
+    roh = await async_verlauf(hass, [s.entity_id for s in kontakte], von, ende)
+    verlaeufe = []
+    for s in kontakte:
+        punkte = [(dt_util.utc_from_timestamp(p["lu"]), p["s"]) for p in roh.get(s.entity_id, [])]
+        zustand = hass.states.get(s.entity_id)   # heute: der Recorder schreibt mit Verzug, der jetzige Zustand fehlt evtl.
+        if laufend and zustand is not None and (not punkte or zustand.last_changed > punkte[-1][0]):
+            punkte.append((zustand.last_changed, zustand.state))
+        verlaeufe.append((s.entity_id, s.art, s.name, punkte))
+    liste = oeffnungen_logik.oeffnungen(verlaeufe, von, ende)
+    ergebnis["oeffnungen"] = oeffnungen_logik.fuer_seite(liste, dt_util.get_default_time_zone(), laufend, ende)
+    connection.send_result(msg["id"], ergebnis)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/meldungen", vol.Optional("entry_id"): vol.Any(None, str)})

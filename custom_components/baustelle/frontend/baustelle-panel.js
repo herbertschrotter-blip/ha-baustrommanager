@@ -5215,6 +5215,10 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .c-kachel span { font-size: 18px; } .c-kachel b { font-size: 22px; margin-top: 4px; } .c-kachel small { color: var(--ink2); font-size: 12px; }
 .c-tag-svg { width: 100%; height: auto; display: block; } .c-achse { font-size: 11px; fill: var(--ink2); }
 .c-legende { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--ink2); margin-top: 6px; } .c-legende i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.o-wrap { position: relative; } .o-hit { cursor: pointer; }
+.o-tip { position: absolute; top: 2px; transform: translateX(-50%); max-width: min(320px, 92%); padding: 6px 10px; border-radius: 10px; font-size: 12px; line-height: 1.35; color: var(--ink);
+  background: var(--sheet); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--panel-rand); box-shadow: 0 6px 18px rgba(0,0,0,.35); pointer-events: none; z-index: 2; }
+.o-tip .leise { font-size: 11px; }
 .c-legende i.gestr { background: repeating-linear-gradient(90deg, var(--ink) 0 4px, transparent 4px 7px); }
 .c-chips { display: flex; flex-wrap: wrap; gap: 10px; } .c-chip { flex: 1 1 260px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; }
 .c-chip-t { flex: 1; display: flex; flex-direction: column; } .c-chip-t small { color: var(--ink2); font-size: 12px; } .c-chip-t .link { font-size: 12px; text-align: left; padding: 0; }
@@ -5622,7 +5626,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.149";
+var SEITE_VERSION = "0.8.150";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];
@@ -5750,6 +5754,9 @@ var BaustellePanel = class extends i4 {
     sr.addEventListener("pointerdown", (e6) => this.zugStart(e6));
     wischenAn(this, sr);
     sr.addEventListener("pointerleave", () => this.tip(null));
+    sr.addEventListener("click", (e6) => this.oeTippen(e6));
+    sr.addEventListener("pointerover", (e6) => this.oeZeigen(e6));
+    sr.addEventListener("pointerout", (e6) => this.oeWeg(e6));
     sr.addEventListener("focusout", () => {
       if (this._wartet) {
         this._wartet = false;
@@ -7837,11 +7844,67 @@ var BaustellePanel = class extends i4 {
     const raster = [lo, Math.round((lo + hi) / 2), hi].map((v2) => `<line x1="${L2}" x2="${W - Rr}" y1="${y3(v2).toFixed(1)}" y2="${y3(v2).toFixed(1)}" stroke="var(--gridc)"/><text x="${L2 - 6}" y="${(y3(v2) + 4).toFixed(1)}" text-anchor="end" class="c-achse">${v2}°</text>`).join("");
     const stunden = [0, 6, 12, 18, 24].map((h3) => `<text x="${x2(h3).toFixed(1)}" y="${H2 - 4}" text-anchor="middle" class="c-achse">${String(h3).padStart(2, "0")}</text>`).join("");
     const bars = kw.map((k2, h3) => k2 > 0 ? `<rect x="${(x2(h3) + 2).toFixed(1)}" y="${(H2 - B2 + 6 + 22 * (1 - k2 / kmax)).toFixed(1)}" width="${(x2(1) - x2(0) - 4).toFixed(1)}" height="${(22 * k2 / kmax).toFixed(1)}" rx="2" fill="${farbe}" opacity=".8"><title>${String(h3).padStart(2, "0")}:00 · ${de(k2, 2)} kWh</title></rect>` : "").join("");
-    return `<svg viewBox="0 0 ${W} ${H2}" class="c-tag-svg">${band}${raster}
+    const O = this.cOeffnungLage(b3, vs, x2), unten = H2 - B2 + 28;
+    const oeUnter = O.map((o6) => `<rect x="${o6.x1.toFixed(1)}" y="${T2}" width="${o6.w.toFixed(1)}" height="${unten - T2}" fill="${o6.farbe}" opacity="${o6.art === "tuer" ? 0.22 : 0.2}" class="o-band o-${o6.art}"/><rect x="${o6.x1.toFixed(1)}" y="${T2}" width="${o6.w.toFixed(1)}" height="3" fill="${o6.farbe}" opacity=".9"/>`).join("");
+    const oeOben = O.map((o6) => {
+      const hit = Math.max(12, o6.w);
+      return `<rect class="o-hit" data-o="${esc(o6.k)}" x="${(o6.x1 + o6.w / 2 - hit / 2).toFixed(1)}" y="${T2}" width="${hit.toFixed(1)}" height="${unten - T2}" fill="transparent"><title>${esc(o6.text)}</title></rect>`;
+    }).join("");
+    const sel = O.find((o6) => o6.k === this._otip), mitT = O.some((o6) => o6.art === "tuer"), mitF = O.some((o6) => o6.art === "fenster");
+    const tip = !sel ? "" : `<div class="o-tip" style="left:clamp(90px, ${((sel.x1 + sel.w / 2) / W * 100).toFixed(1)}%, calc(100% - 90px))"><b style="color:${sel.farbe}">${esc(sel.text)}</b>${O.filter((o6) => o6 !== sel && o6.a < sel.e && o6.e > sel.a).map((o6) => `<div class="leise">gleichzeitig: ${esc(o6.text)}</div>`).join("")}</div>`;
+    return `<div class="o-wrap"><svg viewBox="0 0 ${W} ${H2}" class="c-tag-svg">${band}${oeUnter}${raster}
       ${mitSoll ? `<line x1="${L2}" x2="${W - Rr}" y1="${y3(soll2).toFixed(1)}" y2="${y3(soll2).toFixed(1)}" stroke="var(--ink)" stroke-dasharray="5 4" opacity=".6"/><text x="${W - Rr}" y="${(y3(soll2) - 5).toFixed(1)}" text-anchor="end" class="c-achse">Soll ${de(soll2)}°</text>` : ""}
       <path d="${pfad(aussen)}" fill="none" stroke="var(--ink2)" stroke-width="1.5" opacity=".7"/>${b3.fuehler ? `<path d="${pfad(innen)}" fill="none" stroke="#ff9f0a" stroke-width="2.6"/>` : ""}
-      ${bars}${vs ? "" : `<line x1="${x2(jetzt).toFixed(1)}" x2="${x2(jetzt).toFixed(1)}" y1="${T2}" y2="${H2 - B2 + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}</svg>
-      <div class="c-legende">${b3.fuehler ? '<span><i style="background:#ff9f0a"></i>innen</span>' : ""}<span><i style="background:var(--ink2)"></i>außen</span>${mitSoll ? '<span><i class="gestr"></i>Soll</span>' : ""}<span><i style="background:var(--amber);opacity:.4"></i>Heizzeit</span><span><i style="background:${farbe}"></i>geheizt (kWh je Stunde)</span></div>`;
+      ${bars}${vs ? "" : `<line x1="${x2(jetzt).toFixed(1)}" x2="${x2(jetzt).toFixed(1)}" y1="${T2}" y2="${H2 - B2 + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}${oeOben}</svg>${tip}</div>
+      <div class="c-legende">${b3.fuehler ? '<span><i style="background:#ff9f0a"></i>innen</span>' : ""}<span><i style="background:var(--ink2)"></i>außen</span>${mitSoll ? '<span><i class="gestr"></i>Soll</span>' : ""}<span><i style="background:var(--amber);opacity:.4"></i>Heizzeit</span><span><i style="background:${farbe}"></i>geheizt (kWh je Stunde)</span>${mitT ? '<span class="o-leg"><i style="background:var(--rot);opacity:.45"></i>Tür offen</span>' : ""}${mitF ? '<span class="o-leg"><i style="background:var(--blau);opacity:.45"></i>Fenster offen</span>' : ""}</div>`;
+  }
+  /* Tür/Fenster offen am angezeigten Tag: fertig von der Integration (baustelle/oeffnungen, Öffnungen unter 10 s schon
+     weg); ohne Kontakte kein Aufruf, solange es lädt keine Bänder. Heute kurz gültig (30 s), frühere Tage 1 h */
+  cOeffnungen(b3, vs = 0) {
+    const d3 = this.d;
+    if (!(b3.sensoren || []).some((s4) => s4.art === "tuer" || s4.art === "fenster")) return [];
+    const tag = plusTage(this.z.HEUTE, -vs);
+    const r5 = this._holen(`oe:${d3.entry}:${b3.id}:${tag}`, () => this._hass.callWS({ type: "baustelle/oeffnungen", entry_id: d3.entry, bereich: b3.id, tag }), vs ? 36e5 : 3e4);
+    return r5 && Array.isArray(r5.oeffnungen) ? r5.oeffnungen : [];
+  }
+  /* Lage der Bänder im Diagramm (nur Zeichnen): noch offen → bis „jetzt“, kurze Öffnungen mindestens 2 px breit */
+  cOeffnungLage(b3, vs, x2) {
+    const jm = this.z.JETZT.split(":"), jetzt = +jm[0] * 60 + +jm[1], bis1440 = (m3) => Math.min(1440, Math.max(0, m3));
+    const lang = (m3) => m3 < 60 ? `${m3} min` : `${Math.floor(m3 / 60)} h${m3 % 60 ? ` ${m3 % 60} min` : ""}`;
+    return this.cOeffnungen(b3, vs).map((o6) => {
+      const a3 = bis1440(minu(o6.von)), e6 = o6.bis ? bis1440(minu(o6.bis)) : vs ? 1440 : Math.max(a3, jetzt), x1 = x2(a3 / 60);
+      return {
+        ...o6,
+        a: a3,
+        e: e6,
+        x1,
+        w: Math.max(2, x2(e6 / 60) - x1),
+        k: `${o6.entity_id}@${o6.von}`,
+        farbe: o6.art === "tuer" ? "var(--rot)" : "var(--blau)",
+        text: o6.bis ? `${o6.name} offen ${o6.von}–${o6.bis} (${lang(o6.min)})` : `${o6.name} offen seit ${o6.von}`
+      };
+    });
+  }
+  /* Antippen bzw. Darüberfahren (Maus) eines Bands zeigt „Tür 1 offen 07:12–07:31 (19 min)“; woanders tippen schließt */
+  oeTippen(e6) {
+    const t5 = e6.target && e6.target.closest && e6.target.closest("[data-o]");
+    this.oeSetzen(!t5 ? null : this._otip === t5.dataset.o && e6.pointerType !== "mouse" ? null : t5.dataset.o);
+  }
+  oeZeigen(e6) {
+    if (e6.pointerType !== "mouse") return;
+    const t5 = e6.target && e6.target.closest && e6.target.closest("[data-o]");
+    if (t5) this.oeSetzen(t5.dataset.o);
+  }
+  oeWeg(e6) {
+    if (e6.pointerType !== "mouse") return;
+    const n4 = e6.relatedTarget;
+    if (e6.target && e6.target.closest && e6.target.closest("[data-o]") && !(n4 && n4.closest && n4.closest("[data-o]"))) this.oeSetzen(null);
+  }
+  oeSetzen(k2) {
+    if ((this._otip || null) !== k2) {
+      this._otip = k2;
+      this.neuZeichnen();
+    }
   }
   /* Diagramm der Container-Ansicht (WU-0002) */
   containerTeile(b3) {

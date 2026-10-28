@@ -604,6 +604,10 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .c-kachel span { font-size: 18px; } .c-kachel b { font-size: 22px; margin-top: 4px; } .c-kachel small { color: var(--ink2); font-size: 12px; }
 .c-tag-svg { width: 100%; height: auto; display: block; } .c-achse { font-size: 11px; fill: var(--ink2); }
 .c-legende { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--ink2); margin-top: 6px; } .c-legende i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.o-wrap { position: relative; } .o-hit { cursor: pointer; }
+.o-tip { position: absolute; top: 2px; transform: translateX(-50%); max-width: min(320px, 92%); padding: 6px 10px; border-radius: 10px; font-size: 12px; line-height: 1.35; color: var(--ink);
+  background: var(--sheet); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--panel-rand); box-shadow: 0 6px 18px rgba(0,0,0,.35); pointer-events: none; z-index: 2; }
+.o-tip .leise { font-size: 11px; }
 .c-legende i.gestr { background: repeating-linear-gradient(90deg, var(--ink) 0 4px, transparent 4px 7px); }
 .c-chips { display: flex; flex-wrap: wrap; gap: 10px; } .c-chip { flex: 1 1 260px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; }
 .c-chip-t { flex: 1; display: flex; flex-direction: column; } .c-chip-t small { color: var(--ink2); font-size: 12px; } .c-chip-t .link { font-size: 12px; text-align: left; padding: 0; }
@@ -981,6 +985,8 @@ class BaustellePanel extends LitElement {
     sr.addEventListener('pointerdown', e => this.zugStart(e));   // WU-0005: Layout der Auswertung (ziehen, Größe)
     wischenAn(this, sr);   // WU-0020: in der Container-Ansicht mit Finger oder Stift zum nächsten Container wischen
     sr.addEventListener('pointerleave', () => this.tip(null));
+    // Tür/Fenster offen im Tagesdiagramm (cTag): antippen, Maus darüber; woanders tippen schließt
+    sr.addEventListener('click', e => this.oeTippen(e)); sr.addEventListener('pointerover', e => this.oeZeigen(e)); sr.addEventListener('pointerout', e => this.oeWeg(e));
     sr.addEventListener('focusout', () => { if (this._wartet) { this._wartet = false; setTimeout(() => this._auffrischen(), 0); } });
     this.himmel = Himmel.an(this.bg);          // WebGL-Himmel; ohne WebGL bleibt der CSS-Hintergrund
     this._stimmung(true);
@@ -2171,12 +2177,43 @@ class BaustellePanel extends LitElement {
     const raster = [lo, Math.round((lo + hi) / 2), hi].map(v => `<line x1="${L}" x2="${W - Rr}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--gridc)"/><text x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" class="c-achse">${v}°</text>`).join('');
     const stunden = [0, 6, 12, 18, 24].map(h => `<text x="${x(h).toFixed(1)}" y="${H - 4}" text-anchor="middle" class="c-achse">${String(h).padStart(2, '0')}</text>`).join('');
     const bars = kw.map((k, h) => k > 0 ? `<rect x="${(x(h) + 2).toFixed(1)}" y="${(H - B + 6 + 22 * (1 - k / kmax)).toFixed(1)}" width="${(x(1) - x(0) - 4).toFixed(1)}" height="${(22 * k / kmax).toFixed(1)}" rx="2" fill="${farbe}" opacity=".8"><title>${String(h).padStart(2, '0')}:00 · ${de(k, 2)} kWh</title></rect>` : '').join('');
-    return `<svg viewBox="0 0 ${W} ${H}" class="c-tag-svg">${band}${raster}
+    // Tür/Fenster offen (Mockup tuer-diagramm, Variante A): halbdurchsichtiges Band über die ganze Höhe, oben kräftige Kante
+    const O = this.cOeffnungLage(b, vs, x), unten = H - B + 28;
+    const oeUnter = O.map(o => `<rect x="${o.x1.toFixed(1)}" y="${T}" width="${o.w.toFixed(1)}" height="${unten - T}" fill="${o.farbe}" opacity="${o.art === 'tuer' ? .22 : .2}" class="o-band o-${o.art}"/>`
+      + `<rect x="${o.x1.toFixed(1)}" y="${T}" width="${o.w.toFixed(1)}" height="3" fill="${o.farbe}" opacity=".9"/>`).join('');
+    const oeOben = O.map(o => { const hit = Math.max(12, o.w);   // Tippfläche mindestens 12 px
+      return `<rect class="o-hit" data-o="${esc(o.k)}" x="${(o.x1 + o.w / 2 - hit / 2).toFixed(1)}" y="${T}" width="${hit.toFixed(1)}" height="${unten - T}" fill="transparent"><title>${esc(o.text)}</title></rect>`; }).join('');
+    const sel = O.find(o => o.k === this._otip), mitT = O.some(o => o.art === 'tuer'), mitF = O.some(o => o.art === 'fenster');
+    const tip = !sel ? '' : `<div class="o-tip" style="left:clamp(90px, ${((sel.x1 + sel.w / 2) / W * 100).toFixed(1)}%, calc(100% - 90px))"><b style="color:${sel.farbe}">${esc(sel.text)}</b>${O.filter(o => o !== sel && o.a < sel.e && o.e > sel.a).map(o => `<div class="leise">gleichzeitig: ${esc(o.text)}</div>`).join('')}</div>`;
+    return `<div class="o-wrap"><svg viewBox="0 0 ${W} ${H}" class="c-tag-svg">${band}${oeUnter}${raster}
       ${mitSoll ? `<line x1="${L}" x2="${W - Rr}" y1="${y(soll).toFixed(1)}" y2="${y(soll).toFixed(1)}" stroke="var(--ink)" stroke-dasharray="5 4" opacity=".6"/><text x="${W - Rr}" y="${(y(soll) - 5).toFixed(1)}" text-anchor="end" class="c-achse">Soll ${de(soll)}°</text>` : ''}
       <path d="${pfad(aussen)}" fill="none" stroke="var(--ink2)" stroke-width="1.5" opacity=".7"/>${b.fuehler ? `<path d="${pfad(innen)}" fill="none" stroke="#ff9f0a" stroke-width="2.6"/>` : ''}
-      ${bars}${vs ? '' : `<line x1="${x(jetzt).toFixed(1)}" x2="${x(jetzt).toFixed(1)}" y1="${T}" y2="${H - B + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}</svg>
-      <div class="c-legende">${b.fuehler ? '<span><i style="background:#ff9f0a"></i>innen</span>' : ''}<span><i style="background:var(--ink2)"></i>außen</span>${mitSoll ? '<span><i class="gestr"></i>Soll</span>' : ''}<span><i style="background:var(--amber);opacity:.4"></i>Heizzeit</span><span><i style="background:${farbe}"></i>geheizt (kWh je Stunde)</span></div>`;
+      ${bars}${vs ? '' : `<line x1="${x(jetzt).toFixed(1)}" x2="${x(jetzt).toFixed(1)}" y1="${T}" y2="${H - B + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}${oeOben}</svg>${tip}</div>
+      <div class="c-legende">${b.fuehler ? '<span><i style="background:#ff9f0a"></i>innen</span>' : ''}<span><i style="background:var(--ink2)"></i>außen</span>${mitSoll ? '<span><i class="gestr"></i>Soll</span>' : ''}<span><i style="background:var(--amber);opacity:.4"></i>Heizzeit</span><span><i style="background:${farbe}"></i>geheizt (kWh je Stunde)</span>${mitT ? '<span class="o-leg"><i style="background:var(--rot);opacity:.45"></i>Tür offen</span>' : ''}${mitF ? '<span class="o-leg"><i style="background:var(--blau);opacity:.45"></i>Fenster offen</span>' : ''}</div>`;
   }
+  /* Tür/Fenster offen am angezeigten Tag: fertig von der Integration (baustelle/oeffnungen, Öffnungen unter 10 s schon
+     weg); ohne Kontakte kein Aufruf, solange es lädt keine Bänder. Heute kurz gültig (30 s), frühere Tage 1 h */
+  cOeffnungen(b, vs = 0) {
+    const d = this.d; if (!(b.sensoren || []).some(s => s.art === 'tuer' || s.art === 'fenster')) return [];
+    const tag = plusTage(this.z.HEUTE, -vs);
+    const r = this._holen(`oe:${d.entry}:${b.id}:${tag}`, () => this._hass.callWS({ type: 'baustelle/oeffnungen', entry_id: d.entry, bereich: b.id, tag }), vs ? 3600000 : 30000);
+    return r && Array.isArray(r.oeffnungen) ? r.oeffnungen : [];
+  }
+  /* Lage der Bänder im Diagramm (nur Zeichnen): noch offen → bis „jetzt“, kurze Öffnungen mindestens 2 px breit */
+  cOeffnungLage(b, vs, x) {
+    const jm = this.z.JETZT.split(':'), jetzt = +jm[0] * 60 + +jm[1], bis1440 = m => Math.min(1440, Math.max(0, m));
+    const lang = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
+    return this.cOeffnungen(b, vs).map(o => {
+      const a = bis1440(minu(o.von)), e = o.bis ? bis1440(minu(o.bis)) : vs ? 1440 : Math.max(a, jetzt), x1 = x(a / 60);
+      return { ...o, a, e, x1, w: Math.max(2, x(e / 60) - x1), k: `${o.entity_id}@${o.von}`, farbe: o.art === 'tuer' ? 'var(--rot)' : 'var(--blau)',
+        text: o.bis ? `${o.name} offen ${o.von}–${o.bis} (${lang(o.min)})` : `${o.name} offen seit ${o.von}` };
+    });
+  }
+  /* Antippen bzw. Darüberfahren (Maus) eines Bands zeigt „Tür 1 offen 07:12–07:31 (19 min)“; woanders tippen schließt */
+  oeTippen(e) { const t = e.target && e.target.closest && e.target.closest('[data-o]'); this.oeSetzen(!t ? null : this._otip === t.dataset.o && e.pointerType !== 'mouse' ? null : t.dataset.o); }
+  oeZeigen(e) { if (e.pointerType !== 'mouse') return; const t = e.target && e.target.closest && e.target.closest('[data-o]'); if (t) this.oeSetzen(t.dataset.o); }
+  oeWeg(e) { if (e.pointerType !== 'mouse') return; const n = e.relatedTarget; if (e.target && e.target.closest && e.target.closest('[data-o]') && !(n && n.closest && n.closest('[data-o]'))) this.oeSetzen(null); }
+  oeSetzen(k) { if ((this._otip || null) !== k) { this._otip = k; this.neuZeichnen(); } }
   /* Diagramm der Container-Ansicht (WU-0002) */
   containerTeile(b) {
     const d = this.d, c = ['heute', 'woche', 'stunden'].includes(this.s.cvd) ? this.s.cvd : 'heute';

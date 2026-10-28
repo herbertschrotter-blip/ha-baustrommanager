@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.150] – 2026-10-28
+
+- Temperatur-Diagramm der Container-Ansicht (Mockup `tuer-diagramm.html` Variante A, abgenommen 28.10.2026): Wann eine
+  Tür oder ein Fenster offen war, zeigt ein senkrechtes Band über die ganze Höhe – Tür rot, Fenster blau, noch offen
+  bis „jetzt“, auch an früheren Tagen. Antippen zeigt „Tür 1 offen 07:12–07:31 (19 min)“, gleichzeitige Öffnungen als
+  zweite Zeile; die Legende erscheint nur, wenn es Öffnungen gibt. Öffnungen unter 10 s fallen weg (Kontakt prellt).
+  Die Öffnungen liefert die Integration (neuer Befehl `baustelle/oeffnungen`, Regeln in `logik/oeffnungen.py`).
+
 ## [0.8.149] – 2026-10-28
 
 - Kachel-Katalog „＋ Kachel“ (Mockup `katalog-markiert.html` Variante B, abgenommen 28.10.2026): Die Knöpfe S/M/L sind

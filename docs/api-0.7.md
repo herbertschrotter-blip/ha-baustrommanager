@@ -401,6 +401,16 @@ Datenbank nicht kennt (`<entry>_energie_ohne_automatik`, `<entry>_ersparnis`) ko
 aus der eigenen Datenbank: Leistungssensoren der Geräte aus jedem gespeicherten Messwert (`messwert`), Schalter ohne
 Leistungsmessung aus den Minuten; andere Entitäten aus dem HA-Verlauf.
 
+`baustelle/oeffnungen` (alle Benutzer; `entry_id`, `bereich`, `tag` ISO-Datum, Vorgabe heute) – Tür und Fenster offen
+im Tagesdiagramm des Containers (Mockup `tuer-diagramm.html`, Variante A) → `{tag, laufend, oeffnungen: [{entity_id,
+art: tuer|fenster, name, von: "HH:MM", bis: "HH:MM"|null, min}]}`, nach Beginn sortiert. Kontakte = alle Türen und
+Fenster der Sensorliste des Containers (`logik/sensoren`), Verlauf aus dem HA-Verlauf (wie `baustelle/verlauf`), heute
+ergänzt um den jetzigen Zustand. Regeln in `logik/oeffnungen.py`: Öffnungen unter 10 s fallen weg (Prellen); schon vor
+Mitternacht offen → `von` "00:00"; `unavailable`/`unknown` beendet keine Öffnung (sie endet erst mit „zu“); `laufend`
+(heute) und noch offen → `bis` null („offen seit“), an früheren Tagen über Mitternacht offen → `bis` "24:00"; `min`
+abgeschlossen mindestens 1. Ohne Kontakte oder für künftige Tage leere Liste; unbekannter Bereich → `not_found`. Die
+Seite fragt nur Container mit Tür- oder Fensterkontakt (heute 30 s, frühere Tage 1 h zwischengespeichert).
+
 ## 10. Container-Inventar (0.8.107, BSM-031.05, Bauplan Inventar)
 
 Das Inventar liegt in der Datenbank über allen Baustellen (Aufbau 9). Ohne erreichbare Datenbank antworten beide Befehle

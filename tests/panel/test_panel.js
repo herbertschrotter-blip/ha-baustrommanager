@@ -839,6 +839,38 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'cvd', v: 'woche' }, 30); pruefe('Container Woche'); erwarte('WU-0004: Reiter Woche', ui.innerHTML.includes('data-chart="cw-magazin"'));
   await klick({ act: 'cvd', v: 'stunden' }, 30); pruefe('Container Heizzeit'); erwarte('WU-0004: Reiter Heizzeit', ui.innerHTML.includes('data-chart="ch-magazin"'));
   await klick({ act: 'cvd', v: 'heute' });
+  /* Tür/Fenster offen im Tagesdiagramm (Mockup tuer-diagramm, Variante A): Öffnungen fertig von baustelle/oeffnungen */
+  { const tagSvg = () => (ui.innerHTML.match(/<svg viewBox="0 0 640 220" class="c-tag-svg">[^]*?<\/svg>/) || [''])[0];
+    const legende = () => (ui.innerHTML.match(/<div class="c-legende">[^]*?<\/div>/) || [''])[0];
+    const anzahl = re => (tagSvg().match(re) || []).length, tipText = () => (ui.innerHTML.match(/<div class="o-tip"[^]*?<\/b>(?:<div class="leise">[^<]*<\/div>)*/) || [''])[0];
+    const tippe = async k => { const e = litEl(`[data-o="${k}"]`); if (!e) return erwarte(`Band ${k}`, false); e.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })); await ruhe(10); };
+    const oeAufrufe = () => alleAufrufe.filter(a => a.type === 'baustelle/oeffnungen');
+    erwarte('Öffnungen: ohne Öffnungen (Magazin) keine Bänder, keine Legende', anzahl(/class="o-band/g) === 0 && !legende().includes('Tür offen') && !legende().includes('Fenster offen'));
+    await klick({ act: 'container', id: 'polier' }, 30); pruefe('Container Tür/Fenster offen');
+    erwarte('Öffnungen: Aufruf für den angezeigten Tag', oeAufrufe().some(a => a.bereich === 'polier' && a.tag === '2026-09-29' && a.entry_id === panel.d.entry));
+    erwarte('Öffnungen: Mannschaft ohne Kontakte fragt nicht', REFERENZ && !oeAufrufe().some(a => a.bereich === 'mannschaft'));
+    erwarte('Öffnungen: 4 Tür-Bänder, 3 Fenster-Bänder', anzahl(/class="o-band o-tuer"/g) === 4 && anzahl(/class="o-band o-fenster"/g) === 3 && anzahl(/class="o-hit"/g) === 7);
+    erwarte('Öffnungen: Tür rot, Fenster blau', /fill="var\(--rot\)" opacity="0.22" class="o-band o-tuer"/.test(tagSvg()) && /fill="var\(--blau\)" opacity="0.2" class="o-band o-fenster"/.test(tagSvg()));
+    erwarte('Öffnungen: Legende Tür offen und Fenster offen', legende().includes('Tür offen') && legende().includes('Fenster offen'));
+    erwarte('Öffnungen: kurze Öffnung mindestens 2 px, Tippfläche 12 px', /width="2\.0" height="\d+" fill="var\(--rot\)"[^>]*o-band/.test(tagSvg()) && /data-o="binary_sensor\.tuer_polier@09:45" x="[\d.]+" y="12" width="12\.0"/.test(tagSvg()));
+    erwarte('Öffnungen: ohne Antippen kein Text', !tipText());
+    await tippe('binary_sensor.tuer_polier@07:12');
+    erwarte('Öffnungen: Antippen zeigt „Tür 1 offen 07:12–07:31 (19 min)“', tipText().includes('Tür 1 offen 07:12–07:31 (19 min)') && !tipText().includes('gleichzeitig'));
+    await tippe('binary_sensor.polier_fenster_2@10:40');
+    erwarte('Öffnungen: Überlappung als zweite Zeile', tipText().includes('Fenster 2 offen 10:40–11:08 (28 min)') && tipText().includes('gleichzeitig: Fenster 1 offen 10:15–10:50 (35 min)'));
+    await tippe('binary_sensor.polier_fenster_2@10:40');
+    erwarte('Öffnungen: nochmals antippen schließt', !tipText());
+    await tippe('binary_sensor.tuer_polier@12:02'); await klick('.c-legende', 10);
+    erwarte('Öffnungen: woanders tippen schließt', !tipText());
+    const k = `oe:${panel.d.entry}:polier:2026-09-29`, alt = panel.cache[k];   // noch offen: Band bis jetzt (16:20), „offen seit“
+    panel.cache[k] = { daten: { tag: '2026-09-29', laufend: true, oeffnungen: [{ entity_id: 'binary_sensor.polier_fenster_2', art: 'fenster', name: 'Fenster 2', von: '11:40', bis: null, min: 280 }] }, zeit: Date.now(), laufend: false };
+    await panel.neuZeichnen(); await ruhe(5); await tippe('binary_sensor.polier_fenster_2@11:40');
+    erwarte('Öffnungen: noch offen bis jetzt, „Fenster 2 offen seit 11:40“', /width="115\.9" height="\d+" fill="var\(--blau\)"/.test(tagSvg()) && tipText().includes('Fenster 2 offen seit 11:40') && !legende().includes('Tür offen') && legende().includes('Fenster offen'));
+    pruefe('Container Fenster offen seit');
+    panel.cache[k] = alt; panel._otip = null; panel.zrSetzen('c-Tag', 30, 1); await ruhe(30);
+    erwarte('Öffnungen: früherer Tag fragt seinen Tag und zeichnet seine Bänder', oeAufrufe().some(a => a.bereich === 'polier' && a.tag === '2026-09-28') && anzahl(/class="o-band o-tuer"/g) === 3 && anzahl(/class="o-band o-fenster"/g) === 1);
+    pruefe('Container Tür/Fenster früherer Tag');
+    panel.zrSetzen('c-Tag', 30, 0); await klick({ act: 'container', id: 'magazin' }, 20); }
   { await klick({ act: 'container', id: 'polier' }, 20); const pol = () => panel.d.bereiche.find(x => x.id === 'polier');
     pol().modus = 'thermo'; await panel.neuZeichnen(); pruefe('Container D Thermostat');
     erwarte('WU-0004: Thermostat-Rad mit Soll ±', ui.innerHTML.includes('class="c-rad"') && ui.innerHTML.includes('class="c-pm"') && /Soll \d/.test(ui.innerHTML));

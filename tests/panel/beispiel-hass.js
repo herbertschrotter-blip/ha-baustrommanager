@@ -70,6 +70,17 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     }
     return erg;
   }
+  /* Tür/Fenster offen wie die Integration (logik/oeffnungen): Beispielöffnungen im Poliercontainer, heute und frühere Tage */
+  function oeffnungen(m) {
+    const heute = new Date(JETZT + 2 * 36e5).toISOString().slice(0, 10), tag = m.tag || heute;
+    const hm = x => `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`;
+    const T1 = ['binary_sensor.tuer_polier', 'tuer', 'Tür 1'], F1 = ['binary_sensor.polier_fenster_1', 'fenster', 'Fenster 1'], F2 = ['binary_sensor.polier_fenster_2', 'fenster', 'Fenster 2'];
+    const auf = ([entity_id, art, name], von, bis) => ({ entity_id, art, name, von: hm(von), bis: hm(bis), min: Math.max(1, bis - von) });
+    const liste = m.bereich !== 'polier' || tag > heute ? [] : tag === heute
+      ? [auf(T1, 432, 451), auf(T1, 585, 586), auf(F1, 615, 650), auf(F2, 640, 668), auf(T1, 722, 760), auf(F1, 730, 745), auf(T1, 930, 933)]
+      : [auf(T1, 425, 440), auf(F1, 600, 630), auf(T1, 725, 752), auf(T1, 1012, 1013)];
+    return { tag, laufend: tag === heute, oeffnungen: liste };
+  }
   function verlauf(m) {
     const von = Date.parse(m.start_time), erg = {};
     for (const id of m.entity_ids) {
@@ -281,7 +292,8 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
           const reihe = Array.from({ length: n }, (_, i) => m.zeitraum === 'Tag' ? (i <= 16 ? kw : 0) : kw * 24 * (i < 5 ? 1 : 0)), ohne = reihe.reduce((a, b) => a + b, 0), kwh = ohne * 0.35;
           return { zeitraum: { art: m.zeitraum, n }, basis: m.basis || 'geraet', preis: 0.28, kw, reihe, ohne_kwh: ohne, kwh,
             ergebnis: { ohne_eur: ohne * 0.28, gespart_eur: (ohne - kwh) * 0.28, prozent: 65, hinweis: 'grobe Obergrenze, nicht belastbar' }, geraete: [] }; }
-        case 'history/history_during_period': case 'baustelle/verlauf': return verlauf(m);   // BSM-014: Verlauf aus der Datenbank
+        case 'history/history_during_period': case 'baustelle/verlauf': return verlauf(m);
+        case 'baustelle/oeffnungen': return oeffnungen(m);   // Tür/Fenster offen im Tagesdiagramm (Mockup tuer-diagramm, Variante A)   // BSM-014: Verlauf aus der Datenbank
         case 'baustelle/protokoll': { const b = welt().find(x => x.baustelle.entry_id === m.entry_id); const p = b.laufzeit.protokoll.length ? b.laufzeit.protokoll : [['2026-04-17T12:00:00+02:00', 'einstellung', null, 'Baustelle abgeschlossen – Heizung aus, Werte gespeichert'], ['2026-03-03T06:00:00+02:00', 'warnung', `${m.entry_id}-3`, 'Frostgefahr 3,8 °C trotz Frostschutz'], ['2026-03-02T11:00:00+02:00', 'ok', `${m.entry_id}-3`, 'wieder über 5 °C']];
           return [...p, ...p.map(e => [e[0].replace('2026-09-2', '2026-09-1'), ...e.slice(1)])].slice(0, m.limit); }
         case 'baustelle/meldungen': return JSON.parse(JSON.stringify(meldungen));
