@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.152",
+   "version": "0.8.153",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -536,7 +536,8 @@
    "melden_knopf": true,
    "auswertung_quelle": "datenbank",
    "erklaer": true,
-   "geraete": {}
+   "geraete": {},
+   "korrekturen": []
   },
   "zaehler": {
    "gradh:polier": 152.2113333333336,
@@ -2149,7 +2150,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.152",
+   "version": "0.8.153",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2351,7 +2352,8 @@
    "melden_knopf": true,
    "auswertung_quelle": "datenbank",
    "erklaer": true,
-   "geraete": {}
+   "geraete": {},
+   "korrekturen": []
   },
   "zaehler": {
    "energie": 1840.5,

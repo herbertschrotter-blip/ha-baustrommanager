@@ -42,7 +42,7 @@ from .const import (
     SUB_GERAET,
 )
 from .logik import auswertung as a, preise as preise_logik
-from .logik import zeitraum
+from .logik import ruecksprung, zeitraum
 from .logik.abrechnung import EIGEN
 
 if TYPE_CHECKING:
@@ -162,13 +162,51 @@ async def async_statistik(
     ergebnis, rest = await async_aus_datenbank(hass, gesucht, start, ende, periode)
     if not rest or "recorder" not in hass.config.components:
         return ergebnis
+    daten = await _aus_ha(hass, set(rest), start, ende, periode, arten)
+    if "change" in arten:
+        daten = await _zaehler_bereinigen(hass, daten, start, ende, periode)
+    return {**daten, **ergebnis}
+
+
+async def _aus_ha(hass: HomeAssistant, ids: set[str], start: datetime, ende: datetime, periode: str, arten: set[str]) -> Statistik:
+    """HA-Langzeitstatistik (`statistics_during_period`) so, wie HA sie liefert."""
     from homeassistant.components.recorder.statistics import statistics_during_period  # noqa: PLC0415
     from homeassistant.helpers.recorder import get_instance  # noqa: PLC0415
 
     daten = await get_instance(hass).async_add_executor_job(
-        statistics_during_period, hass, start, ende, rest, periode, None, arten
+        statistics_during_period, hass, start, ende, ids, periode, None, arten
     )
-    return cast(Statistik, {**daten, **ergebnis})
+    return cast(Statistik, daten)
+
+
+def _ausgleich(hass: HomeAssistant, ids: Iterable[str]) -> dict[str, list[tuple[float, float]]]:
+    """Ausgleich nachgetragener Zähler (`baustelle/zaehler_korrigieren`) je Statistik-ID der geladenen Baustellen."""
+    gesucht, reg = set(ids), er.async_get(hass)
+    je: dict[str, list[tuple[float, float]]] = {}
+    for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+        st: Steuerung | None = getattr(entry, "runtime_data", None)
+        if st is None or not st.e.get("korrekturen"):
+            continue
+        for sensor, liste in ruecksprung.ausgleich(st.e["korrekturen"]).items():
+            entity_id = reg.async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_{sensor}")
+            if entity_id in gesucht:
+                je.setdefault(entity_id, []).extend(liste)
+    return je
+
+
+async def _zaehler_bereinigen(hass: HomeAssistant, daten: Statistik, start: datetime, ende: datetime, periode: str) -> Statistik:
+    """FE-0029: Zähler aus der HA-Statistik nach `logik/ruecksprung` – Rücksprung zählt 0, Nachtrag ohne Sprung. Je
+    Stunde (bzw. 5 Minuten) bereinigt; Tag, Woche und Monat als Summe der bereinigten Stunden. Die eigene Datenbank
+    rechnet aus den Minuten und kennt keine Rücksprünge."""
+    zaehler = {sid for sid, punkte in daten.items() if any(a.ist_zahl(p.get("change")) for p in punkte)}
+    if not zaehler:
+        return daten
+    ausgleich = _ausgleich(hass, zaehler)
+    if periode in ("5minute", "hour"):
+        return {sid: ruecksprung.bereinigt(p, ausgleich.get(sid, ())) if sid in zaehler else p for sid, p in daten.items()}
+    stunden = await _aus_ha(hass, zaehler, start, ende, "hour", {"change"})
+    return {sid: ruecksprung.zusammenfassen(p, ruecksprung.bereinigt(stunden.get(sid, []), ausgleich.get(sid, ())))
+            if sid in zaehler else p for sid, p in daten.items()}
 
 
 def _zone() -> tzinfo:

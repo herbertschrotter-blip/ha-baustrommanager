@@ -31,7 +31,7 @@ from .logik.prognose_typen import MODELL_VERSION
 from .geraete import BEFEHLE as GERAETE_BEFEHLE
 from .inventar import BEFEHLE as INVENTAR_BEFEHLE
 from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
-from .logik import preise as preise_logik
+from .logik import preise as preise_logik, ruecksprung
 from .logik.arbeitszeit import arbeitszeit_loeschen, arbeitszeiten_speichern
 from .logik.auswertung import ARTEN
 from .logik import hochrechnung as hochrechnung_logik, oeffnungen as oeffnungen_logik, sensoren as sensor_logik, symbol as symbol_logik
@@ -282,7 +282,7 @@ async def async_panel_anmelden(hass: HomeAssistant, version: str) -> None:
     hass.data[DATA_MELDUNGEN] = Meldungen(hass)
     hass.async_create_task(hass.data[DATA_MELDUNGEN].async_laden(), "baustelle_meldungen_laden")  # lesbare Kopie beim Start
     for befehl in (ws_struktur, ws_setzen, ws_liste, ws_aktion, ws_bericht, ws_protokoll, ws_meldungen, ws_meldung,
-                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_verlauf, ws_oeffnungen, ws_notprogramm_pruefen, ws_notprogramm_probe,
+                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_zaehler_korrigieren, ws_verlauf, ws_oeffnungen, ws_notprogramm_pruefen, ws_notprogramm_probe,
                    *INVENTAR_BEFEHLE, *UMBENENNEN_BEFEHLE, *GERAETE_BEFEHLE):
         websocket_api.async_register_command(hass, befehl)
 
@@ -997,6 +997,42 @@ async def ws_statistik(hass: HomeAssistant, connection: websocket_api.ActiveConn
         return
     arten = set(msg.get("types") or ["change", "mean", "state"])
     connection.send_result(msg["id"], await auswertung.async_statistik(hass, msg["statistic_ids"], start, ende, msg["period"], arten))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "baustelle/zaehler_korrigieren",
+    vol.Required("entry_id"): str,
+    vol.Required("key"): vol.In(ruecksprung.KORRIGIERBAR),
+    vol.Required("plus_kwh"): vol.All(vol.Coerce(float), vol.Range(min=0.001, max=100000)),
+    vol.Required("grund"): vol.All(cv.string, vol.Length(min=3, max=300)),
+})
+@websocket_api.async_response
+async def ws_zaehler_korrigieren(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """FE-0029: Zähler einmalig nachtragen (nur Admins). Der Sprung des Zählers (und der Sensoren, die daraus rechnen) wird
+    als Korrektur gemerkt; `async_statistik` rechnet ihn aus Auswertung, Diagrammen und Bericht heraus (logik/ruecksprung)."""
+    if not _darf(connection, msg, "zaehler_korrigieren") or (st := _steuerung(hass, connection, msg)) is None:
+        return
+    from homeassistant.components.sensor import SensorStateClass  # noqa: PLC0415
+    from .sensor import ZAEHLER_BAUSTELLE  # noqa: PLC0415 – sensor → steuerung (Kreis beim Import)
+
+    heizung = Heizung.von(st).aktiv()
+    mit_statistik = [z for z in ZAEHLER_BAUSTELLE if z.art in (SensorStateClass.TOTAL, SensorStateClass.TOTAL_INCREASING)
+                     and (heizung or not z.nur_heizung)]
+
+    def stand() -> dict[str, float | None]:
+        return {z.key: z.lesen(st) for z in mit_statistik}
+
+    zeit, vorher = dt_util.utcnow(), stand()   # Zeit vor dem Sprung: er liegt in diesem Abschnitt oder danach
+    key, kwh = msg["key"], float(msg["plus_kwh"])
+    st.zaehler_plus(key, kwh)
+    eintrag = ruecksprung.korrektur(zeit, key, kwh, msg["grund"], vorher, stand(), _benutzer(connection))
+    st.e.setdefault("korrekturen", []).append(eintrag)
+    zahl = f"{kwh:.1f}".replace(".", ",")
+    st.protokoll("einstellung", None, f"Zähler „{key}“ um {zahl} kWh nachgetragen: {msg['grund']}")
+    st.auswerten()
+    await st.einstellungen.async_jetzt_speichern()
+    einstellung_merken(hass, st.entry.entry_id, "aktion.zaehler_korrigieren", eintrag, _benutzer(connection))
+    connection.send_result(msg["id"], eintrag)
 
 
 @websocket_api.websocket_command({

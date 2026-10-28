@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.153] – 2026-10-28
+
+- FE-0029: In „Gespart“ fiel die Linie „ohne (24/7)“ am 17./18.10. unter 0. Ursache war die Datenbank-Panne vom
+  16.–19.10. (behoben in 0.8.139): Bei jedem Neustart kam der Zählerstand vom 16.10. zurück; die Stromzähler holen das
+  über den Shelly-Zählerstand auf, „ohne Automatik“ wird aus der Zeit gerechnet und lief dreimal rückwärts (−147, −188,
+  −28 kWh). Jetzt gilt: Läuft ein Zähler in einem Abschnitt rückwärts, zählt der Abschnitt 0 – für alle Zähler, in
+  Diagrammen, Summen, Abrechnung, Bericht und CSV (Regel in `logik/ruecksprung.py`). Neuer Admin-Befehl
+  `baustelle/zaehler_korrigieren`, um verlorene kWh einmalig nachzutragen, ohne einen Sprung im Diagramm.
+
 ## [0.8.152] – 2026-10-28
 
 - Kachel „Gespart“ (Mockup `gespart.html` Variante B, abgenommen 28.10.2026): Bisher zeigte sie dieselbe Kurve wie

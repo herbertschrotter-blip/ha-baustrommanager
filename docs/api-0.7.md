@@ -407,6 +407,22 @@ Fühler. Anders als HA mit der laufenden Stunde bzw. dem laufenden Tag; für die
 Datenbank nicht kennt (`<entry>_energie_ohne_automatik`, `<entry>_ersparnis`) kommt aus der HA-Statistik. Einstellung
 `auswertung_quelle` (`baustelle/setzen`, `datenbank`|`statistik`) schaltet eine Baustelle auf die HA-Statistik zurück.
 
+**Zähler aus der HA-Statistik bereinigt (FE-0029, `logik/ruecksprung.py`):** Für alles, was aus der HA-Statistik kommt
+(`baustelle/statistik`, `baustelle/auswertung`, `baustelle/abrechnung`, Bericht, CSV – alle über
+`auswertung.async_statistik`), gilt je Stunde bzw. 5 Minuten: eine negative `change` (Zähler läuft nach einem Neustart
+rückwärts) zählt 0. `day`/`week`/`month` sind dann die Summe der bereinigten Stunden (die Integration holt dafür die
+Stundenwerte dazu). `mean` und `state` bleiben unverändert. Die eigene Datenbank rechnet aus den Minuten und kennt keine
+Rücksprünge.
+
+`baustelle/zaehler_korrigieren` (nur Admins; `entry_id`, `key`: `ohne`, `plus_kwh` 0,001–100000, `grund` 3–300 Zeichen)
+trägt einen Zähler einmalig nach (z. B. „ohne Automatik“ nach der Datenbank-Panne 16.–19.10.2026) → der gespeicherte
+Eintrag `{zeit, key, kwh, grund, von, sprung: {sensor: betrag}}`. `sprung` = um wie viel jeder Zähler-Sensor mit
+Statistik dadurch springt (`energie_ohne_automatik` in kWh, `ersparnis` in €). Die Einträge stehen in der Einstellung
+`korrekturen`; `async_statistik` zieht jeden Sprung vom Abschnitt ab, in dem er liegt (ist der kleiner, von den folgenden; nie
+unter 0; liegt der Abschnitt außerhalb der Abfrage, nichts) – Zählerstand und Sensoren stimmen wieder, Diagramme und Summen zeigen keinen Sprung. Protokoll („Zähler „ohne“
+um … kWh nachgetragen: …“) und Einstellung `aktion.zaehler_korrigieren` mit Benutzer. Unbekannter `key` →
+`invalid_format`.
+
 `baustelle/verlauf` (0.8.60; `start_time`, `end_time`, `entity_ids`, `entry_id`) antwortet wie
 `history/history_during_period` mit `minimal_response` – `{entity_id: [{s, lu}]}`, erster Eintrag = Zustand zu Beginn –
 aus der eigenen Datenbank: Leistungssensoren der Geräte aus jedem gespeicherten Messwert (`messwert`), Schalter ohne

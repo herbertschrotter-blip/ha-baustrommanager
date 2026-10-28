@@ -128,6 +128,8 @@ STANDARD: dict[str, Any] = {
     "erklaer": True,          # Erklärtexte „ⓘ“ auf der Seite (0.7.8)
     "geraete": {},            # je Gerät {"aktiv": False} = inaktiv: Automatik lässt es aus, keine Warnungen (WU-0004);
                               # {"zusatz": True} = Zusatz-Heizkörper (AN-0006)
+    # FE-0029: einmalig nachgetragene Zähler (baustelle/zaehler_korrigieren) – Ausgleich für die Statistik (logik/ruecksprung)
+    "korrekturen": [],
     "protokoll": [],
     # Zähler wie 0.6: Energie, Kosten, Zeiten, Zyklen, Mittel; „stand:<gerät>“ = letzter Zählerstand des Shelly
     "zaehler": {},
