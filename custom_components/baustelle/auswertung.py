@@ -394,6 +394,7 @@ async def async_auswertung(
     vorher = [await _summen(hass, x, zr_vorher) for x in quellen]
     summen = {k: sum(s[k] for s in jetzt) for k in ("kwh", "heizzeit", "pumpzeit", "ohne")}
     davor = {k: sum(s[k] for s in vorher) for k in ("kwh", "heizzeit", "pumpzeit")}
+    vorher_ganz = all(x.beginn <= zr_vorher.von for x in quellen)   # Zeitraum davor ganz in der Baustelle?
     preis = preis_sim if preis_sim is not None else await _preis_zeitraum(hass, quellen, zr)
     # Je Gerät (diese Baustelle): kWh aus den Energiezählern der Geräte, Pumpzeit aus der Statistik
     eigene = next((s for x, s in zip(quellen, jetzt, strict=True) if x is q), None) or await _summen(hass, q, zr)
@@ -432,11 +433,11 @@ async def async_auswertung(
     return {
         "zeitraum": _zeitraum_dict(zr), "preis": preis, "simuliert": preis_sim is not None,
         "summen": {**summen, "eur": a.geld(summen["kwh"], preis), "vorher": davor,
-                   "veraenderung": {k: a.veraenderung(summen[k], davor[k]) for k in davor},
+                   "veraenderung": {k: a.veraenderung(summen[k], davor[k], vorher_ganz) for k in davor},
                    "ohne_automatik": oa},
         # Rangliste der Container und „Was fällt auf“ (WU-0005, logik/auswertung) – über `scope`
         "rangliste": rang,
-        "erkenntnisse": a.erkenntnisse(rang, ohne=oa, gerade=gerade, veraenderung_kwh=a.veraenderung(summen["kwh"], davor["kwh"]),
+        "erkenntnisse": a.erkenntnisse(rang, ohne=oa, gerade=gerade, veraenderung_kwh=a.veraenderung(summen["kwh"], davor["kwh"], vorher_ganz),
                                        typ_weniger=typ.get("weniger") if isinstance(typ, dict) else None),
         "je_geraet": [{**z, "eur": a.geld(z["kwh"], preis)}
                       for z in a.je_geraet(q.geraete, q.zaehler, roh_g, eigene["pumpzeit_je"])],

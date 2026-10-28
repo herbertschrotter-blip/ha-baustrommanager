@@ -97,8 +97,8 @@ export function streu(id, pkt, k, d0, grenze = null) {   // grenze: Heizgrenze d
     <div class="legende"><span><i style="background:var(--s1)"></i>ein Heiztag</span><span><i style="background:var(--s2)"></i>Trend</span><span class="leise">x: Tagesmittel außen · y: kWh</span></div>`;
 }
 
-export function flaeche(id, reihen, labels, einheit, jedes, vergleich = null) {   // vergleich: { name, v } gestrichelt (WU-0013)
-  const W = 320, H = 160, L = 30, R = 8, T = 10, U = 22, n = labels.length, viele = reihen.length > 1;
+export function flaeche(id, reihen, labels, einheit, jedes, vergleich = null, breite = 320) {   // vergleich: { name, v } gestrichelt (WU-0013); breite: Kachel L füllt die Breite
+  const W = breite, H = 160, L = 30, R = 8, T = 10, U = 22, n = labels.length, viele = reihen.length > 1;
   reihen = reihen.map(r => ({ ...r, v: labels.map((_, i) => zahl(r.v[i]) ? Number(r.v[i]) : 0) }));
   // gestapelt: jede Reihe liegt auf der Summe der darunterliegenden, die oberste Kante ist die Summe der Auswahl
   let unten = Array(n).fill(0);

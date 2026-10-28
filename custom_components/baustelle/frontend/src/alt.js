@@ -792,7 +792,7 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .kk-kopf small { font-size: 10.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kk-ic { font-size: 15px; line-height: 1; flex: none; }
 .kk-zahl { font-size: 28px; font-weight: 300; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .kk-zahl small { font-size: 13px; color: var(--ink2); font-weight: 400; }
-.kk-S .kk-zahl { margin-top: auto; font-size: 24px; }
+.kk-S .kk-zahl { margin: auto 0; font-size: 34px; text-align: center; } .kk-S > .kk-wo { text-align: center; }   /* Herbert 28.10.2026: Wert größer und mittig */
 .kk-wo { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kk-vgl { font-size: 12px; color: var(--ink2); line-height: 1.35; } .kk-vgl em { font-style: normal; } .kk-vgl em.mehr { color: var(--amber); } .kk-vgl em.weniger { color: #30d158; }
 .kk-M { flex-direction: row; gap: 12px; align-items: stretch; }
@@ -2272,9 +2272,9 @@ class BaustellePanel extends LitElement {
     const heuteNr = TAGE.indexOf(this.z.HEUTE_TAG), soll = b ? this.sollVon(b) : null;
     switch (x.k) {
       case 'b-kosten': { const r = this.kkSumme(c);
-        return { zahl: zahl(S.eur) ? de(S.eur, 0) : '–', einh: '€', wo: wann, vgl: `${f(S.kwh, 0)} kWh ${pfeil((S.veraenderung || {}).kwh)} zu ${this.zrVgl(c.z, c.v)}`, funke: r,
+        return { zahl: zahl(S.eur) ? de(S.eur, 0) : '–', einh: '€', wo: wann, vgl: `${f(S.kwh, 0)} kWh${zahl((S.veraenderung || {}).kwh) ? ` ${pfeil(S.veraenderung.kwh)} zu ${this.zrVgl(c.z, c.v)}` : ''}`, funke: r,
           kennz: [['Kosten', `${f(S.eur, 2)} €`], ['Verbrauch', `${f(S.kwh, 0)} kWh`], ['Heizzeit', `${f(S.heizzeit, 0)} h`], ['Pumpzeit', `${f(S.pumpzeit, 1)} h`]],
-          dia: id => r ? flaeche(id, [{ name: 'Verbrauch', farbe: 'var(--s1)', v: r }], zr.labels, 'kWh', KK_JEDES[c.z]) : '' }; }
+          dia: (id, w) => r ? flaeche(id, [{ name: 'Verbrauch', farbe: 'var(--s1)', v: r }], zr.labels, 'kWh', KK_JEDES[c.z], null, w) : '' }; }
       case 'b-gespart': { const oa = S.ohne_automatik, r = this.kkSumme(c), alle = c.ort === 'aw' && this.s.awScope === 'alle';
         const ohne = alle ? null : this.reihe(d, this.eid(d, d.entry, 'energie_ohne_automatik'), c.z, c.v);
         return { zahl: oa ? de(oa.gespart_eur, 0) : '–', einh: '€', wo: wann, vgl: oa ? `${f(oa.prozent, 0)} % weniger als rund um die Uhr (${f(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ''}` : 'noch keine Werte', funke: r, farbe: 'var(--s3)',

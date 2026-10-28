@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.148] – 2026-10-28
+
+- Kachel „Kosten & Verbrauch“ (Herbert 28.10.2026): In der Größe L füllt das Diagramm jetzt die Breite der Kachel
+  (vorher ein schmales Bild in der Mitte), in der Größe S steht der Betrag größer und mittig. Der Vergleich „▲ … % zu
+  Vormonat“ entfällt, wenn der Zeitraum davor nicht ganz in der Baustelle lag – „+11 441 %“ gegen die letzten zwei
+  Tage im September war kein sinnvoller Vergleich. Das gilt auch für die Pfeile oben in der Auswertung und für die
+  Hinweise „x % mehr als …“.
+
 ## [0.8.147] – 2026-10-28
 
 - Prognose V2 (Schattenbetrieb): Der Evidenzbericht vom 28.10. zeigte für keinen Container einen Wärmeverlust H – zwei

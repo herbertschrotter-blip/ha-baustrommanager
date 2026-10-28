@@ -63,7 +63,7 @@ export function kachelVorlage(p, x, i, ort, c) {
   else if (gr === 'M') { const rechts = D.mini || funke(D.funke, D.farbe);
     inhalt = html`<div class="kk-m-l">${k}${zahlH}<span class="kk-vgl">${roh(D.vgl)}</span>${b ? wo : nothing}</div><div class="kk-m-r">${rechts ? roh(rechts) : html`<span class="kk-wo">${b ? D.wo || '' : ''}</span>`}</div>`; }
   else {
-    const dia = mitDia ? D.dia(`kk-${ort}-${i}-${x.k}-${b ? b.id : 'b'}-${c.zc}${c.vc}`) : '';
+    const dia = mitDia ? D.dia(`kk-${ort}-${i}-${x.k}-${b ? b.id : 'b'}-${c.zc}${c.vc}`, p.narrow ? 320 : 640) : '';   // Herbert 28.10.2026: L füllt die Breite
     inhalt = html`${k}<div class="kk-l-zeile">${zahlH}${wo}</div><span class="kk-vgl">${roh(D.vgl)}</span>${mitDia ? html`<div class="kk-dia ${D.zeilen ? 'zeilen' : ''}">${dia ? roh(dia) : html`<div class="leer">Noch keine Werte</div>`}</div>`
       : html`<div class="kk-kennz">${(D.kennz || []).map(([kk, v]) => html`<div><b>${roh(v)}</b><span>${kk}</span></div>`)}</div>`}`;
   }

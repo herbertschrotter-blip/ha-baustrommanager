@@ -420,9 +420,11 @@ def kennzahlen(
     }
 
 
-def veraenderung(jetzt: float | None, vorher: float | None) -> int | None:
-    """Veränderung zum Zeitraum davor in ganzen % (Pfeile der Auswertung); ohne Wert davor None."""
-    if jetzt is None or vorher is None or vorher <= 0:
+def veraenderung(jetzt: float | None, vorher: float | None, vorher_ganz: bool = True) -> int | None:
+    """Veränderung zum Zeitraum davor in ganzen % (Pfeile der Auswertung); ohne Wert davor None. `vorher_ganz` False:
+    der Zeitraum davor begann vor der Baustelle (nur ein Teil gemessen) – dann kein Vergleich, sonst stünde z. B.
+    „+11 441 %“ gegen die letzten zwei Tage im September (Herbert 28.10.2026)."""
+    if not vorher_ganz or jetzt is None or vorher is None or vorher <= 0:
         return None
     return js_runden((jetzt - vorher) / vorher * 100)
 

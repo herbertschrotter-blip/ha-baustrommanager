@@ -192,7 +192,7 @@ function stueck(p, k, B, A, z, gr = { w: 4, h: 4 }) {
   const auf = (hier, c) => hier ? () => p.containerOeffnen(c.bereich) : null;
   switch (k) {
     case 'betrag': return laed ? html`<div class="glas-panel block">${LAEDT}</div>` : html`<div class="glas-panel aw-betrag"><div><small>KOSTEN · ${wann}</small><b>${eur}</b>
-          <span>${zahl(S.kwh) ? de(S.kwh, 0) : '–'} kWh ${awDelta((S.veraenderung || {}).kwh)} <span class="leise">zu ${awVgl(p, z)}</span></span></div>
+          <span>${zahl(S.kwh) ? de(S.kwh, 0) : '–'} kWh ${zahl((S.veraenderung || {}).kwh) ? html`${awDelta(S.veraenderung.kwh)} <span class="leise">zu ${awVgl(p, z)}</span>` : nothing}</span></div>
         <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b>${oa && oa.hinweis ? html`<span class="hp-grob">${oa.hinweis}</span>` : nothing}</div>
           <div><small>HOCHRECHNUNG HEIZPERIODE</small><b>${h && zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)} €` : '–'}</b></div></div></div>`;
     case 'rangliste': if (gr.w <= 2) return html`<div class="glas-panel block aw-klein"><div class="block-kopf"><b>Wer verbraucht was</b><span class="leise">Top 3</span></div>

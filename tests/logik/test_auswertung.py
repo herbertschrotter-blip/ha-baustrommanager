@@ -145,6 +145,7 @@ def test_csv_text_wie_seite():
 def test_veraenderung_und_ohne_automatik():
     assert a.veraenderung(115, 100) == 15 and a.veraenderung(99.5, 100) == 0 and a.veraenderung(98.5, 100) == -1
     assert a.veraenderung(5, 0) is None and a.veraenderung(None, 5) is None
+    assert a.veraenderung(528, 4.6, vorher_ganz=False) is None   # Vormonat nur teilweise in der Baustelle
     grob = a.OHNE_HINWEIS
     assert a.ohne_automatik(40, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 15.0, "prozent": 60.0, "hinweis": grob}
     assert a.ohne_automatik(120, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 0.0, "prozent": 0.0, "hinweis": grob}

@@ -1079,6 +1079,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('WU-0014: Katalog der Auswertung mit Bausteinen und Vorlagen', /class="kk-chip[^"]*">Auswertung</.test(ui.innerHTML) && KAT.treffer().includes('data-k="rangliste"') && ui.innerHTML.includes('Vorlage laden'));
     await klick(KAT.gk('b-kosten', 'L')); await klick(KAT.hinzu, 30); pruefe('Auswertung mit Kachel');
     erwarte('WU-0014: Kachel im Raster der Auswertung', panel.awAuswahl().some(x => x.an && x.k === 'b-kosten') && !!litEl('.aw-raster[data-ort="aw"] .kk[data-ort="aw"][role="button"]'));
+    { const kk = litEl('.aw-raster[data-ort="aw"] .kk-L'), svg = kk && kk.querySelector('.kk-dia svg');
+      erwarte('Herbert 28.10.: Kachel L zeichnet das Diagramm in der Breite der Kachel', !!svg && svg.getAttribute('viewBox') === `0 0 ${panel.narrow ? 320 : 640} 160`); }
     await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Woche' }, 30); pruefe('Auswertung Woche mit Kachel');
     erwarte('WU-0014: Kachel folgt dem Zeitraum', panel.kkCtx('aw').z === 'Woche' && ui.innerHTML.includes('<span class="kk-wo">diese Woche</span>'));
     await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Monat' }, 30);

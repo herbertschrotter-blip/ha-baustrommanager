@@ -758,8 +758,8 @@ function streu(id, pkt, k2, d0, grenze = null) {
   return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H2}">${raster}${achse}<text x="${W - R2}" y="${H2 - 8}" class="ax" text-anchor="end" dx="0" opacity="0">.</text>${trend}${punkte}<g class="hover"></g></svg>
     <div class="legende"><span><i style="background:var(--s1)"></i>ein Heiztag</span><span><i style="background:var(--s2)"></i>Trend</span><span class="leise">x: Tagesmittel außen · y: kWh</span></div>`;
 }
-function flaeche(id, reihen, labels, einheit, jedes, vergleich3 = null) {
-  const W = 320, H2 = 160, L2 = 30, R2 = 8, T2 = 10, U = 22, n4 = labels.length, viele = reihen.length > 1;
+function flaeche(id, reihen, labels, einheit, jedes, vergleich3 = null, breite = 320) {
+  const W = breite, H2 = 160, L2 = 30, R2 = 8, T2 = 10, U = 22, n4 = labels.length, viele = reihen.length > 1;
   reihen = reihen.map((r5) => ({ ...r5, v: labels.map((_2, i7) => zahl(r5.v[i7]) ? Number(r5.v[i7]) : 0) }));
   let unten = Array(n4).fill(0);
   const lagen = reihen.map((r5) => {
@@ -4036,7 +4036,7 @@ function kachelVorlage(p4, x2, i7, ort2, c4) {
     const rechts = D2.mini || funke(D2.funke, D2.farbe);
     inhalt = b2`<div class="kk-m-l">${k2}${zahlH}<span class="kk-vgl">${roh(D2.vgl)}</span>${b3 ? wo : A}</div><div class="kk-m-r">${rechts ? roh(rechts) : b2`<span class="kk-wo">${b3 ? D2.wo || "" : ""}</span>`}</div>`;
   } else {
-    const dia = mitDia ? D2.dia(`kk-${ort2}-${i7}-${x2.k}-${b3 ? b3.id : "b"}-${c4.zc}${c4.vc}`) : "";
+    const dia = mitDia ? D2.dia(`kk-${ort2}-${i7}-${x2.k}-${b3 ? b3.id : "b"}-${c4.zc}${c4.vc}`, p4.narrow ? 320 : 640) : "";
     inhalt = b2`${k2}<div class="kk-l-zeile">${zahlH}${wo}</div><span class="kk-vgl">${roh(D2.vgl)}</span>${mitDia ? b2`<div class="kk-dia ${D2.zeilen ? "zeilen" : ""}">${dia ? roh(dia) : b2`<div class="leer">Noch keine Werte</div>`}</div>` : b2`<div class="kk-kennz">${(D2.kennz || []).map(([kk, v2]) => b2`<div><b>${roh(v2)}</b><span>${kk}</span></div>`)}</div>`}`;
   }
   return huelle(p4, x2, i7, ort2, gr, inhalt, `${p4.kkName(x2)} – antippen öffnet die Ansicht`);
@@ -4555,7 +4555,7 @@ function stueck(p4, k2, B2, A2, z2, gr = { w: 4, h: 4 }) {
   switch (k2) {
     case "betrag":
       return laed ? b2`<div class="glas-panel block">${LAEDT8}</div>` : b2`<div class="glas-panel aw-betrag"><div><small>KOSTEN · ${wann2}</small><b>${eur2}</b>
-          <span>${zahl(S3.kwh) ? de(S3.kwh, 0) : "–"} kWh ${awDelta((S3.veraenderung || {}).kwh)} <span class="leise">zu ${awVgl(p4, z2)}</span></span></div>
+          <span>${zahl(S3.kwh) ? de(S3.kwh, 0) : "–"} kWh ${zahl((S3.veraenderung || {}).kwh) ? b2`${awDelta(S3.veraenderung.kwh)} <span class="leise">zu ${awVgl(p4, z2)}</span>` : A}</span></div>
         <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : "–"}</b>${oa && oa.hinweis ? b2`<span class="hp-grob">${oa.hinweis}</span>` : A}</div>
           <div><small>HOCHRECHNUNG HEIZPERIODE</small><b>${h3 && zahl(h3.mit_eur) ? `≈ ${de(h3.mit_eur, 0)} €` : "–"}</b></div></div></div>`;
     case "rangliste":
@@ -5397,7 +5397,7 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .kk-kopf small { font-size: 10.5px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kk-ic { font-size: 15px; line-height: 1; flex: none; }
 .kk-zahl { font-size: 28px; font-weight: 300; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .kk-zahl small { font-size: 13px; color: var(--ink2); font-weight: 400; }
-.kk-S .kk-zahl { margin-top: auto; font-size: 24px; }
+.kk-S .kk-zahl { margin: auto 0; font-size: 34px; text-align: center; } .kk-S > .kk-wo { text-align: center; }   /* Herbert 28.10.2026: Wert größer und mittig */
 .kk-wo { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kk-vgl { font-size: 12px; color: var(--ink2); line-height: 1.35; } .kk-vgl em { font-style: normal; } .kk-vgl em.mehr { color: var(--amber); } .kk-vgl em.weniger { color: #30d158; }
 .kk-M { flex-direction: row; gap: 12px; align-items: stretch; }
@@ -5610,7 +5610,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.147";
+var SEITE_VERSION = "0.8.148";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];
@@ -8004,10 +8004,10 @@ var BaustellePanel = class extends i4 {
           zahl: zahl(S3.eur) ? de(S3.eur, 0) : "–",
           einh: "€",
           wo: wann2,
-          vgl: `${f3(S3.kwh, 0)} kWh ${pfeil((S3.veraenderung || {}).kwh)} zu ${this.zrVgl(c4.z, c4.v)}`,
+          vgl: `${f3(S3.kwh, 0)} kWh${zahl((S3.veraenderung || {}).kwh) ? ` ${pfeil(S3.veraenderung.kwh)} zu ${this.zrVgl(c4.z, c4.v)}` : ""}`,
           funke: r5,
           kennz: [["Kosten", `${f3(S3.eur, 2)} €`], ["Verbrauch", `${f3(S3.kwh, 0)} kWh`], ["Heizzeit", `${f3(S3.heizzeit, 0)} h`], ["Pumpzeit", `${f3(S3.pumpzeit, 1)} h`]],
-          dia: (id) => r5 ? flaeche(id, [{ name: "Verbrauch", farbe: "var(--s1)", v: r5 }], zr.labels, "kWh", KK_JEDES[c4.z]) : ""
+          dia: (id, w2) => r5 ? flaeche(id, [{ name: "Verbrauch", farbe: "var(--s1)", v: r5 }], zr.labels, "kWh", KK_JEDES[c4.z], null, w2) : ""
         };
       }
       case "b-gespart": {
