@@ -1194,6 +1194,53 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       Object.keys(c).forEach(k => delete c[k]); Object.assign(c, alt); panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen();
       await klick({ act: 'tab', v: 'uebersicht' }, 10);
     } }
+  /* WU-0020 (Mockup wischen.html, Variante A): in der Container-Ansicht blättern – nur Container, am Ende stoppen, „2 / 6“ */
+  { const C = panel.d.bereiche.filter(x => !x.pumpe), S = panel.d.bereiche.find(x => x.pumpe), N = C.length;
+    const pos = () => { const e = litEl('.seite .w-nav .w-pos'); return e ? e.textContent.trim() : null; };
+    const pfeil = d => litEl(`.seite .w-nav [data-w="${d}"]`);
+    const fertig = () => new Promise(r => setTimeout(r, 260)).then(() => ruhe(20));   // Schiebe-Animation (happy-dom spielt sie in Echtzeit)
+    const wisch = async (sel, dx, dy, typ = 'touch') => { const e = litEl(sel); if (!e) return erwarte(`WU-0020: Element ${sel}`, false);
+      const ev = (art, x, y) => e.dispatchEvent(new PointerEvent(art, { bubbles: true, composed: true, pointerId: 7, pointerType: typ, clientX: x, clientY: y, button: 0 }));
+      ev('pointerdown', 200, 300); ev('pointermove', 200 + dx / 2, 300 + dy / 2); ev('pointermove', 200 + dx, 300 + dy); ev('pointerup', 200 + dx, 300 + dy); await fertig(); };
+    panel._wischHinweis = undefined;   // Hinweis einmal je Gerät – der Test-Speicher kennt ihn noch nicht
+    await klick({ act: 'tab', v: 'uebersicht' }, 10); await klick({ act: 'container', id: C[1].id }, 20);
+    erwarte(`WU-0020: Kopfzeile „‹ 2 / ${N} ›“ in der Container-Ansicht`, pos() === `2 / ${N}` && pfeil(-1) && pfeil(1) && pfeil(-1).textContent.trim() === '‹' && pfeil(1).textContent.trim() === '›');
+    erwarte('WU-0020: Hinweis „← wischen →“ am Handy', ui.innerHTML.includes('← wischen →'));
+    await klick('.seite .w-nav [data-w="1"]', 20); await fertig();
+    erwarte('WU-0020: › führt zum nächsten Container', panel.s.view === 'container' && panel.s.cid === C[2].id && pos() === `3 / ${N}`);
+    erwarte('WU-0020: Hinweis nach dem ersten Blättern weg', !ui.innerHTML.includes('← wischen →'));
+    await klick('.seite .w-nav [data-w="-1"]', 20); await fertig(); erwarte('WU-0020: ‹ führt zurück', panel.s.cid === C[1].id);
+    await wisch('.seite .c-d-info .glas-titel', -120, 10);
+    erwarte('WU-0020: Wischen von rechts nach links (> 60 px) → nächster Container', panel.s.cid === C[2].id);
+    await wisch('.seite .c-d-info .glas-titel', 120, 10);
+    erwarte('WU-0020: Wischen nach rechts → vorheriger Container', panel.s.cid === C[1].id);
+    await wisch('.seite .c-d-info .glas-titel', -50, 0); erwarte('WU-0020: zu kurz gewischt – bleibt', panel.s.cid === C[1].id);
+    await wisch('.seite .c-d-info .glas-titel', -90, 80); erwarte('WU-0020: fast senkrecht – bleibt', panel.s.cid === C[1].id);
+    await wisch('.seite .c-d-info .glas-titel', -120, 0, 'mouse'); erwarte('WU-0020: mit der Maus kein Wischen', panel.s.cid === C[1].id);
+    { const r = litEl('.seite input[type="range"]');
+      if (r) { await wisch('.seite input[type="range"]', -120, 0); erwarte('WU-0020: auf einem Schieberegler kein Wischen', panel.s.cid === C[1].id); }
+      else {   // Container-Ansicht ohne Schieberegler: einen einsetzen, wie er in einer Ansicht stehen kann
+        const ein = document.createElement('input'); ein.type = 'range'; ein.className = 'w-test'; litEl('.seite .c-d-info').appendChild(ein);
+        await wisch('.seite input.w-test', -120, 0); erwarte('WU-0020: auf einem Schieberegler kein Wischen', panel.s.cid === C[1].id); ein.remove(); } }
+    await wisch('.seite .seg button', -120, 0); erwarte('WU-0020: auf einem Segment kein Wischen', panel.s.cid === C[1].id);
+    await klick({ act: 'sheet', s: 'bereich' }, 10);
+    await wisch('.seite .c-d-info .glas-titel', -120, 0); erwarte('WU-0020: bei offener Einblendung kein Wischen', panel.s.cid === C[1].id && panel.s.sheet);
+    panel.narrow = false; window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await fertig();
+    erwarte('WU-0020: Pfeiltaste bei offener Einblendung – nichts', panel.s.cid === C[1].id);
+    await klick({ act: 'zu' }, 10);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await fertig();
+    erwarte('WU-0020: → am Desktop führt zum nächsten', panel.s.cid === C[2].id);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })); await fertig();
+    erwarte('WU-0020: ← am Desktop führt zurück', panel.s.cid === C[1].id);
+    panel.narrow = true; await ruhe(10);
+    await klick({ act: 'container', id: C[N - 1].id }, 20);
+    erwarte(`WU-0020: am letzten „${N} / ${N}“ und › gesperrt`, pos() === `${N} / ${N}` && pfeil(1) && pfeil(1).disabled && !pfeil(-1).disabled);
+    await wisch('.seite .c-d-info .glas-titel', -120, 0); erwarte('WU-0020: am letzten stoppt das Wischen (kein Kreis)', panel.s.cid === C[N - 1].id);
+    await klick({ act: 'container', id: C[0].id }, 20); erwarte('WU-0020: am ersten ‹ gesperrt', pos() === `1 / ${N}` && pfeil(-1).disabled);
+    if (S) { await klick({ act: 'container', id: S.id }, 20);
+      erwarte('WU-0020: im Pumpenschacht keine Blätterzeile', !litEl('.seite .w-nav') && !pos());
+      await wisch('.seite', -120, 0); erwarte('WU-0020: im Pumpenschacht kein Wischen', panel.s.cid === S.id); }
+    await klick({ act: 'tab', v: 'uebersicht' }, 10); }
   /* AN-0004: „Warm ab“ – Werte von der Integration (lernen.warm), Einstellungen je Baustelle und Container */
   { const b0 = panel.d.bereiche.find(x => x.fuehler && !x.pumpe), welt = struktur.find(x => x.baustelle.entry_id === panel.d.entry);
     const c = welt.laufzeit.container[b0.id], alt = JSON.parse(JSON.stringify(c));

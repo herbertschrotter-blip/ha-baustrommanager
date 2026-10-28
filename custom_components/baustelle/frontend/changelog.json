@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.146",
+    "datum": "2026-10-28",
+    "punkte": [
+      "Container-Ansicht blättern (WU-0020, Mockup `wischen.html` Variante A, abgenommen 28.10.2026): Oben steht jetzt „‹ Übersicht · ‹ 2 / 6 › · Bearbeiten“ – mit ‹ › zum vorherigen bzw. nächsten Container, am Handy auch durch waagrechtes Wischen (Finger oder Stift, über 60 px und deutlich mehr waagrecht als senkrecht; senkrecht scrollt wie bisher), am Desktop zusätzlich mit den Pfeiltasten ← →. Reihenfolge wie die Kacheln der Übersicht, nur Container (der Pumpenschacht blättert nicht); am ersten und letzten Container ist Schluss. Auf Knöpfen, Reglern, Diagrammen, dem Thermostat-Rad und bei offener Einblendung wird nicht gewischt. Am Handy erscheint einmal der Hinweis „← wischen →“."
+    ]
+  },
+  {
     "version": "0.8.145",
     "datum": "2026-10-28",
     "punkte": [

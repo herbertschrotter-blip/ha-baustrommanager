@@ -2012,8 +2012,8 @@ function bsdetailVorlage(p4) {
 }
 
 // src/ansichten/zeitraum.js
-function kalender(p4, ziel, z2, v2, max, k2) {
-  const h3 = p4.z.HEUTE, mo0 = p4.z.WOCHE_ISO[0], ver = (iso) => zrVersatz(z2, iso, h3, mo0), setz = (x2) => () => p4.zrSetzen(ziel, max, x2);
+function kalender(p4, ziel2, z2, v2, max, k2) {
+  const h3 = p4.z.HEUTE, mo0 = p4.z.WOCHE_ISO[0], ver = (iso) => zrVersatz(z2, iso, h3, mo0), setz = (x2) => () => p4.zrSetzen(ziel2, max, x2);
   const knopf9 = (iso, text2, cls2 = "") => {
     const x2 = ver(iso), an = x2 >= 0 && x2 <= max;
     return b2`<button class="zr-k ${cls2} ${x2 === v2 ? "on" : ""} ${x2 === 0 ? "jetzt" : ""}" data-v=${an ? x2 : A} ?disabled=${!an} @click=${an ? setz(x2) : null}>${text2}</button>`;
@@ -2052,12 +2052,12 @@ function kalender(p4, ziel, z2, v2, max, k2) {
       <div class=${cls}>${inhalt}</div>
       <div class="zr-kal-fuss"><button class="glas-panel chip" @click=${setz(0)}>${{ Tag: "Heute", Woche: "Diese Woche", Monat: "Dieser Monat", Jahr: "Dieses Jahr" }[z2]}</button></div></div>`;
 }
-function zeitraumVorlage(p4, ziel, z2, grenze) {
-  const v2 = p4.zrV(ziel), max = p4.zrMax(z2, grenze), i7 = p4.zrInfo(z2, v2), k2 = p4.s.zrKal && p4.s.zrKal.ziel === ziel ? p4.s.zrKal : null;
-  return b2`<div class="zr-zeile" data-ziel=${ziel}><div class="zr-nav glas-panel"><button class="zr-pf" ?disabled=${v2 >= max} aria-label="früher" title="früher" @click=${() => p4.zrSchritt(ziel, max, 1)}>‹</button>
-        <button class="zr-mitte zr-auf" @click=${() => p4.zrKalAuf(ziel)}><b>${i7.text}</b>${i7.unter ? b2`<small>${i7.unter}</small>` : A}<span class="zr-pfeil">${k2 ? "▴" : "▾"}</span></button>
-        <button class="zr-pf" ?disabled=${v2 <= 0} aria-label="später" title="später" @click=${() => p4.zrSchritt(ziel, max, -1)}>›</button></div>
-      ${v2 ? b2`<button class="glas-panel chip zr-akt" @click=${() => p4.zrSetzen(ziel, max, 0)}>Aktuell</button>` : A}${k2 ? kalender(p4, ziel, z2, v2, max, k2) : A}</div>`;
+function zeitraumVorlage(p4, ziel2, z2, grenze) {
+  const v2 = p4.zrV(ziel2), max = p4.zrMax(z2, grenze), i7 = p4.zrInfo(z2, v2), k2 = p4.s.zrKal && p4.s.zrKal.ziel === ziel2 ? p4.s.zrKal : null;
+  return b2`<div class="zr-zeile" data-ziel=${ziel2}><div class="zr-nav glas-panel"><button class="zr-pf" ?disabled=${v2 >= max} aria-label="früher" title="früher" @click=${() => p4.zrSchritt(ziel2, max, 1)}>‹</button>
+        <button class="zr-mitte zr-auf" @click=${() => p4.zrKalAuf(ziel2)}><b>${i7.text}</b>${i7.unter ? b2`<small>${i7.unter}</small>` : A}<span class="zr-pfeil">${k2 ? "▴" : "▾"}</span></button>
+        <button class="zr-pf" ?disabled=${v2 <= 0} aria-label="später" title="später" @click=${() => p4.zrSchritt(ziel2, max, -1)}>›</button></div>
+      ${v2 ? b2`<button class="glas-panel chip zr-akt" @click=${() => p4.zrSetzen(ziel2, max, 0)}>Aktuell</button>` : A}${k2 ? kalender(p4, ziel2, z2, v2, max, k2) : A}</div>`;
 }
 
 // src/ansichten/pumpen.js
@@ -2484,6 +2484,137 @@ var GERAETE_CSS = `
 .g-liste > .zeile, .g-liste > .gruppe { padding-left: 16px; padding-right: 16px; } a.zeile { text-decoration: none; color: inherit; }
 .g-sensor.weg { opacity: .6; } .g-sensor.warn { border-color: var(--amber); }`;
 
+// src/ansichten/wischen.js
+var WISCH_SCHWELLE = 60;
+var WISCH_VERHAELTNIS = 1.5;
+var NICHT = 'button, a, input, select, textarea, label, svg, canvas, [role="slider"], [role="switch"], .seg, .chart-wrap, .c-kern, .c-chips, .glas-chips';
+var HINWEIS_SPEICHER = "baustelle-wischen-hinweis";
+function wischLage(p4) {
+  const L2 = p4.d ? p4.d.bereiche.filter((b4) => !b4.pumpe) : [], b3 = p4.b, i7 = b3 && !b3.pumpe ? L2.indexOf(b3) : -1;
+  return { L: L2, i: i7, n: L2.length };
+}
+var ziel = (p4, dir) => {
+  const { L: L2, i: i7, n: n4 } = wischLage(p4);
+  if (i7 < 0 || n4 < 2) return null;
+  const j2 = i7 + dir;
+  return j2 >= 0 && j2 < n4 ? L2[j2] : null;
+};
+var seiteEl = (p4) => p4.renderRoot && p4.renderRoot.querySelector(".scroll > .seite");
+var anim = (el, k2, o6) => el && typeof el.animate === "function" ? el.animate(k2, o6).finished.catch(() => {
+}) : Promise.resolve();
+var bereit = (p4) => p4.s.view === "container" && !p4.s.sheet && wischLage(p4).i >= 0 && wischLage(p4).n > 1;
+async function wischWechseln(p4, dir, von = "none") {
+  if (p4._wischLaeuft) return;
+  const z2 = ziel(p4, dir), el = seiteEl(p4);
+  if (el) el.style.transform = "";
+  if (!z2) return anim(el, [{ transform: von }, { transform: `translateX(${-dir * 18}px)` }, { transform: "none" }], { duration: 260, easing: "ease-out" });
+  p4._wischLaeuft = true;
+  const raus = el && typeof el.animate === "function" ? el.animate([{ transform: von, opacity: 1 }, { transform: `translateX(${-dir * 35}%)`, opacity: 0 }], { duration: 150, easing: "ease-in", fill: "forwards" }) : null;
+  try {
+    wischHinweisWeg(p4);
+    if (raus) await raus.finished.catch(() => {
+    });
+    if (bereit(p4)) await p4.containerOeffnen(z2.id);
+  } finally {
+    p4._wischLaeuft = false;
+  }
+  anim(seiteEl(p4), [{ transform: `translateX(${dir * 35}%)`, opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 220, easing: "cubic-bezier(.2,.7,.2,1)" });
+  if (raus) raus.cancel();
+}
+function wischenAn(p4, root) {
+  let z2 = null;
+  const weg = () => {
+    if (z2 && z2.el) {
+      z2.el.style.transform = "";
+      z2.el.style.userSelect = "";
+    }
+    z2 = null;
+  };
+  root.addEventListener("pointerdown", (e6) => {
+    if (e6.pointerType !== "touch" && e6.pointerType !== "pen") return;
+    if (!bereit(p4)) return;
+    const t5 = e6.composedPath && e6.composedPath()[0] || e6.target;
+    if (!t5 || !t5.closest || t5.closest(NICHT) || !t5.closest(".seite")) return;
+    z2 = { id: e6.pointerId, x: e6.clientX, y: e6.clientY, el: seiteEl(p4), waag: false };
+  });
+  root.addEventListener("pointermove", (e6) => {
+    if (!z2 || e6.pointerId !== z2.id) return;
+    if (!bereit(p4)) return weg();
+    const dx = e6.clientX - z2.x, dy = e6.clientY - z2.y;
+    if (!z2.waag) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      if (Math.abs(dx) <= Math.abs(dy) * WISCH_VERHAELTNIS) return weg();
+      z2.waag = true;
+      if (z2.el) z2.el.style.userSelect = "none";
+    }
+    if (z2.el) z2.el.style.transform = `translateX(${ziel(p4, dx < 0 ? 1 : -1) ? dx : dx * 0.25}px)`;
+  });
+  root.addEventListener("pointerup", (e6) => {
+    if (!z2 || e6.pointerId !== z2.id) return;
+    const dx = e6.clientX - z2.x, dy = e6.clientY - z2.y, el = z2.el, von = el && el.style.transform || "none";
+    const ok = z2.waag && bereit(p4) && Math.abs(dx) > WISCH_SCHWELLE && Math.abs(dx) >= Math.abs(dy) * WISCH_VERHAELTNIS;
+    weg();
+    if (ok) wischWechseln(p4, dx < 0 ? 1 : -1, von);
+    else if (von !== "none") anim(el, [{ transform: von }, { transform: "none" }], { duration: 180, easing: "ease-out" });
+  });
+  root.addEventListener("pointercancel", weg);
+}
+function wischTaste(p4, e6) {
+  if (e6.key !== "ArrowLeft" && e6.key !== "ArrowRight" || e6.altKey || e6.ctrlKey || e6.metaKey || e6.shiftKey || e6.defaultPrevented) return;
+  if (p4.narrow || !bereit(p4)) return;
+  const t5 = e6.composedPath && e6.composedPath()[0] || e6.target;
+  if (t5 && t5.closest && t5.closest('input, select, textarea, [contenteditable], [role="slider"]')) return;
+  e6.preventDefault();
+  wischWechseln(p4, e6.key === "ArrowRight" ? 1 : -1);
+}
+function hinweisZeigen(p4) {
+  if (!p4.narrow) return false;
+  if (p4._wischHinweis === void 0) {
+    let gesehen = false;
+    try {
+      gesehen = !!localStorage.getItem(HINWEIS_SPEICHER);
+    } catch (e6) {
+      gesehen = false;
+    }
+    p4._wischHinweis = !gesehen;
+    if (p4._wischHinweis) {
+      try {
+        localStorage.setItem(HINWEIS_SPEICHER, "1");
+      } catch (e6) {
+      }
+      setTimeout(() => wischHinweisWeg(p4), 3500);
+    }
+  }
+  return p4._wischHinweis;
+}
+function wischHinweisWeg(p4) {
+  if (p4._wischHinweis) {
+    p4._wischHinweis = false;
+    p4.neuZeichnen();
+  }
+}
+function blaetterZeile(p4) {
+  const { i: i7, n: n4 } = wischLage(p4), mit = i7 >= 0 && n4 > 1, vor = mit && ziel(p4, -1), nach = mit && ziel(p4, 1), hinweis = mit && hinweisZeigen(p4);
+  return b2`<div class="zurueck-zeile w-zeile"><button class="glas-panel chip" @click=${() => p4.gehe("uebersicht")}>‹ Übersicht</button>
+      ${mit ? b2`<div class="glas-panel w-nav" role="group" aria-label="Container blättern">
+        <button class="w-pfeil" data-w="-1" ?disabled=${!vor} title=${vor ? `Vorheriger: ${vor.name}` : "erster Container"} aria-label="Vorheriger Container" @click=${() => wischWechseln(p4, -1)}>‹</button>
+        <span class="w-pos">${i7 + 1} / ${n4}</span>
+        <button class="w-pfeil" data-w="1" ?disabled=${!nach} title=${nach ? `Nächster: ${nach.name}` : "letzter Container"} aria-label="Nächster Container" @click=${() => wischWechseln(p4, 1)}>›</button></div>` : A}
+      <button class="glas-panel chip" @click=${() => p4.einblenden("bereich")}>Bearbeiten</button>
+      ${hinweis ? b2`<div class="w-hinweis" @click=${() => wischHinweisWeg(p4)}>← wischen →</div>` : A}</div>`;
+}
+var WISCHEN_CSS = `
+.seite:has(.w-nav) { touch-action: pan-y pinch-zoom; }   /* senkrecht scrollt (und zoomt) der Browser, waagrecht bekommt die Seite */
+.w-zeile { position: relative; align-items: center; gap: 8px; }
+.w-nav { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px; border-radius: 999px; min-width: 0; }
+.w-pfeil { width: 34px; height: 30px; border: 0; background: none; color: var(--ink); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 999px; }
+.w-pfeil:disabled { opacity: .25; cursor: default; }
+.w-pos { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink2); min-width: 38px; text-align: center; white-space: nowrap; }
+.w-hinweis { position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%); z-index: 3; font-size: 13px; padding: 6px 14px; border-radius: 999px;
+  background: color-mix(in srgb, var(--amber) 85%, transparent); color: #000; white-space: nowrap; animation: w-wink 1.2s ease-in-out 3; cursor: pointer; }
+@keyframes w-wink { 0%, 100% { transform: translateX(-50%); } 30% { transform: translateX(calc(-50% - 10px)); } 70% { transform: translateX(calc(-50% + 10px)); } }
+`;
+
 // src/ansichten/container.js
 var OHNE_SOLL = { plan: "Zeitplan – der Heizkörperthermostat regelt", hand: "Hand – kein Soll", aus: "Aus – nur Frostschutz" };
 function rad(p4, b3) {
@@ -2537,8 +2668,7 @@ function geraete(p4, b3) {
 }
 function containerVorlage(p4) {
   const d3 = p4.d, b3 = p4.b, { c: c4, chart } = p4.containerTeile(b3), vT = p4.zrV("c-Tag");
-  return b2`<div class="zurueck-zeile"><button class="glas-panel chip" @click=${() => p4.gehe("uebersicht")}>‹ Übersicht</button>
-        <button class="glas-panel chip" @click=${() => p4.einblenden("bereich")}>Bearbeiten</button></div>
+  return b2`${blaetterZeile(p4)}
       <div class="glas-panel c-d-held ${b3.z}" style="--c:${FARBE[b3.z]}">
         <div class="c-d-info"><div><div class="glas-klein">CONTAINER</div><div class="glas-titel">${b3.name}</div>
           <div class="glas-status"><span class="glas-dot"></span>${TEXT(b3)}</div><div class="leise">${p4.cRegelText(b3)}</div></div>
@@ -2946,8 +3076,8 @@ function hzEinblendung(p4, s4) {
 // src/ansichten/einblendungen-heizung.js
 var GRIFF4 = b2`<div class="griff"></div>`;
 var knopf3 = (t5, fn, art = "") => b2`<button class="knopf ${art}" @click=${fn}>${t5}</button>`;
-var feld = (ziel, k2, typ, attr, nach) => b2`<input type=${typ || A} value=${ziel[k2]} .value=${l3(ziel[k2])} placeholder=${attr.ph || A} data-f=${attr.marke || k2} @input=${(e6) => {
-  ziel[k2] = e6.target.value;
+var feld = (ziel2, k2, typ, attr, nach) => b2`<input type=${typ || A} value=${ziel2[k2]} .value=${l3(ziel2[k2])} placeholder=${attr.ph || A} data-f=${attr.marke || k2} @input=${(e6) => {
+  ziel2[k2] = e6.target.value;
   if (nach) nach();
 }}>`;
 function heizplanEinblendung(p4) {
@@ -3019,15 +3149,15 @@ var HEIZUNG_EINBLENDUNGEN = { heizplan: heizplanEinblendung, az: arbeitszeitEinb
 var GRIFF5 = b2`<div class="griff"></div>`;
 var LAEDT5 = b2`<div class="leer">Lädt …</div>`;
 var knopf4 = (t5, fn, art = "") => b2`<button class="knopf ${art}" @click=${fn}>${t5}</button>`;
-var feld2 = (ziel, k2, typ, ph, extra = {}) => b2`<input type=${typ || A} step=${extra.step || A} min=${extra.min ?? A} value=${ziel[k2] ?? ""} .value=${l3(String(ziel[k2] ?? ""))} placeholder=${ph || A} data-f=${k2} @input=${(e6) => {
-  ziel[k2] = e6.target.value;
+var feld2 = (ziel2, k2, typ, ph, extra = {}) => b2`<input type=${typ || A} step=${extra.step || A} min=${extra.min ?? A} value=${ziel2[k2] ?? ""} .value=${l3(String(ziel2[k2] ?? ""))} placeholder=${ph || A} data-f=${k2} @input=${(e6) => {
+  ziel2[k2] = e6.target.value;
 }}>`;
 var optionenVorlage = (liste2, aktuell, leer2) => b2`${leer2 ? b2`<option value="">${leer2}</option>` : A}${liste2.map(([v2, n4]) => b2`<option value=${v2} ?selected=${v2 === aktuell}>${n4}</option>`)}`;
-var auswahl = (ziel, k2, liste2, leer2) => {
+var auswahl = (ziel2, k2, liste2, leer2) => {
   const setze = (e6) => {
-    ziel[k2] = e6.target.value;
+    ziel2[k2] = e6.target.value;
   };
-  return b2`<select data-f=${k2} @input=${setze} @change=${setze}>${optionenVorlage(liste2, ziel[k2], leer2)}</select>`;
+  return b2`<select data-f=${k2} @input=${setze} @change=${setze}>${optionenVorlage(liste2, ziel2[k2], leer2)}</select>`;
 };
 function preisListeVorlage(p4) {
   const e6 = p4.d.e, H2 = p4.z.HEUTE, L2 = (e6.preise.length ? e6.preise : [{ ab: null, preis: e6.preis }]).slice().sort((a3, b3) => String(b3.ab).localeCompare(String(a3.ab))), jetzt = L2.find((x2) => !x2.ab || x2.ab <= H2);
@@ -3314,13 +3444,13 @@ function einstellungenVorlage(p4) {
 // src/ansichten/einblendungen-einrichtung.js
 var GRIFF7 = b2`<div class="griff"></div>`;
 var knopf7 = (t5, fn, art = "") => b2`<button class="knopf ${art}" @click=${fn}>${t5}</button>`;
-var text = (ziel, k2, ph, nach, extra = {}) => b2`<input type=${extra.typ || A} step=${extra.step || A} min=${extra.min ?? A} value=${ziel[k2] ?? ""} .value=${l3(String(ziel[k2] ?? ""))} placeholder=${ph || A} ?disabled=${!!extra.aus} data-f=${extra.marke || k2} data-i=${extra.i ?? A} @input=${(e6) => {
-  ziel[k2] = e6.target.value;
+var text = (ziel2, k2, ph, nach, extra = {}) => b2`<input type=${extra.typ || A} step=${extra.step || A} min=${extra.min ?? A} value=${ziel2[k2] ?? ""} .value=${l3(String(ziel2[k2] ?? ""))} placeholder=${ph || A} ?disabled=${!!extra.aus} data-f=${extra.marke || k2} data-i=${extra.i ?? A} @input=${(e6) => {
+  ziel2[k2] = e6.target.value;
   if (nach) nach();
 }}>`;
-var auswahl2 = (ziel, k2, inhalt, nach, marke, i7) => {
+var auswahl2 = (ziel2, k2, inhalt, nach, marke, i7) => {
   const setze = (e6) => {
-    ziel[k2] = e6.target.value;
+    ziel2[k2] = e6.target.value;
     if (nach) nach();
   };
   return b2`<select data-f=${marke || k2} data-i=${i7 ?? A} @input=${setze} @change=${setze}>${inhalt}</select>`;
@@ -4092,15 +4222,15 @@ var LAEDT7 = b2`<div class="leer">Lädt …</div>`;
 var knopf8 = (t5, fn, art = "") => b2`<button class="knopf ${art}" @click=${fn}>${t5}</button>`;
 var ZEITRAEUME2 = ["Tag", "Woche", "Monat", "Jahr"];
 var svg = (s4) => o5(s4);
-function verbrauchVorlage(p4, st, ziel, kennzahlen) {
-  const V2 = p4.verbrauchDaten(st, ziel), { Q, z: z2, aus, alle, eur: eur2, einC, basis, oa, laedt, reihen, sum, spitze, wo, preis: preis2 } = V2;
-  return b2`<div class="block-kopf">${ziel === "sheet" ? b2`<h3>${eur2 ? "Kosten" : "Verbrauch"}</h3>` : b2`<b>Verbrauch</b>`}<span class="leise">${V2.titel}</span></div>
-      <div class="seg">${ZEITRAEUME2.map((v2) => b2`<button data-v=${v2} class=${v2 === z2 ? "on" : ""} @click=${() => p4.zeitraumWahl(ziel, v2)}>${v2}</button>`)}</div>
-      ${ziel === "aw" ? A : zeitraumVorlage(p4, ziel, z2, p4.zrGrenze(alle))}
-      <div class="vb-gruppe"><span class="leise">stapeln nach</span><div class="seg klein">${[["teil", alle ? "Baustelle" : "Container"], ["firma", "Firma"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${(st.gruppe || "teil") === k2 ? "on" : ""} @click=${() => p4.vbGruppe(ziel, k2)}>${t5}</button>`)}</div></div>
-      <div class="vb-wer"><button class=${!aus.length ? "on" : ""} @click=${() => p4.vbWer(ziel, "")}><i style="background:var(--s1)"></i>Summe</button>
-        <button data-id="*" class=${V2.alleGewaehlt ? "on" : ""} @click=${() => p4.vbWer(ziel, "*")}>Alle gestapelt</button>
-        ${Q.map((q) => b2`<button data-id=${q.id} class=${st.auswahl.includes(q.id) ? "on" : ""} @click=${() => p4.vbWer(ziel, q.id)}><i style="background:${q.farbe}"></i>${q.name}${st.auswahl.includes(q.id) ? " ✓" : ""}</button>`)}</div>
+function verbrauchVorlage(p4, st, ziel2, kennzahlen) {
+  const V2 = p4.verbrauchDaten(st, ziel2), { Q, z: z2, aus, alle, eur: eur2, einC, basis, oa, laedt, reihen, sum, spitze, wo, preis: preis2 } = V2;
+  return b2`<div class="block-kopf">${ziel2 === "sheet" ? b2`<h3>${eur2 ? "Kosten" : "Verbrauch"}</h3>` : b2`<b>Verbrauch</b>`}<span class="leise">${V2.titel}</span></div>
+      <div class="seg">${ZEITRAEUME2.map((v2) => b2`<button data-v=${v2} class=${v2 === z2 ? "on" : ""} @click=${() => p4.zeitraumWahl(ziel2, v2)}>${v2}</button>`)}</div>
+      ${ziel2 === "aw" ? A : zeitraumVorlage(p4, ziel2, z2, p4.zrGrenze(alle))}
+      <div class="vb-gruppe"><span class="leise">stapeln nach</span><div class="seg klein">${[["teil", alle ? "Baustelle" : "Container"], ["firma", "Firma"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${(st.gruppe || "teil") === k2 ? "on" : ""} @click=${() => p4.vbGruppe(ziel2, k2)}>${t5}</button>`)}</div></div>
+      <div class="vb-wer"><button class=${!aus.length ? "on" : ""} @click=${() => p4.vbWer(ziel2, "")}><i style="background:var(--s1)"></i>Summe</button>
+        <button data-id="*" class=${V2.alleGewaehlt ? "on" : ""} @click=${() => p4.vbWer(ziel2, "*")}>Alle gestapelt</button>
+        ${Q.map((q) => b2`<button data-id=${q.id} class=${st.auswahl.includes(q.id) ? "on" : ""} @click=${() => p4.vbWer(ziel2, q.id)}><i style="background:${q.farbe}"></i>${q.name}${st.auswahl.includes(q.id) ? " ✓" : ""}</button>`)}</div>
       ${kennzahlen ? b2`<div class="kennz"><div><b>${laedt ? "–" : de(sum, sum < 100 ? 1 : 0)}</b><span>kWh ${{ Tag: "heute", Woche: "diese Woche", Monat: "im Monat", Jahr: "im Jahr" }[z2]}${reihen.length > 1 ? " zusammen" : ""}</span></div>
         <div><b>${laedt ? "–" : de(sum * preis2, 2)} €</b><span>Kosten</span></div><div><b>${laedt ? "–" : wo}</b><span>Spitze ${laedt ? "–" : de(spitze, 1)} kWh</span></div></div>` : A}
       ${einC ? b2`<div class="vb-gruppe"><span class="leise">ohne Automatik mit</span><div class="seg klein">${[["geraet", "Ø je Gerät"], ["typ", "Ø je Typ"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${basis === k2 ? "on" : ""} @click=${() => p4.ohneBasisWahl(k2)}>${t5}</button>`)}</div></div>
@@ -5480,10 +5610,10 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.145";
+var SEITE_VERSION = "0.8.146";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
-  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];
+  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];
   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
@@ -5567,7 +5697,9 @@ var BaustellePanel = class extends i4 {
       "location-changed": () => {
         this._adresseFertig = null;
         setTimeout(() => this._adresse(), 0);
-      }
+      },
+      keydown: (e6) => wischTaste(this, e6)
+      // WU-0020: ← → blättert in der Container-Ansicht (Desktop)
     };
     for (const [art, f3] of Object.entries(this._fenster)) window.addEventListener(art, f3);
   }
@@ -5604,6 +5736,7 @@ var BaustellePanel = class extends i4 {
     this.ui = sr.querySelector(".ui");
     sr.addEventListener("pointermove", (e6) => this.hover(e6));
     sr.addEventListener("pointerdown", (e6) => this.zugStart(e6));
+    wischenAn(this, sr);
     sr.addEventListener("pointerleave", () => this.tip(null));
     sr.addEventListener("focusout", () => {
       if (this._wartet) {
@@ -6005,14 +6138,14 @@ var BaustellePanel = class extends i4 {
   zrVgl(z2, v2 = 0) {
     return z2 === "Jahr" ? this.zrInfo("Jahr", v2 + 1).text : { Tag: v2 ? "Vortag" : "gestern", Woche: "Vorwoche", Monat: "Vormonat" }[z2];
   }
-  zrSt(ziel) {
-    if (ziel === "aw") return this.s.aw;
-    if (ziel === "sheet") return this.s.sheet || {};
-    const z2 = ziel === "c-Tag" ? "Tag" : "Woche", c4 = this.s.cZr ||= {};
+  zrSt(ziel2) {
+    if (ziel2 === "aw") return this.s.aw;
+    if (ziel2 === "sheet") return this.s.sheet || {};
+    const z2 = ziel2 === "c-Tag" ? "Tag" : "Woche", c4 = this.s.cZr ||= {};
     return c4[z2] ||= { zeitraum: z2, v: 0 };
   }
-  zrV(ziel) {
-    return (this.zrSt(ziel) || {}).v || 0;
+  zrV(ziel2) {
+    return (this.zrSt(ziel2) || {}).v || 0;
   }
   /* Kalender: Tag → Monat mit Tagen, Woche → Monat mit KW-Zeilen, Monat → Jahr mit Monaten, Jahr → Jahre seit Beginn */
   /* Preis simulieren (Herbert 04.10.2026): in der Auswertung mit dem Chip „💶 Preis“; die Integration rechnet alle € damit */
@@ -6351,8 +6484,8 @@ var BaustellePanel = class extends i4 {
     return d3.firmen.find((f3) => f3.id === id) || d3.firmen[0];
   }
   /* Was im Verbrauch gestapelt wird: Container dieser Baustelle, laufende Baustellen oder Firmen */
-  quellen(st, ziel) {
-    const alle = ziel === "aw" && this.s.awScope === "alle", lauf = alle ? this.laufende() : [this.d], vs = st.v || 0;
+  quellen(st, ziel2) {
+    const alle = ziel2 === "aw" && this.s.awScope === "alle", lauf = alle ? this.laufende() : [this.d], vs = st.v || 0;
     if (st.gruppe === "firma") {
       const namen = [...new Map(lauf.flatMap((l4) => l4.firmen.map((f3) => [f3.eigen ? "eigen" : f3.name, f3]))).values()];
       return namen.map((f3, k2) => ({ id: f3.eigen ? "eigen" : f3.name, name: f3.name, farbe: `var(--s${k2 % 6 + 1})`, v: (z2) => {
@@ -6509,14 +6642,14 @@ var BaustellePanel = class extends i4 {
   }
   /* Einblendungen der Übersicht (src/ansichten/einblendungen-uebersicht.js, BSM-022 3f) */
   /* Verbrauch (Einblendung „verbrauch“ und Auswertung, src/ansichten/einblendungen-uebersicht.js): Reihen, Summen, Diagramm */
-  verbrauchDaten(st, ziel) {
-    const Q = this.quellen(st, ziel), z2 = st.zeitraum, aus = Q.filter((q) => st.auswahl.includes(q.id)), alleGewaehlt = aus.length === Q.length && Q.length > 0;
-    const alle = ziel === "aw" && this.s.awScope === "alle", summenName = alle ? "Alle laufenden" : this.d.titel;
+  verbrauchDaten(st, ziel2) {
+    const Q = this.quellen(st, ziel2), z2 = st.zeitraum, aus = Q.filter((q) => st.auswahl.includes(q.id)), alleGewaehlt = aus.length === Q.length && Q.length > 0;
+    const alle = ziel2 === "aw" && this.s.awScope === "alle", summenName = alle ? "Alle laufenden" : this.d.titel;
     const zr = this.zeitraum(z2, st.v || 0), labels = zr.labels;
     const was = st.gruppe === "firma" ? "Firmen" : alle ? "Baustellen" : "Container";
     const titel2 = !aus.length ? `${summenName} · Summe` : aus.length === 1 ? aus[0].name : `${aus.length} ${was} gestapelt`;
     const eur2 = st.t === "eur", f3 = eur2 ? this.d.e.preis : 1;
-    const einC = ziel === "sheet" && st.auswahl.length === 1 ? this.d.bereiche.find((b3) => b3.id === st.auswahl[0] && !b3.pumpe && b3.geraete.some((g2) => g2.heizer)) : null;
+    const einC = ziel2 === "sheet" && st.auswahl.length === 1 ? this.d.bereiche.find((b3) => b3.id === st.auswahl[0] && !b3.pumpe && b3.geraete.some((g2) => g2.heizer)) : null;
     const basis = st.ohneBasis || "geraet";
     const oa = einC ? this._holen(`oh:${this.d.entry}:${einC.id}:${z2}:${st.v || 0}:${basis}`, () => this._hass.callWS({ type: "baustelle/ohne", entry_id: this.d.entry, bereich: einC.id, zeitraum: z2, versatz: st.v || 0, basis })) : void 0;
     const werte = Q.map((q) => ({ q, v: q.v(z2) })), laedt = werte.some((x2) => !x2.v);
@@ -6525,7 +6658,7 @@ var BaustellePanel = class extends i4 {
     const spitze = Math.max(...summeJe, 0), wo = sum > 0 ? labels[summeJe.indexOf(spitze)] : "–";
     const einheit = eur2 ? "€" : z2 === "Tag" ? "kWh/h" : "kWh", je = `${{ Tag: "je Stunde", Woche: "je Tag", Monat: "je Tag", Jahr: "je Monat" }[z2]} · ${this.zrText(z2, st.v || 0)}`;
     const chart = laedt ? null : flaeche(
-      `vb-${ziel}-${this.s.awScope || ""}-${st.gruppe || ""}-${aus.map((q) => q.id).join("_") || "alle"}-${z2}${eur2 ? "-eur" : ""}`,
+      `vb-${ziel2}-${this.s.awScope || ""}-${st.gruppe || ""}-${aus.map((q) => q.id).join("_") || "alle"}-${z2}${eur2 ? "-eur" : ""}`,
       eur2 ? reihen.map((r5) => ({ ...r5, v: r5.v.map((x2) => (x2 || 0) * f3) })) : reihen,
       labels,
       einheit,
@@ -6539,17 +6672,17 @@ var BaustellePanel = class extends i4 {
     return { Q, z: z2, aus, alleGewaehlt, alle, titel: titel2, eur: eur2, einC, basis, oa, laedt, reihen, sum, spitze, wo, einheit, je, preis: this.d.e.preis, chart, jeReihe };
   }
   /* Verbrauch: stapeln nach Container/Baustelle oder Firma (vorher case 'vb-gruppe') */
-  vbGruppe(ziel, v2) {
-    const S3 = this.s, st = ziel === "aw" ? S3.aw : S3.sheet;
+  vbGruppe(ziel2, v2) {
+    const S3 = this.s, st = ziel2 === "aw" ? S3.aw : S3.sheet;
     st.gruppe = v2;
-    st.auswahl = this.quellen(st, ziel).map((q) => q.id);
+    st.auswahl = this.quellen(st, ziel2).map((q) => q.id);
     return this.neuZeichnen();
   }
   /* Verbrauch: Summe ('' ), alle gestapelt ('*') oder einen Teil an/ab (vorher case 'vb-wer') */
-  vbWer(ziel, id) {
-    const S3 = this.s, sh = ziel === "aw" ? S3.aw : S3.sheet;
+  vbWer(ziel2, id) {
+    const S3 = this.s, sh = ziel2 === "aw" ? S3.aw : S3.sheet;
     if (!id) sh.auswahl = [];
-    else if (id === "*") sh.auswahl = this.quellen(sh, ziel || "sheet").map((q) => q.id);
+    else if (id === "*") sh.auswahl = this.quellen(sh, ziel2 || "sheet").map((q) => q.id);
     else sh.auswahl = sh.auswahl.includes(id) ? sh.auswahl.filter((x2) => x2 !== id) : [...sh.auswahl, id];
     return this.neuZeichnen();
   }
@@ -7184,8 +7317,8 @@ var BaustellePanel = class extends i4 {
     this.s.sheet = this.s.sheet && this.s.sheet.zurueck || null;
     return this.neuZeichnen();
   }
-  zeitraumWahl(ziel, z2) {
-    const st = ziel === "aw" ? this.s.aw : this.s.sheet;
+  zeitraumWahl(ziel2, z2) {
+    const st = ziel2 === "aw" ? this.s.aw : this.s.sheet;
     if (st.zeitraum !== z2) st.v = 0;
     st.zeitraum = z2;
     this.s.zrKal = null;
@@ -7315,25 +7448,25 @@ var BaustellePanel = class extends i4 {
     if (k2 === "frost_temp" && wert2 >= e6.frost_aus) return this.toast("„ein unter“ muss unter „aus über“ liegen");
     return this.setzen(PFAD[k2], wert2);
   }
-  zrSchritt(ziel, max, schritt) {
-    const st = this.zrSt(ziel);
+  zrSchritt(ziel2, max, schritt) {
+    const st = this.zrSt(ziel2);
     st.v = Math.max(0, Math.min(max, (st.v || 0) + schritt));
     this.s.zrKal = null;
     return this.neuZeichnen();
   }
-  zrSetzen(ziel, max, v2) {
-    this.zrSt(ziel).v = Math.max(0, Math.min(max, v2));
+  zrSetzen(ziel2, max, v2) {
+    this.zrSt(ziel2).v = Math.max(0, Math.min(max, v2));
     this.s.zrKal = null;
     return this.neuZeichnen();
   }
-  zrKalAuf(ziel) {
+  zrKalAuf(ziel2) {
     const S3 = this.s;
-    if (S3.zrKal && S3.zrKal.ziel === ziel) {
+    if (S3.zrKal && S3.zrKal.ziel === ziel2) {
       S3.zrKal = null;
       return this.neuZeichnen();
     }
-    const st = this.zrSt(ziel), iso = this.zrInfo(st.zeitraum, st.v || 0).iso;
-    S3.zrKal = { ziel, j: +iso.slice(0, 4), m: +iso.slice(5, 7) - 1 };
+    const st = this.zrSt(ziel2), iso = this.zrInfo(st.zeitraum, st.v || 0).iso;
+    S3.zrKal = { ziel: ziel2, j: +iso.slice(0, 4), m: +iso.slice(5, 7) - 1 };
     return this.neuZeichnen();
   }
   zrKalBlaettern(dd) {
@@ -8249,7 +8382,7 @@ var BaustellePanel = class extends i4 {
     const breite = (raster.getBoundingClientRect().width - luecke * (spalten - 1)) / spalten, hoehe = parseFloat(cs.gridAutoRows) || 110;
     const x0 = ev.clientX, y0 = ev.clientY, w0 = item.w, h0 = item.h, mass = kachel.querySelector(".aw-mass"), wurzel = this.shadowRoot;
     kachel.classList.add(art === "move" ? "zieht" : "waechst");
-    let ziel = null;
+    let ziel2 = null;
     const bewegt = (e6) => {
       if (art === "size") {
         const st = awStufe(item.k, w0 + (e6.clientX - x0) / (breite + luecke), h0 + (e6.clientY - y0) / (hoehe + luecke));
@@ -8262,8 +8395,8 @@ var BaustellePanel = class extends i4 {
         kachel.style.pointerEvents = "none";
         const unter = (wurzel.elementFromPoint ? wurzel : document).elementFromPoint(e6.clientX, e6.clientY), k2 = unter && unter.closest && unter.closest(".aw-frei-s");
         raster.querySelectorAll(".aw-frei-s.ziel").forEach((x2) => x2.classList.remove("ziel"));
-        ziel = k2 && k2 !== kachel && raster.contains(k2) ? k2 : null;
-        if (ziel) ziel.classList.add("ziel");
+        ziel2 = k2 && k2 !== kachel && raster.contains(k2) ? k2 : null;
+        if (ziel2) ziel2.classList.add("ziel");
       }
     };
     const fertig = () => {
@@ -8274,10 +8407,10 @@ var BaustellePanel = class extends i4 {
       kachel.style.transform = "";
       kachel.style.pointerEvents = "";
       raster.querySelectorAll(".aw-frei-s.ziel").forEach((x2) => x2.classList.remove("ziel"));
-      if (art === "move" && ziel) {
-        const Lg = this.kkListe(ort2), nach = an[+ziel.dataset.i], von = Lg.indexOf(item);
+      if (art === "move" && ziel2) {
+        const Lg = this.kkListe(ort2), nach = an[+ziel2.dataset.i], von = Lg.indexOf(item);
         Lg.splice(von, 1);
-        Lg.splice(Lg.indexOf(nach) + (+ziel.dataset.i > +kachel.dataset.i ? 1 : 0), 0, item);
+        Lg.splice(Lg.indexOf(nach) + (+ziel2.dataset.i > +kachel.dataset.i ? 1 : 0), 0, item);
       }
       this.kkMerken(ort2);
       this.neuZeichnen();

@@ -9,6 +9,7 @@ import { FARBE, MODI, TEXT, WIEDER, kwVon } from '../tabellen.js';
 import { IC_MINUS, IC_PLUS, IC_POWER } from '../symbole.js';
 import { schalterVorlage } from './allgemein.js';
 import { zeitraumVorlage } from './zeitraum.js';
+import { blaetterZeile } from './wischen.js';   // WU-0020
 
 const OHNE_SOLL = { plan: 'Zeitplan – der Heizkörperthermostat regelt', hand: 'Hand – kein Soll', aus: 'Aus – nur Frostschutz' };
 
@@ -78,8 +79,7 @@ function geraete(p, b) {
 
 export function containerVorlage(p) {
   const d = p.d, b = p.b, { c, chart } = p.containerTeile(b), vT = p.zrV('c-Tag');
-  return html`<div class="zurueck-zeile"><button class="glas-panel chip" @click=${() => p.gehe('uebersicht')}>‹ Übersicht</button>
-        <button class="glas-panel chip" @click=${() => p.einblenden('bereich')}>Bearbeiten</button></div>
+  return html`${blaetterZeile(p)}
       <div class="glas-panel c-d-held ${b.z}" style="--c:${FARBE[b.z]}">
         <div class="c-d-info"><div><div class="glas-klein">CONTAINER</div><div class="glas-titel">${b.name}</div>
           <div class="glas-status"><span class="glas-dot"></span>${TEXT(b)}</div><div class="leise">${p.cRegelText(b)}</div></div>

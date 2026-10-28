@@ -40,6 +40,7 @@ import { uebersichtVorlage } from './ansichten/uebersicht.js';
 import { katalogEinblendung } from './ansichten/kacheln.js';
 import { UEBERSICHT_EINBLENDUNGEN } from './ansichten/einblendungen-uebersicht.js';
 import { auswertungVorlage, awDetailEinblendung } from './ansichten/auswertung.js';
+import { WISCHEN_CSS, wischTaste, wischenAn } from './ansichten/wischen.js';
 
 const CSS = `/* Wetter */
 .wetter .wjetzt { display: flex; align-items: center; gap: 14px; }
@@ -904,7 +905,7 @@ const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
 const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(WISCHEN_CSS)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -946,6 +947,7 @@ class BaustellePanel extends LitElement {
         const it = [...((e.clipboardData && e.clipboardData.items) || [])].find(i => i.type && i.type.startsWith('image/')); if (!it) return;
         e.preventDefault(); this.mbDatei(it.getAsFile(), 'eingefügt'); },
       'location-changed': () => { this._adresseFertig = null; setTimeout(() => this._adresse(), 0); },
+      keydown: e => wischTaste(this, e),   // WU-0020: ← → blättert in der Container-Ansicht (Desktop)
     };
     for (const [art, f] of Object.entries(this._fenster)) window.addEventListener(art, f);
   }
@@ -971,6 +973,7 @@ class BaustellePanel extends LitElement {
     this.bg = sr.querySelector('.glas-bg'); this.ui = sr.querySelector('.ui');
     sr.addEventListener('pointermove', e => this.hover(e));
     sr.addEventListener('pointerdown', e => this.zugStart(e));   // WU-0005: Layout der Auswertung (ziehen, Größe)
+    wischenAn(this, sr);   // WU-0020: in der Container-Ansicht mit Finger oder Stift zum nächsten Container wischen
     sr.addEventListener('pointerleave', () => this.tip(null));
     sr.addEventListener('focusout', () => { if (this._wartet) { this._wartet = false; setTimeout(() => this._auffrischen(), 0); } });
     this.himmel = Himmel.an(this.bg);          // WebGL-Himmel; ohne WebGL bleibt der CSS-Hintergrund
