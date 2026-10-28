@@ -152,6 +152,36 @@ def test_veraenderung_und_ohne_automatik():
     assert a.ohne_automatik(5, 0, 0.25) is None
 
 
+def test_reihe_offen_stellen_ohne_wert_bleiben_leer():
+    assert a.reihe_offen([[1.0, None, None, 2.0], [0.5, 3.0, None]], 4) == [1.5, 3.0, None, 2.0]
+    assert a.reihe_offen([], 2) == [None, None]
+
+
+def test_gespart_reihen_summe_wie_ohne_automatik():
+    """Kachel „Gespart“ (Herbert 28.10.2026, Variante B): je Periode mit, ohne (24/7) und gespart in kWh und €; die Summe
+    von „gespart €“ ist `ohne_automatik.gespart_eur`, kommende Perioden bleiben leer."""
+    mit, ohne = [1.0, 2.0, 0.5, None], [4.0, 3.0, 4.0, None]
+    r = a.gespart_reihen(mit, ohne, 0.25)
+    oa = a.ohne_automatik(a.summe(mit), a.summe(ohne), 0.25)
+    assert r["gespart_kwh"] == [3.0, 1.0, 3.5, None] and r["mit_kwh"] == [1.0, 2.0, 0.5, None]
+    assert r["ohne_kwh"] == [4.0, 3.0, 4.0, None]   # ohne nie unter mit: genau die gemessene Reihe
+    assert r["gespart_eur"] == [0.75, 0.25, 0.875, None] and r["ohne_eur"][0] == 1.0
+    assert a.summe(r["gespart_eur"]) == pytest.approx(oa["gespart_eur"]) == pytest.approx(r["summe"]["gespart_eur"])
+    assert r["summe"]["ohne_eur"] == pytest.approx(oa["ohne_eur"]) and r["summe"]["mit_kwh"] == 3.5
+
+
+def test_gespart_reihen_nie_unter_null():
+    # Stunde 2 mit mehr als ohne: dort 0 gespart, die übrigen teilen sich Σohne − Σmit = 5 − 3 = 2 (roh 2 + 1 = 3)
+    r = a.gespart_reihen([0.0, 1.0, 2.0], [2.0, 2.0, 1.0], 1.0)
+    assert r["gespart_kwh"] == pytest.approx([4 / 3, 2 / 3, 0.0])
+    assert a.summe(r["gespart_kwh"]) == pytest.approx(a.ohne_automatik(3.0, 5.0, 1.0)["gespart_eur"])
+    assert r["ohne_kwh"] == pytest.approx([4 / 3, 5 / 3, 2.0]) and r["summe"]["ohne_kwh"] == pytest.approx(5.0)
+    # insgesamt mehr als ohne: nichts gespart (wie ohne_automatik), „ohne“ = „mit“
+    r = a.gespart_reihen([3.0, 3.0], [2.0, 1.0], 1.0)
+    assert r["gespart_kwh"] == [0.0, 0.0] and r["ohne_kwh"] == [3.0, 3.0] and a.ohne_automatik(6.0, 3.0, 1.0)["gespart_eur"] == 0.0
+    assert a.gespart_reihen([1.0, None], [0.0, None], 1.0) is None and a.gespart_reihen([], [], 1.0) is None   # ohne Wert wie ohne_automatik
+
+
 # ------------------------------------------------------------------ Heizperiode
 
 

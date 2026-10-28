@@ -146,6 +146,22 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       reihen: Object.fromEntries(zeilen.filter(z => z.kwh).map(z => [z.eigen ? 'eigen' : z.firma, Array(n).fill(z.kwh / n)])),
       csv: { firma: csvText(csvFirma), verbrauch: csvText(csvVerbrauch) } };
   }
+  /* Kachel „Gespart“ wie baustelle/auswertung › gespart_reihen (logik/auswertung.gespart_reihen): je Stunde/Tag/Monat mit, ohne (24/7)
+     und gespart in kWh und €; Summen wie summen.ohne_automatik (ohne = 3 × mit, gespart = 2 × mit); kommende Perioden null */
+  function beispielGespart(m, kwh, preis, heute) {
+    const n = perioden(m.zeitraum, heute), [j, mo, t] = heute.split('-').map(Number), h = new Date(JETZT + 2 * 36e5).getUTCHours();
+    const jetzt = (m.versatz || 0) > 0 ? n - 1 : { Tag: h, Woche: (new Date(Date.UTC(j, mo - 1, t)).getUTCDay() + 6) % 7, Monat: t - 1, Jahr: mo - 1 }[m.zeitraum];
+    if (!kwh) return null;
+    const da = i => i <= jetzt, tag = m.zeitraum === 'Tag';
+    const w = [...Array(n)].map((_, i) => da(i) ? (tag ? (i >= 6 && i < 17 ? 1.5 : 0.2) : 1 + .15 * Math.sin(i * 1.7)) : 0);
+    const f = [...Array(n)].map((_, i) => da(i) ? (tag ? (i >= 6 && i < 17 ? 1 : 1.15) : 1 + .1 * Math.cos(i)) : 0);
+    const sw = w.reduce((a, x) => a + x, 0), sf = f.reduce((a, x) => a + x, 0);
+    const mit = w.map((x, i) => da(i) ? kwh * x / sw : null), ohne = f.map((x, i) => da(i) ? 3 * kwh * x / sf : null);
+    const R = { mit_kwh: mit, ohne_kwh: ohne, gespart_kwh: mit.map((x, i) => x === null ? null : ohne[i] - x) };
+    for (const k of ['mit', 'ohne', 'gespart']) R[k + '_eur'] = R[k + '_kwh'].map(x => x === null ? null : x * preis);
+    R.summe = { mit_kwh: kwh, mit_eur: kwh * preis, ohne_kwh: 3 * kwh, ohne_eur: 3 * kwh * preis, gespart_kwh: 2 * kwh, gespart_eur: 2 * kwh * preis };
+    return R;
+  }
   function fakeAuswertung(m) {
     const b = welt().find(x => x.baustelle.entry_id === m.entry_id), id = m.entry_id, zl = b.zaehler || {}, preis = (b.einstellungen || {}).preis ?? 0;
     if (m.teil === 'verlauf') {
@@ -178,6 +194,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       : { oelradiator: { kwh_gradh: null, auf: null, ab: null, container: [], ids: [] }, konvektor: { kwh_gradh: null, auf: null, ab: null, container: [], ids: [] }, weniger: null, vergleichbar: false, ausgeschlossen: [], ersparnis: null },
       heizperiode: { ende: '2026-04-30', bis: ende && ende < '2026-04-30' ? ende : '2026-04-30' }, heiztage: zl.heiztage ?? 0,
       hochrechnung: beispielHochrechnung(b, preis),
+      gespart_reihen: beispielGespart(m, kwh, preis, b.baustelle.heute || '2026-09-29'),
       // WU-0005: Rangliste und Erkenntnisse (wie logik/auswertung.rangliste/erkenntnisse)
       rangliste: b.bereiche.filter(c => c.art !== 'pumpenschacht').map((c, i) => ({ bereich: c.id, name: c.name, baustelle: b.baustelle.titel, kwh: 40 - i * 5, heizzeit: 20 - i, eur: (40 - i * 5) * preis, kwh_h: (40 - i * 5) / (20 - i), anteil: 0 })),
       erkenntnisse: kwh ? [{ art: 'gespart', eur: kwh * 2 * preis, prozent: 66.7 }, { art: 'groesster', bereich: b.bereiche[0].id, name: b.bereiche[0].name, kwh: 40, anteil: 38 }, { art: 'wetter', kwh_je_grad: 7.2, eur_je_grad: 2, null0: 15.5 }, { art: 'mehr', prozent: 18 }] : [] };

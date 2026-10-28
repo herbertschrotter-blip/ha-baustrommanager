@@ -786,6 +786,27 @@ function flaeche(id, reihen, labels, einheit, jedes, vergleich3 = null, breite =
   return `<svg class="chart" data-chart="${id}" viewBox="0 0 ${W} ${H2}"><defs>${defs}</defs>${raster}${achse}${flaechen}${kanten}${oben}${vglSvg}<g class="hover"></g></svg>
     ${viele || vv ? `<div class="legende">${[...lagen].reverse().map((r5) => `<span><i style="background:${r5.farbe}"></i>${esc(r5.name)}</span>`).join("")}${vv ? `<span><i class="gestr"></i>${esc(vergleich3.name)}</span>` : ""}</div>` : ""}`;
 }
+function luecke(id, mit, ohne, gespart, labels, jedes, breite = 320, einheit = "€") {
+  const W = breite, kurz = W <= 320, H2 = kurz ? 128 : 160, L2 = 30, R2 = 8, T2 = 20, U = 22, n4 = labels.length, GRUEN = "var(--s3)";
+  const idx = labels.map((_2, i8) => i8).filter((i8) => zahl(mit[i8]) && zahl(ohne[i8]));
+  if (!idx.length) return '<div class="leer">Noch keine Werte</div>';
+  const hi0 = Math.max(...idx.flatMap((i8) => [Number(mit[i8]), Number(ohne[i8])]), 0) * 1.1 || 1;
+  const stufe = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1e3].find((st) => hi0 / st <= 4) || 2e3, hi = Math.ceil(hi0 / stufe) * stufe;
+  const x2 = (i8) => L2 + i8 / Math.max(1, n4 - 1) * (W - L2 - R2), y3 = (v2) => T2 + (1 - Number(v2) / hi) * (H2 - T2 - U);
+  const raster = [...Array(Math.round(hi / stufe) + 1)].map((_2, k2) => k2 * stufe).map((v2) => `<line x1="${L2}" x2="${W - R2}" y1="${y3(v2)}" y2="${y3(v2)}" class="gr"/><text x="${L2 - 5}" y="${y3(v2) + 3}" class="ax" text-anchor="end">${de(v2, stufe < 1 ? 1 : 0)}</text>`).join("");
+  const achse = labels.map((t5, i8) => i8 % jedes ? "" : `<text x="${x2(i8)}" y="${H2 - 6}" class="ax" text-anchor="middle">${t5}</text>`).join("");
+  const P2 = (a3) => idx.map((i8, k2) => `${k2 ? "L" : "M"}${x2(i8).toFixed(1)} ${y3(a3[i8]).toFixed(1)}`).join("");
+  const zur = (a3) => [...idx].reverse().map((i8) => `L${x2(i8).toFixed(1)} ${y3(a3[i8]).toFixed(1)}`).join("");
+  const a0 = idx[0], a1 = idx[idx.length - 1];
+  const fl = `<path class="fl-flaeche" d="${P2(mit)}L${x2(a1).toFixed(1)} ${y3(0)}L${x2(a0).toFixed(1)} ${y3(0)}z" fill="var(--s1)" opacity=".28"/><path class="fl-linie" d="${P2(mit)}" fill="none" stroke="var(--s1)" stroke-width="1.8" stroke-linejoin="round"/>`;
+  const lu = `<path class="kk-luecke" d="${P2(ohne)}${zur(mit)}z" fill="${GRUEN}" opacity=".38"/>`;
+  const oh = `<path d="${P2(ohne)}" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+  const m3 = idx[Math.floor(idx.length / 2)], mitte = (y3(ohne[m3]) + y3(mit[m3])) / 2;
+  const tx = idx.length > 2 && y3(mit[m3]) - y3(ohne[m3]) > 16 ? `<text x="${x2(m3).toFixed(1)}" y="${(mitte + 3).toFixed(1)}" class="kk-luecke-t" text-anchor="middle">gespart</text>` : "";
+  const i7 = (farbe, t5, gestr) => `<span><i ${gestr ? 'class="gestr"' : `style="background:${farbe}"`}></i>${t5}</span>`;
+  CHARTS[id] = { art: "luecke", x0: L2, x1: W - R2, W, n: n4, labels, mit, ohne, gespart, einheit, y: y3, unten: H2 - U, jedes };
+  return `<svg class="chart kk-breit" data-chart="${id}" viewBox="0 0 ${W} ${H2}">${raster}${achse}${fl}${lu}${oh}${tx}<text x="${L2 - 5}" y="${T2 - 5}" class="ax ax-e" text-anchor="end">${einheit}</text><g class="hover"></g></svg><div class="kk-leg">${kurz ? i7(GRUEN, "gespart") + i7(null, "24/7", true) : i7("var(--s1)", "mit Automatik") + i7(null, "ohne (24/7)", true) + i7(GRUEN, "Lücke = gespart")}</div>`;
+}
 function funke(v2, farbe = "var(--s1)") {
   if (!v2) return "";
   v2 = v2.map((x2) => zahl(x2) ? Number(x2) : null);
@@ -4094,6 +4115,11 @@ var roh = (v2) => o5(String(v2 ?? ""));
 var kopf3 = (ic, name2) => b2`<div class="kk-kopf"><span class="kk-ic">${ic}</span><small>${name2}</small></div>`;
 var huelle = (p4, x2, i7, ort2, gr, inhalt, tip) => ort2 === "kat" ? b2`<div class="glas-panel kk kk-${gr}">${inhalt}</div>` : b2`<div class="glas-panel kk kk-${gr}" role="button" tabindex="0" data-ort=${ort2} data-i=${i7} title=${tip} @click=${() => p4.kkAufI(ort2, i7)}>${inhalt}</div>`;
 var fb = (b3) => BEREICH_FARBEN[b3.f % BEREICH_FARBEN.length];
+var breiteS = (zahlText, einh) => {
+  const t5 = String(zahlText ?? "").replace(/<[^>]*>/g, "").replace(/&[a-z#0-9]+;/gi, "x");
+  const em = [...t5].reduce((a3, ch) => a3 + (/\d/.test(ch) ? 0.56 : /[:.,/]/.test(ch) ? 0.3 : /\s/.test(ch) ? 0.28 : 0.6), 0) * 1.03;
+  return `--kk-n:${Math.max(0.6, em).toFixed(2)};--kk-e:${einh ? Math.round((String(einh).length + 1) * 7.5) : 0}px`;
+};
 function vergleich2(p4, x2, i7, ort2, c4) {
   const e6 = KK[x2.k], W0 = p4.vgWerte(x2, c4), R2 = W0.R, gr = x2.st, eur2 = W0.eur;
   const wert2 = (v2) => zahl(v2) ? eur2 ? `${de(v2, 2)} €` : `${de(v2, v2 < 100 ? 1 : 0)} kWh` : "–";
@@ -4116,7 +4142,7 @@ function preis(p4, x2, i7, ort2, c4) {
     return p4.spSim(dd);
   }}>${t5}</button>`;
   const regler = b2`<div class="sp-sim">${knopfSim(-0.01, "−", "Preis niedriger")}<b>${de(sim, 2)} €</b>${knopfSim(0.01, "+", "Preis höher")}</div>`;
-  const zahlH = b2`<b class="kk-zahl">${zahl(simE) ? de(simE, simE < 100 ? 2 : 0) : "–"}<small> €</small></b>`;
+  const zahlT = zahl(simE) ? de(simE, simE < 100 ? 2 : 0) : "–", zahlH = b2`<b class="kk-zahl" style=${breiteS(zahlT, "€")}>${zahlT}<small> €</small></b>`;
   const unter = diff === null ? "lädt …" : `${diff > 0 ? "+" : diff < 0 ? "−" : "±"}${de(Math.abs(diff), 2)} € gegenüber tatsächlich ${de(echt, 2)} €`;
   let inhalt;
   if (gr === "S") inhalt = b2`${k2}${zahlH}<span class="kk-wo">bei ${de(sim, 2)} €/kWh</span>`;
@@ -4132,7 +4158,7 @@ function kachelVorlage(p4, x2, i7, ort2, c4) {
   const e6 = KK[x2.k], b3 = e6.je ? p4.kkB(x2) : null, gr = x2.st, k2 = kopf3(e6.ic, e6.name);
   if (e6.je && !b3) return b2`<div class="glas-panel kk">${k2}<span class="kk-wo">kein ${e6.je === "p" ? "Schacht" : "Container"} vorhanden</span></div>`;
   const D2 = p4.kkDaten(x2, b3, c4), mitDia = gr === "L" && x2.dia !== false;
-  const wo = b2`<span class="kk-wo">${b3 ? b3.name : D2.wo || ""}</span>`, zahlH = b2`<b class="kk-zahl">${roh(D2.zahl)}${D2.einh ? b2`<small> ${D2.einh}</small>` : A}</b>`;
+  const wo = b2`<span class="kk-wo">${b3 ? b3.name : D2.wo || ""}</span>`, zahlH = b2`<b class="kk-zahl" style=${breiteS(D2.zahl, D2.einh)}>${roh(D2.zahl)}${D2.einh ? b2`<small> ${D2.einh}</small>` : A}</b>`;
   let inhalt;
   if (gr === "S") inhalt = b2`${k2}${zahlH}${!b3 && D2.unter ? b2`<span class="kk-wo">${roh(D2.unter)}</span>` : wo}`;
   else if (gr === "M") {
@@ -5556,6 +5582,13 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .kk-ic { font-size: 15px; line-height: 1; flex: none; }
 .kk-zahl { font-size: 28px; font-weight: 300; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .kk-zahl small { font-size: 13px; color: var(--ink2); font-weight: 400; }
 .kk-S .kk-zahl { margin: auto 0; font-size: 34px; text-align: center; } .kk-S > .kk-wo { text-align: center; }   /* Herbert 28.10.2026: Wert größer und mittig */
+.kk-S { container-type: inline-size; } .kk-S .kk-zahl { font-size: clamp(14px, (100cqi - var(--kk-e, 16px)) / var(--kk-n, 2.4), 34px); white-space: normal; overflow-wrap: anywhere; }   /* Herbert 28.10.2026: am Handy passt sich die Zahl der Kachelbreite an (--kk-n Breite der Zahl in em, --kk-e Einheit; Desktop 34 px) */
+.kk-mini-t { text-align: center; font-size: 11px; }
+.kk-dia:has(> .kk-breit) { flex-direction: column; align-items: stretch; gap: 2px; } .kk-dia > svg.kk-breit { flex: 1 1 0; min-height: 0; }
+.kk-leg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--ink2); }
+.kk-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.kk-leg i.gestr { height: 2px; border-radius: 0; vertical-align: 3px; background: repeating-linear-gradient(90deg, var(--ink2) 0 4px, transparent 4px 7px); }
+.kk-luecke-t { font-size: 10px; font-weight: 600; fill: var(--s3); }
 .kk-wo { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kk-vgl { font-size: 12px; color: var(--ink2); line-height: 1.35; } .kk-vgl em { font-style: normal; } .kk-vgl em.mehr { color: var(--amber); } .kk-vgl em.weniger { color: #30d158; }
 .kk-M { flex-direction: row; gap: 12px; align-items: stretch; }
@@ -5774,7 +5807,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.151";
+var SEITE_VERSION = "0.8.152";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];
@@ -8234,17 +8267,18 @@ var BaustellePanel = class extends i4 {
         };
       }
       case "b-gespart": {
-        const oa = S3.ohne_automatik, r5 = this.kkSumme(c4), alle = c4.ort === "aw" && this.s.awScope === "alle";
-        const ohne = alle ? null : this.reihe(d3, this.eid(d3, d3.entry, "energie_ohne_automatik"), c4.z, c4.v);
+        const oa = S3.ohne_automatik, G = A2 && A2.gespart_reihen, su = G && G.summe || {}, je = c4.z === "Tag" ? "je Stunde" : c4.z === "Jahr" ? "je Monat" : "je Tag";
+        const gruen = "var(--s3)", mini = G && funke(G.gespart_eur, gruen);
         return {
-          zahl: oa ? de(oa.gespart_eur, 0) : "–",
+          zahl: oa ? de(oa.gespart_eur, oa.gespart_eur < 10 ? 2 : 0) : "–",
           einh: "€",
           wo: wann2,
-          vgl: oa ? `${f3(oa.prozent, 0)} % weniger als rund um die Uhr (${f3(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ""}` : "noch keine Werte",
-          funke: r5,
-          farbe: "var(--s3)",
-          kennz: [["mit Automatik", `${f3(S3.eur, 0)} €`], ["ohne (24/7)", `${f3(oa && oa.ohne_eur, 0)} €`], ["gespart", `${f3(oa && oa.gespart_eur, 0)} €`], ["weniger", `${f3(oa && oa.prozent, 0)} %`]],
-          dia: (id) => r5 ? flaeche(id, [{ name: "mit Automatik", farbe: "var(--s1)", v: r5 }], zr.labels, "kWh", KK_JEDES[c4.z], ohne ? { name: "ohne Automatik", v: ohne } : null) : ""
+          farbe: gruen,
+          funke: G && G.gespart_eur,
+          vgl: oa ? `${f3(su.gespart_kwh, 0)} kWh · ${f3(oa.prozent, 0)} % weniger als rund um die Uhr (${f3(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ""}` : "noch keine Werte",
+          mini: mini ? `${mini}<span class="kk-wo kk-mini-t">gespart ${je}</span>` : "",
+          kennz: [["gespart", `${f3(oa && oa.gespart_eur, 0)} €`], ["gespart", `${f3(su.gespart_kwh, 0)} kWh`], ["ohne (24/7)", `${f3(oa && oa.ohne_eur, 0)} €`], ["mit Automatik", `${f3(S3.eur, 0)} €`]],
+          dia: (id, w2) => G && oa ? luecke(id, G.mit_eur, G.ohne_eur, G.gespart_eur, zr.labels, KK_JEDES[c4.z], w2) : ""
         };
       }
       case "b-hoch": {
@@ -8601,14 +8635,14 @@ var BaustellePanel = class extends i4 {
     const art = griff.dataset.zug, ort2 = raster.dataset.ort || "aw", an = this.kkListe(ort2).filter((x2) => x2.an), item = an[+kachel.dataset.i];
     if (!item) return;
     ev.preventDefault();
-    const cs = getComputedStyle(raster), spalten = cs.gridTemplateColumns.split(" ").length, luecke = parseFloat(cs.columnGap) || 12;
-    const breite = (raster.getBoundingClientRect().width - luecke * (spalten - 1)) / spalten, hoehe = parseFloat(cs.gridAutoRows) || 110;
+    const cs = getComputedStyle(raster), spalten = cs.gridTemplateColumns.split(" ").length, luecke2 = parseFloat(cs.columnGap) || 12;
+    const breite = (raster.getBoundingClientRect().width - luecke2 * (spalten - 1)) / spalten, hoehe = parseFloat(cs.gridAutoRows) || 110;
     const x0 = ev.clientX, y0 = ev.clientY, w0 = item.w, h0 = item.h, mass = kachel.querySelector(".aw-mass"), wurzel = this.shadowRoot;
     kachel.classList.add(art === "move" ? "zieht" : "waechst");
     let ziel2 = null;
     const bewegt = (e6) => {
       if (art === "size") {
-        const st = awStufe(item.k, w0 + (e6.clientX - x0) / (breite + luecke), h0 + (e6.clientY - y0) / (hoehe + luecke));
+        const st = awStufe(item.k, w0 + (e6.clientX - x0) / (breite + luecke2), h0 + (e6.clientY - y0) / (hoehe + luecke2));
         Object.assign(item, { w: st[1], h: st[2], st: st[0] });
         kachel.style.setProperty("--w", item.w);
         kachel.style.setProperty("--h", item.h);
@@ -8939,6 +8973,15 @@ var BaustellePanel = class extends i4 {
       svg2.querySelector(".hover").innerHTML = `<line x1="${x2}" x2="${x2}" y1="10" y2="138" class="kreuz"/>` + c4.reihen.map((q) => `<circle cx="${x2}" cy="${c4.y(q.o[i8])}" r="3.5" fill="${q.farbe}" class="punkt"/>`).join("");
       const vglTip = c4.vergleich ? `<div class="leise">${esc(c4.vglName || "Vergleich")} ${de(c4.vergleich[i8], 2)} ${c4.einheit === "€" ? "€" : "kWh"}</div>` : "";
       return this.tip(ev, `<b>${c4.labels[i8]}${h3 ? ":00" : ""}</b>` + vglTip + (c4.reihen.length > 1 ? [...c4.reihen].reverse().map((q) => `<div><i style="background:${q.farbe}"></i>${esc(q.name)} <b>${de(q.v[i8], 2)} ${c4.einheit === "€" ? "€" : "kWh"}</b></div>`).join("") + `<div class="tip-summe">zusammen <b>${de(sum, 2)} kWh</b> · ${de(sum * p4, 2)} €</div>` : c4.einheit === "€" ? `<div>${de(sum, 2)} €</div>` : `<div>${de(sum, 2)} kWh</div><div class="leise">${de(sum * p4, 2)} €</div>`));
+    }
+    if (c4.art === "luecke") {
+      const vx = fx * c4.W, i8 = Math.max(0, Math.min(c4.n - 1, Math.round((vx - c4.x0) / (c4.x1 - c4.x0) * (c4.n - 1)))), x2 = c4.x0 + i8 / Math.max(1, c4.n - 1) * (c4.x1 - c4.x0);
+      if (!zahl(c4.mit[i8])) {
+        svg2.querySelector(".hover").innerHTML = "";
+        return this.tip(null);
+      }
+      svg2.querySelector(".hover").innerHTML = `<line x1="${x2}" x2="${x2}" y1="10" y2="${c4.unten}" class="kreuz"/><circle cx="${x2}" cy="${c4.y(c4.mit[i8])}" r="3.5" fill="var(--s1)" class="punkt"/><circle cx="${x2}" cy="${c4.y(c4.ohne[i8])}" r="3.5" fill="var(--ink2)" class="punkt"/>`;
+      return this.tip(ev, `<b>${c4.labels[i8]}${c4.n === 24 ? ":00" : ""}</b><div><i style="background:var(--s3)"></i>gespart <b>${de(c4.gespart[i8], 2)} ${c4.einheit}</b></div><div><i style="background:var(--s1)"></i>mit Automatik <b>${de(c4.mit[i8], 2)} ${c4.einheit}</b></div><div class="leise">ohne (24/7) ${de(c4.ohne[i8], 2)} ${c4.einheit}</div>`);
     }
     if (c4.art === "stufen") {
       const vx = fx * c4.W, t5 = c4.von + Math.max(0, Math.min(1, (vx - c4.L) / (c4.B - c4.L))) * (c4.bis - c4.von);

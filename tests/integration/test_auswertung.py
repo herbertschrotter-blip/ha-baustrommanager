@@ -222,8 +222,20 @@ async def test_auswertung_befehl(hass: HomeAssistant, baustelle, ws, statistik) 
     assert [c["kwh"] for c in rang] == sorted((c["kwh"] for c in rang), reverse=True)
     assert sum(c["anteil"] for c in rang) == pytest.approx(100) and all(c["eur"] == pytest.approx(c["kwh"] * 0.25) for c in rang)
     assert r["erkenntnisse"] and r["erkenntnisse"][0]["art"] == "gespart" and len(r["erkenntnisse"]) <= 5
+    # Kachel „Gespart“ (Herbert 28.10.2026): je Tag mit, ohne (24/7), gespart; Summe = ohne_automatik.gespart_eur
+    g = r["gespart_reihen"]
+    assert len(g["gespart_eur"]) == r["zeitraum"]["n"] == 7 and g["summe"]["mit_kwh"] == pytest.approx(s["kwh"])
+    assert sum(v or 0 for v in g["gespart_eur"]) == pytest.approx(s["ohne_automatik"]["gespart_eur"])
+    assert sum(v or 0 for v in g["ohne_eur"]) == pytest.approx(s["ohne_automatik"]["ohne_eur"])
+    fertig = [i for i, v in enumerate(g["mit_kwh"]) if v is not None]
+    assert fertig and fertig[-1] < 6 and g["gespart_kwh"][6] is None   # kommende Tage leer
+    assert all(g["ohne_kwh"][i] >= g["mit_kwh"][i] and g["gespart_eur"][i] >= 0 for i in fertig)
+    assert g["gespart_kwh"] != g["mit_kwh"]   # nicht dieselbe Reihe wie „Kosten & Verbrauch“
+    tag = (await ws("baustelle/auswertung", zeitraum="Tag"))["result"]["gespart_reihen"]
+    assert len(tag["gespart_kwh"]) == 24   # Tag: je Stunde
     alle = (await ws("baustelle/auswertung", zeitraum="Woche", scope="alle"))["result"]
     assert alle["summen"]["kwh"] == pytest.approx(s["kwh"])   # nur eine laufende Baustelle
+    assert alle["gespart_reihen"]["gespart_kwh"] == pytest.approx(g["gespart_kwh"])   # auch für „alle laufenden“
     assert (await ws("baustelle/auswertung", entry_id="falsch"))["error"]["code"] == "not_found"
 
 

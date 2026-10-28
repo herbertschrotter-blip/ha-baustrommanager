@@ -314,6 +314,9 @@ async def _summen(hass: HomeAssistant, q: Quelle, zr: a.Zeitraum) -> dict[str, A
         "heizzeit": sum(a.summe(w.get(q.eid(b["id"], "heizzeit") or "", leer)) for b in container),
         "pumpzeit": sum(a.summe(v) for v in pumpzeit.values()),
         "ohne": a.summe(w.get(q.eid(eid, "energie_ohne_automatik") or "", leer)),
+        # je Periode (Kachel „Gespart“): Verbrauch mit Automatik und „ohne Automatik“; ohne jeden Wert None
+        "mit_je": a.reihe_offen([w.get(i, leer) for b in q.bereiche for i in q.energie_ids(b["id"])], zr.n),
+        "ohne_je": a.reihe_offen([w.get(q.eid(eid, "energie_ohne_automatik") or "", leer)], zr.n),
         "pumpzeit_je": pumpzeit,
         # je Container (Rangliste der Auswertung, WU-0005)
         "je_container": [{"bereich": b["id"], "name": b["name"], "baustelle": q.entry.title,
@@ -428,6 +431,7 @@ async def async_auswertung(
     wetter = a.wetter_aus_signatur((hr_erg or {}).get("signatur"), preis)   # BSM-033: Energiesignatur der Baustelle
     gerade = wetter["gerade"]
     oa = a.ohne_automatik(summen["kwh"], summen["ohne"], preis)
+    gespart = a.gespart_reihen(a.reihe_offen([x["mit_je"] for x in jetzt], zr.n), a.reihe_offen([x["ohne_je"] for x in jetzt], zr.n), preis)
     hp_von = min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_VON) or 10)))
     hp_bis = min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_BIS) or 4)))
     return {
@@ -435,6 +439,8 @@ async def async_auswertung(
         "summen": {**summen, "eur": a.geld(summen["kwh"], preis), "vorher": davor,
                    "veraenderung": {k: a.veraenderung(summen[k], davor[k], vorher_ganz) for k in davor},
                    "ohne_automatik": oa},
+        # Kachel „Gespart“ (Herbert 28.10.2026): je Periode mit, ohne (24/7) und gespart in kWh und € – über `scope`
+        "gespart_reihen": gespart,
         # Rangliste der Container und „Was fällt auf“ (WU-0005, logik/auswertung) – über `scope`
         "rangliste": rang,
         "erkenntnisse": a.erkenntnisse(rang, ohne=oa, gerade=gerade, veraenderung_kwh=a.veraenderung(summen["kwh"], davor["kwh"], vorher_ganz),

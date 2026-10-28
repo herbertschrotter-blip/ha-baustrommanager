@@ -335,6 +335,9 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
  "heizperiode": {"ende": "2027-04-30", "bis": "2027-04-30"}, "heiztage": 16,
  "hochrechnung": {"bisher_kwh": 412, "bisher_eur": 115.36, "mit_kwh": 2310, "mit_eur": 646.8, "ohne_kwh": 10626,
                   "ohne_eur": 2975.28, "gespart_eur": 2328.48},
+ "gespart_reihen": {"mit_kwh": [1.2, 3.4, null], "mit_eur": [0.34, 0.95, null], "ohne_kwh": [5.0, 5.1, null], "ohne_eur": [1.4, 1.43, null],
+                    "gespart_kwh": [3.8, 1.7, null], "gespart_eur": [1.06, 0.48, null],
+                    "summe": {"mit_kwh": 4.6, "mit_eur": 1.29, "ohne_kwh": 10.1, "ohne_eur": 2.83, "gespart_kwh": 5.5, "gespart_eur": 1.54}},
  "rangliste": [{"bereich": "<bid>", "name": "Polier", "baustelle": "…", "kwh": 60, "heizzeit": 25, "eur": 16.8, "kwh_h": 2.4, "anteil": 60}],
  "erkenntnisse": [{"art": "gespart|groesster|sparsamster|wetter|mehr|weniger|typ", "…": "Werte je Art"}]}
 ```
@@ -344,6 +347,14 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
 - `summen` über `scope`; `heizzeit` nur Container, `pumpzeit` nur Pumpen; `veraenderung` in ganzen % zum Zeitraum davor
   (`null` ohne Wert davor); `ohne_automatik` `null`, solange „ohne Automatik“ 0 ist, sonst mit `ohne_eur` (Kosten im
   Dauerbetrieb, 0.7.24).
+- `gespart_reihen` (Kachel „Gespart“, Mockup `gespart.html` Variante B, Herbert 28.10.2026) über `scope` (auch „alle
+  laufenden“): je Periode des Zeitraums (`zeitraum.n`: Tag je Stunde, Woche/Monat je Tag, Jahr je Monat) „mit
+  Automatik“ (Energie der Container), „ohne (24/7)“ und „gespart“ in kWh und € (× `preis`), dazu `summe`. Regel einmal in
+  `logik/auswertung.gespart_reihen`: Σ`gespart` = `summen.ohne_automatik.gespart_eur` (Σohne − Σmit, nie unter 0); je
+  Periode nie unter 0 – die Perioden, in denen der Zähler „ohne Automatik“ über „mit“ liegt, teilen sich die Summe im
+  Verhältnis ihres Abstands (liegt er nie darunter, ist es genau der Abstand); `ohne` je Periode = `mit` + `gespart` (die
+  gestrichelte Linie der Kachel, Σ = `ohne_automatik.ohne_eur`, solange Σohne ≥ Σmit). Perioden ganz ohne Wert (kommende
+  Stunden/Tage) `null`; `null` wie `ohne_automatik`, solange „ohne Automatik“ 0 ist. Die Seite zeichnet nur.
 - `je_geraet`, `wetter`, `typ`, `heizperiode`, `heiztage` immer für die Baustelle `entry_id`. `je_geraet` nach
   Containern geordnet; `mittel` Ø kW im Betrieb (ab 50 W), `std` bei Pumpen gemessen, sonst kWh ÷ Ø kW (Schätzung).
   `wetter.gerade` `null` unter 5 Heiztagen; `eur_je_grad` = −k · Preis (Mehrkosten am Tag je Grad kälter, `null` bei

@@ -9,7 +9,7 @@ import { AW_BAUSTEINE, AW_HOEHE, AW_SPEICHER, AW_VORLAGEN, KK, KK_JEDES, KK_SPEI
 import { ARTEN, AUSNAHME, MODI, TEXT, TICKET_STATUS, WETTER_TEXT, WIEDER, illu, kwVon } from './tabellen.js';
 
 import { Himmel, himmelLauf, partikel, phaseAusSonne } from './himmel.js';
-import { CHARTS, balken, flaeche, funke, kkBalken, linie, streu, stufen } from './diagramme.js';
+import { CHARTS, balken, flaeche, funke, kkBalken, linie, luecke, streu, stufen } from './diagramme.js';
 
 import { MONATE, TAGE, addieren, datum, dauer, de, esc, kurzDatum, minu, plusTage, stdMin, summe, tageZwischen, uhr, verNeuer, wtag, zahl, zrInfo, zrVersatz } from './hilfen.js';
 import { BEREICH_FARBEN, ICON_COG, ICON_MELDEN, SYMBOL_STANDARD, sigHtml, sigStufe } from './symbole.js';
@@ -842,6 +842,13 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .kk-ic { font-size: 15px; line-height: 1; flex: none; }
 .kk-zahl { font-size: 28px; font-weight: 300; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .kk-zahl small { font-size: 13px; color: var(--ink2); font-weight: 400; }
 .kk-S .kk-zahl { margin: auto 0; font-size: 34px; text-align: center; } .kk-S > .kk-wo { text-align: center; }   /* Herbert 28.10.2026: Wert größer und mittig */
+.kk-S { container-type: inline-size; } .kk-S .kk-zahl { font-size: clamp(14px, (100cqi - var(--kk-e, 16px)) / var(--kk-n, 2.4), 34px); white-space: normal; overflow-wrap: anywhere; }   /* Herbert 28.10.2026: am Handy passt sich die Zahl der Kachelbreite an (--kk-n Breite der Zahl in em, --kk-e Einheit; Desktop 34 px) */
+.kk-mini-t { text-align: center; font-size: 11px; }
+.kk-dia:has(> .kk-breit) { flex-direction: column; align-items: stretch; gap: 2px; } .kk-dia > svg.kk-breit { flex: 1 1 0; min-height: 0; }
+.kk-leg { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 11px; color: var(--ink2); }
+.kk-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.kk-leg i.gestr { height: 2px; border-radius: 0; vertical-align: 3px; background: repeating-linear-gradient(90deg, var(--ink2) 0 4px, transparent 4px 7px); }
+.kk-luecke-t { font-size: 10px; font-weight: 600; fill: var(--s3); }
 .kk-wo { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kk-vgl { font-size: 12px; color: var(--ink2); line-height: 1.35; } .kk-vgl em { font-style: normal; } .kk-vgl em.mehr { color: var(--amber); } .kk-vgl em.weniger { color: #30d158; }
 .kk-M { flex-direction: row; gap: 12px; align-items: stretch; }
@@ -2363,11 +2370,14 @@ class BaustellePanel extends LitElement {
         return { zahl: zahl(S.eur) ? de(S.eur, 0) : '–', einh: '€', wo: wann, vgl: `${f(S.kwh, 0)} kWh${zahl((S.veraenderung || {}).kwh) ? ` ${pfeil(S.veraenderung.kwh)} zu ${this.zrVgl(c.z, c.v)}` : ''}`, funke: r,
           kennz: [['Kosten', `${f(S.eur, 2)} €`], ['Verbrauch', `${f(S.kwh, 0)} kWh`], ['Heizzeit', `${f(S.heizzeit, 0)} h`], ['Pumpzeit', `${f(S.pumpzeit, 1)} h`]],
           dia: (id, w) => r ? flaeche(id, [{ name: 'Verbrauch', farbe: 'var(--s1)', v: r }], zr.labels, 'kWh', KK_JEDES[c.z], null, w) : '' }; }
-      case 'b-gespart': { const oa = S.ohne_automatik, r = this.kkSumme(c), alle = c.ort === 'aw' && this.s.awScope === 'alle';
-        const ohne = alle ? null : this.reihe(d, this.eid(d, d.entry, 'energie_ohne_automatik'), c.z, c.v);
-        return { zahl: oa ? de(oa.gespart_eur, 0) : '–', einh: '€', wo: wann, vgl: oa ? `${f(oa.prozent, 0)} % weniger als rund um die Uhr (${f(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ''}` : 'noch keine Werte', funke: r, farbe: 'var(--s3)',
-          kennz: [['mit Automatik', `${f(S.eur, 0)} €`], ['ohne (24/7)', `${f(oa && oa.ohne_eur, 0)} €`], ['gespart', `${f(oa && oa.gespart_eur, 0)} €`], ['weniger', `${f(oa && oa.prozent, 0)} %`]],
-          dia: id => r ? flaeche(id, [{ name: 'mit Automatik', farbe: 'var(--s1)', v: r }], zr.labels, 'kWh', KK_JEDES[c.z], ohne ? { name: 'ohne Automatik', v: ohne } : null) : '' }; }
+      case 'b-gespart': {   // Mockup gespart.html Variante B (Herbert 28.10.2026): Reihen je Stunde/Tag/Monat von der Integration (gespart_reihen), auch für „alle laufenden“
+        const oa = S.ohne_automatik, G = A && A.gespart_reihen, su = (G && G.summe) || {}, je = c.z === 'Tag' ? 'je Stunde' : c.z === 'Jahr' ? 'je Monat' : 'je Tag';
+        const gruen = 'var(--s3)', mini = G && funke(G.gespart_eur, gruen);
+        return { zahl: oa ? de(oa.gespart_eur, oa.gespart_eur < 10 ? 2 : 0) : '–', einh: '€', wo: wann, farbe: gruen, funke: G && G.gespart_eur,
+          vgl: oa ? `${f(su.gespart_kwh, 0)} kWh · ${f(oa.prozent, 0)} % weniger als rund um die Uhr (${f(oa.ohne_eur, 0)} €)${oa.hinweis ? ` · ${oa.hinweis}` : ''}` : 'noch keine Werte',
+          mini: mini ? `${mini}<span class="kk-wo kk-mini-t">gespart ${je}</span>` : '',
+          kennz: [['gespart', `${f(oa && oa.gespart_eur, 0)} €`], ['gespart', `${f(su.gespart_kwh, 0)} kWh`], ['ohne (24/7)', `${f(oa && oa.ohne_eur, 0)} €`], ['mit Automatik', `${f(S.eur, 0)} €`]],
+          dia: (id, w) => G && oa ? luecke(id, G.mit_eur, G.ohne_eur, G.gespart_eur, zr.labels, KK_JEDES[c.z], w) : '' }; }
       case 'b-hoch': { const h = (A && A.hochrechnung) || {};
         return { zahl: zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)}` : '–', einh: '€', wo: 'bis Ende Heizperiode', vgl: `bisher ${f(h.bisher_eur, 0)} € · ohne Automatik ${f(h.ohne_eur, 0)} €${h.ohne_hinweis ? ` (${h.ohne_hinweis})` : ''}`,
           mini: kkBalken([['bisher', h.bisher_eur, `${f(h.bisher_eur, 0)} €`, 'var(--s3)'], ['mit', h.mit_eur, `${f(h.mit_eur, 0)} €`, 'var(--s1)'], ['ohne', h.ohne_eur, `${f(h.ohne_eur, 0)} €`, 'var(--s2)']]),
@@ -2714,6 +2724,13 @@ class BaustellePanel extends LitElement {
       return this.tip(ev, `<b>${c.labels[i]}${h ? ':00' : ''}</b>` + vglTip + (c.reihen.length > 1
         ? [...c.reihen].reverse().map(q => `<div><i style="background:${q.farbe}"></i>${esc(q.name)} <b>${de(q.v[i], 2)} ${c.einheit === '€' ? '€' : 'kWh'}</b></div>`).join('') + `<div class="tip-summe">zusammen <b>${de(sum, 2)} kWh</b> · ${de(sum * p, 2)} €</div>`
         : c.einheit === '€' ? `<div>${de(sum, 2)} €</div>` : `<div>${de(sum, 2)} kWh</div><div class="leise">${de(sum * p, 2)} €</div>`));
+    }
+    if (c.art === 'luecke') {   // Kachel „Gespart“: mit, ohne (24/7) und gespart der Integration zur Stunde/zum Tag unter dem Zeiger
+      const vx = fx * c.W, i = Math.max(0, Math.min(c.n - 1, Math.round((vx - c.x0) / (c.x1 - c.x0) * (c.n - 1)))), x = c.x0 + i / Math.max(1, c.n - 1) * (c.x1 - c.x0);
+      if (!zahl(c.mit[i])) { svg.querySelector('.hover').innerHTML = ''; return this.tip(null); }
+      svg.querySelector('.hover').innerHTML = `<line x1="${x}" x2="${x}" y1="10" y2="${c.unten}" class="kreuz"/><circle cx="${x}" cy="${c.y(c.mit[i])}" r="3.5" fill="var(--s1)" class="punkt"/><circle cx="${x}" cy="${c.y(c.ohne[i])}" r="3.5" fill="var(--ink2)" class="punkt"/>`;
+      return this.tip(ev, `<b>${c.labels[i]}${c.n === 24 ? ':00' : ''}</b><div><i style="background:var(--s3)"></i>gespart <b>${de(c.gespart[i], 2)} ${c.einheit}</b></div>`
+        + `<div><i style="background:var(--s1)"></i>mit Automatik <b>${de(c.mit[i], 2)} ${c.einheit}</b></div><div class="leise">ohne (24/7) ${de(c.ohne[i], 2)} ${c.einheit}</div>`);
     }
     if (c.art === 'stufen') {   // AN-0005: Wert jedes Geräts zur Zeit unter dem Zeiger
       const vx = fx * c.W, t = c.von + Math.max(0, Math.min(1, (vx - c.L) / (c.B - c.L))) * (c.bis - c.von);

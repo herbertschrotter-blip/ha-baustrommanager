@@ -1184,6 +1184,35 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick(AW.layout); const an2 = panel.awAuswahl().filter(x => x.an), n2 = panel.awAuswahl().length;
     await klick({ act: 'aw-weg', ort: 'aw', i: String(an2.findIndex(x => x.k === 'b-kosten')) }); erwarte('WU-0014: ✕ entfernt die Kachel aus der Auswertung', panel.awAuswahl().length === n2 - 1);
     await klick(AW.layout); await klick(AW.bearb); await klick('.aw-wahl [data-v="misch"]'); await klick(AW.bearb); panel.s.kkUe = null; }
+  /* Kachel „Gespart“ nach Mockup gespart.html Variante B (Herbert 28.10.2026): L Fläche mit Automatik, gestrichelt ohne (24/7), Lücke grün
+     = gespart, volle Kachelbreite; M Funke der gesparten Reihe; Reihen von der Integration (gespart_reihen), auch „alle laufenden“ */
+  { const KACHELN = [...['S', 'M', 'L'].map(st => panel.kkGross({ k: 'b-gespart', an: true, dia: true }, st)), panel.kkGross({ k: 'b-kosten', an: true, dia: true }, 'M')];
+    const gespartL = () => litEl('.aw-raster[data-ort="ue"] .kk-L'), schmal0 = panel.narrow;
+    await klick({ act: 'tab', v: 'uebersicht' }, 10);
+    for (const schmal of [true, false]) {
+      panel.narrow = schmal; panel.s.kkUe = KACHELN.map(x => ({ ...x })); await panel.neuZeichnen(); await ruhe(30); pruefe(`Kachel Gespart ${schmal ? 'Handy' : 'Desktop'}`);
+      const kk = gespartL(), svg = kk && kk.querySelector('.kk-dia svg'), leg = kk && kk.querySelector('.kk-leg');
+      erwarte(`Gespart L (${schmal ? 320 : 640}): Diagramm in Kachelbreite mit Lücke`, !!svg && svg.getAttribute('viewBox') === `0 0 ${schmal ? '320 128' : '640 160'}` && !!svg.querySelector('path.kk-luecke') && !!svg.querySelector('path[stroke-dasharray]'), svg && svg.getAttribute('viewBox'));
+      erwarte(`Gespart L (${schmal ? 320 : 640}): Legende „gespart“`, !!leg && leg.textContent.includes(schmal ? 'gespart' : 'Lücke = gespart') && (schmal || leg.textContent.includes('ohne (24/7)')), leg && leg.textContent);
+    }
+    panel.narrow = schmal0;
+    const c = panel.kkCtx('ue'), G = c.A && c.A.gespart_reihen, D = panel.kkDaten({ k: 'b-gespart' }, null, c), K = panel.kkDaten({ k: 'b-kosten' }, null, c);
+    erwarte('Gespart: Reihen von der Integration, Summe = ohne_automatik.gespart_eur', !!G && Math.abs(G.gespart_eur.reduce((a, v) => a + (v || 0), 0) - c.S.ohne_automatik.gespart_eur) < 1e-6);
+    erwarte('Gespart M: Funke = gesparte Reihe, nicht die Verbrauchsreihe', D.funke === G.gespart_eur && JSON.stringify(D.funke) !== JSON.stringify(K.funke) && D.mini.includes('gespart je Tag'));
+    const M = litEl('.aw-raster[data-ort="ue"] .kk-M'); erwarte('Gespart M: Unterschrift „gespart je Tag“', !!M && M.textContent.includes('gespart je Tag'));
+    const S = litEl('.aw-raster[data-ort="ue"] .kk-S .kk-zahl'); erwarte('Gespart S: Zahl mit Breite für die Schrift (--kk-n)', !!S && /--kk-n:\d/.test(S.getAttribute('style') || ''), S && S.getAttribute('style'));
+    { const svg = gespartL().querySelector('svg.chart[data-chart]'); let t = ''; const alt = panel.tip; panel.tip = (e, h) => { t = h || ''; };
+      if (svg) { svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 640, height: 160, right: 640, bottom: 160, x: 0, y: 0 });
+        svg.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, composed: true, clientX: 60, clientY: 60 })); }
+      panel.tip = alt; erwarte('Gespart L: Hover zeigt gespart, mit Automatik und ohne (24/7)', /gespart <b>[\d,.]+ €/.test(t) && t.includes('mit Automatik') && t.includes('ohne (24/7)') && !/NaN|undefined/.test(t), t); }
+    // Tag: je Stunde; alle laufenden: Reihen über alle
+    await klick({ act: 'tab', v: 'auswertung' }, 30); panel.s.awListe = [...KACHELN.map(x => ({ ...x })), ...panel.awAuswahl().filter(x => !KACHELN.some(k => k.k === x.k))];
+    await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Tag' }, 30); pruefe('Gespart Auswertung Tag');
+    erwarte('Gespart Tag: „gespart je Stunde“, 24 Werte', panel.kkDaten({ k: 'b-gespart' }, null, panel.kkCtx('aw')).mini.includes('gespart je Stunde') && panel.kkCtx('aw').A.gespart_reihen.gespart_eur.length === 24);
+    await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Monat' }, 30); await klick(AW.scope('alle'), 30); pruefe('Gespart alle laufenden');
+    { const ca = panel.kkCtx('aw'), kk = litEl('.aw-raster[data-ort="aw"] .kk-L'), svg = kk && kk.querySelector('.kk-dia svg');
+      erwarte('Gespart alle laufenden: Lücke mit „ohne“ über alle', !!ca.A.gespart_reihen && !!svg && !!svg.querySelector('path.kk-luecke') && !!svg.querySelector('path[stroke-dasharray]')); }
+    await klick(AW.scope('diese'), 30); panel.s.awListe = null; panel.awVorlage('misch', false); panel.s.kkUe = null; }
   panel.awAuswahl().forEach(x => { x.an = true; });   // WU-0005: alle Bausteine zeigen – die Inhalte prüfen die folgenden Tests
   await klick({ act: 'tab', v: 'auswertung' }, 30);
   erwarte('Auswertung: Leistung heute, Temperaturen, Je Gerät, Heizperiode', ['Leistung heute', 'Temperaturen', 'Je Gerät', 'hp-karte'].every(t => ui.innerHTML.includes(t)));

@@ -478,13 +478,55 @@ def ohne_hinweis(methode: str | None) -> str | None:
     return None if methode == "baseline" else OHNE_HINWEIS
 
 
+def gespart_kwh(mit: float, ohne: float) -> float:
+    """Gespart gegenüber Dauerbetrieb: „ohne“ − „mit“, nie unter 0 (Ohne Automatik, Hochrechnung, Kachel „Gespart“)."""
+    return max(0.0, ohne - mit)
+
+
 def ohne_automatik(kwh: float, ohne: float, preis: float) -> dict[str, Any] | None:
     """„Ohne Automatik“: Kosten im Dauerbetrieb (`ohne` kWh), gespart in € und % dagegen, dazu der Hinweis (der Zähler
     rechnet immer Dauerbetrieb); ohne Wert (0) None."""
     if ohne <= 0:
         return None
-    return {"ohne_eur": ohne * preis, "gespart_eur": max(0.0, ohne - kwh) * preis, "prozent": max(0.0, 1 - kwh / ohne) * 100,
+    return {"ohne_eur": ohne * preis, "gespart_eur": gespart_kwh(kwh, ohne) * preis, "prozent": max(0.0, 1 - kwh / ohne) * 100,
             "hinweis": ohne_hinweis(None)}
+
+
+def reihe_offen(reihen: Sequence[Sequence[float | None]], n: int) -> list[float | None]:
+    """Reihen stellenweise addieren; eine Stelle ganz ohne Wert bleibt None (z. B. kommende Stunden), sonst zählt ein
+    fehlender Wert 0 – wie `summe`."""
+    aus: list[float | None] = [None] * n
+    for reihe in reihen:
+        for i, v in enumerate(list(reihe)[:n]):
+            if ist_zahl(v):
+                aus[i] = (aus[i] or 0.0) + float(v)
+    return aus
+
+
+def gespart_reihen(mit: Sequence[float | None], ohne: Sequence[float | None], preis: float) -> dict[str, Any] | None:
+    """Kachel „Gespart“: je Periode des Zeitraums „mit Automatik“, „ohne (24/7)“ und „gespart“ in kWh und €, dazu die
+    Summen. Die Summe von „gespart“ ist die von `ohne_automatik` (Σohne − Σmit, nie unter 0); je Periode ist „gespart“
+    nie unter 0 – die Perioden, in denen „ohne“ über „mit“ liegt, teilen sich die Summe im Verhältnis ihres Abstands
+    (liegt „ohne“ nie unter „mit“, ist es genau der Abstand). „ohne“ je Periode = „mit“ + „gespart“ (die Linie der
+    Kachel; ihre Summe ist die von „ohne“, solange Σohne ≥ Σmit). Perioden ohne jeden Wert bleiben None (kommende
+    Stunden/Tage); ohne „ohne Automatik“ (Σohne ≤ 0) None wie `ohne_automatik`."""
+    n = max(len(mit), len(ohne))
+    mit_, ohne_ = [*mit, *[None] * (n - len(mit))], [*ohne, *[None] * (n - len(ohne))]
+    da = [ist_zahl(m) or ist_zahl(o) for m, o in zip(mit_, ohne_, strict=True)]
+    m = [float(v) if ist_zahl(v) else 0.0 for v in mit_]
+    o = [float(v) if ist_zahl(v) else 0.0 for v in ohne_]
+    if sum(o) <= 0:
+        return None
+    roh = [max(0.0, oi - mi) for mi, oi in zip(m, o, strict=True)]
+    ziel, basis = gespart_kwh(sum(m), sum(o)), sum(roh)
+    g = [r * ziel / basis if basis > 0 else 0.0 for r in roh]
+    reihen = {"mit": m, "ohne": [mi + gi for mi, gi in zip(m, g, strict=True)], "gespart": g}
+    aus: dict[str, Any] = {}
+    for k, r in reihen.items():
+        aus[f"{k}_kwh"] = [v if da[i] else None for i, v in enumerate(r)]
+        aus[f"{k}_eur"] = [geld(v, preis) for v in aus[f"{k}_kwh"]]
+    aus["summe"] = {f"{k}_{e}": summe(r) * (preis if e == "eur" else 1.0) for k, r in reihen.items() for e in ("kwh", "eur")}
+    return aus
 
 
 def monate_zeitraum(heute: date, beginn: date | None, ende: date | None) -> tuple[date, date, list[str]]:
@@ -535,7 +577,7 @@ def hochrechnung_werte(
     bisher_kwh: float | None, mit_kwh: float | None, ohne_kwh: float | None, preis: float
 ) -> dict[str, float | None]:
     """Hochrechnung der Heizperiode in kWh und €: bisher, mit Automatik, ohne (24/7) und gespart (nie unter 0)."""
-    gespart = None if mit_kwh is None or ohne_kwh is None else max(0.0, ohne_kwh - mit_kwh) * preis
+    gespart = None if mit_kwh is None or ohne_kwh is None else gespart_kwh(mit_kwh, ohne_kwh) * preis
     return {"bisher_kwh": bisher_kwh, "bisher_eur": geld(bisher_kwh, preis), "mit_kwh": mit_kwh, "mit_eur": geld(mit_kwh, preis),
             "ohne_kwh": ohne_kwh, "ohne_eur": geld(ohne_kwh, preis), "gespart_eur": gespart}
 

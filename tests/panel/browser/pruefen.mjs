@@ -572,6 +572,34 @@ await fall('B8 Container am Handy', browser, async (page, erwarte) => {
   }
 });
 
+/* B9 Kacheln S am Handy (Herbert 28.10.2026): die Zahl jeder S-Kachel passt in die Kachel (vorher abgeschnitten „6…“) und
+   steht am Handy (390 px, zwei Spalten) in einer Zeile, kurze Zahlen bleiben 34 px wie am Desktop; im schmalen Telefon-Rahmen
+   des Mockups (vier Spalten) bricht sie notfalls um statt abgeschnitten zu werden. Dazu Kachel „Gespart“ L (Mockup gespart.html,
+   Variante B) in voller Breite mit Lücke und Legende */
+await fall('B9 Kacheln S am Handy', browser, async (page, erwarte) => {
+  const zeige = sel => panel(page, sel, () => { const keys = p.kkEintraege('ue').map(e => e.k);
+    p.s.kkUe = [...keys.map(k => p.kkGross({ k, an: true }, 'S')), p.kkGross({ k: 'b-gespart', an: true, dia: true }, 'L')]; p.s.sheet = null; p.gehe('uebersicht'); p.neuZeichnen(); return keys.length; });
+  const messen = sel => panel(page, sel, () => [...sr.querySelectorAll('.aw-raster[data-ort="ue"] .kk-S .kk-zahl')].map(z => ({
+    text: z.textContent.trim(), px: parseFloat(getComputedStyle(z).fontSize), zu: z.scrollWidth > z.clientWidth + 1, zeilen: Math.round(z.offsetHeight / (parseFloat(getComputedStyle(z).fontSize) * 1.15)),
+    raus: z.closest('.kk').scrollHeight > z.closest('.kk').clientHeight + 1 })));
+  const kurz = z => z.text.length <= 7;
+  await zeige(T); await zeige(D); await warte(1500);
+  const r = await messen(T), d = await messen(D);
+  erwarte(`Telefon-Rahmen: alle ${r.length} S-Zahlen ganz sichtbar`, r.length === d.length && r.length >= 15 && r.every(z => !z.zu && !z.raus), JSON.stringify(r.filter(z => z.zu || z.raus)));
+  erwarte('Desktop: S-Zahlen passen, kurze 34 px wie bisher', d.length >= 15 && d.every(z => !z.zu && z.zeilen === 1) && d.filter(kurz).every(z => z.px === 34), JSON.stringify(d.filter(z => z.zu || z.zeilen !== 1 || (kurz(z) && z.px !== 34))));
+  for (const [sel, w] of [[T, '320 128'], [D, '640 160']]) {
+    const g = await panel(page, sel, () => { const kk = sr.querySelector('.aw-raster[data-ort="ue"] .kk-L'), svg = kk && kk.querySelector('.kk-dia svg.chart'), leg = kk && kk.querySelector('.kk-leg');
+      const q = svg && svg.getBoundingClientRect(), dia = kk && kk.querySelector('.kk-dia').getBoundingClientRect();
+      return svg && { vb: svg.getAttribute('viewBox'), luecke: !!svg.querySelector('path.kk-luecke'), leg: leg && leg.textContent, voll: Math.abs(q.width - dia.width) < 2, legSicht: !!leg && leg.getBoundingClientRect().height > 0 && leg.getBoundingClientRect().bottom <= kk.getBoundingClientRect().bottom + 1 }; });
+    erwarte(`Gespart L ${w}: volle Breite, Lücke, Legende sichtbar`, g && g.vb === `0 0 ${w}` && g.luecke && g.voll && g.legSicht && g.leg.includes('gespart'), JSON.stringify(g));
+  }
+  await bild(page, 'b9-kacheln-s');
+  await page.setViewport({ width: 390, height: 844 }); await zeige(T); await warte(1500);   // echtes Handy: zwei Spalten
+  const h = await messen(T);
+  erwarte(`Handy 390 px: alle ${h.length} S-Zahlen in einer Zeile, keine abgeschnitten`, h.length === d.length && h.every(z => !z.zu && !z.raus && z.zeilen === 1), JSON.stringify(h.filter(z => z.zu || z.raus || z.zeilen !== 1)));
+  erwarte('Handy 390 px: kurze Zahlen bleiben 34 px', h.filter(kurz).every(z => z.px === 34), JSON.stringify(h.filter(kurz).map(z => [z.text, z.px])));
+});
+
 server.close();
 const gesamt = Date.now() - t0;
 let rot = 0; const bekannteTreffer = [];

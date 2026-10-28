@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.152] – 2026-10-28
+
+- Kachel „Gespart“ (Mockup `gespart.html` Variante B, abgenommen 28.10.2026): Bisher zeigte sie dieselbe Kurve wie
+  „Kosten & Verbrauch“. Jetzt zeigt L die Fläche „mit Automatik“, gestrichelt „ohne (24/7)“ und die Lücke dazwischen
+  grün als „gespart“ – in voller Kachelbreite, auch für „alle laufenden“. M zeigt, was je Stunde, Tag oder Monat
+  gespart wurde. Die Reihen liefert die Integration (`gespart_reihen` in `baustelle/auswertung`, Summe wie bisher).
+- Kacheln S: Am Handy wird die Zahl nicht mehr abgeschnitten („6…“), die Schrift passt sich der Kachelbreite an.
+
 ## [0.8.151] – 2026-10-28
 
 - Kopf der Container-Ansicht neu (Mockup `container-kopf.html` Variante D2, abgenommen 28.10.2026): Statt langer Sätze

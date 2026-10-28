@@ -123,6 +123,34 @@ export function flaeche(id, reihen, labels, einheit, jedes, vergleich = null, br
     ${viele || vv ? `<div class="legende">${[...lagen].reverse().map(r => `<span><i style="background:${r.farbe}"></i>${esc(r.name)}</span>`).join('')}${vv ? `<span><i class="gestr"></i>${esc(vergleich.name)}</span>` : ''}</div>` : ''}`;
 }
 
+/* Kachel „Gespart“ L (Mockup gespart.html, Variante B, Herbert 28.10.2026): Fläche „mit Automatik“, gestrichelt „ohne (24/7)“,
+   die Lücke dazwischen grün = gespart. Alle drei Reihen kommen von der Integration (baustelle/auswertung › gespart_reihen);
+   ohne Wert (kommende Stunden/Tage) endet das Diagramm. breite: Kachel L füllt die Breite; kurz (≤ 320) mit kurzer Legende */
+export function luecke(id, mit, ohne, gespart, labels, jedes, breite = 320, einheit = '€') {
+  const W = breite, kurz = W <= 320, H = kurz ? 128 : 160, L = 30, R = 8, T = 20, U = 22, n = labels.length, GRUEN = 'var(--s3)';   // Handy: flacher, damit es mit Legende die Breite füllt
+  const idx = labels.map((_, i) => i).filter(i => zahl(mit[i]) && zahl(ohne[i]));
+  if (!idx.length) return '<div class="leer">Noch keine Werte</div>';
+  const hi0 = Math.max(...idx.flatMap(i => [Number(mit[i]), Number(ohne[i])]), 0) * 1.1 || 1;
+  const stufe = [.1, .2, .5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].find(st => hi0 / st <= 4) || 2000, hi = Math.ceil(hi0 / stufe) * stufe;
+  const x = i => L + i / Math.max(1, n - 1) * (W - L - R), y = v => T + (1 - Number(v) / hi) * (H - T - U);
+  const raster = [...Array(Math.round(hi / stufe) + 1)].map((_, k) => k * stufe).map(v =>
+    `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="gr"/><text x="${L - 5}" y="${y(v) + 3}" class="ax" text-anchor="end">${de(v, stufe < 1 ? 1 : 0)}</text>`).join('');
+  const achse = labels.map((t, i) => i % jedes ? '' : `<text x="${x(i)}" y="${H - 6}" class="ax" text-anchor="middle">${t}</text>`).join('');
+  const P = a => idx.map((i, k) => `${k ? 'L' : 'M'}${x(i).toFixed(1)} ${y(a[i]).toFixed(1)}`).join('');
+  const zur = a => [...idx].reverse().map(i => `L${x(i).toFixed(1)} ${y(a[i]).toFixed(1)}`).join('');
+  const a0 = idx[0], a1 = idx[idx.length - 1];
+  const fl = `<path class="fl-flaeche" d="${P(mit)}L${x(a1).toFixed(1)} ${y(0)}L${x(a0).toFixed(1)} ${y(0)}z" fill="var(--s1)" opacity=".28"/>`
+    + `<path class="fl-linie" d="${P(mit)}" fill="none" stroke="var(--s1)" stroke-width="1.8" stroke-linejoin="round"/>`;
+  const lu = `<path class="kk-luecke" d="${P(ohne)}${zur(mit)}z" fill="${GRUEN}" opacity=".38"/>`;
+  const oh = `<path d="${P(ohne)}" fill="none" stroke="var(--ink2)" stroke-width="1.6" stroke-dasharray="5 4" stroke-linejoin="round"/>`;
+  const m = idx[Math.floor(idx.length / 2)], mitte = (y(ohne[m]) + y(mit[m])) / 2;
+  const tx = idx.length > 2 && y(mit[m]) - y(ohne[m]) > 16 ? `<text x="${x(m).toFixed(1)}" y="${(mitte + 3).toFixed(1)}" class="kk-luecke-t" text-anchor="middle">gespart</text>` : '';
+  const i = (farbe, t, gestr) => `<span><i ${gestr ? 'class="gestr"' : `style="background:${farbe}"`}></i>${t}</span>`;
+  CHARTS[id] = { art: 'luecke', x0: L, x1: W - R, W, n, labels, mit, ohne, gespart, einheit, y, unten: H - U, jedes };
+  return `<svg class="chart kk-breit" data-chart="${id}" viewBox="0 0 ${W} ${H}">${raster}${achse}${fl}${lu}${oh}${tx}<text x="${L - 5}" y="${T - 5}" class="ax ax-e" text-anchor="end">${einheit}</text><g class="hover"></g></svg>`
+    + `<div class="kk-leg">${kurz ? i(GRUEN, 'gespart') + i(null, '24/7', true) : i('var(--s1)', 'mit Automatik') + i(null, 'ohne (24/7)', true) + i(GRUEN, 'Lücke = gespart')}</div>`;
+}
+
 /* kleine Linie für M-Kacheln (nur Anzeige einer Reihe) */
 export function funke(v, farbe = 'var(--s1)') {
   if (!v) return '';

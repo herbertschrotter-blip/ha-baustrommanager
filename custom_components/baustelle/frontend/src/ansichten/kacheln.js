@@ -15,6 +15,12 @@ const kopf = (ic, name) => html`<div class="kk-kopf"><span class="kk-ic">${ic}</
 const huelle = (p, x, i, ort, gr, inhalt, tip) => ort === 'kat' ? html`<div class="glas-panel kk kk-${gr}">${inhalt}</div>`
   : html`<div class="glas-panel kk kk-${gr}" role="button" tabindex="0" data-ort=${ort} data-i=${i} title=${tip} @click=${() => p.kkAufI(ort, i)}>${inhalt}</div>`;
 const fb = b => BEREICH_FARBEN[b.f % BEREICH_FARBEN.length];
+/* S-Kachel (Herbert 28.10.2026): Breite der Zahl in em (Ziffern .56, Satzzeichen .3, Leerzeichen .28, sonst .6; 3 % Luft) und der
+   Einheit (13 px) für die Schriftgröße im CSS (.kk-S .kk-zahl) – die Zahl passt sich am Handy der Kachelbreite an; reicht auch
+   die kleinste Größe nicht, bricht sie um statt abgeschnitten zu werden */
+const breiteS = (zahlText, einh) => { const t = String(zahlText ?? '').replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/gi, 'x');
+  const em = [...t].reduce((a, ch) => a + (/\d/.test(ch) ? .56 : /[:.,/]/.test(ch) ? .3 : /\s/.test(ch) ? .28 : .6), 0) * 1.03;
+  return `--kk-n:${Math.max(.6, em).toFixed(2)};--kk-e:${einh ? Math.round((String(einh).length + 1) * 7.5) : 0}px`; };
 
 /* WU-0017: Vergleich kWh / Kosten – 2 bis 4 Container gegenüber */
 function vergleich(p, x, i, ort, c) {
@@ -39,7 +45,7 @@ function preis(p, x, i, ort, c) {
   const echt = S.eur, simE = S2.eur, kwh = S.kwh, diff = zahl(simE) && zahl(echt) ? simE - echt : null, gr = x.st, k = kopf('🧮', 'Preis simulieren');
   const knopfSim = (dd, t, label) => html`<button class="glas-panel chip" data-d=${dd} aria-label=${label} @click=${e => { e.stopPropagation(); return p.spSim(dd); }}>${t}</button>`;
   const regler = html`<div class="sp-sim">${knopfSim(-0.01, '−', 'Preis niedriger')}<b>${de(sim, 2)} €</b>${knopfSim(0.01, '+', 'Preis höher')}</div>`;
-  const zahlH = html`<b class="kk-zahl">${zahl(simE) ? de(simE, simE < 100 ? 2 : 0) : '–'}<small> €</small></b>`;
+  const zahlT = zahl(simE) ? de(simE, simE < 100 ? 2 : 0) : '–', zahlH = html`<b class="kk-zahl" style=${breiteS(zahlT, '€')}>${zahlT}<small> €</small></b>`;
   const unter = diff === null ? 'lädt …' : `${diff > 0 ? '+' : diff < 0 ? '−' : '±'}${de(Math.abs(diff), 2)} € gegenüber tatsächlich ${de(echt, 2)} €`;
   let inhalt;
   if (gr === 'S') inhalt = html`${k}${zahlH}<span class="kk-wo">bei ${de(sim, 2)} €/kWh</span>`;
@@ -57,7 +63,7 @@ export function kachelVorlage(p, x, i, ort, c) {
   const e = KK[x.k], b = e.je ? p.kkB(x) : null, gr = x.st, k = kopf(e.ic, e.name);
   if (e.je && !b) return html`<div class="glas-panel kk">${k}<span class="kk-wo">kein ${e.je === 'p' ? 'Schacht' : 'Container'} vorhanden</span></div>`;
   const D = p.kkDaten(x, b, c), mitDia = gr === 'L' && x.dia !== false;
-  const wo = html`<span class="kk-wo">${b ? b.name : D.wo || ''}</span>`, zahlH = html`<b class="kk-zahl">${roh(D.zahl)}${D.einh ? html`<small> ${D.einh}</small>` : nothing}</b>`;
+  const wo = html`<span class="kk-wo">${b ? b.name : D.wo || ''}</span>`, zahlH = html`<b class="kk-zahl" style=${breiteS(D.zahl, D.einh)}>${roh(D.zahl)}${D.einh ? html`<small> ${D.einh}</small>` : nothing}</b>`;
   let inhalt;
   if (gr === 'S') inhalt = html`${k}${zahlH}${!b && D.unter ? html`<span class="kk-wo">${roh(D.unter)}</span>` : wo}`;
   else if (gr === 'M') { const rechts = D.mini || funke(D.funke, D.farbe);
