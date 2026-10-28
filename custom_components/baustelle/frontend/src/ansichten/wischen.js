@@ -6,7 +6,7 @@
 import { html, nothing } from 'lit';
 
 export const WISCH_SCHWELLE = 60, WISCH_VERHAELTNIS = 1.5;   // px waagrecht; waagrecht mindestens 1,5× so weit wie senkrecht
-const NICHT = 'button, a, input, select, textarea, label, svg, canvas, [role="slider"], [role="switch"], .seg, .chart-wrap, .c-kern, .c-chips, .glas-chips';
+const NICHT = 'button, a, input, select, textarea, label, svg, canvas, [role="slider"], [role="switch"], .seg, .chart-wrap, .c-kern, .c-chips, .glas-chips, .ck-chips, .ck-soll, .ck-gefuehl, .ck-info';   // Kopf der Container-Ansicht: Chips, Soll, Gefühl, Satz
 const HINWEIS_SPEICHER = 'baustelle-wischen-hinweis';
 
 /* Lage des offenen Containers in der Reihenfolge der Übersicht (ohne Pumpenschächte) */

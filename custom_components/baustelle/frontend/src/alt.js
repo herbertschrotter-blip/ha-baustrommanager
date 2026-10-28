@@ -587,10 +587,60 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .lern-tab > div { display: flex; flex-direction: column; } .lern-tab > b { font-size: 12px; color: var(--ink2); }
 .lern-treffer { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13px; margin: 6px 0 10px; }
 .lern-treffer span { padding: 2px 8px; border-radius: 8px; background: rgba(255,152,0,.18); } .lern-treffer span.gut { background: rgba(76,175,80,.2); }
-/* Container-Ansicht (WU-0004): Kopf mit Thermostat-Rad, Kacheln, Tagesdiagramm, Geräte-Chips */
-.c-d-held { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 16px; margin-bottom: 12px; }
-.c-d-info { display: flex; flex-direction: column; gap: 14px; min-width: 0; } .c-d-knoepfe { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; max-width: 100%; }
-.c-d-knoepfe .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; }   /* BSM-031.11: fünf Modi am Handy – die Leiste scrollt, statt den Kopf zu verbreitern */
+/* Container-Ansicht (WU-0004): Kopf mit Thermostat-Rad und Chips (Mockup container-kopf.html, D2), Kacheln, Tagesdiagramm, Geräte-Chips */
+.ck { container-type: inline-size; display: grid; gap: 10px 24px; padding: 16px 18px; margin-bottom: 12px; }
+.ck-d { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "rad name" "rad rest"; align-items: start; }
+.ck-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ck-art { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--ink2); }
+.ck-titel { font-size: clamp(22px, 4.4cqi, 32px); font-weight: 700; line-height: 1.1; overflow-wrap: anywhere; }
+.ck-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ck-chip { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: clamp(13px, 2.2cqi, 15px); line-height: 1.2; padding: 6px 12px; border-radius: 999px;
+  border: 1px solid transparent; background: rgba(120,120,128,.2); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.ck-chip .ck-ic { font-size: 1.05em; }
+.ck-chip.warm { color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.ck-chip.amber { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
+.ck-chip.rot { color: var(--rot); border-color: color-mix(in srgb, var(--rot) 55%, transparent); }
+.ck-chip.blau { color: var(--blau); background: color-mix(in srgb, var(--blau) 16%, transparent); }
+.ck-chip.auf { border-color: var(--ink2); background: rgba(120,120,128,.32); }
+.ck-info { display: flex; gap: 10px; align-items: flex-start; font-size: 12.5px; line-height: 1.4; color: var(--ink2); padding: 8px 10px 8px 12px; border-radius: 12px;
+  background: rgba(120,120,128,.14); border: 1px solid var(--panel-rand); }
+.ck-info span { flex: 1; min-width: 0; }
+.ck-info > button { border: 0; background: none; color: var(--ink2); font-size: 13px; cursor: pointer; padding: 0 2px; }
+.ck-gefuehl { display: flex; gap: 6px; justify-content: center; }
+.ck-gefuehl button { border: 0; border-radius: 14px; padding: 5px 9px; font: inherit; font-size: 15px; background: rgba(120,120,128,.18); color: var(--ink); cursor: pointer; white-space: nowrap; }
+.ck-gefuehl button:active { background: var(--amber); color: #1a1000; }
+.ck-soll { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.ck-soll .ck-chip { font-size: 12.5px; padding: 4px 10px; }
+.ckd-name { grid-area: name; display: flex; align-items: flex-end; gap: 6px; min-width: 0; }
+.ckd-rad { grid-area: rad; display: flex; flex-direction: column; align-items: center; gap: 6px; } .ck-d .c-rad, .ck-d .c-rad svg { width: 220px; height: 220px; }
+.ckd-soll { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; max-width: 240px; }
+.ckd-soll > .ckd-gt { flex-basis: 100%; text-align: center; } .ckd-soll .ck-info { flex-basis: 100%; }
+.ckd-gt { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--ink2); }
+.ckd-gruppen { grid-area: rest; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; min-width: 0; }
+.ckd-g { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px 10px; border-radius: 12px; background: rgba(120,120,128,.12); border: 1px solid var(--panel-rand); min-width: 0; }
+.ck-d .ckd-g .ck-chip { height: 32px; padding: 0 12px; }
+.ck-d .ckd-g[data-g="Hinweise"] .ckd-gt { color: var(--amber); }
+.ck-d .ck-chip.modus { font-weight: 600; }
+.ck-k { display: none; }
+.ck-modi { flex-wrap: wrap; gap: 6px; } .ck-modi button { border: 0; border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 13px; background: rgba(120,120,128,.2); color: var(--ink); cursor: pointer; }
+.ck-modi button.on { background: var(--amber); color: #1a1000; font-weight: 600; } .ck-modi button:disabled { opacity: .4; cursor: not-allowed; }
+@container (max-width: 640px) {   /* Handy: Name, darunter das Rad kompakt, Gruppen zweispaltig mit kurzen Chips */
+  .ck-d { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "rad" "rest"; gap: 6px; padding: 12px 12px 14px; }
+  .ck-d .ckd-gruppen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .ck-d .ckd-g { gap: 3px; padding: 6px 8px 8px; }
+  .ck-d .ckd-gt { font-size: 10px; letter-spacing: .6px; }
+  .ck-d .ckd-g .ck-chip { height: 28px; padding: 0 9px; }
+  .ck-d .ckd-name { justify-content: center; text-align: center; } .ck-d .ck-name { align-items: center; }
+  .ck-d .ck-titel { font-size: 22px; } .ck-d .ck-art { font-size: 10px; }
+  .ck-d .ckd-rad { justify-self: center; } .ck-d .c-rad, .ck-d .c-rad svg { width: 170px; height: 170px; }
+  .ck-d .ckd-soll { gap: 5px 8px; }
+  .ck-d .ck-chips { gap: 5px; }
+  .ck-d .ck-chip { font-size: 13px; padding: 5px 9px; gap: 4px; }
+  .ck-d .ck-soll .ck-chip { font-size: 12px; padding: 3px 8px; }
+  .ck-d .ck-l { display: none; } .ck-d .ck-k { display: inline; }
+  .ck-d .ck-info { font-size: 11.5px; padding: 6px 8px 6px 10px; }
+  .ck-d .ck-gefuehl button { padding: 4px 8px; font-size: 14px; }
+}
 .c-rad { position: relative; width: 210px; margin: 0 auto; }   /* WU-0018: mittig über „zu kalt / passt / zu warm“ */ .c-rad svg { width: 210px; height: 210px; display: block; }
 .c-rad-k { font-size: 11px; letter-spacing: 2px; fill: var(--ink2); } .c-rad-t { font-size: 38px; font-weight: 700; fill: var(--ink); } .c-rad-s { font-size: 13px; font-weight: 600; }
 .c-rad-pm { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: center; gap: 36px; }
@@ -614,7 +664,7 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .c-chip.an { box-shadow: inset 0 0 0 1px var(--amber); } .c-chip.inaktiv { opacity: .55; }
 .c-power { width: 42px; height: 42px; color: var(--ink2); } .c-power.an { background: var(--amber); color: #fff; border-color: transparent; box-shadow: 0 0 14px rgba(255,159,10,.55); }
 .c-power:disabled { opacity: .35; cursor: not-allowed; } .c-aktiv { display: flex; flex-direction: column; align-items: center; gap: 2px; } .c-aktiv small { font-size: 10px; color: var(--ink2); }
-@container (max-width: 700px) { .c-d-held { grid-template-columns: minmax(0, 1fr); } .c-kern { justify-self: center; } .c-kacheln { grid-template-columns: repeat(2, 1fr); } }   /* BSM-031.11: Breite der Seite, nicht des Fensters (HA mit Seitenleiste, Mockup-Rahmen) */
+@container (max-width: 700px) { .c-kacheln { grid-template-columns: repeat(2, 1fr); } }   /* BSM-031.11: Breite der Seite, nicht des Fensters (HA mit Seitenleiste, Mockup-Rahmen) */
 /* Verlauf (WU-0006): Reiter, Archiv-Karten, Vergleich, Chronik */
 .vl-reiter { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; } .vl-reiter .seg { margin: 0; }
 .vl-archiv { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
@@ -775,11 +825,6 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .sg-heute b { text-align: right; font-weight: 500; white-space: nowrap; } .sg-heute .summe { border-top: 1px solid var(--gridc); padding-top: 4px; font-weight: 600; font-size: 15px; }
 .sg-kurve { width: 100%; height: 150px; display: block; margin: 4px 0; } .sg-kurve .ax { font-size: 9px; fill: var(--ink2); } .sg-kurve .gr { stroke: var(--gridc); stroke-width: 1; }
 .sg-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--ink2); margin-bottom: 6px; } .sg-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
-.sg-box { margin: 14px 0 4px; } .sg-gefuehl { display: flex; gap: 8px; justify-content: center; margin: 0 0 4px; }
-.sg-gefuehl button { flex: 1; max-width: 120px; white-space: nowrap; padding: 9px 6px; border-radius: 14px; border: 0; background: rgba(120,120,128,.18); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
-.sg-gefuehl button:active { background: var(--amber); color: #1a1000; }
-.sg-versch { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 2px 0 6px; font-size: 13px; } .sg-versch b { color: var(--amber); }
-.sg-gefuehl-t { text-align: center; font-size: 11.5px; color: var(--ink2); }
 /* AN-0012: Regeln nach Tagesablauf */
 .rv-kopf { display: flex; align-items: baseline; gap: 8px; margin: 14px 2px 4px; } .rv-kopf b { font-size: 16px; } .rv-kopf .leise { font-size: 12px; }
 .rv-karte { border-radius: 16px; background: rgba(120,120,128,.10); padding: 2px 12px; margin-bottom: 6px; } .rv-karte > .zeile:first-child { border-top: 0; }

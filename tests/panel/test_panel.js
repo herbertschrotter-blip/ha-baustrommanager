@@ -515,7 +515,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('Lernen: Schalter setzt bereiche.polier.lernen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
     pol = pol0(); pol.modus = 'thermo'; pol.lern = Object.assign({ ...lern0 }, { an: true, zyklen: 3, anteil: 38, erwartet: .8, aus_bei: 19.2, kint: { wert: .57, start: .6, fort: .06 },
       nachlauf: { 'oel|lang|kalt': { grad: 1.2, min: 12, n: 3 } }, treffer: [.3, -.1, .2] });
-    await panel.neuZeichnen(); erwarte('Lernen: Regelungszeile', /Thermostat · lernend/.test(ui.innerHTML) && /aus bei 19,2/.test(ui.innerHTML));
+    await panel.neuZeichnen(); erwarte('Lernen: Kopf-Chips „lernt“ und „Nachlauf +0,8°“ in der Gruppe Lernen, Satz erst beim Antippen',
+      /data-g="Lernen"[^]*?data-k="lern"[^]*?data-k="nach"[^]*?Nachlauf \+0,8°/.test(ui.innerHTML) && !/Thermostat · lernend/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="lern"]', 10);
+    erwarte('Lernen: Regelungszeile per Antippen', /class="ck-info"[^]*?Thermostat · lernend[^]*?aus bei 19,2/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="lern"]', 10); erwarte('Lernen: nochmals antippen schließt den Satz', !litEl('.ck-d .ck-info'));
     await klick({ act: 'sheet', s: 'lernen' }); pruefe('Lernstand');
     erwarte('Lernen: Lernstand mit Nachlauf und Treffern', /\+1,2 °C/.test(ui.innerHTML) && /Ø ±0,2 °C/.test(ui.innerHTML) && /3\/50 Zyklen/.test(ui.innerHTML));
     await klick('.sheet .seg [data-v="mild"]'); pruefe('Lernstand mild');
@@ -525,7 +529,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   /* WU-0002: neue Sensorwerte zeichnen die Container-Ansicht neu – mit Lit bleiben die Knoten stehen (3d); mit offener
      Einblendung erst später */
   { await klick({ act: 'container', id: 'polier' }, 20);
-    const knoten = [...panel.root.querySelectorAll('.c-d-held, .c-live .seg button, .c-chip .c-power, .c-live-kennz .c-kachel')], zeichne = panel.neuZeichnen; let n = 0;
+    const knoten = [...panel.root.querySelectorAll('.ck-d, .ck-d .ck-chip, .c-live .seg button, .c-chip .c-power, .c-live-kennz .c-kachel')], zeichne = panel.neuZeichnen; let n = 0;
     panel.neuZeichnen = (...x) => { n++; return zeichne.apply(panel, x); };
     panel.s.sheet = null; panel._liveNeu(); await panel.updateComplete;
     erwarte('WU-0002: neu gezeichnet, Knoten bleiben', n === 1 && knoten.length > 5 && knoten.every(k => k.isConnected) && /kWh heute/.test(panel.root.querySelector('.c-live-kennz').innerHTML));
@@ -829,11 +833,19 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     pruefe('nur Heizung');
     struktur = alt; panel.cache = {}; await panel._laden(); await ruhe(20); }
   await klick({ act: 'container', id: 'polier' }, 30);
-  erwarte('Container: Modus-Auswahl statt Automatik-Schalter', /class="c-d-knoepfe"><div class="seg klein"><button data-v="plan"/.test(ui.innerHTML.replace(/<!--[^]*?-->/g, '')) && !ui.innerHTML.includes('Automatik für diesen Container'));
+  erwarte('Container: Modus-Auswahl-Chip in der Gruppe Steuerung statt Automatik-Schalter, Auswahl erst beim Antippen',
+    /data-g="Steuerung"[^]*?class="ck-chip modus[^]*?⚙[^]*?▾/.test(ui.innerHTML) && !litEl('.ck-modi') && !ui.innerHTML.includes('Automatik für diesen Container'));
+  await klick('.ck-d .ck-chip.modus', 10);
+  erwarte('Container: Modus-Auswahl zeigt alle fünf Modi, der aktuelle markiert', litEls('.ck-modi button[role="option"]').map(x => x.dataset.v).join() === 'plan,thermo,bedarf,hand,aus'
+    && litEls('.ck-modi button.on').length === 1);
+  neu(); await klick('.ck-modi button:not(.on):not([disabled])', 10);
+  erwarte('Container: Modus wählen = genau ein Auftrag, Auswahl zu', letzte('baustelle/setzen').length === 1 && letzte('baustelle/setzen')[0].pfad.join('.') === 'bereiche.polier.modus' && !litEl('.ck-modi'));
   neu(); await klick({ act: 'modus', id: 'polier', v: 'plan' });
   erwarte('Modus über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["bereiche","polier","modus"]' && a.wert === 'plan'));
   await klick({ act: 'container', id: 'magazin' }, 20);
-  erwarte('Thermostat ohne Fühler nicht wählbar', /data-v="thermo" class="[^"]*" disabled/.test(ui.innerHTML));
+  erwarte('Modus-Auswahl beim Containerwechsel zu', !litEl('.ck-modi')); await klick('.ck-d .ck-chip.modus', 10);
+  erwarte('Thermostat ohne Fühler nicht wählbar', !!litEl('.ck-modi button[data-v="thermo"]') && litEl('.ck-modi button[data-v="thermo"]').disabled && /kein Temperaturfühler/.test(litEl('.ck-modi button[data-v="thermo"]').title));
+  await klick('.ck-d .ck-chip.modus', 10); erwarte('Modus-Chip nochmals antippen schließt', !litEl('.ck-modi'));
   /* WU-0004: neue Container-Ansicht – Tagesdiagramm mit geheizten Stunden, Reiter Woche und Heizzeit, ohne Fühler kein Rad */
   erwarte('WU-0004: Tagesdiagramm und ohne Fühler Leistung statt Rad', ui.innerHTML.includes('c-tag-svg') && ui.innerHTML.includes('LEISTUNG JETZT') && !litEl('.c-rad-pm .c-pm'));
   await klick({ act: 'cvd', v: 'woche' }, 30); pruefe('Container Woche'); erwarte('WU-0004: Reiter Woche', ui.innerHTML.includes('data-chart="cw-magazin"'));
@@ -878,6 +890,41 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('WU-0004: Soll + über baustelle/setzen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","soll"]' && Number.isFinite(x.wert)));
     pol().modus = 'plan'; await panel.neuZeichnen(); erwarte('WU-0004: im Zeitplan nur Ist, kein Soll ±', ui.innerHTML.includes('class="c-rad"') && !litEl('.c-rad-pm .c-pm') && /Zeitplan – der Heizkörperthermostat regelt/.test(ui.innerHTML));
     erwarte('WU-0004: Geräte-Chips mit ⏻, aktiv, ✎', ['class="c-power', 'class="c-aktiv"', 'class="bs-ic nur-admin"'].every(t => ui.innerHTML.includes(t)));
+    /* Kopf der Container-Ansicht (Mockup container-kopf.html, Variante D2): Rad links, Gruppen als Kästchen, Chips aus Feldern der Integration */
+    { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, tuer: x.tuer, symbol: x.symbol, sensoren: x.sensoren, boost: x.boost };
+      const gruppen = () => litEls('.ck-d .ckd-g').map(g => g.dataset.g).join(), chipK = g => litEls(`.ck-d .ckd-g[data-g="${g}"] .ck-chip[data-k]`).map(c => c.dataset.k).join();
+      x.modus = 'thermo'; x.z = 'pause'; x.text = 'pausiert · Tür offen'; x.boost = false;
+      x.tuer = { ...(x.tuer || { eid: 'binary_sensor.tuer_polier', sensor: 'Tür Polier' }), offen: 4 };
+      x.symbol = { ...(x.symbol || {}), fenster: [{ sensor: 'binary_sensor.polier_fenster_1', zustand: 'gekippt' }, { sensor: null, zustand: 'zu' }] };
+      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 78 } : s);
+      await panel.neuZeichnen(); pruefe('Container Kopf D2 Tür offen');
+      erwarte('Kopf D2: Rad links (ckd-rad mit c-rad), Name, Gruppen Steuerung · Jetzt · Plan', !!litEl('.ck-d.ck-d2 .ckd-rad .c-rad') && litEl('.ck-d .ck-titel').textContent === x.name
+        && /^Steuerung,Jetzt,Plan/.test(gruppen()) && !litEl('.c-d-held'));
+      erwarte('Kopf D2: Jetzt = Zustand, Tür, Fenster (nur offene/gekippte)', chipK('Jetzt') === 'zust,tuer,fenster0' && /Tür offen seit 4 min/.test(litEl('.ck-chip[data-k="tuer"]').textContent)
+        && /Fenster gekippt/.test(litEl('.ck-chip[data-k="fenster0"]').textContent));
+      erwarte('Kopf D2: Chips mit langem und kurzem Text (Handy)', litEl('.ck-chip[data-k="tuer"] .ck-l').textContent === 'Tür offen seit 4 min' && litEl('.ck-chip[data-k="tuer"] .ck-k').textContent === '4 min');
+      erwarte('Kopf D2: Hinweise-Gruppe fehlt bei voller Batterie', !gruppen().includes('Hinweise'));
+      erwarte('Kopf D2: ohne Antippen kein Satz', !litEl('.ck-d .ck-info'));
+      await klick('.ck-chip[data-k="tuer"]', 10);
+      erwarte('Kopf D2: Antippen „Tür“ zeigt den Satz', /class="ck-info"[^]*?offen seit 4 min – Heizung pausiert nach \d+ min, Meldung nach \d+ min/.test(ui.innerHTML) && litEl('.ck-chip[data-k="tuer"]').getAttribute('aria-expanded') === 'true');
+      await klick('.ck-chip[data-k="zust"]', 10);
+      erwarte('Kopf D2: anderer Chip ersetzt den Satz (Zustandstext der Integration)', litEls('.ck-d .ck-info').length === 1 && litEl('.ck-d .ck-info span').textContent === 'pausiert · Tür offen');
+      await klick('.ck-chip[data-k="zust"]', 10);
+      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 8 } : s); await panel.neuZeichnen();
+      const mitF = (x.sensoren || []).some(s => s.art === 'fuehler');
+      erwarte('Kopf D2: Hinweise-Gruppe nur bei schwacher Fühler-Batterie, zuletzt, rot unter 10 %', mitF && (/,Hinweise$/.test(gruppen()) && /Fühler schwach 8 %/.test(litEl('.ckd-g[data-g="Hinweise"]').textContent)
+        && litEl('.ckd-g[data-g="Hinweise"] .ck-chip').classList.contains('rot')));
+      neu(); await klick('.ck-d .ck-chip.ck-boost', 10);
+      erwarte('Kopf D2: „Schnell aufheizen“-Chip = genau ein boost-Auftrag', letzte('baustelle/aktion').length === 1 && letzte('baustelle/aktion')[0].aktion === 'boost' && letzte('baustelle/aktion')[0].an === true);
+      x.boost = true; await panel.neuZeichnen();
+      erwarte('Kopf D2: läuft → „Aufheizen beenden“ (amber)', /Aufheizen beenden/.test(litEl('.ck-chip.ck-boost').textContent) && litEl('.ck-chip.ck-boost').classList.contains('amber'));
+      neu(); await klick('.ck-d .ck-chip.ck-boost', 10);
+      erwarte('Kopf D2: „Aufheizen beenden“ sendet an: false', letzte('baustelle/aktion').some(a => a.aktion === 'boost' && a.an === false));
+      x.modus = 'plan'; await panel.neuZeichnen();
+      erwarte('Kopf D2: im Zeitplan Regel-Chip in Plan, kein Soll, Satz per Antippen', chipK('Plan') === 'regel' && !litEl('.ckd-soll'));
+      await klick('.ck-chip[data-k="regel"]', 10); erwarte('Kopf D2: Regel-Satz per Antippen', litEl('.ck-d .ck-info span') && litEl('.ck-d .ck-info span').textContent === 'Zeitplan – der Heizkörperthermostat regelt');
+      await klick('.ck-chip[data-k="regel"]', 10);
+      Object.assign(x, alt); await panel.neuZeichnen(); }
     neu(); await klick({ act: 'g-aktiv', i: '0' }, 20);
     erwarte('BSM-034.02: Chip setzt den Status über baustelle/geraet', letzte('baustelle/geraet').some(x => x.aktion === 'status' && x.geraet === pol().geraete[0].id && x.status === 'inaktiv'));
     await klick({ act: 'g-bearbeiten', i: '0' }); pruefe('Gerät bearbeiten');
@@ -993,11 +1040,17 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     panel.d.e.soll_art = 'gleitend'; panel.d.sollG = G;   // die Daten wurden nach dem Setzen neu geladen
     const b = panel.d.bereiche.find(x => x.fuehler && !x.pumpe && x.t !== null);
     if (b) { const altB = [b.modus, b.sollJ]; b.modus = 'thermo'; b.sollJ = { wert: 22.71, versch: 0, versch_bis: null, eigen: 1.0 };
-      await klick({ act: 'container', id: b.id }, 20); erwarte('FE-0014: eigenes Soll unter dem Rad erklärt', ui.innerHTML.includes('Soll gleitend 21,7 °C +1,0 eigenes Soll = 22,7 °C'));
+      await klick({ act: 'container', id: b.id }, 20);
+      erwarte('FE-0014: Soll-Chips unter dem Rad („gleitend 21,7°“, „+1,0 eigen“), Satz erst beim Antippen', /class="ckd-soll"[^]*?gleitend 21,7°[^]*?\+1,0 eigen/.test(ui.innerHTML) && !ui.innerHTML.includes('eigenes Soll ='));
+      await klick('.ckd-soll .ck-chip[data-k="seig"]', 10);
+      erwarte('FE-0014: eigenes Soll unter dem Rad erklärt', ui.innerHTML.includes('Soll gleitend 21,7 °C +1,0 eigenes Soll = 22,7 °C'));
+      await klick('.ckd-soll .ck-info > button', 10); erwarte('FE-0014: ✕ schließt die Erklärung', !litEl('.ck-info'));
       b.sollJ = { wert: 22.21, versch: 0.5, versch_bis: '2026-09-30T03:00:00+02:00', eigen: null };
       await klick({ act: 'container', id: b.id }, 20); pruefe('Container Soll gleitend');
-      erwarte('Container: Gefühl, Verschiebung, gültiges Soll im Rad', ['class="sg-gefuehl"', '↺ gleitend', 'bis morgen früh', 'Soll 22,2'].every(t => ui.innerHTML.includes(t)));
-      neu(); await klick({ act: 'c-soll', d: '0.5' }); await klick({ act: 'sg-gefuehl', v: '-1' }); await klick({ act: 'sg-zurueck', id: b.id });
+      erwarte('Container: Gefühl, Verschiebung, gültiges Soll im Rad', ['class="ck-gefuehl"', 'class="ck-chip ck-zurueck"', '+0,5 bis morgen', 'Soll 22,2'].every(t => ui.innerHTML.includes(t))
+        && litEls('.ck-gefuehl button').map(x => x.getAttribute('aria-label')).join() === 'zu kalt,passt,zu warm');
+      await klick('.ckd-soll .ck-chip[data-k="sver"]', 10); erwarte('Container: Verschiebung per Antippen „bis morgen früh“', /class="ck-info"[^]*?bis morgen früh/.test(ui.innerHTML));
+      neu(); await klick({ act: 'c-soll', d: '0.5' }); await klick('.ck-gefuehl button[data-v="-1"]', 10); await klick('.ckd-soll .ck-zurueck', 10);
       const A = letzte('baustelle/aktion').map(a => a.aktion);
       erwarte('Container: + / − verschiebt, Gefühl, zurück (' + A.join(', ') + ')', A.includes('soll_versch') && A.includes('gefuehl') && A.includes('soll_versch_weg')
         && !letzte('baustelle/setzen').some(a => a.pfad[2] === 'soll'));
@@ -1259,21 +1312,22 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('WU-0020: › führt zum nächsten Container', panel.s.view === 'container' && panel.s.cid === C[2].id && pos() === `3 / ${N}`);
     erwarte('WU-0020: Hinweis nach dem ersten Blättern weg', !ui.innerHTML.includes('← wischen →'));
     await klick('.seite .w-nav [data-w="-1"]', 20); await fertig(); erwarte('WU-0020: ‹ führt zurück', panel.s.cid === C[1].id);
-    await wisch('.seite .c-d-info .glas-titel', -120, 10);
+    await wisch('.seite .ck-d .ck-titel', -120, 10);
     erwarte('WU-0020: Wischen von rechts nach links (> 60 px) → nächster Container', panel.s.cid === C[2].id);
-    await wisch('.seite .c-d-info .glas-titel', 120, 10);
+    await wisch('.seite .ck-d .ck-titel', 120, 10);
     erwarte('WU-0020: Wischen nach rechts → vorheriger Container', panel.s.cid === C[1].id);
-    await wisch('.seite .c-d-info .glas-titel', -50, 0); erwarte('WU-0020: zu kurz gewischt – bleibt', panel.s.cid === C[1].id);
-    await wisch('.seite .c-d-info .glas-titel', -90, 80); erwarte('WU-0020: fast senkrecht – bleibt', panel.s.cid === C[1].id);
-    await wisch('.seite .c-d-info .glas-titel', -120, 0, 'mouse'); erwarte('WU-0020: mit der Maus kein Wischen', panel.s.cid === C[1].id);
+    await wisch('.seite .ck-d .ck-titel', -50, 0); erwarte('WU-0020: zu kurz gewischt – bleibt', panel.s.cid === C[1].id);
+    await wisch('.seite .ck-d .ck-titel', -90, 80); erwarte('WU-0020: fast senkrecht – bleibt', panel.s.cid === C[1].id);
+    await wisch('.seite .ck-d .ck-titel', -120, 0, 'mouse'); erwarte('WU-0020: mit der Maus kein Wischen', panel.s.cid === C[1].id);
     { const r = litEl('.seite input[type="range"]');
       if (r) { await wisch('.seite input[type="range"]', -120, 0); erwarte('WU-0020: auf einem Schieberegler kein Wischen', panel.s.cid === C[1].id); }
       else {   // Container-Ansicht ohne Schieberegler: einen einsetzen, wie er in einer Ansicht stehen kann
-        const ein = document.createElement('input'); ein.type = 'range'; ein.className = 'w-test'; litEl('.seite .c-d-info').appendChild(ein);
+        const ein = document.createElement('input'); ein.type = 'range'; ein.className = 'w-test'; litEl('.seite .ckd-name').appendChild(ein);
         await wisch('.seite input.w-test', -120, 0); erwarte('WU-0020: auf einem Schieberegler kein Wischen', panel.s.cid === C[1].id); ein.remove(); } }
     await wisch('.seite .seg button', -120, 0); erwarte('WU-0020: auf einem Segment kein Wischen', panel.s.cid === C[1].id);
+    await wisch('.seite .ck-d .ckd-g .ck-chips', -120, 0); erwarte('WU-0020: auf den Chips im Kopf (auch zwischen zwei Chips) kein Wischen', panel.s.cid === C[1].id);
     await klick({ act: 'sheet', s: 'bereich' }, 10);
-    await wisch('.seite .c-d-info .glas-titel', -120, 0); erwarte('WU-0020: bei offener Einblendung kein Wischen', panel.s.cid === C[1].id && panel.s.sheet);
+    await wisch('.seite .ck-d .ck-titel', -120, 0); erwarte('WU-0020: bei offener Einblendung kein Wischen', panel.s.cid === C[1].id && panel.s.sheet);
     panel.narrow = false; window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); await fertig();
     erwarte('WU-0020: Pfeiltaste bei offener Einblendung – nichts', panel.s.cid === C[1].id);
     await klick({ act: 'zu' }, 10);
@@ -1284,7 +1338,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     panel.narrow = true; await ruhe(10);
     await klick({ act: 'container', id: C[N - 1].id }, 20);
     erwarte(`WU-0020: am letzten „${N} / ${N}“ und › gesperrt`, pos() === `${N} / ${N}` && pfeil(1) && pfeil(1).disabled && !pfeil(-1).disabled);
-    await wisch('.seite .c-d-info .glas-titel', -120, 0); erwarte('WU-0020: am letzten stoppt das Wischen (kein Kreis)', panel.s.cid === C[N - 1].id);
+    await wisch('.seite .ck-d .ck-titel', -120, 0); erwarte('WU-0020: am letzten stoppt das Wischen (kein Kreis)', panel.s.cid === C[N - 1].id);
     await klick({ act: 'container', id: C[0].id }, 20); erwarte('WU-0020: am ersten ‹ gesperrt', pos() === `1 / ${N}` && pfeil(-1).disabled);
     if (S) { await klick({ act: 'container', id: S.id }, 20);
       erwarte('WU-0020: im Pumpenschacht keine Blätterzeile', !litEl('.seite .w-nav') && !pos());
@@ -1307,7 +1361,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick({ act: 'zu' }, 5); await klick({ act: 'hz-auf', k: 'heute' }, 10);
     erwarte('AN-0004: Heute zeigt den gelernten Beginn', ui.innerHTML.includes(`<b>${b0.name}</b>: heizt ab 05:30, damit um 06:45 20,0 °C (jetzt 16,4 °C, 3,2 °C/h gelernt) · warm bis 16:30`));
     await klick({ act: 'zu' }, 5); await klick({ act: 'container', id: b0.id }, 10);
-    erwarte('AN-0004: Container-Kopf mit „heute ab“', ui.innerHTML.includes('heute ab 05:30 → 20,0 °C um 06:45'));
+    erwarte('AN-0004: Container-Kopf mit „warm um 06:45 · ab 05:30“ in der Gruppe Plan', /data-g="Plan"[^]*?warm um 06:45 · ab 05:30/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="warm"]', 10);
+    erwarte('AN-0004: Antippen zeigt den Warm-Satz', /class="ck-info"[^]*?heizt ab 05:30, damit um 06:45 20,0 °C/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="warm"]', 10);
     await klick({ act: 'sheet', s: 'lernen' }, 10);
     erwarte('AN-0004: Lernstand mit Aufheizen', ui.innerHTML.includes('3,2 °C/h') && ui.innerHTML.includes('Heute ab <b>05:30</b> – 70 min'));
     await klick({ act: 'zu' }, 5); await klick({ act: 'sheet', s: 'bereich' }, 10);
@@ -1319,7 +1376,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('AN-0004: eigener Wert je Container', warmVor());
     c.lernen.offen = { art: 'vermutet', seit: '2026-09-29T10:00:00+02:00' }; nachPanel();   // WU-0009
     await klick({ act: 'container', id: b0.id }, 10);
+    erwarte('WU-0009: Chip „lernt gerade nicht“ (amber) im Container', /class="ck-chip amber[^"]*" data-k="lern"[^]*?lernt gerade nicht/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="lern"]', 10);
     erwarte('WU-0009: Hinweis „Tür vermutlich offen“ im Container', ui.innerHTML.includes('Tür vermutlich offen – kühlt beim Heizen ab, lernt gerade nicht'));
+    await klick('.ck-d .ck-chip[data-k="lern"]', 10);
     await klick({ act: 'sheet', s: 'lernen' }, 10); erwarte('WU-0009: Hinweis im Lernstand', ui.innerHTML.includes('Laufende Messungen sind verworfen'));
     await klick({ act: 'zu' }, 5); c.lernen.offen = null;
     c.lernen.warm = { ...c.lernen.warm, gelernt: false, n: 1, plan: null }; nachPanel();

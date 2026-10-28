@@ -187,7 +187,7 @@ await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
 await fall('B4 Container live', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .glas-k[data-id="polier"]`); await warte(400);
   await page.mouse.move(900, 600); await page.mouse.wheel({ deltaY: 200 }); await ruhig(page, D, '.scroll', 'scrollTop');
-  const merken = () => panel(page, D, () => { window.__rest = [sr.querySelector('.c-d-info'), sr.querySelector('.c-d-knoepfe .seg button'), sr.querySelector('.c-chip .c-power'), sr.querySelector('.c-live .seg button')]; window.__wrap = sr.querySelector('.c-live .chart-wrap');
+  const merken = () => panel(page, D, () => { window.__rest = [sr.querySelector('.ck-d .ckd-name'), sr.querySelector('.ck-d .ck-chip.modus'), sr.querySelector('.c-chip .c-power'), sr.querySelector('.c-live .seg button')]; window.__wrap = sr.querySelector('.c-live .chart-wrap');
     return { w: window.__wrap.innerHTML, k: sr.querySelector('.c-live-kennz').textContent, scroll: sr.querySelector('.scroll').scrollTop, lg: p._liveGezeichnet || 0 }; });
   const zustand = (statistik) => panel(page, D, () => {
     if (a0) BB.TEST.statistik = (m, r) => { if (m.period !== '5minute') return r; for (const id in r) r[id] = r[id].map(x => x.change != null ? { ...x, change: x.change + 2 } : x); return r; };
@@ -444,11 +444,21 @@ await fall('3d Container', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .glas-k[data-id="polier"]`); await warte(300);
   const einer = async (sel, soll, text) => { const ab = await aufrufZahl(page); await klick(page, `${D} >>> ${sel}`); await warte(150);
     const a = await schreibAnzahl(page, ab); erwarte(`${text} = genau ein Auftrag`, JSON.stringify(a) === JSON.stringify([soll]), a.join(', ')); };
-  await einer('.c-d-knoepfe .seg button:not(.on):not([disabled])', 'baustelle/setzen', 'Modus wechseln');
-  const ab0 = await aufrufZahl(page); await klick(page, `${D} >>> .c-d-knoepfe .seg button.on`);
+  const modusAuf = async () => { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .ck-d .ck-chip.modus`);
+    erwarte('Modus-Chip öffnet die Auswahl, ohne zu senden', !(await schreibAnzahl(page, ab)).length && await panel(page, D, () => !!sr.querySelector('.ck-modi'))); };
+  await modusAuf(); await einer('.ck-modi button:not(.on):not([disabled])', 'baustelle/setzen', 'Modus wechseln');
+  await modusAuf(); const ab0 = await aufrufZahl(page); await klick(page, `${D} >>> .ck-modi button.on`);
   erwarte('gewählter Modus sendet nichts', !(await schreibAnzahl(page, ab0)).length);
   await einer('.c-rad-pm .c-pm[data-d="0.5"]', 'baustelle/setzen', 'Soll +');
-  await einer('.c-d-knoepfe > .chip', 'baustelle/aktion:boost', 'Schnell aufheizen');
+  await einer('.ck-d .ck-chip.ck-boost', 'baustelle/aktion:boost', 'Schnell aufheizen');
+  { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .ck-d .ckd-g[data-g="Jetzt"] .ck-chip`);
+    const z = await panel(page, D, () => { const i = sr.querySelector('.ck-d .ck-info span'); return i ? i.textContent : ''; });
+    erwarte('Kopf: Antippen eines Chips zeigt den Satz, sendet nichts', !!z && !(await schreibAnzahl(page, ab)).length, z);
+    await klick(page, `${D} >>> .ck-d .ck-info > button`); }
+  { const l = await panel(page, D, () => { const k = sr.querySelector('.ck-d'), r = sr.querySelector('.ck-d .ckd-rad').getBoundingClientRect(), g = sr.querySelector('.ck-d .ckd-gruppen').getBoundingClientRect(),
+      s = sr.querySelector('.ck-d .c-rad svg').getBoundingClientRect(), gs = [...sr.querySelectorAll('.ck-d .ckd-g')].map(x => x.getBoundingClientRect());
+      return { links: r.right <= g.left + 1, rad: Math.round(s.width), nebeneinander: gs.length > 1 && Math.abs(gs[0].top - gs[1].top) < 2, lang: getComputedStyle(k.querySelector('.ck-l')).display !== 'none' }; });
+    erwarte('Kopf Desktop: Rad 220 px links, Gruppen als Kästchen nebeneinander, lange Chips', l.links && l.rad === 220 && l.nebeneinander && l.lang, JSON.stringify(l)); }
   await einer('.c-chip[data-i="0"] .c-power', 'baustelle/aktion:schalten', 'Gerät schalten');
   await einer('.seite > .liste .zeile:last-child .sw', 'baustelle/setzen', 'Kleidung trocknen');
   await klick(page, `${D} >>> .c-live .seg [data-v="woche"]`);
@@ -469,8 +479,8 @@ await fall('3d Container', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .c-chip .bs-ic`);
   const nl = await panel(page, D, () => ({ sheet: p.s.sheet, toast: sr.querySelector('.toast').textContent, grau: getComputedStyle(sr.querySelector('.c-chip .bs-ic')).opacity }));
   erwarte('Nicht-Admin: ✎ ausgegraut, Hinweis, keine Einblendung', !nl.sheet && /ansehen/i.test(nl.toast) && +nl.grau < .6 && !(await schreibAnzahl(page, ab)).length, JSON.stringify(nl));
-  await einer('.c-d-knoepfe > .chip', 'baustelle/aktion:boost', 'Nicht-Admin: Schnell aufheizen (Vor-Ort)');
-  ab = await aufrufZahl(page); await klick(page, `${D} >>> .c-d-knoepfe .seg [data-v="hand"]`);
+  await einer('.ck-d .ck-chip.ck-boost', 'baustelle/aktion:boost', 'Nicht-Admin: Schnell aufheizen (Vor-Ort)');
+  await klick(page, `${D} >>> .ck-d .ck-chip.modus`); ab = await aufrufZahl(page); await klick(page, `${D} >>> .ck-modi [data-v="hand"]`);
   erwarte('Nicht-Admin: Modus ändert nichts', !(await schreibAnzahl(page, ab)).length);
 });
 
@@ -550,11 +560,15 @@ await fall('B8 Container am Handy', browser, async (page, erwarte) => {
   for (const id of ids) {
     await panel(page, T, () => p.containerOeffnen(a0), id); await warte(600);
     const raus = await panel(page, T, () => { const sc = sr.querySelector('.scroll'), re = sc.getBoundingClientRect().right;
-      return [...sc.querySelectorAll('*')].filter(x => x.getBoundingClientRect().right > re + 1 && !x.closest('svg, .c-d-knoepfe .seg, .chips, [class*=leiste]')
+      return [...sc.querySelectorAll('*')].filter(x => x.getBoundingClientRect().right > re + 1 && !x.closest('svg, .chips, [class*=leiste]')
         && ![...x.children].some(k => k.getBoundingClientRect().right > re + 1)).slice(0, 3)
         .map(x => `${x.tagName.toLowerCase()}.${String(x.className).trim()} +${Math.round(x.getBoundingClientRect().right - re)}px`); });
     const rad = await panel(page, T, () => { const k = sr.querySelector('.c-kern'), sc = sr.querySelector('.scroll'); return !k || k.getBoundingClientRect().right <= sc.getBoundingClientRect().right + 1; });
     erwarte(`${id}: nichts ragt hinaus, Rad sichtbar`, !raus.length && rad, raus.join(', '));
+    const k = await panel(page, T, () => { const c = sr.querySelector('.ck-d'); if (!c) return null; const n = c.querySelector('.ckd-name').getBoundingClientRect(), r = c.querySelector('.ckd-rad').getBoundingClientRect(),
+      s = c.querySelector('.ckd-rad > .c-rad svg'), gs = [...c.querySelectorAll('.ckd-g')].map(x => x.getBoundingClientRect()), l = c.querySelector('.ck-l'), kz = c.querySelector('.ck-k');
+      return { unter: n.bottom <= r.top + 1, rad: s ? Math.round(s.getBoundingClientRect().width) : 170, zwei: gs.length < 2 || (Math.abs(gs[0].top - gs[1].top) < 2 && gs[1].left > gs[0].left), kurz: getComputedStyle(l).display === 'none' && getComputedStyle(kz).display !== 'none' }; });
+    erwarte(`${id}: Kopf am Handy – Name über dem Rad (170 px), Gruppen zweispaltig, kurze Chips`, k && k.unter && k.rad === 170 && k.zwei && k.kurz, JSON.stringify(k));
   }
 });
 

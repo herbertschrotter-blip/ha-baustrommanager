@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.151] – 2026-10-28
+
+- Kopf der Container-Ansicht neu (Mockup `container-kopf.html` Variante D2, abgenommen 28.10.2026): Statt langer Sätze
+  zeigen kurze Chips den Zustand, sortiert in Kästchen Steuerung · Jetzt · Plan · Lernen · Hinweise (nur wenn eine
+  Fühler-Batterie schwach ist). Das Rad steht links, darunter Soll und die Knöpfe 🥶 👍 🥵. Antippen eines Chips zeigt
+  den bisherigen Satz; der Modus ist ein Chip mit Auswahl. Am Handy: Name, darunter das Rad, die Kästchen zweispaltig
+  mit kurzen Chips.
+
 ## [0.8.150] – 2026-10-28
 
 - Temperatur-Diagramm der Container-Ansicht (Mockup `tuer-diagramm.html` Variante A, abgenommen 28.10.2026): Wann eine

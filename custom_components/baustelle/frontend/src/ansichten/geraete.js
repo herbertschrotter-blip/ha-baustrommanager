@@ -7,6 +7,7 @@
 import { html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { de, zahl } from '../hilfen.js';
+import { BATTERIE_SCHWACH } from '../tabellen.js';
 import { sigHtml } from '../symbole.js';
 import { invGruppeVorlage } from './inventar.js';
 
@@ -41,7 +42,7 @@ export function geraeteZeilen(p) {
 }
 const zaehlen = X => ({ n: X.length, weg: X.filter(x => x.weg).length, warn: X.filter(x => x.w.length).length,
   bat: X.filter(x => x.w.some(w => /Batterie/.test(w.titel))).length, nicht: X.filter(x => x.status !== 'aktiv').length });
-const batterie = b => b === null ? nothing : html`<span class=${b < 10 ? 'rot-t' : b < 25 ? 'amber-t' : 'leise'} title="Batterie">🔋 ${de(b, 0)} %</span>`;
+const batterie = b => b === null ? nothing : html`<span class=${b < 10 ? 'rot-t' : b < BATTERIE_SCHWACH ? 'amber-t' : 'leise'} title="Batterie">🔋 ${de(b, 0)} %</span>`;
 const signal = db => db === null ? nothing : unsafeHTML(sigHtml(db));
 
 /* Zeile antippen: Gerät → Gerätedialog, Sensor → Einblendung „Sensor“ */

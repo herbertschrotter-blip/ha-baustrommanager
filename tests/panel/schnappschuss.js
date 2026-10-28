@@ -120,10 +120,12 @@ const ruhe = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(r
     await schritt(`c ${c} tag kalender`, '.c-live .zr-auf');
     await schritt(`c ${c} tag kalender heute`, '.c-live .zr-kal-fuss .chip');
     await schritt(`c ${c} soll +`, '.c-rad-pm .c-pm:nth-child(2)');
-    await schritt(`c ${c} gefühl`, '.sg-gefuehl button:nth-child(1)');
-    if (panel.shadowRoot.querySelector('.sg-versch .chip')) await schritt(`c ${c} gleitend`, '.sg-versch .chip');
-    await schritt(`c ${c} modus hand`, '.c-d-knoepfe .seg button:nth-child(4)');
-    await schritt(`c ${c} boost`, '.c-d-knoepfe > .chip');
+    await schritt(`c ${c} gefühl`, '.ck-gefuehl button:nth-child(1)');
+    if (panel.shadowRoot.querySelector('.ckd-soll .ck-zurueck')) await schritt(`c ${c} gleitend`, '.ckd-soll .ck-zurueck');
+    await schritt(`c ${c} chip`, '.ck-d .ckd-g[data-g="Jetzt"] .ck-chip');
+    await schritt(`c ${c} modus auf`, '.ck-d .ck-chip.modus');
+    await schritt(`c ${c} modus hand`, '.ck-modi button:nth-child(4)');
+    await schritt(`c ${c} boost`, '.ck-d .ck-chip.ck-boost');
     for (const n of [1, 2, 3, 4]) { await schritt(`c ${c} kachel ${n}`, `.c-kacheln .c-kachel:nth-child(${n})`); await schritt(`c ${c} kachel ${n} zu`, { act: 'zu' }); }
     await schritt(`c ${c} gerät aktiv`, '.c-chip .c-aktiv .sw');
     await schritt(`c ${c} gerät power`, '.c-chip .c-power:not([disabled])');
@@ -415,8 +417,9 @@ const ruhe = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise(r
   await schritt('nur-lesen schacht', '.seite .block-kopf .chip');
   await schritt('nur-lesen schacht automatik', '.seite .liste .zeile .sw');
   if (mitF) { await schritt('nur-lesen c', { act: 'container', id: mitF.id });
-    await schritt('nur-lesen c gerät bearbeiten', '.c-chip .bs-ic'); await schritt('nur-lesen c boost', '.c-d-knoepfe > .chip');
-    await schritt('nur-lesen c modus', '.c-d-knoepfe .seg button:nth-child(4)'); await schritt('nur-lesen c gefühl', '.sg-gefuehl button:nth-child(1)'); }
+    await schritt('nur-lesen c gerät bearbeiten', '.c-chip .bs-ic'); await schritt('nur-lesen c boost', '.ck-d .ck-chip.ck-boost');
+    await schritt('nur-lesen c modus auf', '.ck-d .ck-chip.modus');
+    await schritt('nur-lesen c modus', '.ck-modi button:nth-child(4)'); await schritt('nur-lesen c gefühl', '.ck-gefuehl button:nth-child(1)'); }
   if (bed) { await schritt('nur-lesen c bedarf', { act: 'container', id: bed.id });
     await schritt('nur-lesen c bedarf termin neu', '.seite .block .zeile .blau'); await schritt('nur-lesen c bedarf 1 h', '.bedarf-dauer .chip:nth-child(1)');
     if (panel.shadowRoot.querySelector('.ereignis .x')) await schritt('nur-lesen c termin weg', '.ereignis .x'); }
