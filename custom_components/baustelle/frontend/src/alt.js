@@ -823,8 +823,14 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .kk-tr-zeile { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-top: 1px solid var(--gridc); cursor: pointer; }
 .kk-tr-zeile.on { background: color-mix(in srgb, var(--amber) 12%, transparent); border-radius: 12px; }
 .kk-z-ic { font-size: 20px; width: 28px; text-align: center; flex: none; } .kk-z-t { flex: 1; min-width: 0; }
-.kk-tr-gr { display: flex; gap: 3px; flex: none; } .kk-tr-gr button { min-width: 28px; height: 26px; border-radius: 8px; border: 0; background: rgba(120,120,128,.2); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
+.kk-tr-gr { display: flex; align-items: center; gap: 3px; flex: none; }
+.kk-tr-gr button { box-sizing: border-box; min-width: 30px; height: 30px; padding: 0 7px; margin: 0; display: inline-flex; align-items: center; justify-content: center; text-align: center; line-height: 1;
+  border-radius: 8px; border: 0; background: rgba(120,120,128,.2); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }   /* Herbert 28.10.2026: gleich groß, Buchstabe mittig (XL breiter) */
 .kk-tr-gr button.on { background: var(--amber); color: #1a1000; font-weight: 600; }
+.kk-tr-zeile.kk-drin { box-shadow: inset 3px 0 0 var(--amber); padding-left: 10px; border-radius: 0 10px 10px 0; }   /* schon eingebaut (katalog-markiert.html, B) */
+.kk-tr-zeile.kk-drin .kk-tr-gr button.kk-gr-drin:not(.on) { background: transparent; box-shadow: inset 0 0 0 1.5px var(--amber); color: var(--amber); }
+.kk-tr-wer { display: block; margin: 1px 0 0; font-size: 11px; font-weight: 500; color: var(--ink2); white-space: normal; }
+.kk-offen-hin { color: var(--amber); padding: 2px 4px 0; }
 .kk-such mark { background: color-mix(in srgb, var(--amber) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 .kk-tr-leer { padding: 14px 4px; color: var(--ink2); font-size: 13px; }
 .kk-wahl { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; } .kk-wahl .vb-wer { display: flex; flex-wrap: wrap; gap: 6px; } .kk-wahl .vb-wer i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }

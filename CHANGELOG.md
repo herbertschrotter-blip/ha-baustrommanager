@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.149] – 2026-10-28
+
+- Kachel-Katalog „＋ Kachel“ (Mockup `katalog-markiert.html` Variante B, abgenommen 28.10.2026): Die Knöpfe S/M/L sind
+  gleich groß, der Buchstabe steht mittig. Schon eingebaute Kacheln haben links einen Amber-Balken, die eingebaute
+  Größe ist amber umrandet; bei Kacheln je Container stehen die Container mit Größe darunter („Poliercontainer L ·
+  Mannschaft M“). „Hinzufügen“ legt wie bisher eine weitere Kachel an – die geöffnete Zeile sagt das dazu.
+
 ## [0.8.148] – 2026-10-28
 
 - Kachel „Kosten & Verbrauch“ (Herbert 28.10.2026): In der Größe L füllt das Diagramm jetzt die Breite der Kachel

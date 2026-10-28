@@ -4148,10 +4148,16 @@ function treffer(p4, s4) {
     s4.st = g2;
     z2();
   };
+  const an = p4.kkListe(s4.ort).filter((x2) => x2.an);
+  const wer = (e6, D2) => D2.map((x2) => {
+    const b3 = e6.je && e6.je !== "v" ? p4.kkB(x2) : null;
+    return b3 ? `${b3.name} ${x2.st}` : x2.st;
+  });
   return b2`<div class="leise">${L2.length} ${L2.length === 1 ? "Kachel" : "Kacheln"}</div>${L2.map((e6) => {
-    const on = s4.k === e6.k;
-    return b2`<div class="kk-tr-zeile ${on ? "on" : ""}" data-k=${e6.k} role="button" tabindex="0" @click=${() => zeile3(e6)}><span class="kk-z-ic">${e6.ic}</span><div class="kk-z-t"><b>${markiere(e6.name)}</b><div class="leise">${bt(e6.ber)} · ${markiere(e6.text)}</div></div>
-        <span class="kk-tr-gr">${e6.stufen.map(([g2]) => b2`<button data-v=${g2} class=${on && s4.st === g2 ? "on" : ""} @click=${groesse2(e6, g2)}>${g2}</button>`)}</span></div>${on ? wahl(p4, s4, e6) : A}`;
+    const on = s4.k === e6.k, D2 = an.filter((x2) => x2.k === e6.k), st = new Set(D2.map((x2) => x2.st));
+    const je = D2.length && e6.je && e6.je !== "v" ? wer(e6, D2).join(" · ") : "";
+    return b2`<div class="kk-tr-zeile ${on ? "on" : ""} ${D2.length ? "kk-drin" : ""}" data-k=${e6.k} role="button" tabindex="0" @click=${() => zeile3(e6)}><span class="kk-z-ic">${e6.ic}</span><div class="kk-z-t"><b>${markiere(e6.name)}</b>${je ? b2`<span class="kk-tr-wer">${je}</span>` : A}<div class="leise">${bt(e6.ber)} · ${markiere(e6.text)}</div></div>
+        <span class="kk-tr-gr">${e6.stufen.map(([g2]) => b2`<button data-v=${g2} class="${on && s4.st === g2 ? "on" : ""} ${st.has(g2) ? "kk-gr-drin" : ""}" title=${st.has(g2) ? "schon eingebaut in dieser Größe" : A} @click=${groesse2(e6, g2)}>${g2}</button>`)}</span></div>${on ? b2`${D2.length && !e6.baustein ? b2`<div class="leise kk-offen-hin">schon ${D2.length > 1 ? `${D2.length}× ` : ""}eingebaut (${wer(e6, D2).join(", ")}) – „Hinzufügen“ legt eine weitere an</div>` : A}${wahl(p4, s4, e6)}` : A}`;
   })}`;
 }
 function katalogEinblendung(p4, s4) {
@@ -5428,8 +5434,14 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .kk-tr-zeile { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-top: 1px solid var(--gridc); cursor: pointer; }
 .kk-tr-zeile.on { background: color-mix(in srgb, var(--amber) 12%, transparent); border-radius: 12px; }
 .kk-z-ic { font-size: 20px; width: 28px; text-align: center; flex: none; } .kk-z-t { flex: 1; min-width: 0; }
-.kk-tr-gr { display: flex; gap: 3px; flex: none; } .kk-tr-gr button { min-width: 28px; height: 26px; border-radius: 8px; border: 0; background: rgba(120,120,128,.2); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
+.kk-tr-gr { display: flex; align-items: center; gap: 3px; flex: none; }
+.kk-tr-gr button { box-sizing: border-box; min-width: 30px; height: 30px; padding: 0 7px; margin: 0; display: inline-flex; align-items: center; justify-content: center; text-align: center; line-height: 1;
+  border-radius: 8px; border: 0; background: rgba(120,120,128,.2); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }   /* Herbert 28.10.2026: gleich groß, Buchstabe mittig (XL breiter) */
 .kk-tr-gr button.on { background: var(--amber); color: #1a1000; font-weight: 600; }
+.kk-tr-zeile.kk-drin { box-shadow: inset 3px 0 0 var(--amber); padding-left: 10px; border-radius: 0 10px 10px 0; }   /* schon eingebaut (katalog-markiert.html, B) */
+.kk-tr-zeile.kk-drin .kk-tr-gr button.kk-gr-drin:not(.on) { background: transparent; box-shadow: inset 0 0 0 1.5px var(--amber); color: var(--amber); }
+.kk-tr-wer { display: block; margin: 1px 0 0; font-size: 11px; font-weight: 500; color: var(--ink2); white-space: normal; }
+.kk-offen-hin { color: var(--amber); padding: 2px 4px 0; }
 .kk-such mark { background: color-mix(in srgb, var(--amber) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 .kk-tr-leer { padding: 14px 4px; color: var(--ink2); font-size: 13px; }
 .kk-wahl { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; } .kk-wahl .vb-wer { display: flex; flex-wrap: wrap; gap: 6px; } .kk-wahl .vb-wer i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -5610,7 +5622,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.148";
+var SEITE_VERSION = "0.8.149";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];

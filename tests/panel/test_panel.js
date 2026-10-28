@@ -1056,6 +1056,16 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     eingabe(KAT.suche, 'xyz'); await panel.updateComplete; erwarte('WU-0014: Suche ohne Treffer', KAT.treffer().includes('Keine Kachel gefunden'));
     eingabe(KAT.suche, ''); await klick('.sheet .kk-chips .kk-chip:last-child');
     erwarte('WU-0014: Chip €', KAT.treffer().includes('data-k="b-kosten"') && !KAT.treffer().includes('data-k="h-plan"')); await klick('.sheet .kk-chips .kk-chip:last-child');
+    { /* Herbert 28.10.2026 (Mockup katalog-markiert.html, Variante B): schon eingebaute Kacheln markiert */
+      const CB = panel.kkWahlListe('c-verbrauch').slice(0, 2), z0 = '.sheet .kk-tr-zeile[data-k="b-kosten"]', zc = '.sheet .kk-tr-zeile[data-k="c-verbrauch"]';
+      erwarte('Katalog: eingebaute Kachel → Zeile markiert, eingebaute Größe umrandet', litEl(z0).classList.contains('kk-drin') && litEl(KAT.gk('b-kosten', 'M')).classList.contains('kk-gr-drin') && !litEl(KAT.gk('b-kosten', 'L')).classList.contains('kk-gr-drin'));
+      erwarte('Katalog: nicht eingebaute Kachel unmarkiert', !litEl('.sheet .kk-tr-zeile[data-k="h-plan"]').classList.contains('kk-drin') && !litEls('.sheet .kk-tr-zeile[data-k="h-plan"] .kk-gr-drin').length && !litEl(z0).querySelector('.kk-tr-wer'));
+      const alt = panel.s.kkUe.length; CB.forEach((b, i) => panel.s.kkUe.push(panel.kkGross({ k: 'c-verbrauch', an: true, id: b.id }, i ? 'M' : 'L'))); await panel.neuZeichnen();
+      const wer = (litEl(`${zc} .kk-tr-wer`) || { textContent: '' }).textContent;
+      erwarte('Katalog: je Container die Container mit Größe', CB.length > 0 && wer === CB.map((b, i) => `${b.name} ${i ? 'M' : 'L'}`).join(' · ') && litEl(zc).classList.contains('kk-drin') && litEl(KAT.gk('c-verbrauch', 'L')).classList.contains('kk-gr-drin'));
+      await klick(zc); erwarte('Katalog: offene eingebaute Zeile mit Hinweis', (litEl('.sheet .kk-offen-hin') || { textContent: '' }).textContent.includes('eingebaut (') && litEl('.sheet .kk-offen-hin').textContent.includes('„Hinzufügen“ legt eine weitere an'));
+      await klick(KAT.gk('c-verbrauch', 'L')); erwarte('Katalog: gewählte Größe bleibt voll (on)', litEl(KAT.gk('c-verbrauch', 'L')).classList.contains('on'));
+      await klick(zc); panel.s.kkUe.splice(alt); await panel.neuZeichnen(); }
     const keys = panel.kkEintraege('ue').map(e => e.k);
     erwarte('WU-0014: Katalog mit Baustelle, Heizung und je Container', ['b-kosten', 'b-wer', 'h-plan', 'h-wann', 'c-verbrauch'].every(k => keys.includes(k)));
     for (const k of keys) for (const [st, dia] of [['S', true], ['M', true], ['L', true], ['L', false]]) {

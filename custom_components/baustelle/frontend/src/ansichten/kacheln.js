@@ -133,9 +133,14 @@ function treffer(p, s) {
   if (!L.length) return html`<div class="kk-tr-leer">Keine Kachel gefunden – anderes Wort oder Filter „Alle“.</div>`;
   const zeile = e => { if (s.k === e.k) s.k = null; else { s.k = e.k; s.id = null; } z(); };
   const groesse = (e, g) => ev => { ev.stopPropagation(); if (s.k !== e.k) s.id = null; s.k = e.k; s.st = g; z(); };
-  return html`<div class="leise">${L.length} ${L.length === 1 ? 'Kachel' : 'Kacheln'}</div>${L.map(e => { const on = s.k === e.k;
-      return html`<div class="kk-tr-zeile ${on ? 'on' : ''}" data-k=${e.k} role="button" tabindex="0" @click=${() => zeile(e)}><span class="kk-z-ic">${e.ic}</span><div class="kk-z-t"><b>${markiere(e.name)}</b><div class="leise">${bt(e.ber)} · ${markiere(e.text)}</div></div>
-        <span class="kk-tr-gr">${e.stufen.map(([g]) => html`<button data-v=${g} class=${on && s.st === g ? 'on' : ''} @click=${groesse(e, g)}>${g}</button>`)}</span></div>${on ? wahl(p, s, e) : nothing}`; })}`;
+  /* Herbert 28.10.2026 (Mockup katalog-markiert.html, Variante B): schon eingebaute Kacheln des Orts markiert – linker Balken,
+     eingebaute Größe umrandet, bei Kacheln je Container die Container mit Größe darunter */
+  const an = p.kkListe(s.ort).filter(x => x.an);
+  const wer = (e, D) => D.map(x => { const b = e.je && e.je !== 'v' ? p.kkB(x) : null; return b ? `${b.name} ${x.st}` : x.st; });
+  return html`<div class="leise">${L.length} ${L.length === 1 ? 'Kachel' : 'Kacheln'}</div>${L.map(e => { const on = s.k === e.k, D = an.filter(x => x.k === e.k), st = new Set(D.map(x => x.st));
+      const je = D.length && e.je && e.je !== 'v' ? wer(e, D).join(' · ') : '';
+      return html`<div class="kk-tr-zeile ${on ? 'on' : ''} ${D.length ? 'kk-drin' : ''}" data-k=${e.k} role="button" tabindex="0" @click=${() => zeile(e)}><span class="kk-z-ic">${e.ic}</span><div class="kk-z-t"><b>${markiere(e.name)}</b>${je ? html`<span class="kk-tr-wer">${je}</span>` : nothing}<div class="leise">${bt(e.ber)} · ${markiere(e.text)}</div></div>
+        <span class="kk-tr-gr">${e.stufen.map(([g]) => html`<button data-v=${g} class="${on && s.st === g ? 'on' : ''} ${st.has(g) ? 'kk-gr-drin' : ''}" title=${st.has(g) ? 'schon eingebaut in dieser Größe' : nothing} @click=${groesse(e, g)}>${g}</button>`)}</span></div>${on ? html`${D.length && !e.baustein ? html`<div class="leise kk-offen-hin">schon ${D.length > 1 ? `${D.length}× ` : ''}eingebaut (${wer(e, D).join(', ')}) – „Hinzufügen“ legt eine weitere an</div>` : nothing}${wahl(p, s, e)}` : nothing}`; })}`;
 }
 
 /** Einblendung „kk-katalog“ (Übersicht und Auswertung) */
