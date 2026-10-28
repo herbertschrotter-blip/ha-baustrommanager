@@ -5,8 +5,8 @@ from datetime import date, timedelta
 import pytest
 
 from logik.hochrechnung import (
-    KLIMA_GRAZ, VOLL_ANTEIL, WINTER_K, ContainerRest, Ohne, TagRoh, baustelle, baustelle_tage, bisher, container_rest, hgt, hgt_summe, klima_tag,
-    klimamittel, klimamittel_pruefen, ohne_baustelle, ohne_container, perioden, reihe, tag_zaehlt, tage, tageswerte, temperaturen,
+    KLIMA_GRAZ, VOLL_ANTEIL, WINTER_K, ContainerRest, Ohne, TagRoh, baustelle, baustelle_tage, bisher, container_rest, heiztag,
+    heiztage_container, hgt, hgt_summe, klima_tag, klimamittel, klimamittel_pruefen, kwh_je_hgt, ohne_baustelle, ohne_container, perioden, reihe, tag_zaehlt, tage, tageswerte, temperaturen,
 )
 from logik.signatur import Signatur
 
@@ -81,12 +81,84 @@ def test_vorhersage_ohne_spanne_fuer_diese_tage():
     assert r.unten_kwh == pytest.approx(r.rest_kwh) and r.oben_kwh == pytest.approx(r.rest_kwh)
 
 
-def test_lernt_noch_tagesschnitt():
+def test_lernt_noch_nach_heizgradtagen():
+    """FE-0030: solange die Signatur lernt, kWh je Heizgradtag der bisherigen Tage × HGT jedes Resttags (keine Gerade)."""
     wenige = roh(5)
-    r = container_rest(wenige, HEUTE, HEUTE + timedelta(days=10), {}, KLIMA, date(2026, 10, 1))
-    assert r.methode == "tagesschnitt" and r.signatur.stand == "lernt"
-    assert r.rest_kwh == pytest.approx(sum(t.kwh for t in wenige) / 5 * 10)
+    ende = HEUTE + timedelta(days=10)
+    r = container_rest(wenige, HEUTE, ende, {}, KLIMA, date(2026, 10, 1))
+    assert r.methode == "heizgradtage" and r.signatur.stand == "lernt"
+    k = sum(t.kwh for t in wenige) / sum(hgt(t.aussen) for t in wenige)
+    assert kwh_je_hgt(wenige) == pytest.approx(k)
+    assert kwh_je_hgt([*wenige, TagRoh(HEUTE, 50.0, None, 86400)]) == pytest.approx(k)   # Tag ohne Außentemperatur zählt nicht
+    assert r.je_tag == pytest.approx([k * hgt(klima_tag(d, KLIMA)) for d in tage(HEUTE + timedelta(days=1), ende)])
+    assert r.rest_kwh == pytest.approx(sum(r.je_tag))
     assert r.unten_kwh is None and r.normjahr_kwh is None
+
+
+def test_heizgradtage_kurve_oktober_gegen_jaenner():
+    """FE-0030: Zahlenbeispiel – 5 Arbeitstage je Woche, 2 kWh je Heizgradtag; eine Jännerwoche braucht rund doppelt so viel
+    wie eine Oktoberwoche (Klima Graz: Okt 10,6 °C → 9,4 HGT, Jän 0,3 °C → 19,7 HGT), das Wochenende 0."""
+    beginn, ende = date(2026, 10, 1), date(2027, 4, 30)
+    heute = date(2026, 10, 9)                       # Freitag; bisher Di–Do 3 Heiztage zu 2 kWh je HGT
+    bisher_ = [TagRoh(heute - timedelta(days=i), 2.0 * hgt(t), t, 86400) for i, t in ((3, 8.0), (2, 10.0), (1, 6.0))]
+    arbeit = frozenset(d for d in tage(beginn, ende) if d.weekday() < 5)
+    r = container_rest(bisher_, heute, ende, {}, KLIMA_GRAZ, beginn, heiztage=arbeit)
+    assert r.methode == "heizgradtage" and kwh_je_hgt(bisher_) == pytest.approx(2.0)
+    rest = tage(heute + timedelta(days=1), ende)
+    woche = lambda montag: sum(r.je_tag[rest.index(montag + timedelta(days=i))] for i in range(7))  # noqa: E731
+    okt, jaen = woche(date(2026, 10, 12)), woche(date(2027, 1, 11))
+    assert okt == pytest.approx(sum(2.0 * hgt(klima_tag(date(2026, 10, 12) + timedelta(days=i), KLIMA_GRAZ)) for i in range(5)))
+    assert 90 < okt < 100 and 190 < jaen < 200 and jaen / okt > 2     # Okt ≈ 92 kWh, Jän ≈ 197 kWh je Woche
+    samstag = rest.index(date(2027, 1, 16))
+    assert r.je_tag[samstag] == 0.0 and r.je_tag[samstag + 1] == 0.0  # Wochenende ohne Heizplan
+
+
+def test_warme_heiztage_bleiben_beim_tagesschnitt():
+    """Ohne Heizgradtage bisher (alle Tage ab 12 °C) der Tagesschnitt der Heiztage × Resttage mit Heizplan."""
+    warm = [TagRoh(date(2026, 10, 1) + timedelta(days=i), 3.0, 14.0, 86400) for i in range(5)]
+    heute = date(2026, 10, 6)
+    ende = heute + timedelta(days=7)
+    plan = frozenset(d for d in tage(date(2026, 10, 1), ende) if d.weekday() < 5)
+    r = container_rest(warm, heute, ende, {}, KLIMA, date(2026, 10, 1), heiztage=plan)
+    assert kwh_je_hgt(warm) is None and r.methode == "tagesschnitt"
+    rest = tage(heute + timedelta(days=1), ende)
+    assert r.je_tag == tuple(3.0 if d.weekday() < 5 else 0.0 for d in rest)
+    assert r.rest_kwh == pytest.approx(3.0 * sum(1 for d in rest if d.weekday() < 5))
+
+
+def test_nur_heiztage_in_signatur_und_rest():
+    """FE-0030: Tage ohne Heizplan (0 kWh am Wochenende) gehören nicht in die Signatur; im Rest bekommen sie 0 kWh."""
+    beginn, ende = date(2026, 10, 1), date(2026, 12, 31)
+    start = date(2026, 10, 5)                                   # Montag
+    alle = [start + timedelta(days=i) for i in range(42)]
+    temps = [-3 + (i * 7 % 15) for i in range(42)]
+    mit_we = [TagRoh(d, 0.0 if d.weekday() >= 5 else modell(t), t, 86400) for d, t in zip(alle, temps)]
+    plan = frozenset(d for d in tage(beginn, ende) if d.weekday() < 5)
+    ohne_filter = container_rest(mit_we, HEUTE, ende, {}, KLIMA, beginn)
+    gefiltert = container_rest(mit_we, HEUTE, ende, {}, KLIMA, beginn, heiztage=plan)
+    assert ohne_filter.signatur.stand == "unsicher"                # Nullen am Wochenende streuen stark (Befund FE-0030)
+    assert gefiltert.methode == "signatur" and gefiltert.signatur.stand == "gut" and gefiltert.signatur.tage == 30
+    assert gefiltert.signatur.kwh_je_grad == pytest.approx(2.0)
+    rest = tage(HEUTE + timedelta(days=1), ende)
+    assert all(w == 0.0 for d, w in zip(rest, gefiltert.je_tag) if d.weekday() >= 5)
+    assert gefiltert.rest_kwh == pytest.approx(sum(modell(klima_tag(d, KLIMA)) for d in rest if d.weekday() < 5), rel=1e-6)
+    assert gefiltert.normjahr_kwh == pytest.approx(sum(modell(klima_tag(d, KLIMA)) for d in tage(beginn, ende) if d in plan), rel=1e-6)
+    # heute ohne Heizplan: kein Rest von heute
+    samstag = date(2026, 11, 21)
+    assert container_rest(mit_we, samstag, ende, {}, KLIMA, beginn, rest_heute=0.5, heiztage=plan).heute_kwh == 0.0
+
+
+def test_heiztage_je_container():
+    """FE-0030: Heiztage = Tage mit Heizplan; Modus „aus“ keiner; ohne Plan, der das Heizen bestimmt (Automatik aus, Hand,
+    Bedarf), zählt jeder Tag (None)."""
+    d = tage(date(2026, 10, 1), date(2026, 10, 14))
+    werktag = lambda t: t.weekday() < 5   # noqa: E731
+    assert heiztage_container(d, werktag, "plan", True) == frozenset(t for t in d if t.weekday() < 5)
+    assert heiztage_container(d, werktag, "thermo", True) == frozenset(t for t in d if t.weekday() < 5)
+    assert heiztage_container(d, werktag, "aus", True) == frozenset()
+    for modus, automatik in (("hand", True), ("bedarf", True), ("plan", False)):
+        assert heiztage_container(d, werktag, modus, automatik) is None
+    assert heiztag(date(2026, 10, 3), None) and not heiztag(date(2026, 10, 3), frozenset())
 
 
 def test_ohne_gezaehlte_tage():
@@ -103,6 +175,10 @@ def test_baustelle_summe_und_spanne():
     c = ContainerRest(30.0, None, None, "tagesschnitt", Signatur("lernt", 3), None)
     h = baustelle(200.0, {"a": a, "c": c})
     assert h["mit_kwh"] == 330.0 and h["unten_kwh"] is None and h["methode"] == "tagesschnitt"
+    g = ContainerRest(40.0, None, None, "heizgradtage", Signatur("lernt", 3), None)
+    assert baustelle(200.0, {"a": a, "g": g})["methode"] == "heizgradtage"            # FE-0030
+    assert baustelle(200.0, {"g": g, "c": c})["methode"] == "tagesschnitt"
+    assert baustelle(200.0, {"a": a, "k": ContainerRest(0.0, None, None, "keine", Signatur("lernt", 0), None)})["methode"] == "tagesschnitt"
     assert baustelle(None, {"a": a})["mit_kwh"] is None
     assert baustelle(10.0, {})["methode"] == "keine"
 
@@ -151,8 +227,10 @@ def test_rest_von_heute_anteilig():
     assert mit.unten_kwh == pytest.approx(mit.rest_kwh) and mit.oben_kwh == pytest.approx(mit.rest_kwh)
     klima = container_rest(roh(), HEUTE, morgen, {}, KLIMA, beginn, rest_heute=0.5)
     assert klima.heute_kwh == pytest.approx(0.5 * modell(klima_tag(HEUTE, KLIMA)))
-    schnitt = container_rest(roh(5), HEUTE, morgen, {}, KLIMA, beginn, rest_heute=0.5)
-    assert schnitt.methode == "tagesschnitt" and schnitt.rest_kwh == pytest.approx(1.5 * sum(t.kwh for t in roh(5)) / 5)
+    gradtage = container_rest(roh(5), HEUTE, morgen, {}, KLIMA, beginn, rest_heute=0.5, aussen_heute=4.0)
+    k = kwh_je_hgt(roh(5))
+    assert gradtage.methode == "heizgradtage" and gradtage.heute_kwh == pytest.approx(0.5 * k * hgt(4.0))
+    assert gradtage.rest_kwh == pytest.approx(k * hgt(klima_tag(morgen, KLIMA)) + 0.5 * k * hgt(4.0))
     # außerhalb der Heizperiode zählt heute nicht
     assert container_rest(roh(), HEUTE, morgen, {}, KLIMA, morgen, rest_heute=0.5).heute_kwh == 0.0
 
@@ -190,6 +268,16 @@ def test_baustelle_tage_nur_wenn_alle_container_zaehlen():
     T = baustelle_tage(r, HEUTE)
     assert len(T) == 1 and T[0].kwh == 15.0 and T[0].aussen == 2.0
     assert baustelle_tage({}, HEUTE) == []
+
+
+def test_baustelle_tage_container_aus_nimmt_keine_tage():
+    """Review 0.8.155: ein Container im Modus „aus“ (keine Heiztage) oder mit anderem Plan nimmt der Baustelle nicht ihre
+    Tage; Tage, an denen niemand heizt (Wochenende), fallen weg."""
+    d1, d2 = date(2026, 11, 2), date(2026, 11, 1)
+    r = {"a": [TagRoh(d1, 10.0, 2.0, 86400), TagRoh(d2, 0.0, 4.0, 86400)],
+         "b": [TagRoh(d1, 0.0, 2.0, 86400), TagRoh(d2, 0.0, 4.0, 86400)]}
+    T = baustelle_tage(r, HEUTE, {"a": {d1}, "b": set()})
+    assert len(T) == 1 and T[0].kwh == 10.0 and T[0].aussen == 2.0
 
 
 # ------------------------------------------------------------------ IPMVP (BSM-033.04)

@@ -483,6 +483,30 @@ def gespart_kwh(mit: float, ohne: float) -> float:
     return max(0.0, ohne - mit)
 
 
+def hochrechnung_herkunft(methode: str | None, container: Sequence[Mapping[str, Any]], vorhersage_tage: int | None,
+                          hgt_rest: float | None) -> tuple[bool, str]:
+    """Woher die Hochrechnung kommt (Karte „Heizperiode“, FE-0030): (lernt noch?, Text). Mit Signatur je Container die
+    Quellen der Temperatur; sonst wie viele Container nach Heizgradtagen bzw. mit dem Tagesschnitt rechnen."""
+    from .bericht import de   # noqa: PLC0415  # bericht importiert dieses Modul
+
+    if methode == "signatur":
+        vor = f"nächste {vorhersage_tage} Tage aus der Vorhersage, danach " if vorhersage_tage else ""
+        rest = f" · noch {de(hgt_rest, 0)} Heizgradtage" if hgt_rest is not None else ""
+        return False, f"aus der Energiesignatur je Container · {vor}Klimamittel{rest}"
+    n = len(container)
+    hgt_n = sum(1 for c in container if c.get("methode") == "heizgradtage")
+    schnitt_n = sum(1 for c in container if c.get("methode") == "tagesschnitt")
+    teile = []
+    if hgt_n:
+        teile.append(f"{hgt_n} von {n} Containern verteilen den Verbrauch je Heizgradtag der bisherigen Heiztage auf die "
+                     "künftigen Heiztage (kältere Monate mehr, Tage ohne Heizplan 0)")
+    if schnitt_n:
+        teile.append(f"{schnitt_n} von {n} Containern rechnen mit dem Tagesschnitt der Heiztage (bisher keine Heizgradtage)")
+    if not teile:
+        teile.append(f"{sum(1 for c in container if c.get('methode') != 'signatur')} von {n} Containern noch ohne Heiztage")
+    return True, " · ".join(teile) + ", bis die Signatur steht (10 ganze Heiztage, 4 K Spanne)."
+
+
 def ohne_automatik(kwh: float, ohne: float, preis: float) -> dict[str, Any] | None:
     """„Ohne Automatik“: Kosten im Dauerbetrieb (`ohne` kWh), gespart in € und % dagegen, dazu der Hinweis (der Zähler
     rechnet immer Dauerbetrieb); ohne Wert (0) None."""
@@ -599,6 +623,8 @@ def hochrechnung_signatur(
     aus["hgt_rest"] = e.get("hgt_rest")
     aus["vorhersage_tage"] = e.get("vorhersage_tage")
     aus["container"] = [{**c, "rest_eur": geld(c.get("rest_kwh"), preis)} for c in e.get("container") or []]
+    aus["herkunft_lernt"], aus["herkunft"] = hochrechnung_herkunft(aus["methode"], aus["container"], aus["vorhersage_tage"],
+                                                                    aus["hgt_rest"])   # FE-0030: Text für die Seite
     # BSM-033.03: Karte „Heizperiode“ – bisher aus den Tagen der Heizperiode, Tagesreihe, Klimamittel, Vorhersage
     if e.get("bisher_kwh") is not None:
         aus["bisher_kwh"], aus["bisher_eur"] = e["bisher_kwh"], geld(e["bisher_kwh"], preis)

@@ -368,6 +368,12 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
   Containern geordnet; `mittel` Ø kW im Betrieb (ab 50 W), `std` bei Pumpen gemessen, sonst kWh ÷ Ø kW (Schätzung).
   `wetter.gerade` `null` unter 5 Heiztagen; `eur_je_grad` = −k · Preis (Mehrkosten am Tag je Grad kälter, `null` bei
   k ≥ 0; 0.7.24). `heizperiode.bis` = geplantes Ende, wenn es vor dem Ende der Heizperiode liegt.
+- `hochrechnung` (Karte „Heizperiode“, Bauplan Hochrechnung §4/§5) dazu: `methode` `signatur|heizgradtage|tagesschnitt|keine`
+  (FE-0030: `heizgradtage`, solange eine Signatur lernt – kWh je Heizgradtag der bisherigen Heiztage × Heizgradtage jedes
+  künftigen Heiztags; `tagesschnitt` nur, wenn die bisherigen Heiztage keine Heizgradtage hatten), je Container
+  `container[].methode` ebenso; `herkunft` (Text unter dem Diagramm, von der Integration) und `herkunft_lernt` (Seite
+  setzt davor fett „lernt noch“). Signatur, `punkte` und Rest zählen nur **Heiztage** nach Heizplan (Arbeitszeit,
+  Ausnahmen, Feiertag/Urlaub der ganzen Heizperiode, Container nicht „aus“); Tage ohne Heizplan haben im Rest 0 kWh.
 
 `baustelle/auswertung`, `teil: verlauf` (Reiter Verlauf, Detailseite; `zeitraum`/`scope` ohne Bedeutung):
 

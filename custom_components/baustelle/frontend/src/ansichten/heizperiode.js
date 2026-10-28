@@ -56,11 +56,9 @@ function legende(h) {
     ${h.ohne_hinweis ? html`<div class="hp-grob">⚠ „ohne Automatik“ und „gespart“: ${h.ohne_hinweis}</div>` : nothing}
     <div class="leise">„ohne Automatik“ ist bis zur gemessenen Baseline eine Schätzung (jeder Heizkörper rund um die Uhr).</div>`;
 }
+/* Woher die Zahl kommt: Text von der Integration (FE-0030, logik/auswertung.hochrechnung_herkunft) */
 function herkunft(h) {
-  const C = h.container || [], lernen = C.filter(c => c.methode !== 'signatur').length;
-  return h.methode === 'signatur'
-    ? html`aus der Energiesignatur je Container · ${h.vorhersage_tage ? `nächste ${h.vorhersage_tage} Tage aus der Vorhersage, danach ` : ''}Klimamittel${zahl(h.hgt_rest) ? ` · noch ${de(h.hgt_rest, 0)} Heizgradtage` : ''}`
-    : html`<b>lernt noch</b> – ${lernen} von ${C.length} Containern rechnen mit dem Tagesschnitt, bis die Signatur steht (10 ganze Tage, 4 K Spanne).`;
+  return html`${h.herkunft_lernt ? html`<b>lernt noch</b> – ` : nothing}${h.herkunft || ''}`;
 }
 
 /* ---------- Tag / Woche / Monat (BSM-033.04, Mockup hochrechnung-j4b.html) ---------- */

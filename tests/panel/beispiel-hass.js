@@ -40,7 +40,7 @@ function beispielHochrechnung(b, preis) {
       return z; }); };
   return { bisher_kwh: bisher, bisher_eur: bisher * preis, mit_kwh: z[2], mit_eur: z[2] * preis, ohne_kwh: z[5], ohne_eur: z[5] * preis, gespart_eur: (z[5] - z[2]) * preis,
     methode: 'signatur', ohne_methode: 'schaetzung', ohne_hinweis: 'grobe Obergrenze, nicht belastbar', unten_kwh: z[3], unten_eur: z[3] * preis, oben_kwh: z[4], oben_eur: z[4] * preis, normjahr_kwh: z[2] * 1.03, normjahr_eur: z[2] * 1.03 * preis,
-    hgt_rest: 1860, vorhersage_tage: 6, container: sig.map(c => ({ ...c, rest_kwh: 400, rest_eur: 400 * preis })), reihe,
+    hgt_rest: 1860, vorhersage_tage: 6, herkunft_lernt: false, herkunft: 'aus der Energiesignatur je Container · nächste 6 Tage aus der Vorhersage, danach Klimamittel · noch 1\u00a0860 Heizgradtage', container: sig.map(c => ({ ...c, rest_kwh: 400, rest_eur: 400 * preis })), reihe,
     klima: KLIMA_BSP, klima_vorgabe: true, vorhersage: [['2026-01-16', 1.5], ['2026-01-17', -0.5], ['2026-01-18', -2.0], ['2026-01-19', 0.5], ['2026-01-20', 2.5], ['2026-01-21', 3.0]],
     beginn: '2025-10-01', ende: '2026-04-30', perioden: { tag: perioden('tag'), woche: perioden('woche'), monat: perioden('monat') } };
 }

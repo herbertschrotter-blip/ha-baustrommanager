@@ -6,11 +6,14 @@ die Klimamittel (Einstellung `heizung.klimamittel`, sonst Vorgabe). Gerechnet wi
 Ergebnis liegt bei der Heizung (`Heizung.hochrechnung`) – Sensor `prognose_heizperiode` und `baustelle/auswertung`
 lesen es; dazu für die Karte „Heizperiode“ die Tagesreihe, die Punkte der Signatur je Container, Klimamittel und
 Vorhersage. Ohne Datenbank bleibt es bei der bisherigen Hochrechnung (Tagesschnitt seit Zählbeginn).
+
+FE-0030: Heiztage je Container nach dem Heizplan (`heiztage`): Arbeitszeiten, Ausnahmen und Feiertage/Urlaub der ganzen
+Heizperiode (Kalender, `kern/kalender.async_frei_tage`), Modus des Containers; Regel in `logik/hochrechnung.heiztage_container`.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 import logging
@@ -24,7 +27,10 @@ from ...const import CONF_ENDE, CONF_HEIZPERIODE_BIS, CONF_HEIZPERIODE_VON, ROLL
 from ...db import DATA_DB
 from ...kern.staffelung import nenn_kw
 from ...db.tage import hochrechnung_tage, stunden
+from ...kern.kalender import async_frei_tage
+from ..basis import mitternacht
 from ...logik import baseline as b, hochrechnung as h, tagesverlauf as tv
+from ...logik.arbeitszeit import WetterTag, tagesplan
 from ...logik.signatur import Tag, berechnen
 from ...logik.auswertung import heizperiode_bis, heizperiode_ende
 
@@ -82,10 +88,29 @@ def rest_heute(jetzt: datetime) -> float:
     return max(0.0, min(1.0, (morgen - jetzt).total_seconds() / (morgen - beginn).total_seconds()))
 
 
-def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_heute: float = 0.0) -> dict[str, Any]:
-    """Hochrechnung aus den Tagen je Container (ohne Datenbank, damit testbar); `anteil_heute` = Rest von heute (0–1)."""
+def heiztage(hz: Heizung, beginn: date, ende: date, frei: Mapping[str, set[date]] | None = None
+             ) -> dict[str, frozenset[date] | None]:
+    """Heiztage je Container (FE-0030): Tage mit Heizplan der Baustelle (`logik/arbeitszeit.tagesplan` – Arbeitszeit,
+    Ausnahmen, frei an Feiertag/Urlaub); `frei` = Feiertage/Urlaub aus den Kalendern für die ganze Heizperiode, dazu die
+    der laufenden Wochen. Welche Container wie zählen, sagt `logik/hochrechnung.heiztage_container`."""
+    st, f = hz.st, frei or {}
+    az, ausn, regeln = st.arbeitszeiten(), st.ausnahmen(), hz.heiz_regeln()
+
+    def art(d: date) -> str | None:
+        return "urlaub" if d in f.get("urlaub", ()) else "feiertag" if d in f.get("feiertag", ()) else None
+
+    alle = h.tage(beginn, ende)
+    geplant = {d for d in alle if tagesplan(d, az, ausn, regeln, WetterTag(), False, frei=hz.ist_frei(d, art(d))) is not None}
+    return {bz.id: h.heiztage_container(alle, geplant.__contains__, hz.modus(bz.id), st.automatik) for bz in hz.bereiche()}
+
+
+def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_heute: float = 0.0,
+             frei: Mapping[str, set[date]] | None = None) -> dict[str, Any]:
+    """Hochrechnung aus den Tagen je Container (ohne Datenbank, damit testbar); `anteil_heute` = Rest von heute (0–1);
+    `frei` = Feiertage/Urlaub der Heizperiode (FE-0030)."""
     st = hz.st
     beginn, ende = zeitraum(st, heute)
+    plan = heiztage(hz, beginn, ende, frei)
     eigen = (st.e.get("heizung") or {}).get("klimamittel")
     klima = h.klimamittel(eigen)
     vor = vorhersage(st, heute)
@@ -94,7 +119,7 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     ohne_tage = b.zaehlende_tage(h_baseline.laeufe(hz))   # BSM-033.04: Tage der Baseline-Läufe
     aussen = aussen_heute(st, heute, roh)
     reste = {bid: h.container_rest(roh[bid], heute, ende, vor, klima, beginn, ohne_tage.get(bid, set()),
-                                   rest_heute=anteil_heute, aussen_heute=aussen) for bid in ids}
+                                   rest_heute=anteil_heute, aussen_heute=aussen, heiztage=plan.get(bid)) for bid in ids}
     # Ersparnis nach IPMVP: Signatur „ohne“ je Container, Heizperiode damit; andere über das Verhältnis je Heizkörper-Typ
     ohne = {bid: h.ohne_container(roh[bid], ohne_tage.get(bid, set()), heute, beginn, ende, vor, klima) for bid in ids}
     mit = {bid: sum(t.kwh or 0.0 for t in roh[bid] if beginn <= t.datum <= heute) + reste[bid].rest_kwh for bid in ids}
@@ -106,7 +131,7 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
         "normjahr_kwh": r.normjahr_kwh, "stand": r.signatur.stand, "grund": r.signatur.grund, "tage": r.signatur.tage,
         "grenze": r.signatur.grenze, "kwh_je_grad": r.signatur.kwh_je_grad, "grundlast": r.signatur.grundlast,
         "cv_rmse": r.signatur.cv_rmse,
-        "punkte": [[t.aussen, round(t.kwh or 0.0, 2)] for t in roh[bid] if h.tag_zaehlt(t, heute)],
+        "punkte": [[t.aussen, round(t.kwh or 0.0, 2)] for t in roh[bid] if h.tag_zaehlt(t, heute) and h.heiztag(t.datum, plan.get(bid))],
     } for bid, r in reste.items()]
     rest_temps = [t for t, _ in h.temperaturen(h.tage(heute, ende), vor, klima)]
     reihe = h.reihe(roh, reste, heute, beginn, ende,
@@ -116,7 +141,7 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     return {"heute": heute.isoformat(), "beginn": beginn.isoformat(), "ende": ende.isoformat(), "reste": reste,
             "container": container, "hgt_rest": h.hgt_summe(rest_temps[1:]), "vorhersage_tage": len(vor),
             "bisher_kwh": h.bisher(roh, heute, beginn),
-            "signatur": _signatur(h.baustelle_tage(roh, heute)),
+            "signatur": _signatur(h.baustelle_tage(roh, heute, plan)),
             "reihe": reihe, "perioden": {art: h.perioden(tw, art, heute) for art in h.PERIODEN},
             "ohne": {"methode": "baseline" if ohne_kwh is not None else "schaetzung", "kwh": ohne_kwh,
                      "container": [{"bereich": bid, "stand": o.signatur.stand, "tage": o.tage, "heizperiode_kwh": o.heizperiode_kwh,
@@ -150,7 +175,7 @@ async def async_rechnen(hass: HomeAssistant, hz: Heizung) -> None:
         return
     jetzt = dt_util.now()
     heute = jetzt.date()
-    beginn, _ = zeitraum(st, heute)
+    beginn, ende = zeitraum(st, heute)
     hz.hochrechnung_lauf += 1   # nur die zuletzt gestartete Rechnung zählt (eine ältere, langsamere überschreibt sonst)
     lauf = hz.hochrechnung_lauf
     zone = dt_util.get_default_time_zone()
@@ -158,9 +183,10 @@ async def async_rechnen(hass: HomeAssistant, hz: Heizung) -> None:
     if roh is None:
         _LOGGER.debug("Hochrechnung: Tage nicht lesbar (%s)", db.fehler)
         return
+    frei = await async_frei_tage(st, mitternacht(beginn), mitternacht(ende + timedelta(days=1)))   # FE-0030
     if lauf != hz.hochrechnung_lauf:
         return
-    hz.hochrechnung = ergebnis(hz, roh, heute, rest_heute(jetzt))
+    hz.hochrechnung = ergebnis(hz, roh, heute, rest_heute(jetzt), frei)
 
 
 async def async_tagesverlauf(hass: HomeAssistant, hz: Heizung, tag: date) -> dict[str, Any]:

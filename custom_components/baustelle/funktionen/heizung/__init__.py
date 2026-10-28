@@ -206,9 +206,9 @@ class Heizung(Funktion):
             trocknen_laenger_min=int(h["trocknen_laenger_min"]), trocknen_frueher_min=int(h["trocknen_frueher_min"]),
         )
 
-    def ist_frei(self, tag: date) -> bool:
-        """Urlaub immer, Feiertag nur mit „Feiertage frei“."""
-        art = self.st.frei_art(tag)
+    def ist_frei(self, tag: date, art: str | None = None) -> bool:
+        """Urlaub immer, Feiertag nur mit „Feiertage frei“; `art` statt der Kalender der laufenden Wochen (Hochrechnung)."""
+        art = art or self.st.frei_art(tag)
         return art == "urlaub" or (art == "feiertag" and bool(self.st.e["heizung"]["feiertag_frei"]))
 
     def plan(self, tag: date, trocknen: bool, warm: WarmAb | None = None) -> Plan | None:

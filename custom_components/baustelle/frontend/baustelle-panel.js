@@ -3975,8 +3975,7 @@ function legende(h3) {
     <div class="leise">„ohne Automatik“ ist bis zur gemessenen Baseline eine Schätzung (jeder Heizkörper rund um die Uhr).</div>`;
 }
 function herkunft(h3) {
-  const C2 = h3.container || [], lernen = C2.filter((c4) => c4.methode !== "signatur").length;
-  return h3.methode === "signatur" ? b2`aus der Energiesignatur je Container · ${h3.vorhersage_tage ? `nächste ${h3.vorhersage_tage} Tage aus der Vorhersage, danach ` : ""}Klimamittel${zahl(h3.hgt_rest) ? ` · noch ${de(h3.hgt_rest, 0)} Heizgradtage` : ""}` : b2`<b>lernt noch</b> – ${lernen} von ${C2.length} Containern rechnen mit dem Tagesschnitt, bis die Signatur steht (10 ganze Tage, 4 K Spanne).`;
+  return b2`${h3.herkunft_lernt ? b2`<b>lernt noch</b> – ` : A}${h3.herkunft || ""}`;
 }
 var WT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 var AUFL = [["hp", "Heizperiode"], ["monat", "Monat"], ["woche", "Woche"], ["tag", "Tag"]];
@@ -5917,7 +5916,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.154";
+var SEITE_VERSION = "0.8.155";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];

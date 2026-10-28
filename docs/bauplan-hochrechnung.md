@@ -59,7 +59,17 @@ nach ÖNORM); es zählen nur **ganze Tage ohne Ausfall und ohne Notbetrieb** (mi
   (Klimamittel der nächsten Station) prüfen.**
 - **Spanne** (rund 90 %): wärmerer bzw. kälterer Winter um 1,5 K an allen Tagen ohne Vorhersage, dazu 1,645 · rmse · √Tage.
   Nur wenn jeder Container eine Signatur hat.
-- **Container ohne Signatur** (lernt, unsicher): Tagesschnitt der gezählten Tage × Resttage, wie vorher.
+- **Container ohne Signatur** (lernt, unsicher): ~~Tagesschnitt der gezählten Tage × Resttage~~ – seit FE-0030
+  (Herbert 28.10.2026) **Gradtagverfahren**: kWh je Heizgradtag der bisherigen Heiztage (Σ kWh ÷ Σ HGT 20/12) × HGT
+  jedes künftigen Heiztags (Vorhersage, sonst Klimamittel) – kältere Monate mehr, die Linie ist eine Kurve
+  (`methode` „heizgradtage“). Nur wenn die bisherigen Heiztage keine Heizgradtage hatten (alle ab 12 °C): Tagesschnitt
+  der Heiztage × Resttage mit Heizplan. Beides ohne Spanne.
+- **Nur Heiztage** (FE-0030, Herbert 28.10.2026): Tage ohne Heizplan (Wochenende, Feiertag, Urlaub, Ausnahme frei,
+  Container „aus“) gehören nicht in die Signatur und ihre Punkte (sie streuten mit 0 kWh so stark, dass die Signatur
+  „unsicher“ blieb); im Rest bekommen sie 0 kWh, auch heute. Regel `logik/hochrechnung.heiztage_container`; der Plan je
+  Tag kommt aus `logik/arbeitszeit.tagesplan`, Feiertage/Urlaub für die ganze Heizperiode aus den Kalendern
+  (`kern/kalender.async_frei_tage`). Jeder Tag zählt (wie vorher), wenn kein Plan das Heizen bestimmt: Automatik aus,
+  Modus „hand“ oder „bedarf“. Den Hinweis unter dem Diagramm liefert die Integration (`herkunft`).
 - **Normjahr** (Witterungsbereinigung): die ganze Heizperiode bei Klimamitteln; **Heizgradtage 20/12** des Rests.
 - Bisher = Zähler `energie_heizen` (wie vorher); heute zählt dort mit, der Rest beginnt morgen.
 - **Tag/Woche/Monat** (0.8.129): `tageswerte` (je Tag nicht aufsummiert, „ohne“ aus der Tagesreihe) und `perioden` (Tag,
@@ -150,9 +160,11 @@ Lauftage × Preis (stündlich nachgetragen). Einschalten erst mit J4b (Seite).
 `tests/logik/test_signatur.py`: Grenze und Steigung aus Modelldaten, Streuung, lernt (Tage, Spanne), Gerade, ohne
 Zusammenhang, starke Streuung, Gütestufen, erwarteter Verbrauch, getrennter Betrieb.
 `tests/logik/test_hochrechnung.py`: Klimamittel, Klima je Tag, HGT, welche Tage zählen (auch Sommerzeit), Vorhersage vor
-Klima, Rest mit Spanne und Normjahr, lernt (Tagesschnitt), ohne Tage, Summe der Baustelle.
+Klima, Rest mit Spanne und Normjahr, lernt (Heizgradtage; warm: Tagesschnitt), nur Heiztage, Heiztage je Container,
+Kurve Oktober gegen Jänner, ohne Tage, Summe der Baustelle.
 `tests/integration/test_hochrechnung.py`: Tage aus der Datenbank (ein Tag im Notbetrieb fällt weg) → Signatur, Sensorwert,
-ohne Tage der Tagesschnitt.
+ohne Tage der Tagesschnitt; FE-0030: nur Heiztage nach Heizplan und Feiertagskalender, lernt nach Heizgradtagen, Befehl
+`baustelle/auswertung` mit `methode` und `herkunft`.
 
 ## 8. Prognose V2 – Entscheidungen aus dem Review (CGR-2026-10-11-hochrechnung, 11.10.2026)
 

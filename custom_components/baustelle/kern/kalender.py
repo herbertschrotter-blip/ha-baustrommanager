@@ -28,21 +28,34 @@ async def _async_kalender(st: Steuerung, _now: datetime | None = None) -> None:
     ende = start + timedelta(days=15)
     o = st.entry.options
     for art, key in (("feiertag", CONF_FEIERTAG_KALENDER), ("urlaub", CONF_URLAUB_KALENDER)):
-        tage: set[date] = set()
-        for ev in await st.async_events(o.get(key), start, ende):
-            von, bis = _ev_zeit(ev.get("start")), _ev_zeit(ev.get("end"))
-            if von is None or bis is None:
-                continue
-            tag = von.date()
-            while _mitternacht(tag) < bis:
-                tage.add(tag)
-                if art == "feiertag":
-                    st.kalender_namen[tag] = str(ev.get("summary") or "Feiertag")
-                tag += timedelta(days=1)
-        st.kalender_tage[art] = tage
+        tage = tage_aus_events(await st.async_events(o.get(key), start, ende))
+        if art == "feiertag":
+            st.kalender_namen.update({tag: name or "Feiertag" for tag, name in tage.items()})
+        st.kalender_tage[art] = set(tage)
     for f in st.funktionen:
         await f.async_kalender(start, ende)
     st.auswerten()
+
+
+def tage_aus_events(events: list[dict[str, Any]]) -> dict[date, str]:
+    """Jeder Tag, den ein Kalendereintrag berührt, mit dessen Titel (Feiertage, Urlaub)."""
+    tage: dict[date, str] = {}
+    for ev in events:
+        von, bis = _ev_zeit(ev.get("start")), _ev_zeit(ev.get("end"))
+        if von is None or bis is None:
+            continue
+        tag = von.date()
+        while _mitternacht(tag) < bis:
+            tage[tag] = str(ev.get("summary") or "")
+            tag += timedelta(days=1)
+    return tage
+
+
+async def async_frei_tage(st: Steuerung, start: datetime, ende: datetime) -> dict[str, set[date]]:
+    """Feiertage und Urlaub für einen beliebigen Zeitraum (Hochrechnung der ganzen Heizperiode, FE-0030)."""
+    o = st.entry.options
+    return {art: set(tage_aus_events(await st.async_events(o.get(key), start, ende)))
+            for art, key in (("feiertag", CONF_FEIERTAG_KALENDER), ("urlaub", CONF_URLAUB_KALENDER))}
 
 
 async def async_events(st: Steuerung, entity_id: str | None, start: datetime, ende: datetime) -> list[dict[str, Any]]:

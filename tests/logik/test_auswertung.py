@@ -331,6 +331,24 @@ def test_hochrechnung_signatur():
     assert leer["container"] == [] and leer["hgt_rest"] is None
 
 
+def test_hochrechnung_herkunft():
+    """FE-0030: der Hinweis unter dem Diagramm kommt von der Integration – Signatur, Heizgradtage oder Tagesschnitt."""
+    lernt, text = a.hochrechnung_herkunft("signatur", [{"methode": "signatur"}], 6, 2345.4)
+    assert lernt is False and text.startswith("aus der Energiesignatur je Container · nächste 6 Tage aus der Vorhersage, danach Klimamittel")
+    assert "Heizgradtage" in text and "2" in text
+    assert a.hochrechnung_herkunft("signatur", [{"methode": "signatur"}], None, 0.0)[1].endswith("noch 0 Heizgradtage")   # 0 ist ein Wert
+    assert "Heizgradtage" not in a.hochrechnung_herkunft("signatur", [{"methode": "signatur"}], None, None)[1]
+    C = [{"methode": "heizgradtage"}] * 3 + [{"methode": "signatur"}]
+    lernt, text = a.hochrechnung_herkunft("heizgradtage", C, 6, 2000.0)
+    assert lernt is True and text.startswith("3 von 4 Containern verteilen den Verbrauch je Heizgradtag")
+    assert "kältere Monate mehr, Tage ohne Heizplan 0" in text and "Tagesschnitt" not in text
+    lernt, text = a.hochrechnung_herkunft("tagesschnitt", [{"methode": "tagesschnitt"}, {"methode": "heizgradtage"}], 0, None)
+    assert lernt is True and "1 von 2 Containern rechnen mit dem Tagesschnitt" in text and "1 von 2 Containern verteilen" in text
+    h = a.hochrechnung_signatur(a.hochrechnung_werte(1.0, 2.0, None, 0.25), {"methode": "heizgradtage"},
+                                {"container": C, "vorhersage_tage": 6}, 0.25)
+    assert h["herkunft_lernt"] is True and h["herkunft"].startswith("3 von 4")
+
+
 def test_ohne_hinweis():
     """BSM-033.05: „ohne Automatik“ und „gespart“ sind bis zur gemessenen Baseline nur eine grobe Obergrenze."""
     assert a.OHNE_HINWEIS == "grobe Obergrenze, nicht belastbar"

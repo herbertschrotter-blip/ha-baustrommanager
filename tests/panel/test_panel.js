@@ -1650,6 +1650,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('Je Gerät: kWh der Integration', G.length && G.every(z => h.includes(`<td>${deT(z.kwh, 1)}</td>`)));
     // BSM-033.03: „Wetter-Einfluss“ ist jetzt die Karte „Heizperiode“ im Reiter Signatur (Werte der Integration)
     erwarte('Energiesignatur der Integration (Karte Heizperiode)', h.includes('hp-karte') && h.includes('Heizgrenze') && h.includes('kWh je Grad'));
+    erwarte('FE-0030: Herkunft der Hochrechnung als Text der Integration', h.includes('aus der Energiesignatur je Container · nächste 6 Tage') && !h.includes('rechnen mit dem Tagesschnitt'));
     const A = fall('abrechnung', 'dobl diese Monat');
     erwarte('CSV Abrechnung = CSV der Integration', JSON.stringify(panel.csv('firma')) === JSON.stringify(A.csv_firma));
     erwarte('CSV Verbrauch = CSV der Integration', JSON.stringify(panel.csv()) === JSON.stringify(A.csv_verbrauch));

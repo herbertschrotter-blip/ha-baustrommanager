@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.155] – 2026-10-28
+
+- FE-0030: Die rote Prognose-Linie der Heizperiode war eine Gerade – alle Container rechneten mit dem Tagesschnitt
+  (jede Woche gleich viel, Oktober wie Jänner), weil die Energiesignatur an Tagen ohne Heizplan (Wochenende, Feiertag,
+  0 kWh) scheiterte. Jetzt zählen für die Signatur nur Heiztage nach Heizplan und Feiertagen, und Tage ohne Heizplan
+  bekommen auch in der Prognose 0. Bis die Signatur steht, verteilt die Hochrechnung den Verbrauch nach Heizgradtagen
+  (Vorhersage, sonst Klimamittel) – kältere Monate mehr, die Linie wird eine Kurve. Feiertage und Urlaub kennt die
+  Integration dafür für die ganze Heizperiode; der Hinweis „lernt noch …“ kommt von der Integration.
+
 ## [0.8.154] – 2026-10-28
 
 - Takt verständlich (Mockup `takt.html` Variante B, abgenommen 28.10.2026): Statt „Takt-Pause · lernend 46 % je 10 min“
