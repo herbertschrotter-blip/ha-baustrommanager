@@ -67,6 +67,7 @@ class Heizung(Funktion):
         self.plaene: dict[str, Plan | None] = {}  # Heizplan je Container von heute (letzte Auswertung)
         # lernende Regelung (0.8): Anteil und erwarteter Nachlauf je Container (letzte Auswertung), Grund, Lern-Minute
         self.tpi_jetzt: dict[str, tuple[float, float]] = {}
+        self.takt: dict[str, dict[str, Any]] = {}   # Takt je Container für die Seite (logik/lernen.takt_anzeige, anzeige.py)
         self._lern_grund: dict[str, str] = {}
         self._lern_minute: dict[str, int] = {}
         self._plan_cache: dict[tuple[date, bool, WarmAb | None], Plan | None] = {}
@@ -308,6 +309,10 @@ class Heizung(Funktion):
 
     def warm_anzeige(self, bid: str) -> dict[str, Any] | None:
         return h_lernregelung.warm_anzeige(self, bid)
+
+    def takt_anzeige(self, bid: str) -> dict[str, Any] | None:
+        """Takt der lernenden Regelung (api: laufzeit.container.<id>.takt); None, wenn sie gerade nicht im Takt regelt."""
+        return self.takt.get(bid)
 
     # ------------------------------------------------------------------ Staffelung und Schalten
     def schaltbar(self, g: GeraetInfo) -> bool:

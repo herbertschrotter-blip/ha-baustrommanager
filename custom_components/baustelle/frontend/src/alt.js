@@ -606,6 +606,16 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
   background: rgba(120,120,128,.14); border: 1px solid var(--panel-rand); }
 .ck-info span { flex: 1; min-width: 0; }
 .ck-info > button { border: 0; background: none; color: var(--ink2); font-size: 13px; cursor: pointer; padding: 0 2px; }
+.ckd-gruppen .ckd-g:has(> .tk-info) { grid-column: 1 / -1; }   /* Takt-Satz offen (Mockup takt.html B): Kästchen über die ganze Breite */
+.tk-info { justify-content: space-between; } .tk-info > span { max-width: 62ch; } .tk-info b { font-weight: 600; color: var(--ink); }
+.tk-runde { display: block; margin: 10px 0 2px; padding-top: 12px; max-width: 340px; }
+.tk-bahn { position: relative; display: flex; height: 10px; border-radius: 5px; background: rgba(120,120,128,.25); }
+.tk-an { background: var(--amber); border-radius: 5px 0 0 5px; } .tk-an.voll { border-radius: 5px; } .tk-aus { background: rgba(120,120,128,.35); border-radius: 0 5px 5px 0; }
+.tk-jetzt { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
+.tk-jetzt i { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10px; line-height: 1; padding-bottom: 2px; color: var(--ink); white-space: nowrap; }
+.tk-skala { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; font-size: 10.5px; color: var(--ink2); margin-top: 4px; gap: 2px 10px; }
+.tk-info .tk-skala > span { flex: none; min-width: auto; white-space: nowrap; }   /* .ck-info span: flex 1, min-width 0 */
+.tk-q { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 4px 0 0; background: rgba(120,120,128,.55); vertical-align: 0; } .tk-q.an { background: var(--amber); }
 .ck-gefuehl { display: flex; gap: 6px; justify-content: center; }
 .ck-gefuehl button { border: 0; border-radius: 14px; padding: 5px 9px; font: inherit; font-size: 15px; background: rgba(120,120,128,.18); color: var(--ink); cursor: pointer; white-space: nowrap; }
 .ck-gefuehl button:active { background: var(--amber); color: #1a1000; }

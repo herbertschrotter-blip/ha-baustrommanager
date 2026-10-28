@@ -515,10 +515,13 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('Lernen: Schalter setzt bereiche.polier.lernen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
     pol = pol0(); pol.modus = 'thermo'; pol.lern = Object.assign({ ...lern0 }, { an: true, zyklen: 3, anteil: 38, erwartet: .8, aus_bei: 19.2, kint: { wert: .57, start: .6, fort: .06 },
       nachlauf: { 'oel|lang|kalt': { grad: 1.2, min: 12, n: 3 } }, treffer: [.3, -.1, .2] });
-    await panel.neuZeichnen(); erwarte('Lernen: Kopf-Chips „lernt“ und „Nachlauf +0,8°“ in der Gruppe Lernen, Satz erst beim Antippen',
-      /data-g="Lernen"[^]*?data-k="lern"[^]*?data-k="nach"[^]*?Nachlauf \+0,8°/.test(ui.innerHTML) && !/Thermostat · lernend/.test(ui.innerHTML));
+    await panel.neuZeichnen(); erwarte('Lernen: Kopf-Chips „lernt mit“ und „wärmt nach +0,8°“ in der Gruppe Lernen, Satz erst beim Antippen (takt.html)',
+      /data-g="Lernen"[^]*?data-k="lern"[^]*?lernt mit[^]*?data-k="nach"[^]*?wärmt nach \+0,8°/.test(ui.innerHTML) && !/Thermostat · lernend/.test(ui.innerHTML) && !/Lernt bei jedem Heizen/.test(ui.innerHTML));
     await klick('.ck-d .ck-chip[data-k="lern"]', 10);
-    erwarte('Lernen: Regelungszeile per Antippen', /class="ck-info"[^]*?Thermostat · lernend[^]*?aus bei 19,2/.test(ui.innerHTML));
+    erwarte('Lernen: 🧠 Satz per Antippen (takt.html)', /class="ck-info[^"]*"[^]*?Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="nach"]', 10);
+    erwarte('Lernen: ↘ Satz per Antippen mit „aus bei“ (takt.html)', /class="ck-info[^"]*"[^]*?Wärmt nach dem Ausschalten noch etwa 0,8 °C nach – darum schaltet die Automatik früher ab \(bei 19,2 °C\)/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="nach"]', 10); await klick('.ck-d .ck-chip[data-k="lern"]', 10);
     await klick('.ck-d .ck-chip[data-k="lern"]', 10); erwarte('Lernen: nochmals antippen schließt den Satz', !litEl('.ck-d .ck-info'));
     await klick({ act: 'sheet', s: 'lernen' }); pruefe('Lernstand');
     erwarte('Lernen: Lernstand mit Nachlauf und Treffern', /\+1,2 °C/.test(ui.innerHTML) && /Ø ±0,2 °C/.test(ui.innerHTML) && /3\/50 Zyklen/.test(ui.innerHTML));
@@ -891,9 +894,9 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     pol().modus = 'plan'; await panel.neuZeichnen(); erwarte('WU-0004: im Zeitplan nur Ist, kein Soll ±', ui.innerHTML.includes('class="c-rad"') && !litEl('.c-rad-pm .c-pm') && /Zeitplan – der Heizkörperthermostat regelt/.test(ui.innerHTML));
     erwarte('WU-0004: Geräte-Chips mit ⏻, aktiv, ✎', ['class="c-power', 'class="c-aktiv"', 'class="bs-ic nur-admin"'].every(t => ui.innerHTML.includes(t)));
     /* Kopf der Container-Ansicht (Mockup container-kopf.html, Variante D2): Rad links, Gruppen als Kästchen, Chips aus Feldern der Integration */
-    { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, tuer: x.tuer, symbol: x.symbol, sensoren: x.sensoren, boost: x.boost };
+    { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, tuer: x.tuer, symbol: x.symbol, sensoren: x.sensoren, boost: x.boost, takt: x.takt };
       const gruppen = () => litEls('.ck-d .ckd-g').map(g => g.dataset.g).join(), chipK = g => litEls(`.ck-d .ckd-g[data-g="${g}"] .ck-chip[data-k]`).map(c => c.dataset.k).join();
-      x.modus = 'thermo'; x.z = 'pause'; x.text = 'pausiert · Tür offen'; x.boost = false;
+      x.modus = 'thermo'; x.z = 'pause'; x.text = 'pausiert · Tür offen'; x.boost = false; x.takt = null;   // Tür offen: kein Takt (api-0.7)
       x.tuer = { ...(x.tuer || { eid: 'binary_sensor.tuer_polier', sensor: 'Tür Polier' }), offen: 4 };
       x.symbol = { ...(x.symbol || {}), fenster: [{ sensor: 'binary_sensor.polier_fenster_1', zustand: 'gekippt' }, { sensor: null, zustand: 'zu' }] };
       x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 78 } : s);
@@ -925,6 +928,62 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await klick('.ck-chip[data-k="regel"]', 10); erwarte('Kopf D2: Regel-Satz per Antippen', litEl('.ck-d .ck-info span') && litEl('.ck-d .ck-info span').textContent === 'Zeitplan – der Heizkörperthermostat regelt');
       await klick('.ck-chip[data-k="regel"]', 10);
       Object.assign(x, alt); await panel.neuZeichnen(); }
+    /* Takt verständlich (Mockup takt.html, Variante B, Herbert 28.10.2026): Jetzt-Chip mit „bis“, Satz in Minuten mit Balken
+       der 10-Minuten-Runde, ◔ immer sichtbar; alle Werte aus laufzeit.container.<id>.takt, die Seite formatiert nur */
+    { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, lern: x.lern, takt: x.takt, t: x.t, tuer: x.tuer };
+      const chipK = g => litEls(`.ck-d .ckd-g[data-g="${g}"] .ck-chip[data-k]`).map(c => c.dataset.k).join();
+      const lang = k => (litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-l`) || {}).textContent, kurz = k => (litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-k`) || {}).textContent;
+      const ic = k => (litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-ic`) || {}).textContent, satz = () => (litEl('.ck-d .ck-info.tk-info span') || {}).textContent || '';
+      const R = { art: 'runde', anteil: 46, zyklus_min: 10, an_min: 4.5, aus_min: 5.5 };
+      const lage = async T => { x.takt = T; panel.s.ck = null; await panel.neuZeichnen(); };
+      x.modus = 'thermo'; x.z = 'aus'; x.t = 20.3; x.tuer = { ...(x.tuer || {}), offen: 0 };
+      x.lern = { ...(x.lern || {}), an: true, offen: null, erwartet: 0.4, aus_bei: 22, zyklus_min: 10 };
+      x.text = 'Pause bis 17:42';
+      await lage({ ...R, phase: 'pause', bis: '17:42', minute: 7.5 }); pruefe('Takt Pause');
+      erwarte('Takt: Jetzt „⏸ Pause bis 17:42“ (Handy gleich), Lernen „◔ 4½ von 10 min“ (Handy „4½/10 min“), alte Texte weg',
+        chipK('Jetzt').startsWith('zust') && ic('zust') === '⏸' && lang('zust') === 'Pause bis 17:42' && kurz('zust') === 'Pause bis 17:42'
+        && /takt/.test(chipK('Lernen')) && lang('takt') === '4½ von 10 min' && kurz('takt') === '4½/10 min' && lang('lern') === 'lernt mit' && lang('nach') === 'wärmt nach +0,4°'
+        && !/Takt-Pause|Takt \d+ %/.test(ui.innerHTML));
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10); pruefe('Takt Pause Satz');
+      erwarte('Takt: Antippen Jetzt – Satz in Minuten mit „bis“', /^Fast am Soll \(20,3 von \d+,\d °C\): Die Heizung läuft in Runden – je 10 Minuten etwa 4½ min an und 5½ min aus, damit es nicht zu warm wird\./.test(satz().replace(/\s+/g, ' '))
+        && satz().includes('Gerade Pause, wieder an um 17:42.') && /<b>Gerade Pause, wieder an um 17:42\.<\/b>/.test(litEl('.ck-d .ck-info.tk-info').innerHTML.replace(/<!--[^]*?-->/g, '')));
+      const bahn = () => litEl('.ck-d .tk-info .tk-runde'), flex = sel => ((litEl(`.ck-d .tk-info ${sel}`) || {}).style || {}).flexGrow;
+      erwarte('Takt: Balken der Runde – an 45 % amber, aus 55 % grau, Marke „jetzt“ bei 75 %, Legende', !!bahn() && flex('.tk-an') === '45' && flex('.tk-aus') === '55'
+        && litEl('.ck-d .tk-info .tk-jetzt').style.left === '75%' && litEl('.ck-d .tk-info .tk-jetzt').textContent === 'jetzt'
+        && /4½ min an · 5½ min aus/.test(litEl('.ck-d .tk-skala').textContent) && /Runde 10 min/.test(litEl('.ck-d .tk-skala').textContent));
+      erwarte('Takt: offener Satz über die ganze Breite (tk-info in der Gruppe Jetzt)', !!litEl('.ck-d .ckd-g[data-g="Jetzt"] > .ck-info.tk-info'));
+      await klick('.ck-d .ck-chip[data-k="takt"]', 10);
+      erwarte('Takt: Antippen ◔ – Satz mit Minuten und %, Balken', satz().includes('In jeder 10-Minuten-Runde läuft die Heizung gerade etwa 4½ min (46 %).') && !!bahn()
+        && !!litEl('.ck-d .ckd-g[data-g="Lernen"] > .ck-info.tk-info') && litEls('.ck-d .ck-info').length === 1);
+      await lage({ ...R, phase: 'an', bis: '17:38', minute: 2 });
+      erwarte('Takt: heizt gerade im an-Teil – „🔥 an bis 17:38“ (nicht nur in der Pause)', ic('zust') === '🔥' && lang('zust') === 'an bis 17:38'
+        && litEl('.ck-d .ck-chip[data-k="zust"]').classList.contains('warm'));
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10);
+      erwarte('Takt: Satz „Gerade an, Pause ab 17:38.“, Marke bei 20 %', satz().includes('Gerade an, Pause ab 17:38.') && litEl('.ck-d .tk-info .tk-jetzt').style.left === '20%');
+      await lage({ art: 'dauernd', anteil: 100, zyklus_min: 10, an_min: 10, aus_min: 0, phase: 'an', bis: null, minute: null });
+      erwarte('Takt: 100 % – „🔥 heizt durch“ (Handy „durch“), ◔ bleibt: „dauernd an“ (Handy „dauernd“)', ic('zust') === '🔥' && lang('zust') === 'heizt durch' && kurz('zust') === 'durch'
+        && lang('takt') === 'dauernd an' && kurz('takt') === 'dauernd');
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10); pruefe('Takt dauernd Satz');
+      erwarte('Takt: dauernd – Satz und Balken ganz amber ohne aus-Teil und ohne Marke', satz().startsWith('Noch deutlich unter dem Soll (20,3 von') && satz().includes('Die Heizung läuft durchgehend.')
+        && flex('.tk-an') === '100' && litEl('.ck-d .tk-info .tk-an').classList.contains('voll') && !litEl('.ck-d .tk-info .tk-aus') && !litEl('.ck-d .tk-info .tk-jetzt')
+        && /dauernd an/.test(litEl('.ck-d .tk-skala').textContent));
+      x.text = 'Soll erreicht · hält 22,4 °C';
+      await lage({ art: 'erreicht', anteil: 0, zyklus_min: 10, an_min: 0, aus_min: 10, phase: 'pause', bis: null, minute: null });
+      erwarte('Takt: Soll erreicht – „✓ Soll erreicht“ (Handy „am Soll“), ◔ bleibt: „0 von 10 min“ (Handy „0/10 min“)', ic('zust') === '✓' && lang('zust') === 'Soll erreicht' && kurz('zust') === 'am Soll'
+        && lang('takt') === '0 von 10 min' && kurz('takt') === '0/10 min');
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10);
+      erwarte('Takt: erreicht – Satz ohne Balken', satz().startsWith('Soll erreicht (20,3 von') && !bahn());
+      await klick('.ck-d .ck-chip[data-k="takt"]', 10);
+      erwarte('Takt: erreicht – ◔-Satz ohne Balken', satz().includes('bleibt die Heizung aus (0 von 10 min)') && !bahn());
+      x.text = 'Pause · wartet';
+      await lage({ ...R, phase: 'pause', bis: null, minute: 1 });
+      erwarte('Takt: Runde unterbrochen (bis null) – „⏸ Pause“ ohne Uhrzeit', lang('zust') === 'Pause' && kurz('zust') === 'Pause');
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10);
+      erwarte('Takt: unterbrochen – Satz ohne erfundene Uhrzeit', satz().includes('Gerade Pause – sie wartet, bis sie wieder heizen darf.') && !/um \d\d:\d\d/.test(satz()));
+      x.text = 'heizt auf 22,4 °C · Arbeitszeit'; x.z = 'heizt';
+      await lage(null);
+      erwarte('Takt: ohne Takt (z. B. außerhalb der Regelung) Zustandschip wie bisher, kein ◔', lang('zust') === 'heizt auf 22,4 °C' && !litEl('.ck-d .ck-chip[data-k="takt"]'));
+      Object.assign(x, alt); panel.s.ck = null; await panel.neuZeichnen(); }
     neu(); await klick({ act: 'g-aktiv', i: '0' }, 20);
     erwarte('BSM-034.02: Chip setzt den Status über baustelle/geraet', letzte('baustelle/geraet').some(x => x.aktion === 'status' && x.geraet === pol().geraete[0].id && x.status === 'inaktiv'));
     await klick({ act: 'g-bearbeiten', i: '0' }); pruefe('Gerät bearbeiten');

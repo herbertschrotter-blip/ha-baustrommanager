@@ -226,6 +226,15 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   `{an, zyklen, kint: {wert, start, fort}, kext: {…}, nachlauf: {"oel|lang|kalt": {grad, min, n}, …}, treffer: [Spitze −
   Soll …], anteil (% je Zyklus oder null), erwartet (°C), aus_bei (°C), zyklus_min}`. `baustelle/aktion` `lern_reset`
   mit `bereich` setzt den Lernstand zurück.
+- Takt der lernenden Regelung (Mockup `takt.html`, Variante B, Herbert 28.10.2026; `lernen.takt_anzeige`):
+  `laufzeit.container.<id>.takt` = `{art: "runde"|"dauernd"|"erreicht", anteil (%), zyklus_min, an_min, aus_min (je
+  Runde, auf ½ min), phase: "an"|"pause", bis ("HH:MM" | null), minute (Stelle „jetzt“ in der Runde, nur bei „runde“,
+  sonst null)}` – nur, solange der Container selbst nach TPI auf das Soll regelt (Frühstart, Vorheizen, Arbeitszeit,
+  Nachheizen, Trocknen, Bei Bedarf; nicht von Hand, nicht offline, nicht bei Tür offen), sonst `null`. `dauernd` = an-Teil
+  über `zyklus_min − 2` min, `erreicht` = unter 2 min. `bis`: Ende der laufenden Phase nach `tpi_ein` mit dem Anteil von
+  jetzt (an-Teil mit Mindestlaufzeit, Pause bis zum Beginn der nächsten Runde); `null` bei dauernd/erreicht und wenn die
+  Runde unterbrochen ist (der Heizkörper steht anders, als die Regelung will: Staffelung, Mindestpause). Der Zustandstext
+  sagt dann „Pause bis 17:42“ bzw. „Pause · wartet“ (bis 0.8.153 „Takt-Pause · lernend 46 % je 10 min“).
 - „Warm ab“ (AN-0004, Optimum Start): Einstellungen `heizung.warm_vor_min` (Soll erreicht … min vor Arbeitsbeginn, 0–240),
   `heizung.warm_nach_min` (warm halten … min nach Arbeitsende, 0–240), `heizung.warm_max_min` (frühestens … min vor
   Arbeitsbeginn, 15–480); je Container `bereiche.<id>.warm_vor` / `warm_nach` (Zahl oder `null` = wie die Baustelle).

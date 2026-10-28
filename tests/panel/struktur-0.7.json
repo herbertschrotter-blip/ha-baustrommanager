@@ -564,7 +564,8 @@
      "bedarf": false,
      "prio": "normal",
      "anschluss": "nord",
-     "tuer": "binary_sensor.tuer_polier"
+     "tuer": "binary_sensor.tuer_polier",
+     "lernen": true
     },
     "mannschaft": {
      "auto": true,
@@ -749,6 +750,71 @@
       "licht": null,
       "licht_an": false,
       "rahmen": "#37474f"
+     },
+     "modus": "thermo",
+     "lernen": {
+      "an": true,
+      "zyklen": 12,
+      "kint": {
+       "wert": 0.57,
+       "start": 0.6,
+       "fort": 0.24
+      },
+      "kext": {
+       "wert": 0.011,
+       "start": 0.01,
+       "fort": 0.1
+      },
+      "nachlauf": {},
+      "treffer": [
+       0.2,
+       -0.1,
+       0.3
+      ],
+      "aufheizen": {},
+      "offen": null,
+      "ruhe_bis": null,
+      "auf_n": 3,
+      "anteil": 63,
+      "erwartet": 0.8,
+      "aus_bei": 20.2,
+      "zyklus_min": 10,
+      "warm": {
+       "gelernt": true,
+       "geschaetzt": null,
+       "band": "mild",
+       "rate": 1.2,
+       "n": 5,
+       "n_noetig": 3,
+       "vor": 15,
+       "nach": 0,
+       "max": 120,
+       "vor_eigen": false,
+       "nach_eigen": false,
+       "aufheiz_min": 85,
+       "innen": 19.4,
+       "soll": 21.0,
+       "fest": false,
+       "anzahl": 1,
+       "plan": {
+        "start": 320,
+        "ziel": 405,
+        "a": 420,
+        "b": 990,
+        "ende": 990,
+        "begrenzt": false
+       }
+      }
+     },
+     "takt": {
+      "art": "runde",
+      "anteil": 63,
+      "zyklus_min": 10,
+      "an_min": 6.5,
+      "aus_min": 3.5,
+      "phase": "an",
+      "bis": "16:27",
+      "minute": 0.0
      }
     },
     "mannschaft": {

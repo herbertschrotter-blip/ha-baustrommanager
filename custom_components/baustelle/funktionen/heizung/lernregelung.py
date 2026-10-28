@@ -85,9 +85,9 @@ def _tpi(hz: Heizung, info: BereichInfo, e: Mapping[str, Any], temp: float | Non
     log = [(ta, zeit(b)) for a, b in stand["ein"] if (ta := zeit(a)) is not None]
     kl = lernen.klasse(lernen.ein_minuten(log, jetzt))
     nachlauf = lernen.nachlauf_erwartet(stand["nachlauf"], hz._lern_art(info.id), kl, lernen.band(wetter.aussen))
-    # je Container um 3 min versetzt, damit nicht alle zur selben Minute einschalten
+    # je Container versetzt, damit nicht alle zur selben Minute einschalten
     t = lernen.Tpi(kint=float(stand["kint"]), kext=float(stand["kext"]), nachlauf=nachlauf, aussen=wetter.aussen,
-                   minute_im_zyklus=(jetzt.hour * 60 + jetzt.minute + 3 * info.nr) % lernen.ZYKLUS_MIN)
+                   minute_im_zyklus=lernen.zyklus_minute(jetzt, info.nr))
     hz.tpi_jetzt[info.id] = (lernen.tpi_anteil(temp, soll_t, t), nachlauf)
     return t
 

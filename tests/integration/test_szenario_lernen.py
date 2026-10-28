@@ -150,11 +150,72 @@ async def test_thermo_regelt_lernend_nach_tpi(hass: HomeAssistant, freezer, shel
     # Hysterese hätte bei 19,5 (≤ Soll − 0,3) durchgehend geheizt; TPI: etwa die Hälfte des Zyklus ein
     assert 3 <= sum(zustaende) <= 6, zustaende
     assert _c(hass, entry)["modus"] == "thermo"
-    # FE-0014: in der Pause des Takts zeigt die Kachel nicht „aus bis …“, sondern die Takt-Pause
+    # FE-0014: in der Pause des Takts zeigt die Kachel nicht „aus bis …“, sondern die Takt-Pause – seit takt.html
+    # verständlich mit Uhrzeit („Pause bis 10:20“ statt „Takt-Pause · lernend 46 % je 10 min“)
     while _an(hass, "switch.hk1"):
         await uhr.minute(19.5)
-    import re
-    assert re.fullmatch(r"Takt-Pause · lernend 4\d % je 10 min", _c(hass, entry)["text"]), _c(hass, entry)["text"]
+    c = _c(hass, entry)
+    assert c["text"] == f"Pause bis {c['takt']['bis']}" and c["takt"]["phase"] == "pause", c
+
+
+async def test_takt_bis_stimmt_mit_dem_schalten(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Mockup takt.html (Variante B): `takt` je Container mit Phase und „bis“ – auch im an-Teil der Runde. „bis“ ist die
+    Minute, zu der die Regelung tatsächlich schaltet (tpi_ein mit Mindestlaufzeit, Pause bis zur nächsten Runde)."""
+    entry, st = await _einrichten(hass, freezer, shellys)
+    hass.states.async_set("sensor.temp_c1", "19.5")
+    freezer.move_to(ZEHN_UHR)
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    uhr = Uhr(hass, freezer, st, ZEHN_UHR)
+    gesehen = set()
+    for _ in range(25):
+        await uhr.minute(19.5)
+        c = _c(hass, entry)
+        t = c["takt"]
+        assert t is not None and t["art"] == "runde" and t["zyklus_min"] == 10 and t["an_min"] + t["aus_min"] == 10
+        # 0,6·0,5 + 0,01·15,5 ≈ 46 % (lernt mit: K-Werte, Nachlauf) → je Runde etwa 4½ min an, auf ½ min
+        assert 40 <= t["anteil"] <= 55 and t["an_min"] in (4.0, 4.5, 5.0, 5.5) and abs(t["an_min"] - t["anteil"] / 10) <= 0.3
+        assert t["phase"] == ("an" if _an(hass, "switch.hk1") else "pause") and t["bis"] is not None
+        if t["phase"] == "an":
+            assert c["text"].startswith("heizt auf 20,0 °C"), c["text"]     # im an-Teil: Zustandstext wie bisher
+        else:
+            assert c["text"] == f"Pause bis {t['bis']}"
+        gesehen.add(t["phase"])
+    assert gesehen == {"an", "pause"}
+    # Gegenprobe Minute für Minute: genau zum „bis“ schaltet der Heizkörper
+    for _ in range(3):
+        t = _c(hass, entry)["takt"]
+        vorher = _an(hass, "switch.hk1")
+        while uhr.t.strftime("%H:%M") != t["bis"]:
+            assert _an(hass, "switch.hk1") == vorher, (uhr.t, t)
+            await uhr.minute(19.5)
+        assert _an(hass, "switch.hk1") != vorher, (uhr.t, t)
+
+
+async def test_takt_unterbrochen_ohne_falsches_bis(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Hält die Staffelung (Mindestpause) den Heizkörper zu Beginn der Runde aus, steht kein „Pause bis …“ da, das nicht
+    stimmt; Tür offen: kein Takt (die Tür pausiert, nicht die Regelung)."""
+    entry, st = await _einrichten(hass, freezer, shellys)
+    st.e["staffel"].update({"an": True, "min_pause_min": 9})
+    hass.states.async_set("sensor.temp_c1", "19.5")
+    freezer.move_to(ZEHN_UHR)
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    uhr = Uhr(hass, freezer, st, ZEHN_UHR)
+    gewartet = False
+    for _ in range(30):
+        await uhr.minute(19.5)
+        t = _c(hass, entry)["takt"]
+        if t["phase"] == "pause" and t["bis"] is None:   # Runde müsste laufen, Mindestpause hält
+            gewartet = True
+            assert _c(hass, entry)["text"] == "Pause · wartet"
+            assert not _an(hass, "switch.hk1")
+    assert gewartet
+    st.e["staffel"]["an"] = False
+    st.einstellungen.bereich(C1)["tuer"] = "binary_sensor.tuer_c1"
+    hass.states.async_set("binary_sensor.tuer_c1", "on")
+    await uhr.minute(19.5, n=12)
+    assert st.daten.grund[C1] == "tuer_offen" and _c(hass, entry)["takt"] is None
 
 
 async def test_plan_modus_ignoriert_lernende_regelung(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:

@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.const import STATE_ON
 
-from ...const import HEIZROLLEN
+from ...const import HEIZROLLEN, ROLLE_HEIZKOERPER
 from ...logik import lernen
 from ...logik import warnungen as warn_logik
 from ...logik.arbeitszeit import AusnahmeArt, StatusArt, frei_gilt, status as plan_status, uhrzeit
 from ...logik.regelung import SollGrund
 from ...texte import wochentag
 from ..basis import mitternacht, zahl
-from .typen import ABSCHNITT_TEXT, HEIZ_GRUENDE
+from .typen import ABSCHNITT_TEXT, HEIZ_GRUENDE, TAKT_GRUENDE
 
 if TYPE_CHECKING:
     from . import Heizung
+    from ...logik.regelung import LageContainer, Soll
     from ...steuerung import BereichInfo, GeraetInfo
     from ..basis import SollJeBereich
 
@@ -68,6 +69,8 @@ def anzeige(hz: Heizung, bid: str, info: BereichInfo, jetzt: datetime, soll: Sol
     # FE-0015: mit Fühler regelt die Integration auf das Soll („heizt auf 22,6 °C“), sonst gilt der Heizplan und der
     # Regler am Heizkörper – dazu der Abschnitt des Tages
     regelt = hz.modus(bid) in ("thermo", "bedarf") and st.daten.temperatur[bid] is not None
+    takt = _takt(hz, bid, s_c, jetzt) if not offline else None
+    takt_gilt = False   # nur in den Zweigen, in denen die lernende Regelung gerade im Takt schaltet
     abschnitt = ABSCHNITT_TEXT.get(str(grund))
     dazu = f" · {abschnitt}" if abschnitt else ""
     if offline:
@@ -91,17 +94,20 @@ def anzeige(hz: Heizung, bid: str, info: BereichInfo, jetzt: datetime, soll: Sol
         zustand, text = "aus", "aus · nur Frostschutz"
     elif heizer_an and grund == SollGrund.TROCKNEN:
         zustand, text = "trocknen", "Kleidung trocknen"
+        takt_gilt = regelt
     elif heizer_an:
         zustand = "heizt"
         if grund == SollGrund.BEDARF:
             bis = hz.bis("bedarf_bis", bid, jetzt) or hz._termin_ende(bid, jetzt)
             text = f"heizt bis {bis.strftime('%H:%M')}" if bis else "heizt · bei Bedarf"
+            takt_gilt = True
         elif grund == SollGrund.HAND or not e["auto"] or any(g.id in st.lz["hand"] for g in geraete if g.rolle in HEIZROLLEN):
             text = "heizt · Hand"   # auch ein Heizkörper im Handbetrieb (FE-0004), auch ohne Fühler (Szenarien)
         elif grund == SollGrund.ABSENKEN:
             text = "heizt · abgesenkt"
         elif regelt:
             text = f"heizt auf {warn_logik._zahl(hz.soll_temperatur(bid))} °C{dazu}"
+            takt_gilt = True
         else:
             text = f"heizt · Heizplan{dazu}"
     else:
@@ -110,17 +116,36 @@ def anzeige(hz: Heizung, bid: str, info: BereichInfo, jetzt: datetime, soll: Sol
         text = f"aus bis {naechster}" if naechster else "aus"
         # FE-0014: in der Heizzeit aus, weil die Regelung gerade nicht heizen will – das sagen, statt „aus bis …“
         if grund in HEIZ_GRUENDE and grund not in (SollGrund.FROST, SollGrund.ABSENKEN):
-            tpi = hz.tpi_jetzt.get(bid)
             innen = st.daten.temperatur[bid]
-            if tpi is not None and 0 < tpi[0] < 1:
-                text = f"Takt-Pause · lernend {round(tpi[0] * 100)} % je {lernen.ZYKLUS_MIN} min"
+            takt_gilt = takt is not None
+            if takt is not None and takt["art"] != "erreicht":
+                # Takt-Pause verständlich (Mockup takt.html): bis wann; ohne „bis“ ist die Runde unterbrochen
+                text = f"Pause bis {takt['bis']}" if takt["bis"] else "Pause · wartet"
             elif innen is not None:
                 text = f"Soll erreicht · hält {warn_logik._zahl(hz.soll_temperatur(bid))} °C"
     if an and not heizer_an and zustand == "aus":
         text = "aus · Steckdose an"
+        takt_gilt = False
     if zustand in ("aus", "bereit") and grund != SollGrund.TUER_OFFEN and hz._tuer_offen(bid):
         text = f"{text} · 🚪 Tür offen"
+    if takt is not None and takt_gilt:
+        hz.takt[bid] = takt
+    else:
+        hz.takt.pop(bid, None)
     return zustand, text, str(grund)
+
+
+def _takt(hz: Heizung, bid: str, s_c: tuple[Soll, LageContainer] | None, jetzt: datetime) -> dict[str, Any] | None:
+    """Takt der lernenden Regelung (logik/lernen.takt_anzeige) – nur, wenn sie gerade selbst auf das Soll regelt
+    (`TAKT_GRUENDE`, mit TPI, kein Heizkörper von Hand). `an`: ein Heizkörper, den die Automatik schaltet, ist ein."""
+    if s_c is None or s_c[0].grund not in TAKT_GRUENDE or (lage := s_c[1]).tpi is None or lage.temperatur is None:
+        return None
+    heizer = [g for g in hz.st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER]
+    if any(g.id in hz.st.lz["hand"] for g in heizer):
+        return None
+    an = any((z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON for g in heizer if hz.st.geraet_aktiv(g))
+    anteil = lernen.tpi_anteil(lage.temperatur, lage.soll, lage.tpi)
+    return lernen.takt_anzeige(anteil, lage.tpi.minute_im_zyklus, an, jetzt)
 
 
 def _zieht_strom(hz: Heizung, g: GeraetInfo) -> bool:

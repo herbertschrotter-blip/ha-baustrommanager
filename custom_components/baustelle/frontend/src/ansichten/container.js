@@ -35,11 +35,46 @@ const vz = x => x > 0 ? '+' : '−';
 const ckZ = p => p.s.ck && p.s.ck.id === p.b.id ? p.s.ck : { id: p.b.id, info: null, modus: false };
 const ckSetzen = (p, x) => { p.s.ck = { ...ckZ(p), ...x }; p.neuZeichnen(); };
 
+/* Takt der lernenden Regelung (Mockup takt.html, Variante B, Herbert 28.10.2026): Art, Minuten, Phase und „bis“ liefert die
+   Integration (laufzeit.container.<id>.takt); die Seite formatiert nur (4.5 → „4½“) und zeichnet die 10-Minuten-Runde. */
+const minT = x => { const g = Math.floor(x); return Math.abs(x - g - 0.5) < 0.01 ? (g ? `${g}½` : '½') : de(x, 0); };
+function rundeBalken(T) {   // an-Teil amber, aus-Teil grau, Marke „jetzt“; bei Soll erreicht kein Balken
+  if (T.art === 'erreicht') return nothing;
+  const an = T.an_min / T.zyklus_min * 100, jetzt = zahl(T.minute) ? Math.min(100, T.minute / T.zyklus_min * 100) : null;
+  return html`<span class="tk-runde" aria-hidden="true"><span class="tk-bahn"><span class="tk-an ${an >= 100 ? 'voll' : ''}" style="flex:${an} 0 0"></span>${an < 100 ? html`<span class="tk-aus" style="flex:${100 - an} 0 0"></span>` : nothing}
+      ${jetzt === null ? nothing : html`<span class="tk-jetzt" style="left:${jetzt}%"><i>jetzt</i></span>`}</span>
+      <span class="tk-skala">${T.art === 'runde' ? html`<span><i class="tk-q an"></i>${minT(T.an_min)} min an · <i class="tk-q"></i>${minT(T.aus_min)} min aus</span>` : html`<span><i class="tk-q an"></i>dauernd an</span>`}<span>Runde ${T.zyklus_min} min</span></span></span>`;
+}
+function taktJetzt(p, b, T) {
+  const ist = de(b.t), soll = de(p.sollVon(b)), Z = T.zyklus_min, pause = T.phase === 'pause';
+  if (T.art === 'dauernd' && !pause) return { k: 'zust', ic: '🔥', ton: 'warm', lang: 'heizt durch', kurz: 'durch', breit: true,
+    info: html`Noch deutlich unter dem Soll (${ist} von ${soll} °C): Die Heizung läuft durchgehend. Kurz vor dem Soll läuft sie in Runden (je ${Z} Minuten an und aus), damit es nicht zu warm wird.${rundeBalken(T)}` };
+  if (T.art === 'erreicht') return { k: 'zust', ic: '✓', ton: '', lang: 'Soll erreicht', kurz: 'am Soll', breit: true,
+    info: html`Soll erreicht (${ist} von ${soll} °C): Die Heizung bleibt aus. Wird es kühler, läuft sie wieder in kurzen Runden.` };
+  if (T.art === 'dauernd') return { k: 'zust', ic: '⏸', ton: '', lang: 'Pause', kurz: 'Pause', breit: true,   // Runde unterbrochen (Staffelung)
+    info: html`Noch deutlich unter dem Soll (${ist} von ${soll} °C): Die Heizung soll durchgehend laufen. <b>Gerade Pause – sie wartet, bis sie wieder heizen darf.</b>` };
+  const lang = `${pause ? 'Pause' : 'an'}${T.bis ? ` bis ${T.bis}` : ''}`;
+  const jetzt = T.bis ? (pause ? `Gerade Pause, wieder an um ${T.bis}.` : `Gerade an, Pause ab ${T.bis}.`) : (pause ? 'Gerade Pause – sie wartet, bis sie wieder heizen darf.' : 'Gerade an.');
+  return { k: 'zust', ic: pause ? '⏸' : '🔥', ton: pause ? '' : 'warm', lang, kurz: lang, breit: true,
+    info: html`Fast am Soll (${ist} von ${soll} °C): Die Heizung läuft in Runden – je ${Z} Minuten etwa ${minT(T.an_min)} min an und ${minT(T.aus_min)} min aus, damit es nicht zu warm wird.
+      <b>${jetzt}</b> Je näher am Soll, desto kürzer läuft sie.${rundeBalken(T)}` };
+}
+function taktRunde(T) {   // ◔ immer sichtbar, solange die Integration einen Takt liefert (Herbert: auch dauernd an / Soll erreicht)
+  const Z = T.zyklus_min;
+  if (T.art === 'dauernd') return { k: 'takt', ic: '◔', ton: '', lang: 'dauernd an', kurz: 'dauernd', breit: true,
+    info: html`Noch weit unter dem Soll: Die Heizung läuft die ganze ${Z}-Minuten-Runde durch. Kurz vor dem Soll läuft sie nur noch einen Teil jeder Runde.${rundeBalken(T)}` };
+  if (T.art === 'erreicht') return { k: 'takt', ic: '◔', ton: '', lang: `0 von ${Z} min`, kurz: `0/${Z} min`, breit: true,
+    info: `Am Soll: In dieser ${Z}-Minuten-Runde bleibt die Heizung aus (0 von ${Z} min). Wird es kühler, läuft sie wieder einen Teil jeder Runde.` };
+  return { k: 'takt', ic: '◔', ton: '', lang: `${minT(T.an_min)} von ${Z} min`, kurz: `${minT(T.an_min)}/${Z} min`, breit: true,
+    info: html`In jeder ${Z}-Minuten-Runde läuft die Heizung gerade etwa ${minT(T.an_min)} min (${T.anteil} %). Das rechnet die Automatik laufend neu – je näher am Soll, desto kürzer.${rundeBalken(T)}` };
+}
+
 function kopfChips(p, b) {
-  const d = p.d, L = [], text = TEXT(b), takt = /^Takt-Pause/.test(text), lern = b.lern && b.lern.an && ['thermo', 'bedarf'].includes(b.modus) ? b.lern : null;
+  const d = p.d, L = [], text = TEXT(b), lern = b.lern && b.lern.an && ['thermo', 'bedarf'].includes(b.modus) ? b.lern : null, T = b.takt;
   const erst = text.split(' · ')[0].replace(/^⚡\s*/, '') || b.z;   // erster Teil des Zustandstexts der Integration
-  L.push({ k: 'zust', ic: takt ? '⏸' : ZUST_IC[b.z] || '•', ton: b.z === 'heizt' ? 'warm' : b.z === 'frost' ? 'blau' : b.z === 'offline' ? 'rot' : '',
-    lang: takt ? 'Takt-Pause' : erst, kurz: takt ? 'Takt' : ZUST_KURZ[b.z] || erst, info: text });
+  if (T) L.push(taktJetzt(p, b, T));   // Takt: was gerade läuft und bis wann (statt des Zustandstexts)
+  else L.push({ k: 'zust', ic: ZUST_IC[b.z] || '•', ton: b.z === 'heizt' ? 'warm' : b.z === 'frost' ? 'blau' : b.z === 'offline' ? 'rot' : '',
+    lang: erst, kurz: ZUST_KURZ[b.z] || erst, info: text });
   if (b.tuer && b.tuer.offen) L.push({ k: 'tuer', ic: '🚪', ton: 'amber', lang: `Tür offen seit ${b.tuer.offen} min`, kurz: `${b.tuer.offen} min`,
     info: `${b.tuer.sensor}: offen seit ${b.tuer.offen} min – Heizung pausiert nach ${d.e.tuer_pause} min, Meldung nach ${d.e.tuer_melden} min` });
   for (const [i, f] of ((b.symbol && b.symbol.fenster) || []).entries()) if (f.sensor && f.zustand && f.zustand !== 'zu')
@@ -51,9 +86,12 @@ function kopfChips(p, b) {
     const w = lern.warm;
     if (w && w.gelernt && w.plan) L.push({ k: 'warm', ic: '⏱', ton: '', lang: `warm um ${uhr(w.plan.ziel)} · ab ${uhr(w.plan.start)}`, kurz: uhr(w.plan.ziel), info: p.warmText(b) });
     else if (w) L.push({ k: 'warm', ic: '⏱', ton: '', lang: 'Aufheizen lernt noch', kurz: 'lernt', info: p.warmText(b) });
-    L.push({ k: 'lern', ic: '🧠', ton: lern.offen ? 'amber' : '', lang: lern.offen ? 'lernt gerade nicht' : 'lernt', kurz: lern.offen ? 'lernt nicht' : 'lernt', info: p.offenText(b) || p.cRegelText(b) });
-    if (zahl(lern.erwartet)) L.push({ k: 'nach', ic: '↘', ton: '', lang: `Nachlauf +${de(lern.erwartet)}°`, kurz: `+${de(lern.erwartet)}°`, info: `Nachlauf +${de(lern.erwartet)} °C → aus bei ${de(lern.aus_bei)} °C` });
-    if (takt && zahl(lern.anteil)) L.push({ k: 'takt', ic: '◔', ton: '', lang: `Takt ${lern.anteil} % je ${lern.zyklus_min} min`, kurz: `${lern.anteil} %`, info: text });
+    L.push(lern.offen ? { k: 'lern', ic: '🧠', ton: 'amber', lang: 'lernt gerade nicht', kurz: 'lernt nicht', info: p.offenText(b) || p.cRegelText(b) }
+      : { k: 'lern', ic: '🧠', ton: '', lang: 'lernt mit', kurz: 'lernt',
+        info: 'Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird und wie viel er nach dem Ausschalten nachwärmt – damit er pünktlich warm ist und nicht zu warm wird.' });
+    if (zahl(lern.erwartet)) L.push({ k: 'nach', ic: '↘', ton: '', lang: `wärmt nach +${de(lern.erwartet)}°`, kurz: `+${de(lern.erwartet)}°`,
+      info: `Wärmt nach dem Ausschalten noch etwa ${de(lern.erwartet)} °C nach – darum schaltet die Automatik früher ab (bei ${de(lern.aus_bei)} °C).` });
+    if (T) L.push(taktRunde(T));
   } else L.push({ k: 'regel', ic: 'ⓘ', ton: '', lang: REGEL_T[b.modus] || 'Regel', kurz: REGEL_T[b.modus] || 'Regel', info: p.cRegelText(b) });
   return L;
 }
@@ -65,7 +103,7 @@ function chip(p, c) {
       @click=${() => ckSetzen(p, { info: auf ? null : c.k, modus: false })}><span class="ck-ic">${c.ic}</span>${chipText(c)}</button>`;
 }
 const info = (p, L) => { const c = L.find(x => x.k === ckZ(p).info);
-  return c ? html`<div class="ck-info" role="note"><span>${c.info}</span><button aria-label="schließen" @click=${() => ckSetzen(p, { info: null })}>✕</button></div>` : nothing; };
+  return c ? html`<div class=${c.breit ? 'ck-info tk-info' : 'ck-info'} role="note"><span>${c.info}</span><button aria-label="schließen" @click=${() => ckSetzen(p, { info: null })}>✕</button></div>` : nothing; };
 
 /* Soll unter dem Rad: kurze Chips statt Satz (Werte der Integration: soll.eigen/versch, soll_gleitend.soll); „↺ gleitend“ bleibt */
 function sollChips(p, b) {

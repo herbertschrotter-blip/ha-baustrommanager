@@ -1014,6 +1014,7 @@ function bauen(r5, hass, ersatzZone) {
       boostBis: c4.boost_bis || null,
       modus: pumpe ? null : MODI.some((m3) => m3[0] === c4.modus) ? c4.modus : eb.bedarf ? "bedarf" : eb.auto === false ? "hand" : b3.fuehler ? "thermo" : "plan",
       lern: c4.lernen || null,
+      takt: c4.takt || null,
       groesse: c4.groesse || null,
       symbol: c4.symbol || null,
       warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null,
@@ -2653,15 +2654,100 @@ var ckSetzen = (p4, x2) => {
   p4.s.ck = { ...ckZ(p4), ...x2 };
   p4.neuZeichnen();
 };
-function kopfChips(p4, b3) {
-  const d3 = p4.d, L2 = [], text2 = TEXT(b3), takt = /^Takt-Pause/.test(text2), lern = b3.lern && b3.lern.an && ["thermo", "bedarf"].includes(b3.modus) ? b3.lern : null;
-  const erst = text2.split(" · ")[0].replace(/^⚡\s*/, "") || b3.z;
-  L2.push({
+var minT = (x2) => {
+  const g2 = Math.floor(x2);
+  return Math.abs(x2 - g2 - 0.5) < 0.01 ? g2 ? `${g2}½` : "½" : de(x2, 0);
+};
+function rundeBalken(T2) {
+  if (T2.art === "erreicht") return A;
+  const an = T2.an_min / T2.zyklus_min * 100, jetzt = zahl(T2.minute) ? Math.min(100, T2.minute / T2.zyklus_min * 100) : null;
+  return b2`<span class="tk-runde" aria-hidden="true"><span class="tk-bahn"><span class="tk-an ${an >= 100 ? "voll" : ""}" style="flex:${an} 0 0"></span>${an < 100 ? b2`<span class="tk-aus" style="flex:${100 - an} 0 0"></span>` : A}
+      ${jetzt === null ? A : b2`<span class="tk-jetzt" style="left:${jetzt}%"><i>jetzt</i></span>`}</span>
+      <span class="tk-skala">${T2.art === "runde" ? b2`<span><i class="tk-q an"></i>${minT(T2.an_min)} min an · <i class="tk-q"></i>${minT(T2.aus_min)} min aus</span>` : b2`<span><i class="tk-q an"></i>dauernd an</span>`}<span>Runde ${T2.zyklus_min} min</span></span></span>`;
+}
+function taktJetzt(p4, b3, T2) {
+  const ist = de(b3.t), soll2 = de(p4.sollVon(b3)), Z2 = T2.zyklus_min, pause = T2.phase === "pause";
+  if (T2.art === "dauernd" && !pause) return {
     k: "zust",
-    ic: takt ? "⏸" : ZUST_IC[b3.z] || "•",
+    ic: "🔥",
+    ton: "warm",
+    lang: "heizt durch",
+    kurz: "durch",
+    breit: true,
+    info: b2`Noch deutlich unter dem Soll (${ist} von ${soll2} °C): Die Heizung läuft durchgehend. Kurz vor dem Soll läuft sie in Runden (je ${Z2} Minuten an und aus), damit es nicht zu warm wird.${rundeBalken(T2)}`
+  };
+  if (T2.art === "erreicht") return {
+    k: "zust",
+    ic: "✓",
+    ton: "",
+    lang: "Soll erreicht",
+    kurz: "am Soll",
+    breit: true,
+    info: b2`Soll erreicht (${ist} von ${soll2} °C): Die Heizung bleibt aus. Wird es kühler, läuft sie wieder in kurzen Runden.`
+  };
+  if (T2.art === "dauernd") return {
+    k: "zust",
+    ic: "⏸",
+    ton: "",
+    lang: "Pause",
+    kurz: "Pause",
+    breit: true,
+    // Runde unterbrochen (Staffelung)
+    info: b2`Noch deutlich unter dem Soll (${ist} von ${soll2} °C): Die Heizung soll durchgehend laufen. <b>Gerade Pause – sie wartet, bis sie wieder heizen darf.</b>`
+  };
+  const lang = `${pause ? "Pause" : "an"}${T2.bis ? ` bis ${T2.bis}` : ""}`;
+  const jetzt = T2.bis ? pause ? `Gerade Pause, wieder an um ${T2.bis}.` : `Gerade an, Pause ab ${T2.bis}.` : pause ? "Gerade Pause – sie wartet, bis sie wieder heizen darf." : "Gerade an.";
+  return {
+    k: "zust",
+    ic: pause ? "⏸" : "🔥",
+    ton: pause ? "" : "warm",
+    lang,
+    kurz: lang,
+    breit: true,
+    info: b2`Fast am Soll (${ist} von ${soll2} °C): Die Heizung läuft in Runden – je ${Z2} Minuten etwa ${minT(T2.an_min)} min an und ${minT(T2.aus_min)} min aus, damit es nicht zu warm wird.
+      <b>${jetzt}</b> Je näher am Soll, desto kürzer läuft sie.${rundeBalken(T2)}`
+  };
+}
+function taktRunde(T2) {
+  const Z2 = T2.zyklus_min;
+  if (T2.art === "dauernd") return {
+    k: "takt",
+    ic: "◔",
+    ton: "",
+    lang: "dauernd an",
+    kurz: "dauernd",
+    breit: true,
+    info: b2`Noch weit unter dem Soll: Die Heizung läuft die ganze ${Z2}-Minuten-Runde durch. Kurz vor dem Soll läuft sie nur noch einen Teil jeder Runde.${rundeBalken(T2)}`
+  };
+  if (T2.art === "erreicht") return {
+    k: "takt",
+    ic: "◔",
+    ton: "",
+    lang: `0 von ${Z2} min`,
+    kurz: `0/${Z2} min`,
+    breit: true,
+    info: `Am Soll: In dieser ${Z2}-Minuten-Runde bleibt die Heizung aus (0 von ${Z2} min). Wird es kühler, läuft sie wieder einen Teil jeder Runde.`
+  };
+  return {
+    k: "takt",
+    ic: "◔",
+    ton: "",
+    lang: `${minT(T2.an_min)} von ${Z2} min`,
+    kurz: `${minT(T2.an_min)}/${Z2} min`,
+    breit: true,
+    info: b2`In jeder ${Z2}-Minuten-Runde läuft die Heizung gerade etwa ${minT(T2.an_min)} min (${T2.anteil} %). Das rechnet die Automatik laufend neu – je näher am Soll, desto kürzer.${rundeBalken(T2)}`
+  };
+}
+function kopfChips(p4, b3) {
+  const d3 = p4.d, L2 = [], text2 = TEXT(b3), lern = b3.lern && b3.lern.an && ["thermo", "bedarf"].includes(b3.modus) ? b3.lern : null, T2 = b3.takt;
+  const erst = text2.split(" · ")[0].replace(/^⚡\s*/, "") || b3.z;
+  if (T2) L2.push(taktJetzt(p4, b3, T2));
+  else L2.push({
+    k: "zust",
+    ic: ZUST_IC[b3.z] || "•",
     ton: b3.z === "heizt" ? "warm" : b3.z === "frost" ? "blau" : b3.z === "offline" ? "rot" : "",
-    lang: takt ? "Takt-Pause" : erst,
-    kurz: takt ? "Takt" : ZUST_KURZ[b3.z] || erst,
+    lang: erst,
+    kurz: ZUST_KURZ[b3.z] || erst,
     info: text2
   });
   if (b3.tuer && b3.tuer.offen) L2.push({
@@ -2688,9 +2774,23 @@ function kopfChips(p4, b3) {
     const w2 = lern.warm;
     if (w2 && w2.gelernt && w2.plan) L2.push({ k: "warm", ic: "⏱", ton: "", lang: `warm um ${uhr(w2.plan.ziel)} · ab ${uhr(w2.plan.start)}`, kurz: uhr(w2.plan.ziel), info: p4.warmText(b3) });
     else if (w2) L2.push({ k: "warm", ic: "⏱", ton: "", lang: "Aufheizen lernt noch", kurz: "lernt", info: p4.warmText(b3) });
-    L2.push({ k: "lern", ic: "🧠", ton: lern.offen ? "amber" : "", lang: lern.offen ? "lernt gerade nicht" : "lernt", kurz: lern.offen ? "lernt nicht" : "lernt", info: p4.offenText(b3) || p4.cRegelText(b3) });
-    if (zahl(lern.erwartet)) L2.push({ k: "nach", ic: "↘", ton: "", lang: `Nachlauf +${de(lern.erwartet)}°`, kurz: `+${de(lern.erwartet)}°`, info: `Nachlauf +${de(lern.erwartet)} °C → aus bei ${de(lern.aus_bei)} °C` });
-    if (takt && zahl(lern.anteil)) L2.push({ k: "takt", ic: "◔", ton: "", lang: `Takt ${lern.anteil} % je ${lern.zyklus_min} min`, kurz: `${lern.anteil} %`, info: text2 });
+    L2.push(lern.offen ? { k: "lern", ic: "🧠", ton: "amber", lang: "lernt gerade nicht", kurz: "lernt nicht", info: p4.offenText(b3) || p4.cRegelText(b3) } : {
+      k: "lern",
+      ic: "🧠",
+      ton: "",
+      lang: "lernt mit",
+      kurz: "lernt",
+      info: "Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird und wie viel er nach dem Ausschalten nachwärmt – damit er pünktlich warm ist und nicht zu warm wird."
+    });
+    if (zahl(lern.erwartet)) L2.push({
+      k: "nach",
+      ic: "↘",
+      ton: "",
+      lang: `wärmt nach +${de(lern.erwartet)}°`,
+      kurz: `+${de(lern.erwartet)}°`,
+      info: `Wärmt nach dem Ausschalten noch etwa ${de(lern.erwartet)} °C nach – darum schaltet die Automatik früher ab (bei ${de(lern.aus_bei)} °C).`
+    });
+    if (T2) L2.push(taktRunde(T2));
   } else L2.push({ k: "regel", ic: "ⓘ", ton: "", lang: REGEL_T[b3.modus] || "Regel", kurz: REGEL_T[b3.modus] || "Regel", info: p4.cRegelText(b3) });
   return L2;
 }
@@ -2702,7 +2802,7 @@ function chip(p4, c4) {
 }
 var info = (p4, L2) => {
   const c4 = L2.find((x2) => x2.k === ckZ(p4).info);
-  return c4 ? b2`<div class="ck-info" role="note"><span>${c4.info}</span><button aria-label="schließen" @click=${() => ckSetzen(p4, { info: null })}>✕</button></div>` : A;
+  return c4 ? b2`<div class=${c4.breit ? "ck-info tk-info" : "ck-info"} role="note"><span>${c4.info}</span><button aria-label="schließen" @click=${() => ckSetzen(p4, { info: null })}>✕</button></div>` : A;
 };
 function sollChips(p4, b3) {
   const S3 = b3.sollJ || {}, gl = p4.d.e.soll_art === "gleitend", G = p4.d.sollG, gs = G ? de(G.soll, 1) : "–", L2 = [];
@@ -5346,6 +5446,16 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
   background: rgba(120,120,128,.14); border: 1px solid var(--panel-rand); }
 .ck-info span { flex: 1; min-width: 0; }
 .ck-info > button { border: 0; background: none; color: var(--ink2); font-size: 13px; cursor: pointer; padding: 0 2px; }
+.ckd-gruppen .ckd-g:has(> .tk-info) { grid-column: 1 / -1; }   /* Takt-Satz offen (Mockup takt.html B): Kästchen über die ganze Breite */
+.tk-info { justify-content: space-between; } .tk-info > span { max-width: 62ch; } .tk-info b { font-weight: 600; color: var(--ink); }
+.tk-runde { display: block; margin: 10px 0 2px; padding-top: 12px; max-width: 340px; }
+.tk-bahn { position: relative; display: flex; height: 10px; border-radius: 5px; background: rgba(120,120,128,.25); }
+.tk-an { background: var(--amber); border-radius: 5px 0 0 5px; } .tk-an.voll { border-radius: 5px; } .tk-aus { background: rgba(120,120,128,.35); border-radius: 0 5px 5px 0; }
+.tk-jetzt { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
+.tk-jetzt i { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10px; line-height: 1; padding-bottom: 2px; color: var(--ink); white-space: nowrap; }
+.tk-skala { position: relative; display: flex; flex-wrap: wrap; justify-content: space-between; font-size: 10.5px; color: var(--ink2); margin-top: 4px; gap: 2px 10px; }
+.tk-info .tk-skala > span { flex: none; min-width: auto; white-space: nowrap; }   /* .ck-info span: flex 1, min-width 0 */
+.tk-q { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin: 0 4px 0 0; background: rgba(120,120,128,.55); vertical-align: 0; } .tk-q.an { background: var(--amber); }
 .ck-gefuehl { display: flex; gap: 6px; justify-content: center; }
 .ck-gefuehl button { border: 0; border-radius: 14px; padding: 5px 9px; font: inherit; font-size: 15px; background: rgba(120,120,128,.18); color: var(--ink); cursor: pointer; white-space: nowrap; }
 .ck-gefuehl button:active { background: var(--amber); color: #1a1000; }
@@ -5807,7 +5917,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.153";
+var SEITE_VERSION = "0.8.154";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];

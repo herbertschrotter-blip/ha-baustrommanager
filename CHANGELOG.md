@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.154] – 2026-10-28
+
+- Takt verständlich (Mockup `takt.html` Variante B, abgenommen 28.10.2026): Statt „Takt-Pause · lernend 46 % je 10 min“
+  zeigt der Kopf der Container-Ansicht „⏸ Pause bis 17:42“, „🔥 an bis 17:38“, „🔥 heizt durch“ oder „✓ Soll erreicht“.
+  Antippen erklärt es in Minuten („je 10 Minuten etwa 4½ min an und 5½ min aus …“) mit einem Balken der
+  10-Minuten-Runde. Unter „Lernen“: „◔ 4½ von 10 min“ (auch „dauernd an“ / „0 von 10 min“), „↘ wärmt nach +0,4°“ und
+  „🧠 lernt mit“, jeweils mit Erklärung. Minuten, Phase und Uhrzeit liefert die Integration (`takt` je Container,
+  Regel in `logik/lernen.py`); ist die Runde unterbrochen, steht „Pause · wartet“ statt einer falschen Uhrzeit.
+
 ## [0.8.153] – 2026-10-28
 
 - FE-0029: In „Gespart“ fiel die Linie „ohne (24/7)“ am 17./18.10. unter 0. Ursache war die Datenbank-Panne vom

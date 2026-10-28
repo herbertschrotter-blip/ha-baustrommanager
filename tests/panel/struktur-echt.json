@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.153",
+   "version": "0.8.154",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -621,6 +621,7 @@
       "zyklus_min": 10,
       "warm": null
      },
+     "takt": null,
      "stufen": {
       "an": false,
       "haupt": [
@@ -715,6 +716,7 @@
      "tuer": null,
      "modus": "bedarf",
      "lernen": null,
+     "takt": null,
      "stufen": {
       "an": false,
       "haupt": [
@@ -836,6 +838,7 @@
       "zyklus_min": 10,
       "warm": null
      },
+     "takt": null,
      "stufen": null,
      "bedarf": {
       "summe": 0.699,
@@ -916,6 +919,7 @@
      "tuer": null,
      "modus": null,
      "lernen": null,
+     "takt": null,
      "stufen": null,
      "bedarf": null,
      "soll": null,
@@ -2150,7 +2154,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.153",
+   "version": "0.8.154",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2384,6 +2388,7 @@
      "tuer": null,
      "modus": "plan",
      "lernen": null,
+     "takt": null,
      "stufen": null,
      "bedarf": {
       "summe": 0.0,

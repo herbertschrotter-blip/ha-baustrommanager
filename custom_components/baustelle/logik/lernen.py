@@ -35,11 +35,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
-from math import ceil
+from datetime import datetime, timedelta
+from math import ceil, floor
 from typing import Any, overload
 
 ZYKLUS_MIN = 10
+VERSATZ_MIN = 3                # je Container um so viele Minuten versetzt, damit nicht alle zur selben Minute einschalten
 MIN_EIN_MIN = 2                # kürzere Pulse lohnen nicht: Anteil unter 20 % → aus, über 80 % → ganz ein
 KINT_START, KEXT_START = 0.6, 0.01
 KINT_GRENZEN = (0.1, 2.0)
@@ -108,6 +109,40 @@ def tpi_ein(anteil: float, minute_im_zyklus: int, heizt_gerade: bool = False) ->
     if heizt_gerade:
         return m < dauer or (anteil > 0 and m < MIN_EIN_MIN)
     return dauer >= MIN_EIN_MIN and dauer - m >= MIN_EIN_MIN
+
+
+def zyklus_minute(jetzt: datetime, nr: int) -> int:
+    """Minute im TPI-Zyklus (0 … `ZYKLUS_MIN` − 1) für den Container Nummer `nr` (um `VERSATZ_MIN` je Nummer versetzt)."""
+    return (jetzt.hour * 60 + jetzt.minute + VERSATZ_MIN * nr) % ZYKLUS_MIN
+
+
+def takt_anzeige(anteil: float, minute_im_zyklus: int, an: bool, jetzt: datetime) -> dict[str, Any]:
+    """Takt der lernenden Regelung für die Seite (laufzeit.container.<id>.takt, Mockup takt.html Variante B).
+
+    - `art`: „dauernd“, wenn der an-Teil länger als `ZYKLUS_MIN − MIN_EIN_MIN` wäre (`tpi_ein` heizt dann durch),
+      „erreicht“, wenn er kürzer als `MIN_EIN_MIN` ist (kein neuer Start), sonst „runde“.
+    - `an_min`/`aus_min`: an- und aus-Teil je Runde, auf ½ min gerundet (zusammen `zyklus_min`).
+    - `phase`: was gerade läuft (`an` = ein Heizkörper ist eingeschaltet).
+    - `bis`: Ende der laufenden Phase (HH:MM) nach `tpi_ein` mit dem Anteil von jetzt – Minute für Minute vorausgerechnet,
+      im an-Teil also mit der Mindestlaufzeit, in der Pause der Beginn der nächsten Runde. `None`, wenn sich in einer
+      Runde nichts ändert (dauernd an, Soll erreicht) – und wenn der Heizkörper gerade anders steht, als `tpi_ein` will
+      (die Runde ist unterbrochen: Staffelung, Mindestpause, Tür; ein Schaltbefehl ist noch unterwegs). Dann gilt nichts
+      vorausgerechnet, statt ein falsches „bis“.
+    - `minute`: Stelle „jetzt“ in der Runde (0 … `zyklus_min`), nur bei „runde“.
+    """
+    dauer, m = anteil * ZYKLUS_MIN, minute_im_zyklus % ZYKLUS_MIN
+    art = "dauernd" if dauer > ZYKLUS_MIN - MIN_EIN_MIN else "erreicht" if dauer < MIN_EIN_MIN else "runde"
+    an_min = {"dauernd": float(ZYKLUS_MIN), "erreicht": 0.0}.get(art, floor(dauer * 2 + 0.5) / 2)
+    if art == "erreicht" and an:   # läuft noch die Mindestlaufzeit zu Ende (tpi_ein): eine Runde, nicht „Soll erreicht“
+        art, an_min = "runde", float(MIN_EIN_MIN)
+    bis = None
+    if tpi_ein(anteil, m, an) == an:   # sonst: Runde unterbrochen
+        start = jetzt.replace(second=0, microsecond=0) - timedelta(minutes=m)
+        k = next((k for k in range(m + 1, m + ZYKLUS_MIN + 1) if tpi_ein(anteil, k, an) != an), None)
+        bis = None if k is None else (start + timedelta(minutes=k)).strftime("%H:%M")
+    return {"art": art, "anteil": round(anteil * 100), "zyklus_min": ZYKLUS_MIN, "an_min": an_min, "aus_min": ZYKLUS_MIN - an_min,
+            "phase": "an" if an else "pause", "bis": bis,
+            "minute": round(m + jetzt.second / 60, 1) if art == "runde" else None}
 
 
 def klasse(ein_minuten: float) -> str:

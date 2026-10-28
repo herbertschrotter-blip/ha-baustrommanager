@@ -13,6 +13,12 @@ LERN_GRUENDE = {
     SollGrund.FRUEHSTART, SollGrund.VORHEIZEN, SollGrund.ARBEITSZEIT, SollGrund.NACHHEIZEN, SollGrund.TROCKNEN,
     SollGrund.BEDARF, SollGrund.ABSENKEN,
 }
+# Takt der lernenden Regelung auf der Seite (laufzeit.container.<id>.takt): Gründe, in denen TPI auf das Soll regelt
+# (Absenken regelt auf das Absenk-Ziel, die Taste am Plug zeigt ihren eigenen Text)
+TAKT_GRUENDE = {
+    SollGrund.FRUEHSTART, SollGrund.VORHEIZEN, SollGrund.ARBEITSZEIT, SollGrund.NACHHEIZEN, SollGrund.TROCKNEN,
+    SollGrund.BEDARF,
+}
 HAND_ENDE_TEXT = {   # Protokoll, wenn die Automatik einen Heizkörper aus dem Handbetrieb übernimmt (FE-0004)
     HandEnde.VORRANG: "Automatik übernimmt ({grund})",
     HandEnde.SOLL: "Soll {soll} °C erreicht – Automatik übernimmt",

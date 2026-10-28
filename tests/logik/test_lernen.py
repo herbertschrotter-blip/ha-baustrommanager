@@ -21,6 +21,8 @@ from logik.lernen import (
     nachlauf_erwartet,
     neuer_stand,
     takt,
+    takt_anzeige,
+    zyklus_minute,
     tuer_verlauf,
     tuer_vermutet,
     tpi_anteil,
@@ -265,3 +267,59 @@ def test_ende_von_schnell_aufheizen_lernt_kein_k_innen():
         t2 += timedelta(minutes=1)
         s2 = takt(s2, jetzt=t2, heizt=False, innen=temp, soll=20.0, aussen=0.0, art="oel", regelt=True)
     assert s2["zyklen"] == 1 and s2["n_kint"] == 0                  # Nachlauf ja, K innen nein
+
+
+# ------------------------------------------------------------------ Takt für die Seite (Mockup takt.html, Variante B)
+def _um(h: int, m: int, s: int = 0) -> datetime:
+    return T0.replace(hour=h, minute=m, second=s)
+
+
+def test_zyklus_minute_je_container_versetzt():
+    assert zyklus_minute(_um(17, 37), 0) == 7 and zyklus_minute(_um(17, 37), 1) == 0 and zyklus_minute(_um(17, 37), 2) == 3
+
+
+def test_takt_runde_pause_bis_naechste_runde():
+    """46 % je 10 min, Minute 7 (Runde 17:30–17:40), aus: Pause bis zum Beginn der nächsten Runde; 4½ an, 5½ aus."""
+    t = takt_anzeige(0.46, 7, False, _um(17, 37, 30))
+    assert t == {"art": "runde", "anteil": 46, "zyklus_min": 10, "an_min": 4.5, "aus_min": 5.5, "phase": "pause",
+                 "bis": "17:40", "minute": 7.5}
+
+
+def test_takt_runde_an_bis_nach_tpi_ein():
+    """an-Teil: Ende, an dem tpi_ein ausschaltet – 4,6 min → in Minute 5 aus (volle Minuten), nicht 4½."""
+    t = takt_anzeige(0.46, 2, True, _um(17, 32))
+    assert t["art"] == "runde" and t["phase"] == "an" and t["bis"] == "17:35" and t["minute"] == 2
+    assert [tpi_ein(0.46, m, True) for m in range(2, 6)] == [True, True, True, False]   # dieselbe Regel
+    # Mindestlaufzeit: 2,3 min in Minute 0 → aus in Minute 3 (2,3 > 2)
+    assert takt_anzeige(0.23, 0, True, _um(8, 0))["bis"] == "08:03"
+
+
+def test_takt_dauernd_und_erreicht_ohne_bis():
+    d = takt_anzeige(0.9, 4, True, _um(7, 4))
+    assert d["art"] == "dauernd" and d["an_min"] == 10 and d["aus_min"] == 0 and d["phase"] == "an" and d["bis"] is None
+    assert d["minute"] is None and d["anteil"] == 90
+    e = takt_anzeige(0.1, 5, False, _um(7, 5))
+    assert e["art"] == "erreicht" and e["an_min"] == 0 and e["aus_min"] == 10 and e["phase"] == "pause" and e["bis"] is None
+    assert takt_anzeige(0.0, 5, False, _um(7, 5))["art"] == "erreicht"
+    # Soll fast erreicht, läuft aber noch zu Beginn der Runde: Mindestlaufzeit 2 min – eine Runde, nicht „erreicht“
+    # (Review 0.8.154: sonst „Soll erreicht · bleibt aus“, während der Heizkörper heizt)
+    m = takt_anzeige(0.1, 0, True, _um(7, 0))
+    assert m["bis"] == "07:02" and m["art"] == "runde" and m["phase"] == "an" and m["an_min"] == 2 and m["aus_min"] == 8
+
+
+def test_takt_grenzen_wie_tpi_ein():
+    """Grenzen wie tpi_ein: über 8 min dauernd, unter 2 min erreicht; ½-min-Rundung."""
+    assert takt_anzeige(0.8, 0, True, _um(7, 0))["art"] == "runde" and takt_anzeige(0.81, 0, True, _um(7, 0))["art"] == "dauernd"
+    assert takt_anzeige(0.2, 0, True, _um(7, 0))["art"] == "runde" and takt_anzeige(0.19, 0, False, _um(7, 0))["art"] == "erreicht"
+    assert takt_anzeige(0.425, 9, False, _um(7, 9))["an_min"] == 4.5 and takt_anzeige(0.42, 9, False, _um(7, 9))["an_min"] == 4.0
+
+
+def test_takt_unterbrochen_kein_falsches_bis():
+    """Die Runde wird abgebrochen (Staffelung, Mindestpause, Tür): steht der Heizkörper anders, als tpi_ein will,
+    gibt es kein „bis“ – sonst stünde „Pause bis 17:40“ da, obwohl die Regelung jetzt heizen will."""
+    gehalten = takt_anzeige(0.46, 1, False, _um(17, 31))      # will an (Minute 1, 3,6 min Rest), ist aus
+    assert tpi_ein(0.46, 1) and gehalten["phase"] == "pause" and gehalten["bis"] is None and gehalten["art"] == "runde"
+    dauernd_gehalten = takt_anzeige(1.0, 3, False, _um(17, 33))
+    assert dauernd_gehalten["phase"] == "pause" and dauernd_gehalten["bis"] is None
+    noch_an = takt_anzeige(0.46, 6, True, _um(17, 36))        # will aus (Minute 6 > 4,6), läuft noch
+    assert not tpi_ein(0.46, 6, True) and noch_an["phase"] == "an" and noch_an["bis"] is None
