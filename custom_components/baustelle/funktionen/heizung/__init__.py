@@ -314,6 +314,10 @@ class Heizung(Funktion):
         """Takt der lernenden Regelung (api: laufzeit.container.<id>.takt); None, wenn sie gerade nicht im Takt regelt."""
         return self.takt.get(bid)
 
+    def eingestellt_anzeige(self, bid: str) -> list[dict[str, Any]]:
+        """Eingeschaltete Einstellungen des Containers (api: laufzeit.container.<id>.eingestellt, logik/eingestellt)."""
+        return h_anzeige.eingestellt(self, bid)
+
     # ------------------------------------------------------------------ Staffelung und Schalten
     def schaltbar(self, g: GeraetInfo) -> bool:
         """Geschaltet werden nur Heizkörper (Mockup „geschaltet werden nur Heizungen“)."""

@@ -235,6 +235,20 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   jetzt (an-Teil mit Mindestlaufzeit, Pause bis zum Beginn der nächsten Runde); `null` bei dauernd/erreicht und wenn die
   Runde unterbrochen ist (der Heizkörper steht anders, als die Regelung will: Staffelung, Mindestpause). Der Zustandstext
   sagt dann „Pause bis 17:42“ bzw. „Pause · wartet“ (bis 0.8.153 „Takt-Pause · lernend 46 % je 10 min“).
+- Eingestellt im Kopf der Container-Ansicht (Mockup `eingestellt.html`, Variante C, Herbert 28.10.2026; `logik/eingestellt.py`):
+  `laufzeit.container.<id>.eingestellt` = `[{k, ic, text, kurz, satz, von: "container"|"baustelle", wirkt, grund, ziel}]` –
+  nur, was an ist und den Container betrifft, in der Reihenfolge der Anzeige (erst Container: `lernen`, `warm`,
+  `trocknen`, `stufen`, `prio`, `tuer`; dann Baustelle: `frost`, `vorheizen`, `nachheizen`, `fruehstart`, `feiertag`,
+  `staffel`, `notprogramm`, `taste`); Pumpenschächte und Baustellen ohne Heizung `null`. `text` Chip am Desktop, `kurz` am
+  Handy, `satz` beim Antippen. `wirkt: false` = an, wirkt gerade nicht, `grund` sagt warum (Automatik aus; Modus Hand:
+  nur Frostschutz, Tür offen und Notprogramm wirken; Modus Aus: nur Frostschutz und Notprogramm; lernende Regelung im
+  Zeitplan; Taste ohne Notprogramm), sonst `grund: null`. Nicht bei lernenden Containern (Fühler + lernend, nicht Zeitplan
+  oder Bei Bedarf): Vorheizen, Nachheizen, Kälte-Frühstart; `warm` nur bei lernenden mit eigenem `warm_vor`/`warm_nach`.
+  Bei Bedarf: kein Trocknen, Nachheizen, Frühstart, Feiertag; Vorheizen „vor jedem Termin“. `stufen` ab zwei Heizkörpern,
+  `prio` nur hoch/niedrig mit Staffelung, `tuer` nur mit Tür- oder Fensterkontakt, `frost` ohne Fühler nur mit
+  `frost_aussen`. `ziel` (Sprungziel für „ändern ›“; die Seite bildet es nur auf ihre Navigation ab): `container:lernen`,
+  `container:trocknen`, `bearbeiten:warm`, `bearbeiten:stufen`, `regeln:<frost|tuer|vorheizen|nachheizen|fruehstart>`,
+  `strom`, `strom:vorrang`, `notprogramm`, `urlaub`.
 - „Warm ab“ (AN-0004, Optimum Start): Einstellungen `heizung.warm_vor_min` (Soll erreicht … min vor Arbeitsbeginn, 0–240),
   `heizung.warm_nach_min` (warm halten … min nach Arbeitsende, 0–240), `heizung.warm_max_min` (frühestens … min vor
   Arbeitsbeginn, 15–480); je Container `bereiche.<id>.warm_vor` / `warm_nach` (Zahl oder `null` = wie die Baustelle).

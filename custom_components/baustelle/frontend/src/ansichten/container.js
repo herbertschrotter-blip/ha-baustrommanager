@@ -32,7 +32,7 @@ const REGEL_T = { plan: 'Heizplan', thermo: 'Thermostat', bedarf: 'bei Bedarf', 
 const vz = x => x > 0 ? '+' : '−';
 
 /* Antipp-Zustand je Container (Satz offen, Modus-Auswahl offen) – nur Anzeige, wechselt der Container, ist alles zu */
-const ckZ = p => p.s.ck && p.s.ck.id === p.b.id ? p.s.ck : { id: p.b.id, info: null, modus: false };
+const ckZ = p => p.s.ck && p.s.ck.id === p.b.id ? p.s.ck : { id: p.b.id, info: null, modus: false, ei: false };
 const ckSetzen = (p, x) => { p.s.ck = { ...ckZ(p), ...x }; p.neuZeichnen(); };
 
 /* Takt der lernenden Regelung (Mockup takt.html, Variante B, Herbert 28.10.2026): Art, Minuten, Phase und „bis“ liefert die
@@ -86,9 +86,8 @@ function kopfChips(p, b) {
     const w = lern.warm;
     if (w && w.gelernt && w.plan) L.push({ k: 'warm', ic: '⏱', ton: '', lang: `warm um ${uhr(w.plan.ziel)} · ab ${uhr(w.plan.start)}`, kurz: uhr(w.plan.ziel), info: p.warmText(b) });
     else if (w) L.push({ k: 'warm', ic: '⏱', ton: '', lang: 'Aufheizen lernt noch', kurz: 'lernt', info: p.warmText(b) });
-    L.push(lern.offen ? { k: 'lern', ic: '🧠', ton: 'amber', lang: 'lernt gerade nicht', kurz: 'lernt nicht', info: p.offenText(b) || p.cRegelText(b) }
-      : { k: 'lern', ic: '🧠', ton: '', lang: 'lernt mit', kurz: 'lernt',
-        info: 'Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird und wie viel er nach dem Ausschalten nachwärmt – damit er pünktlich warm ist und nicht zu warm wird.' });
+    // „🧠 lernt mit“ entfällt (eingestellt.html C): „Lernende Regelung“ steht nur noch unter Eingestellt, mit dem Satz von dort
+    if (lern.offen) L.push({ k: 'lern', ic: '🧠', ton: 'amber', lang: 'lernt gerade nicht', kurz: 'lernt nicht', info: p.offenText(b) || p.cRegelText(b) });
     if (zahl(lern.erwartet)) L.push({ k: 'nach', ic: '↘', ton: '', lang: `wärmt nach +${de(lern.erwartet)}°`, kurz: `+${de(lern.erwartet)}°`,
       info: `Wärmt nach dem Ausschalten noch etwa ${de(lern.erwartet)} °C nach – darum schaltet die Automatik früher ab (bei ${de(lern.aus_bei)} °C).` });
     if (T) L.push(taktRunde(T));
@@ -104,6 +103,42 @@ function chip(p, c) {
 }
 const info = (p, L) => { const c = L.find(x => x.k === ckZ(p).info);
   return c ? html`<div class=${c.breit ? 'ck-info tk-info' : 'ck-info'} role="note"><span>${c.info}</span><button aria-label="schließen" @click=${() => ckSetzen(p, { info: null })}>✕</button></div>` : nothing; };
+
+/* ---------- Eingestellt (Mockup eingestellt.html, Variante C, Herbert 28.10.2026) ----------
+   Unter dem Namen zugeklappt „⚙ 11 eingestellt ▾“ (am Desktop im Modus Hand „· n ruhen“), aufgeklappt je Herkunft eine
+   Zeile Chips („nur hier“, „Baustelle“); Antippen: ein Satz + „ändern ›“. Was an ist und gilt, Texte, Sätze, Reihenfolge,
+   wirkt/grund und das Sprungziel liefert die Integration (laufzeit.container.<id>.eingestellt, logik/eingestellt.py); die
+   Seite zählt nur die Chips und bildet `ziel` auf ihre vorhandene Navigation ab. Handy: kurze Chips (.ck-k). */
+const EI_ZEILEN = [['container', 'nur hier'], ['baustelle', 'Baustelle']];
+const EI_VON = { baustelle: 'Einstellung der Baustelle – gilt für alle Container.', container: 'Einstellung nur dieses Containers.' };
+const hin = (p, sel) => p.updateComplete.then(() => { const el = p.ui && p.ui.querySelector(sel); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' }); });
+/** „ändern ›“: Sprungziel der Integration → vorhandene Wege der Seite (Einblendung, Reiter, Einstellungsgruppe) */
+export function eiSpringen(p, ziel) {
+  const [art, z] = String(ziel || '').split(':');
+  if (art === 'container') { ckSetzen(p, { info: null }); return hin(p, `.c-einst [data-z="${z}"]`); }   // unten in dieser Ansicht
+  if (art === 'bearbeiten') { p.einblenden('bereich'); return hin(p, `.sheet [data-zeile="${z}"]`); }   // Container bearbeiten
+  if (art === 'regeln') { p.hzAuf('regeln'); return hin(p, `.sheet [data-r="${z}"]`); }   // Heizung › Regeln
+  if (art === 'urlaub') return p.hzAuf('urlaub');   // Urlaub & Feiertage
+  if (art === 'strom') { p.einstGruppe('strom'); return z ? hin(p, `.ev-inhalt [data-r="${z}"]`) : p.updateComplete; }   // Einstellungen › Strom
+  if (art === 'notprogramm') return p.einstGruppe('notprogramm');   // Einstellungen › Notprogramm
+  return undefined;
+}
+function eingestellt(p, b) {
+  const L = b.eingestellt || [];
+  if (!L.length) return nothing;
+  const z = ckZ(p), ruhen = L.filter(c => c.wirkt === false).length, offen = L.find(c => z.info === `ei-${c.k}`);
+  const chipE = c => { const k = `ei-${c.k}`, auf = z.info === k, ruht = c.wirkt === false;
+    return html`<button class="ck-chip ei-chip ${ruht ? 'ei-ruht' : ''} ${auf ? 'auf' : ''}" data-k=${k} aria-expanded=${auf ? 'true' : 'false'} title=${ruht ? 'an, wirkt gerade nicht' : nothing}
+        @click=${() => ckSetzen(p, { info: auf ? null : k, modus: false })}><span class="ck-ic">${c.ic}</span><span class="ck-l">${c.text}</span><span class="ck-k">${c.kurz}</span></button>`; };
+  const satz = offen ? html`<div class="ck-info ei-info" role="note"><span>${offen.wirkt === false && offen.grund ? html`<b class="ei-grund">${offen.grund}</b> ` : nothing}${offen.satz}
+        <span class="ei-von-t">${EI_VON[offen.von] || ''}</span> <button class="ei-aendern" @click=${() => eiSpringen(p, offen.ziel)}>ändern ›</button></span>
+      <button aria-label="schließen" @click=${() => ckSetzen(p, { info: null })}>✕</button></div>` : nothing;
+  const zeilen = EI_ZEILEN.map(([v, t]) => [v, t, L.filter(c => c.von === v)]).filter(([, , X]) => X.length)
+    .map(([v, t, X]) => html`<div class="ei-zeile" data-von=${v}><span class="ei-von">${t}</span>${X.map(chipE)}</div>`);
+  return html`<button class="ck-chip ei-c ${z.ei ? 'auf' : ''}" aria-expanded=${z.ei ? 'true' : 'false'} @click=${() => ckSetzen(p, { ei: !z.ei, info: null, modus: false })}>
+      <span class="ck-ic">⚙</span><span class="ck-l">${L.length} eingestellt${ruhen ? html` <span class="ei-ruht-t">· ${ruhen} ruhen</span>` : nothing}</span><span class="ck-k">${L.length} eingestellt</span> ${z.ei ? '▴' : '▾'}</button>
+    ${z.ei ? html`<div class="ei-b">${zeilen}</div>${satz}` : nothing}`;
+}
 
 /* Soll unter dem Rad: kurze Chips statt Satz (Werte der Integration: soll.eigen/versch, soll_gleitend.soll); „↺ gleitend“ bleibt */
 function sollChips(p, b) {
@@ -134,7 +169,7 @@ function kopf(p, b) {
   const gruppe = ([t, fest, dazu, X]) => fest || X.length ? html`<div class="ckd-g" data-g=${t}><div class="ckd-gt">${t}</div><div class="ck-chips">${fest || nothing}${X.map(c => chip(p, c))}</div>${dazu || info(p, X)}</div>` : nothing;
   const mitRad = b.fuehler && b.t !== null, mitSoll = mitRad && p.sollAktiv(b);
   return html`<div class="glas-panel ck ck-d ck-d2 ${b.z}" style="--c:${FARBE[b.z]}">
-      <div class="ckd-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b.name}</span></div></div>
+      <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b.name}</span></div>${eingestellt(p, b)}</div>
       <div class="ckd-rad c-kern">${mitRad ? rad(p, b) : ohneFuehler(b)}${mitSoll ? html`<div class="ckd-soll"><div class="ckd-gt">Soll</div>${sollChips(p, b)}${gefuehl(p, b)}</div>` : nothing}</div>
       <div class="ckd-gruppen">${GR.map(gruppe)}</div></div>`;
 }
@@ -198,9 +233,9 @@ export function containerVorlage(p) {
       <div class="glas-panel block"><div class="block-kopf"><b>Geräte</b><span class="leise">⏻ = Handbetrieb · aktiv aus = die Automatik lässt es aus</span></div>
         ${b.geraete.length ? html`<div class="c-chips">${geraete(p, b)}</div>` : html`<div class="leise">Noch kein Gerät</div>`}</div>
       ${sensorLeisteVorlage(p, b)}
-      <div class="glas-panel liste">
+      <div class="glas-panel liste c-einst">
         ${b.tuer && b.tuer.offen ? html`<div class="zeile"><div><b>🚪 ${b.tuer.sensor}</b><div class="leise">${b.tuer.offen ? `offen seit ${b.tuer.offen} min – Heizung pausiert nach ${d.e.tuer_pause} min, Meldung nach ${d.e.tuer_melden} min` : 'zu'}</div></div></div>` : nothing}
-        ${!b.fuehler || !b.lern ? nothing : html`<div class="zeile"><div><b>🧠 Lernende Regelung</b><div class="leise">${['thermo', 'bedarf'].includes(b.modus) ? 'lernt, wie lange der Raum nach dem Ausschalten nachheizt, und schaltet früher ab' : 'wirkt nur im Modus Thermostat oder Bei Bedarf'}${b.lern.an ? html` · <button class="link" @click=${() => p.einblenden('lernen')}>Lernstand ›</button>` : nothing}</div></div>${schalterVorlage(b.lern.an, () => p.lernenUmschalten(b))}</div>`}
-        <div class="zeile"><span>👕 Kleidung trocknen nach Regen</span>${schalterVorlage(b.trocknen, () => p.trocknenUmschalten(b))}</div>
+        ${!b.fuehler || !b.lern ? nothing : html`<div class="zeile" data-z="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${['thermo', 'bedarf'].includes(b.modus) ? 'lernt, wie lange der Raum nach dem Ausschalten nachheizt, und schaltet früher ab' : 'wirkt nur im Modus Thermostat oder Bei Bedarf'}${b.lern.an ? html` · <button class="link" @click=${() => p.einblenden('lernen')}>Lernstand ›</button>` : nothing}</div></div>${schalterVorlage(b.lern.an, () => p.lernenUmschalten(b))}</div>`}
+        <div class="zeile" data-z="trocknen"><span>👕 Kleidung trocknen nach Regen</span>${schalterVorlage(b.trocknen, () => p.trocknenUmschalten(b))}</div>
       </div>`;
 }

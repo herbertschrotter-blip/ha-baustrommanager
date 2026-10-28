@@ -569,6 +569,15 @@ await fall('B8 Container am Handy', browser, async (page, erwarte) => {
       s = c.querySelector('.ckd-rad > .c-rad svg'), gs = [...c.querySelectorAll('.ckd-g')].map(x => x.getBoundingClientRect()), l = c.querySelector('.ck-l'), kz = c.querySelector('.ck-k');
       return { unter: n.bottom <= r.top + 1, rad: s ? Math.round(s.getBoundingClientRect().width) : 170, zwei: gs.length < 2 || (Math.abs(gs[0].top - gs[1].top) < 2 && gs[1].left > gs[0].left), kurz: getComputedStyle(l).display === 'none' && getComputedStyle(kz).display !== 'none' }; });
     erwarte(`${id}: Kopf am Handy – Name über dem Rad (170 px), Gruppen zweispaltig, kurze Chips`, k && k.unter && k.rad === 170 && k.zwei && k.kurz, JSON.stringify(k));
+    /* Eingestellt (eingestellt.html C) aufgeklappt mit Satz: kurze Chips, Zeilen zentriert, nichts ragt hinaus */
+    const ei = await panel(page, T, async () => { const L = p.b.eingestellt || []; if (!L.length) return null;
+      p.s.ck = { id: p.b.id, info: `ei-${L[0].k}`, modus: false, ei: true }; await p.neuZeichnen(); await new Promise(r => setTimeout(r, 200));
+      const sc = sr.querySelector('.scroll'), re = sc.getBoundingClientRect().right, c = sr.querySelector('.ck-d .ei-b .ck-chip');
+      const raus = [...sr.querySelectorAll('.ck-d .ckd-name *')].filter(x => x.getBoundingClientRect().right > re + 1).map(x => `${x.tagName.toLowerCase()}.${String(x.className).trim()}`);
+      const r = { n: sr.querySelectorAll('.ck-d .ei-b .ck-chip').length, raus, satz: !!sr.querySelector('.ck-d .ckd-name > .ei-info'),
+        kurz: !!c && getComputedStyle(c.querySelector('.ck-l')).display === 'none' && getComputedStyle(c.querySelector('.ck-k')).display !== 'none' };
+      p.s.ck = null; await p.neuZeichnen(); return r; });
+    if (ei) erwarte(`${id}: Eingestellt am Handy aufgeklappt – kurze Chips, Satz, nichts ragt hinaus`, ei.n > 0 && ei.satz && ei.kurz && !ei.raus.length, JSON.stringify(ei));
   }
 });
 

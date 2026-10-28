@@ -851,3 +851,29 @@ async def test_ausnahme_heute_laenger_mit_warm_nach(hass: HomeAssistant, freezer
     warm = _c(hass, entry)["lernen"]["warm"]
     assert warm["nach"] == 10 and warm["nach_eigen"] is True and warm["plan"]["ende"] == 1150
     assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "ausserhalb"
+
+
+async def test_eingestellt_im_kopf(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Eingestellt (Mockup eingestellt.html C): die Integration liefert je Container, was an ist und gilt – lernend ohne
+    Vorheizen/Nachheizen/Kälte-Frühstart, Zusatz erst ab zwei Heizkörpern, im Modus Hand gedämpft mit Grund; der
+    Pumpenschacht hat keine Liste."""
+    entry, st = await _einrichten(hass, freezer, shellys, hk2_bereich=C1)
+    st.einstellung_setzen(("bereiche", C1, "stufen"), True)
+    st.einstellung_setzen(("bereiche", C1, "warm_vor"), 30)
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    L = _c(hass, entry)["eingestellt"]
+    ks = [x["k"] for x in L]
+    assert ks[:3] == ["lernen", "warm", "stufen"] and "frost" in ks and not {"vorheizen", "nachheizen", "fruehstart"} & set(ks)
+    assert all(x["wirkt"] for x in L) and next(x for x in L if x["k"] == "warm")["text"] == "warm 30 min vor Beginn"
+    stufen = next(x for x in L if x["k"] == "stufen")
+    assert stufen["von"] == "container" and stufen["ziel"] == "bearbeiten:stufen" and "Primärheizkörper (" in stufen["satz"]
+    assert _c(hass, entry, SCHACHT)["eingestellt"] is None
+    st.einstellungen.bereich(C1)["modus"] = "hand"
+    L = _c(hass, entry)["eingestellt"]
+    assert [x["k"] for x in L] == ks and {x["k"] for x in L if x["wirkt"]} <= {"frost", "tuer", "notprogramm"} and "frost" in ks and all(x["grund"].startswith("Gerade ohne Wirkung: im Modus Hand") for x in L if not x["wirkt"])
+    st.einstellung_setzen(("bereiche", C1, "lernen"), False)
+    st.einstellungen.bereich(C1)["modus"] = "plan"
+    await hass.async_block_till_done()
+    ks = [x["k"] for x in _c(hass, entry)["eingestellt"]]
+    assert "lernen" not in ks and {"vorheizen", "nachheizen"} <= set(ks)

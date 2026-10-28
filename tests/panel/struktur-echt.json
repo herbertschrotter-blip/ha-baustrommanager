@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.155",
+   "version": "0.8.156",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -622,6 +622,85 @@
       "warm": null
      },
      "takt": null,
+     "eingestellt": [
+      {
+       "k": "prio",
+       "ic": "⬆",
+       "text": "Vorrang hoch",
+       "kurz": "Vorrang",
+       "satz": "Dürfen nicht alle Heizkörper zugleich (Staffelung), kommt dieser Container vor den anderen dran. Frostschutz geht immer vor.",
+       "von": "container",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "strom:vorrang"
+      },
+      {
+       "k": "frost",
+       "ic": "❄",
+       "text": "Frostschutz unter 5°",
+       "kurz": "5°",
+       "satz": "Hält den Container auch nachts, am Wochenende und im Urlaub über 5 °C (aus erst über 7 °C).",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:frost"
+      },
+      {
+       "k": "vorheizen",
+       "ic": "🌅",
+       "text": "Vorheizen 45 min",
+       "kurz": "45′ vor",
+       "satz": "Heizt jeden Arbeitstag 45 min vor Arbeitsbeginn an, damit es warm ist, wenn es losgeht.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:vorheizen"
+      },
+      {
+       "k": "nachheizen",
+       "ic": "🌇",
+       "text": "Nachheizen 15 min",
+       "kurz": "15′ nach",
+       "satz": "Heizt nach Arbeitsende noch 15 min weiter.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:nachheizen"
+      },
+      {
+       "k": "fruehstart",
+       "ic": "⏰",
+       "text": "Kälte-Frühstart +30 min",
+       "kurz": "+30′ kalt",
+       "satz": "Ist es morgens kälter als 0 °C, heizt der Container zusätzlich 30 min früher an.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:fruehstart"
+      },
+      {
+       "k": "feiertag",
+       "ic": "🏖",
+       "text": "Feiertage frei",
+       "kurz": "frei",
+       "satz": "An Feiertagen und im Urlaub wird nicht geheizt, nur der Frostschutz läuft.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "urlaub"
+      },
+      {
+       "k": "staffel",
+       "ic": "⚡",
+       "text": "Staffelung",
+       "kurz": "Staffel",
+       "satz": "Die Heizkörper teilen sich den Anschluss: 67 % je Anschluss nutzbar, höchstens 5 zugleich; wer wartet, kommt im Rundlauf dran.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "strom"
+      }
+     ],
      "stufen": {
       "an": false,
       "haupt": [
@@ -717,6 +796,41 @@
      "modus": "bedarf",
      "lernen": null,
      "takt": null,
+     "eingestellt": [
+      {
+       "k": "frost",
+       "ic": "❄",
+       "text": "Frostschutz unter −3° außen",
+       "kurz": "−3° außen",
+       "satz": "Ohne Fühler: Ist es draußen kälter als −3 °C, heizt der Container (aus erst ab −1 °C), der Heizkörperthermostat regelt dann selbst.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:frost"
+      },
+      {
+       "k": "vorheizen",
+       "ic": "🌅",
+       "text": "Vorheizen 45 min",
+       "kurz": "45′ vor",
+       "satz": "Heizt 45 min vor jedem Termin an.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:vorheizen"
+      },
+      {
+       "k": "staffel",
+       "ic": "⚡",
+       "text": "Staffelung",
+       "kurz": "Staffel",
+       "satz": "Die Heizkörper teilen sich den Anschluss: 67 % je Anschluss nutzbar, höchstens 5 zugleich; wer wartet, kommt im Rundlauf dran.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "strom"
+      }
+     ],
      "stufen": {
       "an": false,
       "haupt": [
@@ -839,6 +953,96 @@
       "warm": null
      },
      "takt": null,
+     "eingestellt": [
+      {
+       "k": "trocknen",
+       "ic": "👕",
+       "text": "Kleidung trocknen",
+       "kurz": "trocknen",
+       "satz": "Nach Regen ab 2 mm heizt dieser Container 45 min länger nach der Arbeit und am nächsten Morgen 15 min früher.",
+       "von": "container",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "container:trocknen"
+      },
+      {
+       "k": "tuer",
+       "ic": "🚪",
+       "text": "Tür-Pause 3 min",
+       "kurz": "Tür 3′",
+       "satz": "Kontakt „Tür 1“: Ist die Tür offen, pausiert die Heizung nach 3 min; nach 10 min kommt eine Nachricht.",
+       "von": "container",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:tuer"
+      },
+      {
+       "k": "frost",
+       "ic": "❄",
+       "text": "Frostschutz unter 5°",
+       "kurz": "5°",
+       "satz": "Hält den Container auch nachts, am Wochenende und im Urlaub über 5 °C (aus erst über 7 °C).",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:frost"
+      },
+      {
+       "k": "vorheizen",
+       "ic": "🌅",
+       "text": "Vorheizen 45 min",
+       "kurz": "45′ vor",
+       "satz": "Heizt jeden Arbeitstag 45 min vor Arbeitsbeginn an, damit es warm ist, wenn es losgeht.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:vorheizen"
+      },
+      {
+       "k": "nachheizen",
+       "ic": "🌇",
+       "text": "Nachheizen 15 min",
+       "kurz": "15′ nach",
+       "satz": "Heizt nach Arbeitsende noch 15 min weiter.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:nachheizen"
+      },
+      {
+       "k": "fruehstart",
+       "ic": "⏰",
+       "text": "Kälte-Frühstart +30 min",
+       "kurz": "+30′ kalt",
+       "satz": "Ist es morgens kälter als 0 °C, heizt der Container zusätzlich 30 min früher an.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "regeln:fruehstart"
+      },
+      {
+       "k": "feiertag",
+       "ic": "🏖",
+       "text": "Feiertage frei",
+       "kurz": "frei",
+       "satz": "An Feiertagen und im Urlaub wird nicht geheizt, nur der Frostschutz läuft.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "urlaub"
+      },
+      {
+       "k": "staffel",
+       "ic": "⚡",
+       "text": "Staffelung",
+       "kurz": "Staffel",
+       "satz": "Die Heizkörper teilen sich den Anschluss: 67 % je Anschluss nutzbar, höchstens 5 zugleich; wer wartet, kommt im Rundlauf dran.",
+       "von": "baustelle",
+       "wirkt": true,
+       "grund": null,
+       "ziel": "strom"
+      }
+     ],
      "stufen": null,
      "bedarf": {
       "summe": 0.699,
@@ -920,6 +1124,7 @@
      "modus": null,
      "lernen": null,
      "takt": null,
+     "eingestellt": null,
      "stufen": null,
      "bedarf": null,
      "soll": null,
@@ -2154,7 +2359,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.155",
+   "version": "0.8.156",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2389,6 +2594,74 @@
      "modus": "plan",
      "lernen": null,
      "takt": null,
+     "eingestellt": [
+      {
+       "k": "frost",
+       "ic": "❄",
+       "text": "Frostschutz unter −3° außen",
+       "kurz": "−3° außen",
+       "satz": "Ohne Fühler: Ist es draußen kälter als −3 °C, heizt der Container (aus erst ab −1 °C), der Heizkörperthermostat regelt dann selbst.",
+       "von": "baustelle",
+       "wirkt": false,
+       "grund": "Gerade ohne Wirkung: die Automatik der Baustelle ist aus – sie schaltet nichts.",
+       "ziel": "regeln:frost"
+      },
+      {
+       "k": "vorheizen",
+       "ic": "🌅",
+       "text": "Vorheizen 45 min",
+       "kurz": "45′ vor",
+       "satz": "Heizt jeden Arbeitstag 45 min vor Arbeitsbeginn an, damit es warm ist, wenn es losgeht.",
+       "von": "baustelle",
+       "wirkt": false,
+       "grund": "Gerade ohne Wirkung: die Automatik der Baustelle ist aus – sie schaltet nichts.",
+       "ziel": "regeln:vorheizen"
+      },
+      {
+       "k": "nachheizen",
+       "ic": "🌇",
+       "text": "Nachheizen 15 min",
+       "kurz": "15′ nach",
+       "satz": "Heizt nach Arbeitsende noch 15 min weiter.",
+       "von": "baustelle",
+       "wirkt": false,
+       "grund": "Gerade ohne Wirkung: die Automatik der Baustelle ist aus – sie schaltet nichts.",
+       "ziel": "regeln:nachheizen"
+      },
+      {
+       "k": "fruehstart",
+       "ic": "⏰",
+       "text": "Kälte-Frühstart +30 min",
+       "kurz": "+30′ kalt",
+       "satz": "Ist es morgens kälter als 0 °C, heizt der Container zusätzlich 30 min früher an.",
+       "von": "baustelle",
+       "wirkt": false,
+       "grund": "Gerade ohne Wirkung: die Automatik der Baustelle ist aus – sie schaltet nichts.",
+       "ziel": "regeln:fruehstart"
+      },
+      {
+       "k": "feiertag",
+       "ic": "🏖",
+       "text": "Feiertage frei",
+       "kurz": "frei",
+       "satz": "An Feiertagen und im Urlaub wird nicht geheizt, nur der Frostschutz läuft.",
+       "von": "baustelle",
+       "wirkt": false,
+       "grund": "Gerade ohne Wirkung: die Automatik der Baustelle ist aus – sie schaltet nichts.",
+       "ziel": "urlaub"
+      },
+      {
+       "k": "staffel",
+       "ic": "⚡",
+       "text": "Staffelung",
+       "kurz": "Staffel",
+       "satz": "Die Heizkörper teilen sich den Anschluss: 67 % je Anschluss nutzbar, höchstens 5 zugleich; wer wartet, kommt im Rundlauf dran.",
+       "von": "baustelle",
+       "wirkt": false,
+       "grund": "Gerade ohne Wirkung: die Automatik der Baustelle ist aus – sie schaltet nichts.",
+       "ziel": "strom"
+      }
+     ],
      "stufen": null,
      "bedarf": {
       "summe": 0.0,

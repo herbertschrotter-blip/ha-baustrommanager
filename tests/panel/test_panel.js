@@ -515,14 +515,19 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('Lernen: Schalter setzt bereiche.polier.lernen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
     pol = pol0(); pol.modus = 'thermo'; pol.lern = Object.assign({ ...lern0 }, { an: true, zyklen: 3, anteil: 38, erwartet: .8, aus_bei: 19.2, kint: { wert: .57, start: .6, fort: .06 },
       nachlauf: { 'oel|lang|kalt': { grad: 1.2, min: 12, n: 3 } }, treffer: [.3, -.1, .2] });
-    await panel.neuZeichnen(); erwarte('Lernen: Kopf-Chips „lernt mit“ und „wärmt nach +0,8°“ in der Gruppe Lernen, Satz erst beim Antippen (takt.html)',
-      /data-g="Lernen"[^]*?data-k="lern"[^]*?lernt mit[^]*?data-k="nach"[^]*?wärmt nach \+0,8°/.test(ui.innerHTML) && !/Thermostat · lernend/.test(ui.innerHTML) && !/Lernt bei jedem Heizen/.test(ui.innerHTML));
+    await panel.neuZeichnen(); erwarte('Lernen: Kopf-Chip „wärmt nach +0,8°“ in der Gruppe Lernen, Satz erst beim Antippen (takt.html)',
+      /data-g="Lernen"[^]*?data-k="nach"[^]*?wärmt nach \+0,8°/.test(ui.innerHTML) && !/Thermostat · lernend/.test(ui.innerHTML) && !/Wärmt nach dem Ausschalten/.test(ui.innerHTML));
+    /* bis 0.8.155 stand hier „🧠 lernt mit“ mit Satz – entfällt (eingestellt.html C): „Lernende Regelung“ steht nur noch unter
+       Eingestellt (Satz von der Integration, Test „Eingestellt“ unten); „🧠 lernt gerade nicht“ bleibt im Kästchen Lernen */
+    erwarte('Lernen: kein Chip „🧠 lernt mit“ mehr (eingestellt.html C)', !litEl('.ck-d .ck-chip[data-k="lern"]') && !/lernt mit/.test(litEl('.ck-d .ckd-gruppen').textContent));
+    pol.lern.offen = { art: 'kontakt', seit: null }; panel.s.ck = null; await panel.neuZeichnen();
+    erwarte('Lernen: „🧠 lernt gerade nicht“ bleibt amber im Kästchen Lernen', !!litEl('.ck-d .ckd-g[data-g="Lernen"] .ck-chip.amber[data-k="lern"]') && /lernt gerade nicht/.test(litEl('.ck-d .ck-chip[data-k="lern"]').textContent));
     await klick('.ck-d .ck-chip[data-k="lern"]', 10);
-    erwarte('Lernen: 🧠 Satz per Antippen (takt.html)', /class="ck-info[^"]*"[^]*?Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird/.test(ui.innerHTML));
+    erwarte('Lernen: „lernt gerade nicht“ per Antippen mit Grund', /class="ck-info[^"]*"[^]*?🚪 Tür offen – lernt gerade nicht/.test(ui.innerHTML));
+    await klick('.ck-d .ck-chip[data-k="lern"]', 10); pol.lern.offen = null; await panel.neuZeichnen();
     await klick('.ck-d .ck-chip[data-k="nach"]', 10);
     erwarte('Lernen: ↘ Satz per Antippen mit „aus bei“ (takt.html)', /class="ck-info[^"]*"[^]*?Wärmt nach dem Ausschalten noch etwa 0,8 °C nach – darum schaltet die Automatik früher ab \(bei 19,2 °C\)/.test(ui.innerHTML));
-    await klick('.ck-d .ck-chip[data-k="nach"]', 10); await klick('.ck-d .ck-chip[data-k="lern"]', 10);
-    await klick('.ck-d .ck-chip[data-k="lern"]', 10); erwarte('Lernen: nochmals antippen schließt den Satz', !litEl('.ck-d .ck-info'));
+    await klick('.ck-d .ck-chip[data-k="nach"]', 10); erwarte('Lernen: nochmals antippen schließt den Satz', !litEl('.ck-d .ck-info'));
     await klick({ act: 'sheet', s: 'lernen' }); pruefe('Lernstand');
     erwarte('Lernen: Lernstand mit Nachlauf und Treffern', /\+1,2 °C/.test(ui.innerHTML) && /Ø ±0,2 °C/.test(ui.innerHTML) && /3\/50 Zyklen/.test(ui.innerHTML));
     await klick('.sheet .seg [data-v="mild"]'); pruefe('Lernstand mild');
@@ -942,7 +947,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await lage({ ...R, phase: 'pause', bis: '17:42', minute: 7.5 }); pruefe('Takt Pause');
       erwarte('Takt: Jetzt „⏸ Pause bis 17:42“ (Handy gleich), Lernen „◔ 4½ von 10 min“ (Handy „4½/10 min“), alte Texte weg',
         chipK('Jetzt').startsWith('zust') && ic('zust') === '⏸' && lang('zust') === 'Pause bis 17:42' && kurz('zust') === 'Pause bis 17:42'
-        && /takt/.test(chipK('Lernen')) && lang('takt') === '4½ von 10 min' && kurz('takt') === '4½/10 min' && lang('lern') === 'lernt mit' && lang('nach') === 'wärmt nach +0,4°'
+        && chipK('Lernen') === 'nach,takt' && lang('takt') === '4½ von 10 min' && kurz('takt') === '4½/10 min' && lang('nach') === 'wärmt nach +0,4°'   /* bis 0.8.155: lern,nach,takt mit „lernt mit“ */
         && !/Takt-Pause|Takt \d+ %/.test(ui.innerHTML));
       await klick('.ck-d .ck-chip[data-k="zust"]', 10); pruefe('Takt Pause Satz');
       erwarte('Takt: Antippen Jetzt – Satz in Minuten mit „bis“', /^Fast am Soll \(20,3 von \d+,\d °C\): Die Heizung läuft in Runden – je 10 Minuten etwa 4½ min an und 5½ min aus, damit es nicht zu warm wird\./.test(satz().replace(/\s+/g, ' '))
@@ -983,6 +988,68 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       x.text = 'heizt auf 22,4 °C · Arbeitszeit'; x.z = 'heizt';
       await lage(null);
       erwarte('Takt: ohne Takt (z. B. außerhalb der Regelung) Zustandschip wie bisher, kein ◔', lang('zust') === 'heizt auf 22,4 °C' && !litEl('.ck-d .ck-chip[data-k="takt"]'));
+      Object.assign(x, alt); panel.s.ck = null; await panel.neuZeichnen(); }
+    /* Eingestellt im Kopf (Mockup eingestellt.html, Variante C, Herbert 28.10.2026): zugeklappt „⚙ 11 eingestellt ▾“, auf je
+       Herkunft eine Zeile, Antippen = Satz + „ändern ›“; Liste, Texte, wirkt/grund und ziel von der Integration
+       (laufzeit.container.<id>.eingestellt, logik/eingestellt.py) – die Seite zählt nur und bildet ziel auf ihre Navigation ab */
+    { const x = pol(), alt = { eingestellt: x.eingestellt, modus: x.modus };
+      const E = (k, ic, text, kurz, von, ziel, satz) => ({ k, ic, text, kurz, von, ziel, satz, wirkt: true, grund: null });
+      const VIELE = [E('lernen', '🧠', 'Lernende Regelung', 'lernend', 'container', 'container:lernen', 'Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird.'),
+        E('warm', '⏱', 'warm 30 min vor Beginn', '−30 min', 'container', 'bearbeiten:warm', 'Eigener Wert dieses Containers.'),
+        E('trocknen', '👕', 'Kleidung trocknen', 'trocknen', 'container', 'container:trocknen', 'Nach Regen ab 2 mm …'),
+        E('stufen', '🔥', 'Zusatz nur bei Bedarf', 'Zusatz', 'container', 'bearbeiten:stufen', 'Zuerst heizt der Primärheizkörper.'),
+        E('prio', '⬆', 'Vorrang hoch', 'Vorrang', 'container', 'strom:vorrang', 'Kommt vor den anderen dran.'),
+        E('tuer', '🚪', 'Tür-Pause 3 min', 'Tür 3′', 'container', 'regeln:tuer', 'Kontakt „Tür 1“: …'),
+        E('frost', '❄', 'Frostschutz unter 5°', '5°', 'baustelle', 'regeln:frost', 'Hält den Container auch nachts, am Wochenende und im Urlaub über 5 °C (aus erst über 7 °C).'),
+        E('feiertag', '🏖', 'Feiertage frei', 'frei', 'baustelle', 'urlaub', 'An Feiertagen …'),
+        E('staffel', '⚡', 'Staffelung', 'Staffel', 'baustelle', 'strom', 'Die Heizkörper teilen sich den Anschluss.'),
+        E('notprogramm', '🛟', 'Notprogramm', 'Not', 'baustelle', 'notprogramm', 'Fallen Home Assistant oder das Netz aus …'),
+        E('taste', '🔘', 'Taste = 1 h heizen', 'Taste', 'baustelle', 'notprogramm', 'Drücken der Taste …')];
+      const HAND = 'Gerade ohne Wirkung: im Modus Hand schaltet die Automatik nicht – nur Frostschutz und Tür offen gehen vor.';
+      const ein = () => litEl('.ck-d .ckd-name .ck-chip.ei-c'), chipsE = () => litEls('.ck-d .ei-b .ck-chip[data-k]').map(c => c.dataset.k).join();
+      const satzE = () => litEl('.ck-d .ckd-name > .ei-info'), lage = async (L, ck = null) => { x.eingestellt = L; panel.s.ck = ck; await panel.neuZeichnen(); };
+      if (alt.eingestellt && alt.eingestellt.length) { await lage(alt.eingestellt);   // Beispieldaten (struktur-0.7: aus logik/eingestellt gerechnet)
+        erwarte('Eingestellt: Beispieldaten der Integration – Anzahl im zugeklappten Chip', !!ein() && ein().querySelector('.ck-l').textContent.trim().startsWith(`${alt.eingestellt.length} eingestellt`)); }
+      await lage(VIELE); pruefe('Eingestellt zu');
+      erwarte('Eingestellt: zugeklappt unter dem Namen „⚙ 11 eingestellt ▾“ (Handy gleich kurz), keine Chips, kein Satz', !!ein() && ein().querySelector('.ck-ic').textContent === '⚙'
+        && ein().querySelector('.ck-l').textContent === '11 eingestellt' && ein().querySelector('.ck-k').textContent === '11 eingestellt' && /▾/.test(ein().textContent)
+        && ein().getAttribute('aria-expanded') === 'false' && !litEl('.ck-d .ei-b') && !satzE());
+      await klick('.ck-d .ck-chip.ei-c', 10); pruefe('Eingestellt auf');
+      erwarte('Eingestellt: aufgeklappt Zeilen „nur hier“ und „Baustelle“ in der Reihenfolge der Integration, ▴', /▴/.test(ein().textContent) && ein().getAttribute('aria-expanded') === 'true'
+        && litEls('.ck-d .ei-zeile').map(z => `${z.dataset.von}:${z.querySelector('.ei-von').textContent}`).join() === 'container:nur hier,baustelle:Baustelle'
+        && chipsE() === VIELE.map(c => `ei-${c.k}`).join() && litEls('.ck-d .ei-zeile[data-von="container"] .ck-chip').length === 6);
+      erwarte('Eingestellt: Chip mit langem Text (Desktop) und kurzem (Handy)', litEl('.ck-d .ck-chip[data-k="ei-frost"] .ck-l').textContent === 'Frostschutz unter 5°'
+        && litEl('.ck-d .ck-chip[data-k="ei-frost"] .ck-k').textContent === '5°' && litEl('.ck-d .ck-chip[data-k="ei-warm"] .ck-k').textContent === '−30 min');
+      await klick('.ck-d .ck-chip[data-k="ei-frost"]', 10); pruefe('Eingestellt Satz');
+      erwarte('Eingestellt: Antippen zeigt den Satz der Integration, Herkunft und „ändern ›“', !!satzE() && satzE().textContent.includes('Hält den Container auch nachts, am Wochenende und im Urlaub über 5 °C (aus erst über 7 °C).')
+        && satzE().textContent.includes('Einstellung der Baustelle – gilt für alle Container.') && satzE().querySelector('.ei-aendern').textContent === 'ändern ›'
+        && litEl('.ck-d .ck-chip[data-k="ei-frost"]').getAttribute('aria-expanded') === 'true' && !litEl('.ck-d .ei-grund'));
+      await klick('.ck-d .ck-chip[data-k="ei-tuer"]', 10);
+      erwarte('Eingestellt: anderer Chip ersetzt den Satz (nur dieser Container)', litEls('.ck-d .ck-info').length === 1 && satzE().textContent.includes('Einstellung nur dieses Containers.'));
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10);
+      erwarte('Eingestellt: ein Chip der Kästchen schließt den Eingestellt-Satz (ein Satz zur Zeit)', !satzE() && litEls('.ck-d .ck-info').length === 1 && !!litEl('.ck-d .ei-b'));
+      const sprung = async (k, pruef) => { await lage(VIELE, { id: x.id, info: `ei-${k}`, modus: false, ei: true }); await klick('.ck-d .ei-aendern', 20); const ok = pruef();
+        panel.s.sheet = null; if (panel.s.view !== 'container') await klick({ act: 'container', id: x.id }, 20); return ok; };
+      erwarte('Eingestellt: ändern › Frostschutz → Heizung › Regeln, Zeile Frostschutz', await sprung('frost', () => panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'regeln' && !!litEl('.sheet [data-r="frost"]')));
+      erwarte('Eingestellt: ändern › Tür → Regeln, Zeile Tür offen', await sprung('tuer', () => panel.s.sheet && panel.s.sheet.k === 'regeln' && !!litEl('.sheet [data-r="tuer"]')));
+      erwarte('Eingestellt: ändern › Zusatz → Container bearbeiten (Zeile Zusatz, falls zwei Heizkörper)', await sprung('stufen', () => panel.s.sheet && panel.s.sheet.art === 'bereich'));
+      erwarte('Eingestellt: ändern › Lernende Regelung → bleibt in der Ansicht, Zeile unten', await sprung('lernen', () => panel.s.view === 'container' && !panel.s.sheet && !!litEl('.c-einst [data-z="lernen"]') && !satzE()));
+      erwarte('Eingestellt: ändern › Feiertage → Urlaub & Feiertage', await sprung('feiertag', () => panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'urlaub'));
+      { const st0 = panel.d.e.staffel; panel.d.e.staffel = true;   // Vorrang gibt es nur mit Staffelung (die Integration liefert prio sonst nicht)
+        erwarte('Eingestellt: ändern › Vorrang → Einstellungen › Strom, Vorrang', await sprung('prio', () => panel.s.view === 'einst' && panel.s.evGruppe === 'strom' && !!litEl('.ev-inhalt [data-r="vorrang"]')));
+        panel.d.e.staffel = st0; }
+      erwarte('Eingestellt: ändern › Notprogramm → Einstellungen › Notprogramm', await sprung('notprogramm', () => panel.s.view === 'einst' && panel.s.evGruppe === 'notprogramm'));
+      x.modus = 'hand';
+      await lage(VIELE.map(c => ['frost', 'tuer', 'notprogramm'].includes(c.k) ? c : { ...c, wirkt: false, grund: HAND }), { id: x.id, info: null, modus: false, ei: false }); pruefe('Eingestellt Hand zu');
+      erwarte('Eingestellt Hand: zugeklappt „11 eingestellt · 8 ruhen“, am Handy nur „11 eingestellt“', ein().querySelector('.ck-l').textContent.replace(/\s+/g, ' ').trim() === '11 eingestellt · 8 ruhen'
+        && ein().querySelector('.ck-k').textContent === '11 eingestellt');
+      await klick('.ck-d .ck-chip.ei-c', 10); await klick('.ck-d .ck-chip[data-k="ei-lernen"]', 10); pruefe('Eingestellt Hand Satz');
+      erwarte('Eingestellt Hand: Wirkungsloses gedämpft/gestrichelt (ei-ruht), Frost/Tür/Notprogramm nicht', litEls('.ck-d .ei-b .ck-chip.ei-ruht').length === 8
+        && ['frost', 'tuer', 'notprogramm'].every(k => !litEl(`.ck-d .ck-chip[data-k="ei-${k}"]`).classList.contains('ei-ruht'))
+        && litEl('.ck-d .ck-chip[data-k="ei-lernen"]').getAttribute('title') === 'an, wirkt gerade nicht');
+      erwarte('Eingestellt Hand: Satz beginnt mit dem Grund der Integration', satzE().querySelector('.ei-grund').textContent === HAND && satzE().textContent.includes('Lernt bei jedem Heizen mit'));
+      await lage([]);
+      erwarte('Eingestellt: leere Liste (Pumpenschacht, nichts an) – kein Eingestellt-Chip', !ein() && !litEl('.ck-d .ei-b'));
       Object.assign(x, alt); panel.s.ck = null; await panel.neuZeichnen(); }
     neu(); await klick({ act: 'g-aktiv', i: '0' }, 20);
     erwarte('BSM-034.02: Chip setzt den Status über baustelle/geraet', letzte('baustelle/geraet').some(x => x.aktion === 'status' && x.geraet === pol().geraete[0].id && x.status === 'inaktiv'));

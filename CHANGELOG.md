@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.156] – 2026-10-28
+
+- Container-Kopf „Eingestellt“ (Mockup `eingestellt.html` Variante C, abgenommen 28.10.2026): Unter dem Namen steht
+  zugeklappt „⚙ 7 eingestellt ▾“; aufgeklappt zeigen Chips, was für diesen Container eingeschaltet ist – „nur hier“
+  (Lernende Regelung, eigenes Warm ab, Kleidung trocknen, Zusatz nur bei Bedarf, Vorrang, Tür-Pause) und „Baustelle“
+  (Frostschutz, Vorheizen, Nachheizen, Kälte-Frühstart, Feiertage frei, Staffelung, Notprogramm, Taste am Plug).
+  Antippen erklärt die Einstellung in einem Satz, „ändern ›“ springt zu ihr. Im Modus Hand ist, was gerade nicht wirkt,
+  gedämpft, mit Grund. Was gilt und wirkt, entscheidet die Integration (`eingestellt` je Container,
+  `logik/eingestellt.py`). Der Chip „🧠 lernt mit“ unter „Lernen“ entfällt – die Lernende Regelung steht jetzt hier.
+
 ## [0.8.155] – 2026-10-28
 
 - FE-0030: Die rote Prognose-Linie der Heizperiode war eine Gerade – alle Container rechneten mit dem Tagesschnitt

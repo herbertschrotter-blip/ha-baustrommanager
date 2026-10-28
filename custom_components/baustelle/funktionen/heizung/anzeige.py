@@ -8,8 +8,8 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.const import STATE_ON
 
 from ...const import HEIZROLLEN, ROLLE_HEIZKOERPER
-from ...logik import lernen
-from ...logik import warnungen as warn_logik
+from ...logik import eingestellt as eingestellt_logik, lernen
+from ...logik import sensoren as sensor_logik, warnungen as warn_logik
 from ...logik.arbeitszeit import AusnahmeArt, StatusArt, frei_gilt, status as plan_status, uhrzeit
 from ...logik.regelung import SollGrund
 from ...texte import wochentag
@@ -146,6 +146,22 @@ def _takt(hz: Heizung, bid: str, s_c: tuple[Soll, LageContainer] | None, jetzt: 
     an = any((z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON for g in heizer if hz.st.geraet_aktiv(g))
     anteil = lernen.tpi_anteil(lage.temperatur, lage.soll, lage.tpi)
     return lernen.takt_anzeige(anteil, lage.tpi.minute_im_zyklus, an, jetzt)
+
+
+def eingestellt(hz: Heizung, bid: str) -> list[dict[str, Any]]:
+    """Eingeschaltete Einstellungen des Containers für den Kopf der Seite (logik/eingestellt, Mockup eingestellt.html C)."""
+    st = hz.st
+    info = st.bereiche.get(bid)
+    heizer = hz.heizer_von(bid)
+    namen = {g.id: g.name for g in heizer}
+    haupt, zusatz = hz.haupt_und_zusatz(bid) if len(heizer) >= 2 else ([], [])
+    lage = eingestellt_logik.Lage(
+        heizung=st.e["heizung"], staffel=st.e["staffel"], bereich=st.einstellungen.bereich(bid), automatik=st.automatik,
+        modus=hz.modus(bid), fuehler=bool(info is not None and info.fuehler), heizkoerper=len(heizer),
+        primaer=namen.get(haupt[0]) if haupt else None, zusatz=tuple(namen[g] for g in zusatz if g in namen),
+        kontakte=tuple(s.name for s in st.sensoren(bid) if s.art in sensor_logik.KONTAKTE),
+    )
+    return eingestellt_logik.eingestellt(lage)
 
 
 def _zieht_strom(hz: Heizung, g: GeraetInfo) -> bool:

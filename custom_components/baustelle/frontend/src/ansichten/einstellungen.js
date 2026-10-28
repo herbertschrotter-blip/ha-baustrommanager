@@ -53,7 +53,7 @@ function strom(p) {
         <div class="zeile unter"><span>Mindestpause</span>${st('min_pause', 1, v => `${v} min`)}</div>
         <div class="zeile unter"><div><span>Wechsel im Rundlauf</span><div class="leise">wenn nicht alle gleichzeitig dürfen</div></div>${st('takt', 5, v => `${v} min`)}</div>
         <div class="zeile unter"><span class="leise">Gesamtzähler: keiner – gerechnet wird mit den Shellys und der Reserve je Anschluss. Später kann je Anschluss ein Zähler dazukommen.</span></div>
-        <div class="gruppe-t gt-einzug">Vorrang, wenn nicht alle dürfen</div>
+        <div class="gruppe-t gt-einzug" data-r="vorrang">Vorrang, wenn nicht alle dürfen</div>
         ${d.bereiche.filter(b => !b.pumpe).map(b => html`<div class="zeile unter"><span>${b.name}</span><div class="seg klein">${['niedrig', 'normal', 'hoch'].map(v => html`<button data-v=${v} class=${(b.prio || 'normal') === v ? 'on' : ''} @click=${() => p.vorrang(b, v)}>${v}</button>`)}</div></div>`)}
         <div class="leise p-fuss">Frostschutz geht immer vor. Pumpen und andere Verbraucher werden mitgezählt, aber nie geschaltet.</div>` : nothing}</div>`;
 }

@@ -91,7 +91,7 @@ function bereich(p, s) {
   if (e.tuer && !tueren.some(x => x[0] === e.tuer)) tueren.unshift([e.tuer, p.name(e.tuer)]);
   const warm = () => { const w = { vor: e.warmVor ?? d.e.warm_vor, nach: e.warmNach ?? d.e.warm_nach, vor_eigen: e.warmVor !== null, nach_eigen: e.warmNach !== null };   // AN-0004
     const sw = (k, v, eigen, f) => html`<span class="stepper klein" data-w=${k}><button data-d="-5" @click=${p.nurAdmin(() => p.warmEigen(e, k, -5))}>−</button><b class=${eigen ? 'eigen' : ''}>${f(v)}</b><button data-d="5" @click=${p.nurAdmin(() => p.warmEigen(e, k, 5))}>+</button></span>`;
-    return html`<div class="gruppe-t">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w.vor_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('vor', w.vor, w.vor_eigen, v => v ? `${v} min vorher` : 'bei Beginn')}</div>
+    return html`<div class="gruppe-t" data-zeile="warm">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w.vor_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('vor', w.vor, w.vor_eigen, v => v ? `${v} min vorher` : 'bei Beginn')}</div>
             <div class="zeile"><div><span>Warm halten</span><div class="leise">${w.nach_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('nach', w.nach, w.nach_eigen, v => v ? `${v} min länger` : 'bis Ende')}</div>
             ${w.vor_eigen || w.nach_eigen ? html`<button class="zeile" @click=${p.nurAdmin(() => p.warmZurueck(e))}><span class="blau">Wie die Baustelle</span></button>` : nothing}`; };
   // AN-0015 (Mockup primaer.html A): genau ein Primärheizkörper je Container, die anderen sind Zusatz

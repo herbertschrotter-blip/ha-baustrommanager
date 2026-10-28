@@ -634,6 +634,22 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .ck-k { display: none; }
 .ck-modi { flex-wrap: wrap; gap: 6px; } .ck-modi button { border: 0; border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 13px; background: rgba(120,120,128,.2); color: var(--ink); cursor: pointer; }
 .ck-modi button.on { background: var(--amber); color: #1a1000; font-weight: 600; } .ck-modi button:disabled { opacity: .4; cursor: not-allowed; }
+/* Eingestellt unter dem Namen (Mockup eingestellt.html, Variante C): zugeklappt ein Chip, aufgeklappt je Herkunft eine Zeile */
+.ck-d .ei-name { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 6px; }
+.ck-d .ei-name > .ei-info { align-self: stretch; }
+.ck-d .ck-chip.ei-c { height: 26px; padding: 0 10px; font-size: 12.5px; gap: 5px; }
+.ei-ruht-t { color: var(--ink2); }
+.ei-b { display: flex; flex-direction: column; gap: 4px; }
+.ei-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 5px; }
+.ei-von { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--ink2); opacity: .8; white-space: nowrap; min-width: 64px; }
+.ck-d .ei-b .ck-chip { height: 24px; padding: 0 8px; font-size: 12px; gap: 4px; background: transparent; }
+.ck-d .ei-b .ck-chip.auf { background: rgba(120,120,128,.32); }
+.ei-chip .ck-ic { font-size: 1em; }
+.ei-chip.ei-ruht { opacity: .5; border-style: dashed; } .ei-chip.ei-ruht.auf { opacity: .85; }
+.ei-info > span { max-width: 70ch; }
+.ei-grund { font-weight: 600; color: var(--ink); }
+.ei-von-t { opacity: .85; }
+.ei-aendern { border: 0; background: none; padding: 0; font: inherit; color: var(--blau); cursor: pointer; white-space: nowrap; }
 @container (max-width: 640px) {   /* Handy: Name, darunter das Rad kompakt, Gruppen zweispaltig mit kurzen Chips */
   .ck-d { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "rad" "rest"; gap: 6px; padding: 12px 12px 14px; }
   .ck-d .ckd-gruppen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
@@ -650,6 +666,11 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
   .ck-d .ck-l { display: none; } .ck-d .ck-k { display: inline; }
   .ck-d .ck-info { font-size: 11.5px; padding: 6px 8px 6px 10px; }
   .ck-d .ck-gefuehl button { padding: 4px 8px; font-size: 14px; }
+  .ck-d .ei-name { align-items: center; }
+  .ei-b, .ei-zeile { justify-content: center; }
+  .ck-d .ei-b .ck-chip { height: 24px; padding: 0 7px; font-size: 11.5px; }
+  .ei-zeile > .ei-von { min-width: 0; flex-basis: 100%; text-align: center; font-size: 9.5px; }
+  .ck-d .ei-info { text-align: left; }
 }
 .c-rad { position: relative; width: 210px; margin: 0 auto; }   /* WU-0018: mittig über „zu kalt / passt / zu warm“ */ .c-rad svg { width: 210px; height: 210px; display: block; }
 .c-rad-k { font-size: 11px; letter-spacing: 2px; fill: var(--ink2); } .c-rad-t { font-size: 38px; font-weight: 700; fill: var(--ink); } .c-rad-s { font-size: 13px; font-weight: 600; }

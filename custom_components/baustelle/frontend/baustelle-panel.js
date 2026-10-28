@@ -1015,6 +1015,7 @@ function bauen(r5, hass, ersatzZone) {
       modus: pumpe ? null : MODI.some((m3) => m3[0] === c4.modus) ? c4.modus : eb.bedarf ? "bedarf" : eb.auto === false ? "hand" : b3.fuehler ? "thermo" : "plan",
       lern: c4.lernen || null,
       takt: c4.takt || null,
+      eingestellt: Array.isArray(c4.eingestellt) ? c4.eingestellt : [],
       groesse: c4.groesse || null,
       symbol: c4.symbol || null,
       warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null,
@@ -2649,7 +2650,7 @@ var ZUST_IC = { heizt: "🔥", pause: "⏸", aus: "○", frost: "❄", trocknen:
 var ZUST_KURZ = { heizt: "heizt", pause: "Pause", aus: "aus", frost: "Frost", trocknen: "trocknet", offline: "offline", bereit: "bereit" };
 var REGEL_T = { plan: "Heizplan", thermo: "Thermostat", bedarf: "bei Bedarf", hand: "von Hand", aus: "nur Frostschutz" };
 var vz = (x2) => x2 > 0 ? "+" : "−";
-var ckZ = (p4) => p4.s.ck && p4.s.ck.id === p4.b.id ? p4.s.ck : { id: p4.b.id, info: null, modus: false };
+var ckZ = (p4) => p4.s.ck && p4.s.ck.id === p4.b.id ? p4.s.ck : { id: p4.b.id, info: null, modus: false, ei: false };
 var ckSetzen = (p4, x2) => {
   p4.s.ck = { ...ckZ(p4), ...x2 };
   p4.neuZeichnen();
@@ -2774,14 +2775,7 @@ function kopfChips(p4, b3) {
     const w2 = lern.warm;
     if (w2 && w2.gelernt && w2.plan) L2.push({ k: "warm", ic: "⏱", ton: "", lang: `warm um ${uhr(w2.plan.ziel)} · ab ${uhr(w2.plan.start)}`, kurz: uhr(w2.plan.ziel), info: p4.warmText(b3) });
     else if (w2) L2.push({ k: "warm", ic: "⏱", ton: "", lang: "Aufheizen lernt noch", kurz: "lernt", info: p4.warmText(b3) });
-    L2.push(lern.offen ? { k: "lern", ic: "🧠", ton: "amber", lang: "lernt gerade nicht", kurz: "lernt nicht", info: p4.offenText(b3) || p4.cRegelText(b3) } : {
-      k: "lern",
-      ic: "🧠",
-      ton: "",
-      lang: "lernt mit",
-      kurz: "lernt",
-      info: "Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird und wie viel er nach dem Ausschalten nachwärmt – damit er pünktlich warm ist und nicht zu warm wird."
-    });
+    if (lern.offen) L2.push({ k: "lern", ic: "🧠", ton: "amber", lang: "lernt gerade nicht", kurz: "lernt nicht", info: p4.offenText(b3) || p4.cRegelText(b3) });
     if (zahl(lern.erwartet)) L2.push({
       k: "nach",
       ic: "↘",
@@ -2804,6 +2798,51 @@ var info = (p4, L2) => {
   const c4 = L2.find((x2) => x2.k === ckZ(p4).info);
   return c4 ? b2`<div class=${c4.breit ? "ck-info tk-info" : "ck-info"} role="note"><span>${c4.info}</span><button aria-label="schließen" @click=${() => ckSetzen(p4, { info: null })}>✕</button></div>` : A;
 };
+var EI_ZEILEN = [["container", "nur hier"], ["baustelle", "Baustelle"]];
+var EI_VON = { baustelle: "Einstellung der Baustelle – gilt für alle Container.", container: "Einstellung nur dieses Containers." };
+var hin = (p4, sel) => p4.updateComplete.then(() => {
+  const el = p4.ui && p4.ui.querySelector(sel);
+  if (el && el.scrollIntoView) el.scrollIntoView({ block: "center" });
+});
+function eiSpringen(p4, ziel2) {
+  const [art, z2] = String(ziel2 || "").split(":");
+  if (art === "container") {
+    ckSetzen(p4, { info: null });
+    return hin(p4, `.c-einst [data-z="${z2}"]`);
+  }
+  if (art === "bearbeiten") {
+    p4.einblenden("bereich");
+    return hin(p4, `.sheet [data-zeile="${z2}"]`);
+  }
+  if (art === "regeln") {
+    p4.hzAuf("regeln");
+    return hin(p4, `.sheet [data-r="${z2}"]`);
+  }
+  if (art === "urlaub") return p4.hzAuf("urlaub");
+  if (art === "strom") {
+    p4.einstGruppe("strom");
+    return z2 ? hin(p4, `.ev-inhalt [data-r="${z2}"]`) : p4.updateComplete;
+  }
+  if (art === "notprogramm") return p4.einstGruppe("notprogramm");
+  return void 0;
+}
+function eingestellt(p4, b3) {
+  const L2 = b3.eingestellt || [];
+  if (!L2.length) return A;
+  const z2 = ckZ(p4), ruhen = L2.filter((c4) => c4.wirkt === false).length, offen = L2.find((c4) => z2.info === `ei-${c4.k}`);
+  const chipE = (c4) => {
+    const k2 = `ei-${c4.k}`, auf = z2.info === k2, ruht = c4.wirkt === false;
+    return b2`<button class="ck-chip ei-chip ${ruht ? "ei-ruht" : ""} ${auf ? "auf" : ""}" data-k=${k2} aria-expanded=${auf ? "true" : "false"} title=${ruht ? "an, wirkt gerade nicht" : A}
+        @click=${() => ckSetzen(p4, { info: auf ? null : k2, modus: false })}><span class="ck-ic">${c4.ic}</span><span class="ck-l">${c4.text}</span><span class="ck-k">${c4.kurz}</span></button>`;
+  };
+  const satz = offen ? b2`<div class="ck-info ei-info" role="note"><span>${offen.wirkt === false && offen.grund ? b2`<b class="ei-grund">${offen.grund}</b> ` : A}${offen.satz}
+        <span class="ei-von-t">${EI_VON[offen.von] || ""}</span> <button class="ei-aendern" @click=${() => eiSpringen(p4, offen.ziel)}>ändern ›</button></span>
+      <button aria-label="schließen" @click=${() => ckSetzen(p4, { info: null })}>✕</button></div>` : A;
+  const zeilen = EI_ZEILEN.map(([v2, t5]) => [v2, t5, L2.filter((c4) => c4.von === v2)]).filter(([, , X]) => X.length).map(([v2, t5, X]) => b2`<div class="ei-zeile" data-von=${v2}><span class="ei-von">${t5}</span>${X.map(chipE)}</div>`);
+  return b2`<button class="ck-chip ei-c ${z2.ei ? "auf" : ""}" aria-expanded=${z2.ei ? "true" : "false"} @click=${() => ckSetzen(p4, { ei: !z2.ei, info: null, modus: false })}>
+      <span class="ck-ic">⚙</span><span class="ck-l">${L2.length} eingestellt${ruhen ? b2` <span class="ei-ruht-t">· ${ruhen} ruhen</span>` : A}</span><span class="ck-k">${L2.length} eingestellt</span> ${z2.ei ? "▴" : "▾"}</button>
+    ${z2.ei ? b2`<div class="ei-b">${zeilen}</div>${satz}` : A}`;
+}
 function sollChips(p4, b3) {
   const S3 = b3.sollJ || {}, gl = p4.d.e.soll_art === "gleitend", G = p4.d.sollG, gs = G ? de(G.soll, 1) : "–", L2 = [];
   if (gl) L2.push({
@@ -2856,7 +2895,7 @@ function kopf(p4, b3) {
   const gruppe = ([t5, fest, dazu, X]) => fest || X.length ? b2`<div class="ckd-g" data-g=${t5}><div class="ckd-gt">${t5}</div><div class="ck-chips">${fest || A}${X.map((c4) => chip(p4, c4))}</div>${dazu || info(p4, X)}</div>` : A;
   const mitRad = b3.fuehler && b3.t !== null, mitSoll = mitRad && p4.sollAktiv(b3);
   return b2`<div class="glas-panel ck ck-d ck-d2 ${b3.z}" style="--c:${FARBE[b3.z]}">
-      <div class="ckd-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b3.name}</span></div></div>
+      <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b3.name}</span></div>${eingestellt(p4, b3)}</div>
       <div class="ckd-rad c-kern">${mitRad ? rad(p4, b3) : ohneFuehler(b3)}${mitSoll ? b2`<div class="ckd-soll"><div class="ckd-gt">Soll</div>${sollChips(p4, b3)}${gefuehl(p4, b3)}</div>` : A}</div>
       <div class="ckd-gruppen">${GR.map(gruppe)}</div></div>`;
 }
@@ -2912,10 +2951,10 @@ function containerVorlage(p4) {
       <div class="glas-panel block"><div class="block-kopf"><b>Geräte</b><span class="leise">⏻ = Handbetrieb · aktiv aus = die Automatik lässt es aus</span></div>
         ${b3.geraete.length ? b2`<div class="c-chips">${geraete(p4, b3)}</div>` : b2`<div class="leise">Noch kein Gerät</div>`}</div>
       ${sensorLeisteVorlage(p4, b3)}
-      <div class="glas-panel liste">
+      <div class="glas-panel liste c-einst">
         ${b3.tuer && b3.tuer.offen ? b2`<div class="zeile"><div><b>🚪 ${b3.tuer.sensor}</b><div class="leise">${b3.tuer.offen ? `offen seit ${b3.tuer.offen} min – Heizung pausiert nach ${d3.e.tuer_pause} min, Meldung nach ${d3.e.tuer_melden} min` : "zu"}</div></div></div>` : A}
-        ${!b3.fuehler || !b3.lern ? A : b2`<div class="zeile"><div><b>🧠 Lernende Regelung</b><div class="leise">${["thermo", "bedarf"].includes(b3.modus) ? "lernt, wie lange der Raum nach dem Ausschalten nachheizt, und schaltet früher ab" : "wirkt nur im Modus Thermostat oder Bei Bedarf"}${b3.lern.an ? b2` · <button class="link" @click=${() => p4.einblenden("lernen")}>Lernstand ›</button>` : A}</div></div>${schalterVorlage(b3.lern.an, () => p4.lernenUmschalten(b3))}</div>`}
-        <div class="zeile"><span>👕 Kleidung trocknen nach Regen</span>${schalterVorlage(b3.trocknen, () => p4.trocknenUmschalten(b3))}</div>
+        ${!b3.fuehler || !b3.lern ? A : b2`<div class="zeile" data-z="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${["thermo", "bedarf"].includes(b3.modus) ? "lernt, wie lange der Raum nach dem Ausschalten nachheizt, und schaltet früher ab" : "wirkt nur im Modus Thermostat oder Bei Bedarf"}${b3.lern.an ? b2` · <button class="link" @click=${() => p4.einblenden("lernen")}>Lernstand ›</button>` : A}</div></div>${schalterVorlage(b3.lern.an, () => p4.lernenUmschalten(b3))}</div>`}
+        <div class="zeile" data-z="trocknen"><span>👕 Kleidung trocknen nach Regen</span>${schalterVorlage(b3.trocknen, () => p4.trocknenUmschalten(b3))}</div>
       </div>`;
 }
 
@@ -3201,12 +3240,12 @@ function soll(p4, z2, st) {
 }
 function regelnInhalt(p4) {
   const e6 = p4.d.e, C2 = p4.d.bereiche.filter((b3) => !b3.pumpe), lernend = C2.filter((b3) => b3.lern && b3.lern.warm), st = (k2, s4, fmt) => stepperVorlage(p4, k2, s4, fmt);
-  const z2 = (titel2, text2, ctrl, unter) => b2`<div class="zeile${unter ? " unter" : ""}"><div>${unter ? b2`<span>${titel2}</span>` : b2`<b>${titel2}</b>`}${text2 ? b2`<div class="leise">${text2}</div>` : A}</div>${ctrl || A}</div>`;
+  const z2 = (titel2, text2, ctrl, unter, r5) => b2`<div class="zeile${unter ? " unter" : ""}" data-r=${r5 || A}><div>${unter ? b2`<span>${titel2}</span>` : b2`<b>${titel2}</b>`}${text2 ? b2`<div class="leise">${text2}</div>` : A}</div>${ctrl || A}</div>`;
   const link = (fn) => b2`<button class="rv-link" @click=${fn}>ändern ›</button>`;
   const nichtLern = lernend.length ? b2` · <i>nicht für lernende Container</i>` : A, bool = (k2) => schalterVorlage(e6[k2], () => p4.einstellungUmschalten(k2));
   const R2 = {
-    vorheizen: z2("Vorheizen", b2`vor Arbeitsbeginn, damit es warm ist${nichtLern}`, st("vorheizen", 5, min)),
-    frueh: b2`${z2("Kälte-Frühstart", b2`unter ${minus(e6.frueh_temp)} zusätzlich früher${nichtLern}`, bool("fruehstart"))}${e6.fruehstart ? b2`${z2("wenn morgens kälter als", "", st("frueh_temp", 1, minus), true)}${z2("so viel früher", "", st("frueh_min", 5, min), true)}` : A}`,
+    vorheizen: z2("Vorheizen", b2`vor Arbeitsbeginn, damit es warm ist${nichtLern}`, st("vorheizen", 5, min), false, "vorheizen"),
+    frueh: b2`${z2("Kälte-Frühstart", b2`unter ${minus(e6.frueh_temp)} zusätzlich früher${nichtLern}`, bool("fruehstart"), false, "fruehstart")}${e6.fruehstart ? b2`${z2("wenn morgens kälter als", "", st("frueh_temp", 1, minus), true)}${z2("so viel früher", "", st("frueh_min", 5, min), true)}` : A}`,
     lernend: z2("🧠 Lernende Container", `heizen selbst so früh, dass das Soll rechtzeitig erreicht ist – statt Vorheizen, Kälte-Frühstart und Nachheizen. Bis genug gelernt ist, gelten die Werte oben.${lernend.length ? ` Jetzt: ${lernend.map((b3) => b3.name).join(", ")}.` : " Gilt für Container mit Fühler, Modus Thermostat und lernender Regelung."}`, ""),
     warm_vor: z2("Soll erreicht", "vor Arbeitsbeginn, z. B. zum Umziehen", st("warm_vor", 5, (v2) => v2 ? `${v2} min vorher` : "bei Beginn"), true),
     warm_max: z2("Frühestens", "vor Arbeitsbeginn – Grenze, falls der Raum sehr kalt ist", st("warm_max", 15, (v2) => `${v2} min vorher`), true),
@@ -3219,12 +3258,12 @@ function regelnInhalt(p4) {
       const n4 = C2.filter((b3) => b3.stufenAn);
       return n4.length ? ` Jetzt: ${n4.map((b3) => b3.name).join(", ")}.` : " Einschalten im Container unter Bearbeiten.";
     })()}`, "")}${z2("… der Raum weiter unter dem Soll ist als", "", st("stufen_abstand", 0.5, grad), true)}${z2("… einer schon so lange läuft", "", st("stufen_min", 5, min), true)}${z2("… und es dabei weniger wärmer wurde als", "", st("stufen_anstieg", 0.1, (v2) => `${de(v2)} °C`), true)}${z2("… es draußen kälter ist als (beide von Anfang an)", "", st("stufen_kalt", 1, minus), true)}`,
-    tuer: b2`${z2("🚪 Tür offen", "Heizung pausieren nach", st("tuer_pause", 1, min))}${z2("Nachricht nach", "", st("tuer_melden", 5, min), true)}`,
-    nachheizen: z2("Nachheizen", b2`nach Arbeitsende, jeden Tag${nichtLern}`, st("nachheizen", 5, min)),
+    tuer: b2`${z2("🚪 Tür offen", "Heizung pausieren nach", st("tuer_pause", 1, min), false, "tuer")}${z2("Nachricht nach", "", st("tuer_melden", 5, min), true)}`,
+    nachheizen: z2("Nachheizen", b2`nach Arbeitsende, jeden Tag${nichtLern}`, st("nachheizen", 5, min), false, "nachheizen"),
     warm_nach: z2("Warm halten (lernende)", "nach Arbeitsende; Kleidung trocknen kommt dazu", st("warm_nach", 5, (v2) => v2 ? `${v2} min länger` : "bis Ende"), true),
     trocknen: z2("👕 Kleidung trocknen", `ab ${de(e6.tr_mm, 1)} mm Regen: +${e6.tr_laenger} min nach dem Nachheizen, am Morgen ${e6.tr_frueher} min früher`, link(() => p4.hzAuf("trocknen"))),
     hand: z2("✋ Handbetrieb übernehmen nach", "Läuft ein Heizkörper zu lange von Hand, kommt eine Nachricht – ohne „So lassen“ übernimmt die Automatik so viel später", st("hand_nachfrist", 5, min)),
-    frost: b2`${z2("❄ Frostschutz", "hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit", bool("frost"))}${e6.frost ? b2`${z2("ein unter", "", st("frost_temp", 0.5, grad), true)}${z2("aus über", "", st("frost_aus", 0.5, grad), true)}${z2("ohne Fühler: ein, wenn draußen unter", "aus erst 2 °C darüber; der Heizkörperthermostat regelt dann selbst", e6.frost_aussen === null ? b2`<span class="leise">aus</span>` : st("frost_aussen", 1, minus), true)}${z2("auch bei Automatik aus", "schaltet dann nur den Frostschutz, sonst nichts", bool("frost_immer"), true)}` : A}`,
+    frost: b2`${z2("❄ Frostschutz", "hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit", bool("frost"), false, "frost")}${e6.frost ? b2`${z2("ein unter", "", st("frost_temp", 0.5, grad), true)}${z2("aus über", "", st("frost_aus", 0.5, grad), true)}${z2("ohne Fühler: ein, wenn draußen unter", "aus erst 2 °C darüber; der Heizkörperthermostat regelt dann selbst", e6.frost_aussen === null ? b2`<span class="leise">aus</span>` : st("frost_aussen", 1, minus), true)}${z2("auch bei Automatik aus", "schaltet dann nur den Frostschutz, sonst nichts", bool("frost_immer"), true)}` : A}`,
     urlaub: z2("🏖 Urlaub & freie Feiertage", { frost: "nur Frostschutz", absenk: `absenken auf ${de(e6.absenk)} °C`, aus: "alles aus" }[e6.urlaub], link(() => p4.hzAuf("urlaub"))),
     zieht: z2("Heizt tatsächlich ab", "Leistung, ab der ein Heizkörper als „heizt“ zählt – Heizzeit geheizt, Heiztage, Warm ab, Lernen, Wann heizt was", st("zieht_w", 5, (v2) => `${v2} W`)),
     fuehler: z2("🌡 Fühler ohne Wert", "meldet ein Fühler nichts, gilt sein letzter Wert noch so lange – danach regelt der Container wie ohne Fühler", st("fuehler_halten", 5, min)),
@@ -3580,7 +3619,7 @@ function strom(p4) {
         <div class="zeile unter"><span>Mindestpause</span>${st("min_pause", 1, (v2) => `${v2} min`)}</div>
         <div class="zeile unter"><div><span>Wechsel im Rundlauf</span><div class="leise">wenn nicht alle gleichzeitig dürfen</div></div>${st("takt", 5, (v2) => `${v2} min`)}</div>
         <div class="zeile unter"><span class="leise">Gesamtzähler: keiner – gerechnet wird mit den Shellys und der Reserve je Anschluss. Später kann je Anschluss ein Zähler dazukommen.</span></div>
-        <div class="gruppe-t gt-einzug">Vorrang, wenn nicht alle dürfen</div>
+        <div class="gruppe-t gt-einzug" data-r="vorrang">Vorrang, wenn nicht alle dürfen</div>
         ${d3.bereiche.filter((b3) => !b3.pumpe).map((b3) => b2`<div class="zeile unter"><span>${b3.name}</span><div class="seg klein">${["niedrig", "normal", "hoch"].map((v2) => b2`<button data-v=${v2} class=${(b3.prio || "normal") === v2 ? "on" : ""} @click=${() => p4.vorrang(b3, v2)}>${v2}</button>`)}</div></div>`)}
         <div class="leise p-fuss">Frostschutz geht immer vor. Pumpen und andere Verbraucher werden mitgezählt, aber nie geschaltet.</div>` : A}</div>`;
 }
@@ -3781,7 +3820,7 @@ function bereich(p4, s4) {
   const warm = () => {
     const w2 = { vor: e6.warmVor ?? d3.e.warm_vor, nach: e6.warmNach ?? d3.e.warm_nach, vor_eigen: e6.warmVor !== null, nach_eigen: e6.warmNach !== null };
     const sw = (k2, v2, eigen, f3) => b2`<span class="stepper klein" data-w=${k2}><button data-d="-5" @click=${p4.nurAdmin(() => p4.warmEigen(e6, k2, -5))}>−</button><b class=${eigen ? "eigen" : ""}>${f3(v2)}</b><button data-d="5" @click=${p4.nurAdmin(() => p4.warmEigen(e6, k2, 5))}>+</button></span>`;
-    return b2`<div class="gruppe-t">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w2.vor_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("vor", w2.vor, w2.vor_eigen, (v2) => v2 ? `${v2} min vorher` : "bei Beginn")}</div>
+    return b2`<div class="gruppe-t" data-zeile="warm">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w2.vor_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("vor", w2.vor, w2.vor_eigen, (v2) => v2 ? `${v2} min vorher` : "bei Beginn")}</div>
             <div class="zeile"><div><span>Warm halten</span><div class="leise">${w2.nach_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("nach", w2.nach, w2.nach_eigen, (v2) => v2 ? `${v2} min länger` : "bis Ende")}</div>
             ${w2.vor_eigen || w2.nach_eigen ? b2`<button class="zeile" @click=${p4.nurAdmin(() => p4.warmZurueck(e6))}><span class="blau">Wie die Baustelle</span></button>` : A}`;
   };
@@ -5473,6 +5512,22 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .ck-k { display: none; }
 .ck-modi { flex-wrap: wrap; gap: 6px; } .ck-modi button { border: 0; border-radius: 10px; padding: 6px 12px; font: inherit; font-size: 13px; background: rgba(120,120,128,.2); color: var(--ink); cursor: pointer; }
 .ck-modi button.on { background: var(--amber); color: #1a1000; font-weight: 600; } .ck-modi button:disabled { opacity: .4; cursor: not-allowed; }
+/* Eingestellt unter dem Namen (Mockup eingestellt.html, Variante C): zugeklappt ein Chip, aufgeklappt je Herkunft eine Zeile */
+.ck-d .ei-name { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 6px; }
+.ck-d .ei-name > .ei-info { align-self: stretch; }
+.ck-d .ck-chip.ei-c { height: 26px; padding: 0 10px; font-size: 12.5px; gap: 5px; }
+.ei-ruht-t { color: var(--ink2); }
+.ei-b { display: flex; flex-direction: column; gap: 4px; }
+.ei-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 5px; }
+.ei-von { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase; color: var(--ink2); opacity: .8; white-space: nowrap; min-width: 64px; }
+.ck-d .ei-b .ck-chip { height: 24px; padding: 0 8px; font-size: 12px; gap: 4px; background: transparent; }
+.ck-d .ei-b .ck-chip.auf { background: rgba(120,120,128,.32); }
+.ei-chip .ck-ic { font-size: 1em; }
+.ei-chip.ei-ruht { opacity: .5; border-style: dashed; } .ei-chip.ei-ruht.auf { opacity: .85; }
+.ei-info > span { max-width: 70ch; }
+.ei-grund { font-weight: 600; color: var(--ink); }
+.ei-von-t { opacity: .85; }
+.ei-aendern { border: 0; background: none; padding: 0; font: inherit; color: var(--blau); cursor: pointer; white-space: nowrap; }
 @container (max-width: 640px) {   /* Handy: Name, darunter das Rad kompakt, Gruppen zweispaltig mit kurzen Chips */
   .ck-d { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "rad" "rest"; gap: 6px; padding: 12px 12px 14px; }
   .ck-d .ckd-gruppen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
@@ -5489,6 +5544,11 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
   .ck-d .ck-l { display: none; } .ck-d .ck-k { display: inline; }
   .ck-d .ck-info { font-size: 11.5px; padding: 6px 8px 6px 10px; }
   .ck-d .ck-gefuehl button { padding: 4px 8px; font-size: 14px; }
+  .ck-d .ei-name { align-items: center; }
+  .ei-b, .ei-zeile { justify-content: center; }
+  .ck-d .ei-b .ck-chip { height: 24px; padding: 0 7px; font-size: 11.5px; }
+  .ei-zeile > .ei-von { min-width: 0; flex-basis: 100%; text-align: center; font-size: 9.5px; }
+  .ck-d .ei-info { text-align: left; }
 }
 .c-rad { position: relative; width: 210px; margin: 0 auto; }   /* WU-0018: mittig über „zu kalt / passt / zu warm“ */ .c-rad svg { width: 210px; height: 210px; display: block; }
 .c-rad-k { font-size: 11px; letter-spacing: 2px; fill: var(--ink2); } .c-rad-t { font-size: 38px; font-weight: 700; fill: var(--ink); } .c-rad-s { font-size: 13px; font-weight: 600; }
@@ -5916,7 +5976,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.155";
+var SEITE_VERSION = "0.8.156";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];
