@@ -7,6 +7,11 @@
 // „Schnell aufheizen“; rechts Rad, „zu kalt / passt / zu warm“ und der Satz zum gleitenden Soll.
 // Vorschlag: der Fließtext wird in kurze Zustands-Chips zerlegt; den bisherigen Satz zeigt ein Antippen des Chips
 // (kleine Einblendung unter den Chips). Schrift nach Breite des Kopfs (Name groß, Chips mittel, Erklärung klein).
+//   D  gewählt (Herbert, 28.10.2026), Standard der Leiste: Desktop Rad ganz links, rechts Name, Modus-Auswahl-Chip,
+//      „Schnell aufheizen“-Chip und Zustands-Chips ausführlich, Soll-Chips und Gefühl-Knöpfe kompakt; Handy: Name, darunter
+//      das Rad (kompakt), dann Soll und Chips kurz („🚪 4 min“, „⏸ Takt“, „⏱ 06:40“), weniger Abstand, Gefühl als Symbole
+//      Chips in festen Gruppen (Herbert, 28.10.2026): Steuerung · Jetzt · Plan · Lernen · Hinweise (nur wenn da); Soll unter dem Rad
+//   D2 wie D, die Gruppen als kleine Kästchen nebeneinander (Vergleich)
 //   A  Chips-Leiste unter dem Namen, Rad rechts wie heute
 //   B  zweispaltig: links Name + Modus + Chips gruppiert (Zustand / Plan / Lernen), rechts Rad mit Soll-Chips
 //   C  kompakt: Rad links groß, rechts Name, eine Zeile Chips, Modus als Auswahl-Chip, „Schnell aufheizen“ als Chip
@@ -21,7 +26,7 @@ const rahmen = require('./rahmen');
 function browser(R) {
   const { html, nothing } = R;
   const BID = 'polier';
-  const G = window.KOPF = { v: 'a', lage: 'heizt', info: null, modusAuf: false };
+  const G = window.KOPF = { v: 'd', lage: 'heizt', info: null, modusAuf: false };
   const MODI = [['plan', 'Zeitplan'], ['thermo', 'Thermostat'], ['bedarf', 'Bei Bedarf'], ['hand', 'Hand'], ['aus', 'Aus']];   // wie tabellen.js MODI
   const de = (x, n = 1) => Number(x).toLocaleString('de-AT', { minimumFractionDigits: n, maximumFractionDigits: n });
   const uhr = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -58,7 +63,7 @@ function browser(R) {
     const d = p.d, L = [], lern = b.lern && b.lern.an && ['thermo', 'bedarf'].includes(b.modus) ? b.lern : null;
     const kurz = (b.text || '').split(' · ')[0].replace(/^⚡\s*/, '');   // erster Teil des Zustandstexts der Integration
     const ic = /^Takt-Pause/.test(b.text || '') ? '⏸' : ZUST[b.z] || '•';
-    if (!(b.boost && /^⚡/.test(b.text || ''))) L.push({ k: 'zust', g: 'zustand', ic, t: kurz || b.z, ton: b.z === 'heizt' ? 'warm' : b.z === 'frost' ? 'blau' : b.z === 'offline' ? 'rot' : '', info: b.text });
+    if (G.v[0] === 'd' || !(b.boost && /^⚡/.test(b.text || ''))) L.push({ k: 'zust', g: 'zustand', ic, t: kurz || b.z, ton: b.z === 'heizt' ? 'warm' : b.z === 'frost' ? 'blau' : b.z === 'offline' ? 'rot' : '', info: b.text });
     if (b.boost) L.push({ k: 'boost', g: 'zustand', ic: '⚡', t: 'Schnell aufheizen läuft', ton: 'amber', info: 'Schnell aufheizen läuft – Ende mit ⚡ „Aufheizen beenden“' });
     if (b.modus === 'hand') L.push({ k: 'hand', g: 'zustand', ic: '✋', t: 'Hand', ton: 'amber', info: p.cRegelText(b) });
     if (b.tuer && b.tuer.offen) L.push({ k: 'tuer', g: 'zustand', ic: '🚪', t: `Tür offen ${b.tuer.offen} min`, ton: 'amber',
@@ -72,12 +77,35 @@ function browser(R) {
       if (w && w.gelernt && w.plan) L.push({ k: 'warm', g: 'plan', ic: '⏱', t: `warm um ${uhr(w.plan.ziel)}`, ton: '', info: p.warmText(b) });
       else if (w) L.push({ k: 'warm', g: 'plan', ic: '⏱', t: 'Aufheizen lernt noch', ton: '', info: p.warmText(b) });
       L.push({ k: 'lern', g: 'lernen', ic: '🧠', t: lern.offen ? 'lernt gerade nicht' : 'lernt', ton: lern.offen ? 'amber' : '', info: p.offenText(b) || p.cRegelText(b) });
+      if (G.v[0] === 'd' && /^Takt-Pause/.test(b.text || '') && lern.anteil !== null) L.push({ k: 'takt', g: 'lernen', ic: '◔', t: `Takt ${lern.anteil} % je ${lern.zyklus_min} min`, ton: '', info: b.text });
       L.push({ k: 'nach', g: 'lernen', ic: '↘', t: `Nachlauf +${de(lern.erwartet)}°`, ton: '', info: `Nachlauf +${de(lern.erwartet)} °C → aus bei ${de(lern.aus_bei)} °C` });
     } else if (b.modus !== 'hand') L.push({ k: 'regel', g: 'plan', ic: 'ⓘ', t: { plan: 'Heizplan', thermo: 'Thermostat', bedarf: 'bei Bedarf', aus: 'nur Frostschutz' }[b.modus] || 'Regel', ton: '', info: p.cRegelText(b) });
+    for (const c of L) Object.assign(c, langKurz(b, c));
     return L;
   }
+  /* Variante D: ausführlicher Text (Desktop) und kurzer Text (Handy) je Chip – nur Felder, die die Seite schon hat */
+  const ZKURZ = { heizt: 'heizt', pause: 'Pause', aus: 'aus', frost: 'Frost', trocknen: 'trocknet', offline: 'offline', bereit: 'bereit' };
+  function langKurz(b, c) {
+    const lern = b.lern || {}, w = lern.warm, takt = /^Takt-Pause/.test(b.text || '');
+    switch (c.k) {
+      case 'zust': return takt ? { lang: 'Takt-Pause', kurz: 'Takt' }   // „15 % je 10 min“ steht in D in der Gruppe Lernen
+        : { lang: c.t, kurz: ZKURZ[b.z] || c.t };
+      case 'takt': return { lang: c.t, kurz: `${lern.anteil} %` };
+      case 'boost': return { lang: 'Schnell aufheizen läuft', kurz: 'läuft' };
+      case 'tuer': return { lang: `Tür offen seit ${b.tuer.offen} min`, kurz: `${b.tuer.offen} min` };
+      case 'fenster': return { lang: c.t, kurz: c.t.replace(/^Fenster /, '') };
+      case 'bat': return { lang: c.t, kurz: c.t.replace(/^Fühler schwach /, '') };
+      case 'warm': return w && w.gelernt && w.plan ? { lang: `warm um ${uhr(w.plan.ziel)} · ab ${uhr(w.plan.start)}`, kurz: uhr(w.plan.ziel) } : { lang: c.t, kurz: 'lernt' };
+      case 'lern': return { lang: c.t, kurz: lern.offen ? 'lernt nicht' : 'lernt' };
+      case 'nach': return { lang: c.t, kurz: c.t.replace(/^Nachlauf /, '') };
+      case 'sgl': return { lang: c.t, kurz: c.t.replace(/^gleitend /, '') };
+      case 'seig': return { lang: c.t, kurz: c.t.replace(/ eigen$/, '') };
+      default: return { lang: c.t, kurz: c.t };
+    }
+  }
+  const chipText = c => G.v[0] === 'd' ? html`<span class="ck-l">${c.lang || c.t}</span><span class="ck-k">${c.kurz || c.t}</span>` : c.t;
   const chip = c => html`<button class="ck-chip ${c.ton} ${G.info === c.k ? 'auf' : ''}" aria-expanded=${G.info === c.k ? 'true' : 'false'}
-      @click=${() => { G.info = G.info === c.k ? null : c.k; G.modusAuf = false; R.neuAlle(); }}><span class="ck-ic">${c.ic}</span>${c.t}</button>`;
+      @click=${() => { G.info = G.info === c.k ? null : c.k; G.modusAuf = false; R.neuAlle(); }}><span class="ck-ic">${c.ic}</span>${chipText(c)}</button>`;
   const info = L => { const c = L.find(x => x.k === G.info); return c ? html`<div class="ck-info" role="note"><span>${c.info}</span><button aria-label="schließen" @click=${() => { G.info = null; R.neuAlle(); }}>✕</button></div>` : nothing; };
   const reihe = (L, cls = '') => html`<div class="ck-chips ${cls}">${L.map(chip)}</div>${info(L)}`;
 
@@ -89,6 +117,7 @@ function browser(R) {
     if (gl && S.eigen) L.push({ k: 'seig', ic: '👤', t: `${S.eigen > 0 ? '+' : '−'}${de(Math.abs(S.eigen))} eigen`, ton: 'amber',
       info: `Soll gleitend ${Gs ? de(Gs.soll) : '–'} °C ${S.eigen > 0 ? '+' : '−'}${de(Math.abs(S.eigen))} eigenes Soll = ${de(p.sollVon(b))} °C – dein Gefühl hilft beim Lernen` });
     if (gl && S.versch) L.push({ k: 'sver', ic: '±', t: `${S.versch > 0 ? '+' : '−'}${de(Math.abs(S.versch))} bis morgen`, ton: 'amber', info: '+ / − lernt mit wie „zu kalt“ / „zu warm“ · ↺ gleitend setzt zurück' });
+    for (const c of L) Object.assign(c, langKurz(b, c));
     if (!gl) L.push({ k: 'sfest', ic: 'ⓘ', t: 'Soll fest', ton: '', info: 'hilft beim gleitenden Soll (Heizung › Regeln)' });
     return html`<div class="ck-soll">${L.map(chip)}</div>${info(L)}`;
   }
@@ -104,7 +133,7 @@ function browser(R) {
 
   function kopf(p, t) {
     const b = p.b, L = chips(p, b), kern = finde(t, 'class="c-rad"') || finde(t, 'class="c-ohne glas-panel"');
-    const band = R.band(`Vorschlag Kopf · Variante ${{ a: 'A: Chips unter dem Namen', b: 'B: zweispaltig, Chips gruppiert', c: 'C: kompakt, Rad links' }[G.v]}`);
+    const band = R.band(`Vorschlag Kopf · Variante ${{ d: 'D: gewählt – Rad links, Chips in Gruppen (Handy: Name, Rad, Gruppen kurz)', d2: 'D2: wie D, Gruppen als Kästchen nebeneinander', a: 'A: Chips unter dem Namen', b: 'B: zweispaltig, Chips gruppiert', c: 'C: kompakt, Rad links' }[G.v]}`);
     if (G.v === 'a') return html`${band}<div class="glas-panel ck ck-a ${b.z}">
         <div class="ck-links">${kopfName(b)}${R.marke}${reihe(L)}
           <div class="ck-bedien">${modusSeg(p, b)}${boostKnopf(p, b)}</div></div>
@@ -117,6 +146,21 @@ function browser(R) {
         <div class="ck-rechts">${kern}${sollChips(p, b)}${gefuehl(p, b)}</div></div>`;
     }
     const modusT = (MODI.find(m => m[0] === b.modus) || ['', '–'])[1];
+    if (G.v[0] === 'd') {   // D / D2: feste Gruppen in fester Reihenfolge (Herbert, 28.10.2026: „gruppieren bzw. nach Thema“)
+      const von = ks => ks.map(k => L.find(c => c.k === k)).filter(Boolean);
+      const steuerung = [html`<button class="ck-chip modus ${G.modusAuf ? 'auf' : ''}" aria-haspopup="listbox" aria-expanded=${G.modusAuf ? 'true' : 'false'}
+              @click=${() => { G.modusAuf = !G.modusAuf; G.info = null; R.neuAlle(); }}><span class="ck-ic">⚙</span>${modusT} ▾</button>`,
+        html`<button class="ck-chip ${b.boost ? 'amber auf' : ''}" @click=${() => p.boostUmschalten(b)}><span class="ck-ic">⚡</span><span class="ck-l">${b.boost ? 'Aufheizen beenden' : 'Schnell aufheizen'}</span><span class="ck-k">${b.boost ? 'beenden' : 'Aufheizen'}</span></button>`];
+      const modi = G.modusAuf ? html`<div class="ck-info ck-modi" role="listbox">${MODI.map(([k, t]) => html`<button role="option" class=${b.modus === k ? 'on' : ''} ?disabled=${k === 'thermo' && !b.fuehler}
+              @click=${() => { G.modusAuf = false; p.modusSetzen(b, k); }}>${t}</button>`)}</div>` : nothing;
+      const GR = [['Steuerung', steuerung, modi, []], ['Jetzt', null, null, von(['zust', 'tuer', 'fenster'])], ['Plan', null, null, von(['warm', 'regel'])],
+        ['Lernen', null, null, von(['lern', 'nach', 'takt'])], ['Hinweise', null, null, von(['bat'])]];   // Hand zeigt der Modus-Chip
+      const zeile = ([t, fest, dazu, X]) => fest || X.length ? html`<div class="ckd-g" data-g=${t}><div class="ckd-gt">${t}</div><div class="ck-chips">${fest || nothing}${X.map(chip)}</div>${dazu || info(X)}</div>` : nothing;
+      return html`${band}<div class="glas-panel ck ck-d ${G.v === 'd2' ? 'ck-d2' : ''} ${b.z}">
+        <div class="ckd-name">${kopfName(b)}${R.marke}</div>
+        <div class="ckd-rad">${kern}<div class="ckd-soll"><div class="ckd-gt">Soll</div>${sollChips(p, b)}${gefuehl(p, b, true)}</div></div>
+        <div class="ckd-rest ckd-gruppen">${GR.map(zeile)}</div></div>`;
+    }
     return html`${band}<div class="glas-panel ck ck-c ${b.z}">
         <div class="ck-rechts">${kern}${gefuehl(p, b, true)}</div>
         <div class="ck-links">${kopfName(b)}${R.marke}
@@ -168,6 +212,26 @@ function browser(R) {
 .ck-gruppe { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px 10px; align-items: start; }
 .ck-gruppe > .ck-info { grid-column: 2; }
 .ck-gt { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink2); padding-top: 8px; }
+/* D (gewählt): Desktop Rad ganz links (Soll darunter), rechts Name und die Gruppen als Zeilen mit Überschrift links */
+.ck-d { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "rad name" "rad rest"; gap: 10px 24px; align-items: start; }
+.ckd-name { grid-area: name; display: flex; align-items: flex-end; gap: 6px; min-width: 0; } .ckd-name .r-marke { margin: 0 0 6px; }
+.ckd-rad { grid-area: rad; display: flex; flex-direction: column; align-items: center; gap: 6px; } .ck-d .c-rad, .ck-d .c-rad svg { width: 220px; height: 220px; }
+.ckd-soll { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; max-width: 240px; }
+.ckd-soll > .ckd-gt { flex-basis: 100%; text-align: center; padding: 0; } .ckd-soll .ck-soll { justify-content: center; } .ckd-soll .ck-info { flex-basis: 100%; }
+.ckd-gruppen { grid-area: rest; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ckd-g { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 6px 10px; align-items: center; }
+.ckd-g > .ck-info { grid-column: 2; }
+.ckd-gt { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--ink2); }
+.ck-d .ck-chips { gap: 6px; }
+.ck-d .ckd-g .ck-chip { height: 32px; padding: 0 12px; }
+.ck-d .ckd-g[data-g="Hinweise"] .ckd-gt { color: var(--amber); }
+.ck-d .ck-gefuehl button { padding: 5px 9px; font-size: 15px; }
+.ck-d .ck-chip.modus { font-weight: 600; }
+.ck-k { display: none; }
+/* D2: Gruppen als kleine Kästchen nebeneinander */
+.ck-d2 .ckd-gruppen { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.ck-d2 .ckd-g { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px 10px; border-radius: 12px; background: rgba(120,120,128,.12); border: 1px solid var(--panel-rand); }
+.ck-d2 .ckd-g > .ck-info { grid-column: auto; }
 /* C: Rad links groß, eine Zeile Chips */
 .ck-c { grid-template-columns: auto minmax(0, 1fr); align-items: center; }
 .ck-c .c-rad, .ck-c .c-rad svg { width: 240px; height: 240px; }
@@ -178,6 +242,23 @@ function browser(R) {
 .ck-modi button.on { background: var(--amber); color: #1a1000; font-weight: 600; } .ck-modi button:disabled { opacity: .4; }
 /* schmal (Handy, Seite unter 700 px): untereinander, Rad mittig; C bleibt nebeneinander mit kleinerem Rad */
 @container (max-width: 640px) {
+  .ck-d { grid-template-columns: minmax(0, 1fr); grid-template-areas: "name" "rad" "rest"; gap: 6px; padding: 12px 12px 14px; }
+  .ck-d .ckd-gruppen { gap: 8px; }
+  .ck-d .ckd-g { display: flex; flex-direction: column; align-items: stretch; gap: 3px; }
+  .ck-d .ckd-gt { font-size: 10px; letter-spacing: .6px; }
+  .ck-d .ckd-g .ck-chip { height: 28px; padding: 0 9px; }
+  .ck-d2 .ckd-gruppen { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .ck-d2 .ckd-g { padding: 6px 8px 8px; } .ck-d2 .ck-chips { justify-content: flex-start; }
+  .ck-d .ckd-name { justify-content: center; text-align: center; } .ck-d .ck-name { align-items: center; }
+  .ck-d .ck-titel { font-size: 22px; } .ck-d .ck-art { font-size: 10px; }
+  .ck-d .ckd-rad { justify-self: center; } .ck-d .c-rad, .ck-d .c-rad svg { width: 170px; height: 170px; }
+  .ck-d .ckd-soll { gap: 5px 8px; }
+  .ck-d .ck-chips { gap: 5px; }
+  .ck-d .ck-chip { font-size: 13px; padding: 5px 9px; gap: 4px; }
+  .ck-d .ck-soll .ck-chip { font-size: 12px; padding: 3px 8px; }
+  .ck-d .ck-l { display: none; } .ck-d .ck-k { display: inline; }
+  .ck-d .ck-info { font-size: 11.5px; padding: 6px 8px 6px 10px; }
+  .ck-d .ck-gefuehl button { padding: 4px 8px; font-size: 14px; }
   .ck-a, .ck-b { grid-template-columns: minmax(0, 1fr); }
   .ck-a .ck-rechts, .ck-b .ck-rechts { order: 2; }
   .ck-titel { font-size: 24px; }
@@ -204,12 +285,14 @@ function browser(R) {
   });
 }
 
-const V = [['a', 'A · Chips unter dem Namen, Rad rechts'], ['b', 'B · zweispaltig, Chips gruppiert'], ['c', 'C · kompakt, Rad links groß']];
+const V = [['d', 'D · gewählt: Rad links, Chips in Gruppen'], ['d2', 'D2 · wie D, Gruppen als Kästchen'], ['a', 'A · Chips unter dem Namen, Rad rechts'], ['b', 'B · zweispaltig, Chips gruppiert'], ['c', 'C · kompakt, Rad links groß']];
 const LAGE = [['heizt', 'heizt, Tür zu'], ['tuer', 'Tür offen (pausiert)'], ['takt', 'Takt-Pause lernend'], ['boost', 'Schnell aufheizen läuft'], ['hand', 'Hand · Fühler schwach'], ['frost', 'Aus · Frostschutz']];
-const ZEIGEN = [['zu', 'nur Chips'], ['chip', 'Chip angetippt (Erklärung)'], ['soll', 'Soll-Chip angetippt'], ['modus', 'Modus-Auswahl (C)']];
+const ZEIGEN = [['zu', 'nur Chips'], ['chip', 'Chip angetippt (Erklärung)'], ['soll', 'Soll-Chip angetippt'], ['modus', 'Modus-Auswahl (C, D)']];
 const faelle = [];
-for (const v of ['a', 'b', 'c']) for (const l of ['heizt', 'tuer', 'takt', 'hand', 'frost']) faelle.push({ name: `${v}-${l}`, werte: { variante: v, lage: l, zeigen: 'zu' } });
-for (const v of ['a', 'b', 'c']) faelle.push({ name: `${v}-takt-erklaerung`, werte: { variante: v, lage: 'takt', zeigen: 'chip' } });
+for (const v of ['d', 'd2', 'a', 'b', 'c']) for (const l of ['heizt', 'tuer', 'takt', 'hand', 'frost']) faelle.push({ name: `${v}-${l}`, werte: { variante: v, lage: l, zeigen: 'zu' } });
+faelle.push({ name: 'd-boost', werte: { variante: 'd', lage: 'boost', zeigen: 'zu' } }, { name: 'd-soll-erklaerung', werte: { variante: 'd', lage: 'heizt', zeigen: 'soll' } },
+  { name: 'd-modus', werte: { variante: 'd', lage: 'heizt', zeigen: 'modus' } }, { name: 'd-tuer-erklaerung', werte: { variante: 'd', lage: 'tuer', zeigen: 'chip' } });
+for (const v of ['d', 'd2', 'a', 'b', 'c']) faelle.push({ name: `${v}-takt-erklaerung`, werte: { variante: v, lage: 'takt', zeigen: 'chip' } });
 faelle.push({ name: 'a-tuer-erklaerung', werte: { variante: 'a', lage: 'tuer', zeigen: 'chip' } });
 faelle.push({ name: 'b-soll-erklaerung', werte: { variante: 'b', lage: 'heizt', zeigen: 'soll' } });
 faelle.push({ name: 'c-modus', werte: { variante: 'c', lage: 'heizt', zeigen: 'modus' } });
