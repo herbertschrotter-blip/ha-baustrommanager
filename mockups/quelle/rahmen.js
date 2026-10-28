@@ -25,6 +25,8 @@
 //   R.abschnitt({ ansicht: 'container', vor(p), nach(p), wann(p) })                       vor/nach den Inhalt einer Ansicht der Seite
 //   R.einblendung(art, vorlage(p, s), { breit(s) })                                        Einblendung im Sheet-Platz der Seite;
 //       öffnen mit R.auf(p, { art, …, zurueck }) – Schließen kehrt zu s.zurueck zurück, wenn das eine Rahmen-Einblendung ist
+//   R.vorlage({ merkmal, fn(t, p), wann(p) })   jede Lit-Vorlage der Seite (auch in Dialogen), deren Text merkmal enthält
+//       (z. B. 'data-zeile="stufen"'), durch fn(t, p) ersetzen oder in fn ändern (Rückgabe undefined = t bleibt) (AN-0015)
 //   R.stil(css)                 zusätzliche Stile im Shadow Root (nur Variablen der Seite: --ink, --ink2, --amber, …)
 //   R.vorfuehren(fn(werte))     Leiste geändert (und beim Start): werte = { id: wert } der Auswahlfelder
 //   R.P(), R.neuAlle()          beide Seiten (Handy, Desktop) bzw. neu zeichnen
@@ -40,7 +42,7 @@ function laufzeit() {
   const html = (strings, ...values) => ({ _$litType$: 1, strings, values });   // Form einer Lit-Vorlage (lit-html)
   const nothing = Symbol.for('lit-nothing');
   const K = customElements.get('baustelle-panel'), proto = K.prototype, alt = { ui: proto._ui, schliessen: proto.schliessen, updated: proto.updated };
-  const GRUPPEN = [], WEG = [], REITER = [], ABSCHNITTE = [], EINBL = {}, STILE = [];
+  const GRUPPEN = [], WEG = [], REITER = [], ABSCHNITTE = [], EINBL = {}, STILE = [], VORLAGEN = [];
   let vorfuehren = null;
   const suche = (t, test, f) => { if (!t || typeof t !== 'object') return; if (Array.isArray(t)) return t.forEach(x => suche(x, test, f));
     if (Array.isArray(t.strings) && test(t)) f(t); if (Array.isArray(t.values)) t.values.forEach(x => suche(x, test, f)); };
@@ -48,6 +50,11 @@ function laufzeit() {
   const kopie = it => ({ ...it, values: [...it.values] });
   const gilt = (x, p) => !x.wann || x.wann(p);
   const marke = html`<span class="r-marke">neu</span>`;
+  const tief = (t, test, f) => { if (!t || typeof t !== 'object') return t;   // von innen nach außen: erst die Werte, dann die Vorlage selbst
+    if (Array.isArray(t)) { for (let i = 0; i < t.length; i++) t[i] = tief(t[i], test, f); return t; }
+    if (!Array.isArray(t.values)) return t;   // Vorlage oder Direktive (keyed …) mit Werten
+    for (let i = 0; i < t.values.length; i++) t.values[i] = tief(t.values[i], test, f);
+    if (!Array.isArray(t.strings) || !test(t)) return t; const n = f(t); return n === undefined ? t : n; };
   const seiteErsetzen = (t, fn) => suche(t, enthaelt('<div class="seite '), x => { const i = x.values.length - 1; x.values[i] = fn(x.values[i]); });
 
   proto._ui = function () {
@@ -77,6 +84,8 @@ function laufzeit() {
     // Einblendungen im Sheet-Platz der Seite (alt.js _ui: <div class="sheet glas-panel ${an}">${melden}${sheet}</div>)
     const sh = S.sheet, e = sh && EINBL[sh.art];
     if (e) { const k = t.strings.findIndex(s => s.includes('class="sheet glas-panel ')); if (k >= 0) { t.values[k] = 'an r-sheet' + (e.breit && e.breit(sh) ? ' r-breit' : ''); t.values[k + 2] = e.vorlage(p, sh); } }
+    // Vorlagen der Seite gezielt ersetzen (Merkmal im Vorlagentext)
+    for (const v of VORLAGEN) if (gilt(v, p)) t.values = t.values.map(x => tief(x, enthaelt(v.merkmal), y => v.fn(y, p)));
     return t;
   };
   proto.schliessen = function () { const sh = this.s.sheet;
@@ -98,7 +107,7 @@ function laufzeit() {
     band: text => html`<div class="r-band">${text}</div>`,
     svg: s => { const d = document.createElement('div'); d.innerHTML = s; return d.firstElementChild; },
     auf: (p, s) => { p.s.sheet = s; return p.neuZeichnen(); },
-    gruppe: g => GRUPPEN.push(g), gruppeWeg: w => WEG.push(w), reiter: r => REITER.push(r), abschnitt: a => ABSCHNITTE.push(a),
+    gruppe: g => GRUPPEN.push(g), gruppeWeg: w => WEG.push(w), reiter: r => REITER.push(r), abschnitt: a => ABSCHNITTE.push(a), vorlage: v => VORLAGEN.push(v),
     einblendung: (art, vorlage, o = {}) => { EINBL[art] = { vorlage, ...o }; },
     stil: css => STILE.push(blatt(css)),
     vorfuehren: fn => { vorfuehren = fn; },
