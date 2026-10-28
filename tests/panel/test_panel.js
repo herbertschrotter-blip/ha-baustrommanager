@@ -1169,21 +1169,28 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       erwarte('BSM-034.01: Schalter im Dialog wartet auf „Speichern“', !stufen());
       await klick({ act: 'b-speichern' }, 60);
       erwarte('AN-0006: Schalter speichert bereiche.<id>.stufen', stufen());
-      await klick({ act: 'container', id: b0.id }, 10);
+      // AN-0015 (Mockup primaer.html A): Primärheizkörper im Container wählen, erst bei „Speichern“
       const g2 = b0.geraete.filter(g => g.heizer)[1], i2 = b0.geraete.indexOf(g2);
-      await klick({ act: 'g-bearbeiten', i: String(i2) }, 10);
-      erwarte('AN-0006: Gerät als Zusatz einstellbar', ui.innerHTML.includes('data-zeile="zusatz"'));
-      neu(); await klick('.sheet [data-zeile="zusatz"] .sw', 10);
-      if (!g2.leistung) await klick('.sheet .stepper [data-d=\"0.1\"]', 10);
-      const ws = k => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `geraete.${g2.id}.${k}`);
-      erwarte('BSM-034.01: ✎ sendet erst bei „Speichern“', !ws('zusatz') && !ws('nenn_kw'));
-      await klick({ act: 'gf-speichern' }, 60);
-      erwarte('AN-0006: speichert geraete.<id>.zusatz', aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `geraete.${g2.id}.zusatz` && m.wert === true));
-      if (!g2.leistung) erwarte('Szenarien: Nennleistung ohne Messung einstellbar', ws('nenn_kw'));
+      await klick({ act: 'container', id: b0.id }, 10); await klick({ act: 'sheet', s: 'bereich' }, 10);
+      erwarte('AN-0015: Auswahl „★ Primärheizkörper“ mit „automatisch“ und jedem Heizkörper',
+        ui.innerHTML.includes('data-zeile="primaer"') && ui.innerHTML.includes('automatisch · ') && b0.geraete.filter(g => g.heizer).every(g => ui.innerHTML.includes(`value="${g.id}"`)));
+      neu(); { const sel = panel.shadowRoot.querySelector('.sheet [data-zeile="primaer"] select'); sel.value = g2.id; sel.dispatchEvent(new Event('change')); await ruhe(10); }
+      const prim = () => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `bereiche.${b0.id}.primaer` && m.wert === g2.id);
+      erwarte('AN-0015: Wahl wartet auf „Speichern“', !prim());
+      await klick({ act: 'b-speichern' }, 60);
+      erwarte('AN-0015: speichert bereiche.<id>.primaer', prim());
       await klick({ act: 'container', id: b0.id }, 10);
-      c.stufen = { an: true, haupt: [b0.geraete.filter(g => g.heizer)[0].id], zusatz: [g2.id], zusatz_an: false, grund: null, text: '' };
+      c.stufen = { an: true, haupt: [g2.id], zusatz: b0.geraete.filter(g => g.heizer && g !== g2).map(g => g.id), zusatz_an: false, grund: null, text: '' };
       panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen(); await panel.neuZeichnen(); await ruhe();
-      erwarte('AN-0006: Chip zeigt „Zusatz – wartet“', ui.innerHTML.includes('Zusatz – wartet, einer reicht') && ui.innerHTML.includes(' · Haupt'));
+      erwarte('AN-0015: Chip zeigt „★ Primär“ und „Zusatz – wartet“', ui.innerHTML.includes('Zusatz – wartet, einer reicht') && ui.innerHTML.includes(' · ★ Primär') && !ui.innerHTML.includes(' · Haupt'));
+      await klick({ act: 'g-bearbeiten', i: String(i2) }, 10);
+      erwarte('AN-0015: ✎ Gerät zeigt nur die Rolle, kein Zusatz-Schalter mehr', ui.innerHTML.includes('Rolle im Container: ★ Primär') && !ui.innerHTML.includes('data-zeile="zusatz"'));
+      if (!g2.leistung) { neu(); await klick('.sheet .stepper [data-d=\"0.1\"]', 10); }
+      const ws = k => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `geraete.${g2.id}.${k}`);
+      erwarte('BSM-034.01: ✎ sendet erst bei „Speichern“', !ws('nenn_kw'));
+      await klick({ act: 'gf-speichern' }, 60);
+      if (!g2.leistung) erwarte('Szenarien: Nennleistung ohne Messung einstellbar', ws('nenn_kw'));
+      erwarte('AN-0015: ✎ Gerät speichert kein „zusatz“ mehr', !ws('zusatz'));
       Object.keys(c).forEach(k => delete c[k]); Object.assign(c, alt); panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen();
       await klick({ act: 'tab', v: 'uebersicht' }, 10);
     } }

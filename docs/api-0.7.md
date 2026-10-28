@@ -233,10 +233,11 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   `warm` (nur lernend im Modus Thermostat, sonst `null`): `{gelernt, band, rate, n, n_noetig, vor, nach, max, vor_eigen,
   nach_eigen, aufheiz_min, innen, soll, fest, plan: {start, ziel, a, b, ende, begrenzt} | null}` (Minuten seit Mitternacht).
   Plangrund `gelernt` in `plan_woche` und `abschnitte` der lernenden Container.
-- Zusatz-Heizkörper nur bei Bedarf (AN-0006, `logik/stufen.py`): je Container `bereiche.<id>.stufen` (bool), je Gerät
-  `geraete.<id>.zusatz` (bool, Pfad `["geraete", id, "zusatz"]`), Schwellen `heizung.stufen_abstand` (°C unter Soll),
+- Zusatz-Heizkörper nur bei Bedarf (AN-0006, `logik/stufen.py`): je Container `bereiche.<id>.stufen` (bool) und
+  `bereiche.<id>.primaer` (Geräte-ID des Primärheizkörpers, `null` = automatisch; AN-0015 – genau einer primär, die
+  anderen Zusatz), je Gerät `geraete.<id>.zusatz` (bool, nur noch Rückfall ohne Wahl; die Seite setzt es nicht mehr), Schwellen `heizung.stufen_abstand` (°C unter Soll),
   `stufen_min` (min Laufzeit des ersten), `stufen_anstieg` (°C), `stufen_kalt` (°C außen). `laufzeit.container.<id>.stufen`
-  (ab zwei Heizkörpern, sonst `null`): `{an, haupt: [ids], zusatz: [ids], zusatz_an, grund, text}`; `laufzeit.geraete.<id>.zusatz`.
+  (ab zwei Heizkörpern, sonst `null`): `{an, haupt: [ids], zusatz: [ids], zusatz_an, grund, text, auto: [id]}` (`auto`: primär ohne Wahl, AN-0015); `laufzeit.geraete.<id>.zusatz`.
   Aufheizen lernt je Anzahl laufender Heizkörper: `lernen.aufheizen` mit Schlüsseln `kalt|1`, `mild|2` …; `lernen.warm.anzahl`.
 - Ölradiator oder Konvektor (AN-0008): `baustelle/auswertung` → `typ = {oelradiator|konvektor: {kwh_gradh, kwh_gradh_m2,
   auf, auf_je_kw, ab, anzahl, kw, m2, container: [Namen], ids}, weniger, vergleichbar, nur_einer, seit,

@@ -57,12 +57,14 @@ def _stufen_rechnen(hz: Heizung, bid: str, soll: Soll, temp: float | None, soll_
 
 
 def stufen_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
-    """Zusatz-Heizkörper für die Seite (laufzeit.container.<id>.stufen); None ohne zwei Heizkörper."""
+    """Zusatz-Heizkörper für die Seite (laufzeit.container.<id>.stufen); None ohne zwei Heizkörper. `auto`: wer ohne
+    gewählten Primärheizkörper primär wäre (AN-0015)."""
     if len(hz.heizer_von(bid)) < 2:
         return None
     haupt, zusatz = hz.haupt_und_zusatz(bid)
     an, grund = hz._stufen.get(bid, (False, None))
     return {"an": hz.stufen_an(bid), "haupt": haupt, "zusatz": zusatz, "zusatz_an": an, "grund": grund,
+            "auto": hz.haupt_und_zusatz(bid, mit_wahl=False)[0],   # AN-0015: „automatisch“ im Container-Dialog
             "text": stufen.TEXT.get(grund or "", "") if an else ""}
 
 

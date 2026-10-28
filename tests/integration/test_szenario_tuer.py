@@ -474,6 +474,26 @@ async def test_tuer_in_container_ohne_fuehler(hass: HomeAssistant, baustelle, fr
     assert _an(hass, "switch.hk2")
 
 
+async def test_primaer_gewaehlt_heizt_zuerst(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """AN-0015: Im Container ist Heizkörper 2 primär – knapp unter dem Soll heizt nur er, Heizkörper 1 ist Zusatz und
+    wartet; die Seite bekommt haupt/zusatz entsprechend."""
+    entry = await baustelle_anlegen(hass, freezer, hk2_bereich=C1)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    shellys.anmelden()
+    st = entry.runtime_data
+    st.einstellungen.bereich(C1)["modus"] = "thermo"
+    st.einstellung_setzen(("bereiche", C1, "stufen"), True)
+    st.einstellung_setzen(("bereiche", C1, "primaer"), HK2)
+    hass.states.async_set("sensor.aussen", "8.0")
+    st.einstellungen.bereich(C1)["soll"] = 20.0
+    hass.states.async_set("sensor.temp_c1", "19.5")
+    await _start(hass, freezer, st)
+    s = _c(hass, entry)["stufen"]
+    assert s["haupt"] == [HK2] and s["zusatz"] == [HK1] and not s["zusatz_an"] and s["auto"] == [HK1]
+    assert _an(hass, "switch.hk2") and not _an(hass, "switch.hk1")
+
+
 async def test_tuer_mit_zwei_heizkoerpern_und_zusatz(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
     """AN-0006: Container 1 mit Haupt- und Zusatz-Heizkörper (weit unter Soll: beide). Tür offen → beide aus, Zusatz
     gilt als aus; Tür zu → beide wieder (weit unter Soll)."""

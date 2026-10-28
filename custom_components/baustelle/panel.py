@@ -157,6 +157,7 @@ SETZEN_BEREICH: dict[str, Any] = {
     "warm_vor": vol.Any(None, vol.All(GANZ, vol.Range(0, 240))),
     "warm_nach": vol.Any(None, vol.All(GANZ, vol.Range(0, 240))),
     "stufen": cv.boolean,
+    "primaer": vol.Any(None, vol.All(cv.string, vol.Length(max=100))),   # AN-0015
     "groesse_m2": vol.Any(None, vol.All(ZAHL, vol.Range(4, 200))),   # AN-0014
     "symbol": _symbol_pruefen,   # BSM-032
 }

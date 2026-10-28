@@ -64,7 +64,7 @@ function bedarf(p, b) {
 function geraete(p, b) {
   const d = p.d;
   return b.geraete.map((g, i) => { const off = b.offline || !g.erreichbar, an = g.an && g.aktiv;
-    const st = b.stufen && b.stufen.an ? (b.stufen.zusatz.includes(g.id) ? (b.stufen.zusatz_an ? html` · <em class="warte">Zusatz – ${b.stufen.text}</em>` : ' · Zusatz – wartet, einer reicht') : ' · Haupt') : '';   // AN-0006
+    const st = b.stufen && b.stufen.an ? (b.stufen.zusatz.includes(g.id) ? (b.stufen.zusatz_an ? html` · <em class="warte">Zusatz – ${b.stufen.text}</em>` : ' · Zusatz – wartet, einer reicht') : ' · ★ Primär') : '';   // AN-0006, AN-0015
     const info = !g.aktiv ? `${g.status} – die Automatik lässt es aus` : off ? html`<span class="rot-t">offline</span>` : html`${g.typ} · ${an ? de(zahl(g.kwJetzt) ? g.kwJetzt : g.kw, 2) + ' kW' : 'aus'}${st}`;
     return html`<div class="c-chip glas-panel ${an ? 'an' : ''} ${g.aktiv ? '' : 'inaktiv'}" data-i=${i}>
         <span class="c-chip-t">${g.typ === 'Steckdose' || g.typ === 'Bautrockner' ? '⏻' : '♨'} <b>${g.n}</b><small>${info}${g.hand && g.aktiv ? html` · <em class="hand">✋ Hand</em>` : nothing}${g.warte && g.aktiv ? html` · <em class="warte">wartet – ${(d.anschluesse.find(a => a.id === b.anschluss) || {}).name || 'Anschluss'} ausgelastet</em>` : nothing}</small>

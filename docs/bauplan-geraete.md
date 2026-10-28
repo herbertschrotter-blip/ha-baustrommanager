@@ -13,8 +13,8 @@ aus zwei Durchsichten (Integration, Seite) auf 0.8.114. Aufgabe BSM-034, Unterau
 | Ablage | Inhalt | geschrieben von |
 |---|---|---|
 | Unter-Einträge in HA (`bereich`, `geraet`) | Shelly im Container, Rolle, Typ, Leistung/Energie, Fühler, Name (doppelt: Titel und `data.name`) | Container anlegen, Bearbeiten, ✎ Gerät (HA-Dialoge direkt), Inventar › Zuordnen (`_verdrahten`), Umbenennen |
-| Einstellungen je Container (`e.bereiche[bid]`) | `tuer`, `symbol` (Tür 1–2, Fenster 1–4, Licht mit Sensoren), Anschluss, Modus, Zusatz, Größe … | `baustelle/setzen` (Bearbeiten teils sofort, teils bei Speichern), Aussehen, Inventar (Tür) |
-| Einstellungen je Gerät (`e.geraete[gid]`) | `aktiv`, `zusatz`, `nenn_kw` | Container-Chip (`aktion aktiv`), ✎ Gerät, Inventar-Status (nur Inventar → hier) |
+| Einstellungen je Container (`e.bereiche[bid]`) | `tuer`, `symbol` (Tür 1–2, Fenster 1–4, Licht mit Sensoren), Anschluss, Modus, Zusatz, Primärheizkörper (`primaer`, AN-0015), Größe … | `baustelle/setzen` (Bearbeiten teils sofort, teils bei Speichern), Aussehen, Inventar (Tür) |
+| Einstellungen je Gerät (`e.geraete[gid]`) | `aktiv`, `zusatz` (nur Rückfall ohne `primaer`), `nenn_kw` | Container-Chip (`aktion aktiv`), ✎ Gerät, Inventar-Status (nur Inventar → hier) |
 | Laufzeit, Zähler | Handbetrieb, Zählerstände, Warnungen je gid/bid | Steuerung, Notprogramm |
 | Datenbank-Spiegel (`geraet`, `bereich`) | Kopie für Excel/Auswertung (aufgelöste Sensoren, gerechnete Nennleistung; ohne aktiv/zusatz/Symbol-Sensoren; `geraet.ausruestung_id` nie geschrieben) | `spiegeln` nur beim Start, nach `setzen`/`liste` |
 | Inventar (Datenbank) | Container, Ausrüstung mit Kennung, Status, GG, Einsätze, Umbenennungen | nur das Inventar |

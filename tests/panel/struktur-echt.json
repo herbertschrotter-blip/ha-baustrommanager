@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.144",
+   "version": "0.8.145",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -437,6 +437,7 @@
      "warm_vor": null,
      "warm_nach": null,
      "stufen": false,
+     "primaer": null,
      "groesse_m2": null,
      "symbol": null
     },
@@ -453,6 +454,7 @@
      "warm_vor": null,
      "warm_nach": null,
      "stufen": false,
+     "primaer": null,
      "groesse_m2": null,
      "symbol": null
     },
@@ -469,6 +471,7 @@
      "warm_vor": null,
      "warm_nach": null,
      "stufen": false,
+     "primaer": null,
      "groesse_m2": null,
      "symbol": null
     },
@@ -485,6 +488,7 @@
      "warm_vor": null,
      "warm_nach": null,
      "stufen": false,
+     "primaer": null,
      "groesse_m2": null,
      "symbol": null
     }
@@ -626,6 +630,9 @@
       ],
       "zusatz_an": false,
       "grund": null,
+      "auto": [
+       "polier_r1"
+      ],
       "text": ""
      },
      "bedarf": {
@@ -717,6 +724,9 @@
       ],
       "zusatz_an": false,
       "grund": null,
+      "auto": [
+       "mannschaft_k1"
+      ],
       "text": ""
      },
      "bedarf": {
@@ -2139,7 +2149,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.144",
+   "version": "0.8.145",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2297,6 +2307,7 @@
      "warm_vor": null,
      "warm_nach": null,
      "stufen": false,
+     "primaer": null,
      "groesse_m2": null,
      "symbol": null
     }

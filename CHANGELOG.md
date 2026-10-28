@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.145] – 2026-10-28
+
+- Primärheizkörper je Container (AN-0015, Mockup `primaer.html` Variante A, abgenommen 28.10.2026): Statt bei jedem
+  Heizkörper ein Häkchen „Zusatz“ zu setzen, wählt man im Dialog „Container bearbeiten“ unter „Zusatz nur bei Bedarf“
+  den **★ Primärheizkörper** (ohne Wahl: der erste). Genau einer ist primär, alle anderen sind Zusatz – vorher konnten
+  bei drei Heizkörpern zwei „Haupt“ sein. Ist „Zusatz nur bei Bedarf“ aus, heizen weiter alle gemeinsam (die Wahl ist
+  dann gedimmt mit Hinweis). ✎ Gerät zeigt nur noch die Rolle („★ Primär“ / „🔥 Zusatz“), die Container-Ansicht
+  „★ Primär“ statt „Haupt“. Wird der Primäre entfernt oder inaktiv, gilt wieder der erste; bestehende Häkchen
+  „Zusatz“ gelten weiter, solange kein Primärheizkörper gewählt ist.
+
 ## [0.8.144] – 2026-10-28
 
 - Auswertung „Ölradiator oder Konvektor“ klarer und fairer (FE-0023, AN-0016). Unter der Tabelle steht jetzt, worauf

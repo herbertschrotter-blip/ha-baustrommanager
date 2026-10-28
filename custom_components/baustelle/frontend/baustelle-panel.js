@@ -975,6 +975,7 @@ function bauen(r5, hass, ersatzZone) {
       auto: eb.auto !== false,
       trocknen: !!eb.trocknen,
       stufenAn: !!eb.stufen,
+      primaer: eb.primaer || null,
       stufen: c4.stufen || null,
       sollJ: c4.soll || null,
       bedarfGrad: c4.bedarf || null,
@@ -2524,7 +2525,7 @@ function geraete(p4, b3) {
   const d3 = p4.d;
   return b3.geraete.map((g2, i7) => {
     const off = b3.offline || !g2.erreichbar, an = g2.an && g2.aktiv;
-    const st = b3.stufen && b3.stufen.an ? b3.stufen.zusatz.includes(g2.id) ? b3.stufen.zusatz_an ? b2` · <em class="warte">Zusatz – ${b3.stufen.text}</em>` : " · Zusatz – wartet, einer reicht" : " · Haupt" : "";
+    const st = b3.stufen && b3.stufen.an ? b3.stufen.zusatz.includes(g2.id) ? b3.stufen.zusatz_an ? b2` · <em class="warte">Zusatz – ${b3.stufen.text}</em>` : " · Zusatz – wartet, einer reicht" : " · ★ Primär" : "";
     const info = !g2.aktiv ? `${g2.status} – die Automatik lässt es aus` : off ? b2`<span class="rot-t">offline</span>` : b2`${g2.typ} · ${an ? de(zahl(g2.kwJetzt) ? g2.kwJetzt : g2.kw, 2) + " kW" : "aus"}${st}`;
     return b2`<div class="c-chip glas-panel ${an ? "an" : ""} ${g2.aktiv ? "" : "inaktiv"}" data-i=${i7}>
         <span class="c-chip-t">${g2.typ === "Steckdose" || g2.typ === "Bautrockner" ? "⏻" : "♨"} <b>${g2.n}</b><small>${info}${g2.hand && g2.aktiv ? b2` · <em class="hand">✋ Hand</em>` : A}${g2.warte && g2.aktiv ? b2` · <em class="warte">wartet – ${(d3.anschluesse.find((a3) => a3.id === b3.anschluss) || {}).name || "Anschluss"} ausgelastet</em>` : A}</small>
@@ -3430,6 +3431,19 @@ function bereich(p4, s4) {
             <div class="zeile"><div><span>Warm halten</span><div class="leise">${w2.nach_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("nach", w2.nach, w2.nach_eigen, (v2) => v2 ? `${v2} min länger` : "bis Ende")}</div>
             ${w2.vor_eigen || w2.nach_eigen ? b2`<button class="zeile" @click=${p4.nurAdmin(() => p4.warmZurueck(e6))}><span class="blau">Wie die Baustelle</span></button>` : A}`;
   };
+  const primaerWahl = () => {
+    const H2 = b3.geraete.filter((g2) => g2.heizer && g2.aktiv !== false);
+    const erster = H2.find((g2) => b3.stufen && (b3.stufen.auto || []).includes(g2.id)) || H2[0];
+    const wahl2 = H2.some((g2) => g2.id === e6.primaer) ? e6.primaer : "", haupt = H2.find((g2) => g2.id === wahl2) || erster;
+    return b2`<label class="feld ${e6.stufen ? "" : "gedimmt"}" data-zeile="primaer">★ Primärheizkörper
+        <select @change=${(ev) => {
+      e6.primaer = ev.target.value;
+      z2();
+    }}>
+          <option value="" ?selected=${!wahl2}>automatisch · ${erster ? erster.n : "–"}</option>
+          ${H2.map((g2) => b2`<option value=${g2.id} ?selected=${wahl2 === g2.id}>${g2.n} · ${g2.typ}</option>`)}</select>
+        <span class="leise">${e6.stufen ? `Zusatz: ${H2.filter((g2) => g2 !== haupt).map((g2) => g2.n).join(", ") || "–"}` : "Alle heizen gemeinsam – Primär zählt erst mit „Zusatz nur bei Bedarf“"}</span></label>`;
+  };
   const geraet = (g2, i7) => g2.weg ? b2`<div class="ge-zeile weg" data-i=${i7}><span>${g2.n} wird entfernt</span><button class="chip glas-panel" @click=${() => {
     g2.weg = false;
     z2();
@@ -3443,10 +3457,11 @@ function bereich(p4, s4) {
   })}>✕</button></div>`;
   return b2`${GRIFF7}<div class="block-kopf"><h3>Bearbeiten</h3><span class="leise">${b3.pumpe ? "Pumpenschacht" : "Container"}</span></div>
         <label class="feld">Name${text(e6, "name")}</label>
-        ${!b3.pumpe && b3.geraete.filter((g2) => g2.heizer).length >= 2 ? b2`<div class="zeile" data-zeile="stufen"><div><b>🔥 Zusatz-Heizkörper nur bei Bedarf</b><div class="leise">zuerst heizt einer; der Zusatz kommt bei Kälte, weit unter dem Soll oder wenn einer es nicht schafft. Welcher Zusatz ist, steht im Gerät.</div></div>${schalterVorlage(e6.stufen, () => {
+        ${!b3.pumpe && b3.geraete.filter((g2) => g2.heizer).length >= 2 ? b2`<div class="zeile" data-zeile="stufen"><div><b>🔥 Zusatz-Heizkörper nur bei Bedarf</b><div class="leise">zuerst heizt der Primärheizkörper; der Zusatz kommt bei Kälte, weit unter dem Soll oder wenn einer es nicht schafft.</div></div>${schalterVorlage(e6.stufen, () => {
     e6.stufen = !e6.stufen;
     z2();
-  })}</div>` : A}
+  })}</div>
+        ${primaerWahl()}` : A}
         ${b3.pumpe ? A : b2`<div class="zeile" data-zeile="bedarf"><div><b>Nur bei Bedarf heizen</b><div class="leise">z. B. Besprechungscontainer: heizt nur per Schalter oder Termin, sonst Frostschutz</div></div>${schalterVorlage(e6.bedarf, () => {
     e6.bedarf = !e6.bedarf;
     z2();
@@ -3553,10 +3568,7 @@ function geraetEdit(p4, s4) {
     p4.neuZeichnen();
   }}>${t5}</button>`)}</div></div>
         ${!g2.leistung ? b2`<div class="zeile"><div><b>Leistung ohne Messung</b><div class="leise">zählt so in der Staffelung, wenn das Gerät an ist${f3.nennKw === null ? " · Standard" : ""}</div></div><span class="stepper klein"><button data-d="-0.1" @click=${() => p4.geraetNennKw(f3, g2, -0.1)}>−</button><b class=${f3.nennKw !== null ? "eigen" : ""}>${de(f3.nennKw ?? g2.kw, 1)} kW</b><button data-d="0.1" @click=${() => p4.geraetNennKw(f3, g2, 0.1)}>+</button></span></div>` : A}
-        ${g2.heizer && b3.geraete.filter((x3) => x3.heizer).length >= 2 ? b2`<div class="zeile" data-zeile="zusatz"><div><b>🔥 Zusatz-Heizkörper</b><div class="leise">${b3.stufenAn ? "heizt nur dazu, wenn einer nicht reicht" : "wirkt, wenn im Container „Zusatz nur bei Bedarf“ an ist"}${b3.stufen && b3.stufen.haupt.includes(g2.id) && !f3.zusatz ? " · jetzt der erste" : ""}</div></div>${schalterVorlage(f3.zusatz, () => {
-    f3.zusatz = !f3.zusatz;
-    p4.neuZeichnen();
-  })}</div>` : A}
+        ${g2.heizer && b3.stufen ? b2`<div class="zeile" data-zeile="rolle"><div><b>Rolle im Container: ${b3.stufen.haupt.includes(g2.id) ? "★ Primär" : "🔥 Zusatz"}</b><div class="leise">${!b3.stufenAn ? "alle heizen gemeinsam" : b3.stufen.haupt.includes(g2.id) ? "heizt zuerst" : `heizt dazu, wenn ${(b3.geraete.find((x3) => b3.stufen.haupt.includes(x3.id)) || {}).n || "der Primäre"} nicht reicht`} · festgelegt im Container unter „Bearbeiten“</div></div></div>` : A}
         <div class="leise">Neuer Shelly: die Werte des alten bleiben im Verlauf. Anderer Container: der Verbrauch zählt ab jetzt dort.</div>
         ${x2 ? inventarVorlage(p4, x2) : A}
         ${knopf7("Speichern", p4.nurAdmin(() => p4.geraetSpeichern()), "amber nur-admin")}${knopf7("Abbrechen", () => p4.schliessen(), "leise-k")}`;
@@ -4987,7 +4999,7 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .neu-version .chip { color: var(--amber); background: color-mix(in srgb, var(--amber) 18%, transparent); font-weight: 600; white-space: nowrap; }
 .sheet .zeile { padding: 8px 0; } .sheet .zeile + .zeile { border-top: 1px solid var(--gridc); }
 .sheet input[type=time] { flex: 1; } .x { color: var(--rot) !important; padding: 4px 8px !important; }
-.feld { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ink2); } .feld input, .feld select { font-size: 15px; }
+.feld { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ink2); } .feld input, .feld select { font-size: 15px; } .feld.gedimmt select { opacity: .55; }   /* AN-0015 */
 .knopf { width: 100%; text-align: center !important; padding: 13px !important; border-radius: 16px !important; background: rgba(120,120,128,.24) !important; font-weight: 600; transition: transform .12s; }
 .knopf:active { transform: scale(.98); } .knopf.amber { background: var(--amber) !important; color: #1a1000 !important; } .knopf.rot { color: var(--rot) !important; }
 .knopf.leise-k { background: transparent !important; color: var(--ink2) !important; }
@@ -5468,7 +5480,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.144";
+var SEITE_VERSION = "0.8.145";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];
@@ -6845,6 +6857,7 @@ var BaustellePanel = class extends i4 {
       if (e6.warmVor !== (x2.warmVor ?? null)) await call("warm_vor", e6.warmVor);
       if (e6.warmNach !== (x2.warmNach ?? null)) await call("warm_nach", e6.warmNach);
       if (e6.stufen !== !!x2.stufenAn) await call("stufen", e6.stufen);
+      if ((e6.primaer || null) !== (x2.primaer || null)) await call("primaer", e6.primaer || null);
       if (e6.anschluss && e6.anschluss !== x2.anschluss) await call("anschluss", e6.anschluss);
       if (e6.firma !== x2.firma) {
         if (x2.firma !== "eigen") await this._hass.callWS({ type: "baustelle/liste", entry_id: d3.entry, liste: "firmen", aktion: "speichern", eintrag: { id: x2.firma, name: this.firma(x2.firma).name, container: d3.bereiche.filter((y3) => y3.firma === x2.firma && y3.id !== x2.id).map((y3) => y3.id) } });
@@ -6931,6 +6944,8 @@ var BaustellePanel = class extends i4 {
       warmVor: x2.warmVor ?? null,
       warmNach: x2.warmNach ?? null,
       stufen: !!x2.stufenAn,
+      primaer: x2.primaer || "",
+      // AN-0015
       // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
       geraete: x2.geraete.map((g2) => ({ id: g2.id, n: g2.n, typ: g2.typ, schalter: g2.schalter, leistung: g2.leistungEigen || void 0, energie: g2.energieEigen || void 0, alt: { n: g2.n, typ: g2.typ } }))
     };

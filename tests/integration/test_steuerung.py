@@ -421,7 +421,7 @@ async def test_store_v1_nur_zaehler_uebernehmen(hass: HomeAssistant, freezer, ha
     assert e["heizung"]["soll"] == 20.0 and e["heizung"]["heizgrenze_basis"] == "tageshoechst"
     assert e["bereiche"][C1] == {"auto": True, "trocknen": False, "soll": None, "bedarf": False, "prio": "normal",
                                  "anschluss": "a1", "tuer": None, "modus": None, "lernen": False,
-                                 "warm_vor": None, "warm_nach": None, "stufen": False, "groesse_m2": None, "symbol": None}
+                                 "warm_vor": None, "warm_nach": None, "stufen": False, "primaer": None, "groesse_m2": None, "symbol": None}
     assert e["arbeitszeiten"][0]["ab"] == "2026-09-29" and e["arbeitszeiten"][0]["tage"]["4"] == ["07:00", "12:30"]
     assert e["meldungen_einst"]["empfaenger"] == ["mobile_app_test"]
     assert e["protokoll"][0][1:] == ["einstellung", None, "Umstellung auf 0.7.0: Einstellungen neu, Zähler übernommen"]

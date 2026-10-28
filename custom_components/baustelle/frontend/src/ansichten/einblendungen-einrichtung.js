@@ -94,6 +94,15 @@ function bereich(p, s) {
     return html`<div class="gruppe-t">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w.vor_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('vor', w.vor, w.vor_eigen, v => v ? `${v} min vorher` : 'bei Beginn')}</div>
             <div class="zeile"><div><span>Warm halten</span><div class="leise">${w.nach_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('nach', w.nach, w.nach_eigen, v => v ? `${v} min länger` : 'bis Ende')}</div>
             ${w.vor_eigen || w.nach_eigen ? html`<button class="zeile" @click=${p.nurAdmin(() => p.warmZurueck(e))}><span class="blau">Wie die Baustelle</span></button>` : nothing}`; };
+  // AN-0015 (Mockup primaer.html A): genau ein Primärheizkörper je Container, die anderen sind Zusatz
+  const primaerWahl = () => { const H = b.geraete.filter(g => g.heizer && g.aktiv !== false);
+    const erster = H.find(g => b.stufen && (b.stufen.auto || []).includes(g.id)) || H[0];   // „automatisch“ von der Integration
+    const wahl = H.some(g => g.id === e.primaer) ? e.primaer : '', haupt = H.find(g => g.id === wahl) || erster;
+    return html`<label class="feld ${e.stufen ? '' : 'gedimmt'}" data-zeile="primaer">★ Primärheizkörper
+        <select @change=${ev => { e.primaer = ev.target.value; z(); }}>
+          <option value="" ?selected=${!wahl}>automatisch · ${erster ? erster.n : '–'}</option>
+          ${H.map(g => html`<option value=${g.id} ?selected=${wahl === g.id}>${g.n} · ${g.typ}</option>`)}</select>
+        <span class="leise">${e.stufen ? `Zusatz: ${H.filter(g => g !== haupt).map(g => g.n).join(', ') || '–'}` : 'Alle heizen gemeinsam – Primär zählt erst mit „Zusatz nur bei Bedarf“'}</span></label>`; };
   const geraet = (g, i) => g.weg ? html`<div class="ge-zeile weg" data-i=${i}><span>${g.n} wird entfernt</span><button class="chip glas-panel" @click=${() => { g.weg = false; z(); }}>rückgängig</button></div>`
     : html`<div class="ge-zeile" data-i=${i}><div class="ge-felder">
             ${g.neu ? auswahl(g, 'schalter', optionenVorlage(p.freieSchalter().map(([v, n]) => [v, `${n} (${v})`]), g.schalter, '– Shelly wählen –'), null, null, i) : html`<span class="leise ge-shelly">${p.name(g.schalter)} · ${g.schalter}</span>`}
@@ -101,7 +110,8 @@ function bereich(p, s) {
             ${g.neu ? nothing : html`<button class="bs-ic nur-admin" title="Gerät bearbeiten" aria-label="${g.n} bearbeiten" @click=${p.nurAdmin(() => p.geraetBearbeiten(b, i))}>✎</button>`}<button class="x nur-admin" title="Gerät entfernen" @click=${p.nurAdmin(() => { if (g.neu) e.geraete.splice(i, 1); else g.weg = true; z(); })}>✕</button></div>`;
   return html`${GRIFF}<div class="block-kopf"><h3>Bearbeiten</h3><span class="leise">${b.pumpe ? 'Pumpenschacht' : 'Container'}</span></div>
         <label class="feld">Name${text(e, 'name')}</label>
-        ${!b.pumpe && b.geraete.filter(g => g.heizer).length >= 2 ? html`<div class="zeile" data-zeile="stufen"><div><b>🔥 Zusatz-Heizkörper nur bei Bedarf</b><div class="leise">zuerst heizt einer; der Zusatz kommt bei Kälte, weit unter dem Soll oder wenn einer es nicht schafft. Welcher Zusatz ist, steht im Gerät.</div></div>${schalterVorlage(e.stufen, () => { e.stufen = !e.stufen; z(); })}</div>` : nothing}
+        ${!b.pumpe && b.geraete.filter(g => g.heizer).length >= 2 ? html`<div class="zeile" data-zeile="stufen"><div><b>🔥 Zusatz-Heizkörper nur bei Bedarf</b><div class="leise">zuerst heizt der Primärheizkörper; der Zusatz kommt bei Kälte, weit unter dem Soll oder wenn einer es nicht schafft.</div></div>${schalterVorlage(e.stufen, () => { e.stufen = !e.stufen; z(); })}</div>
+        ${primaerWahl()}` : nothing}
         ${b.pumpe ? nothing : html`<div class="zeile" data-zeile="bedarf"><div><b>Nur bei Bedarf heizen</b><div class="leise">z. B. Besprechungscontainer: heizt nur per Schalter oder Termin, sonst Frostschutz</div></div>${schalterVorlage(e.bedarf, () => { e.bedarf = !e.bedarf; z(); })}</div>`}
         ${b.lern && b.lern.warm ? warm() : nothing}
         ${b.pumpe || !b.groesse ? nothing : groesse(p, b, e)}
@@ -165,7 +175,7 @@ function geraetEdit(p, s) {
         <div class="zeile" data-zeile="status"><div><b>Status</b><div class="leise">nur „aktiv“ schaltet die Automatik, zählt in der Staffelung und meldet Warnungen; gilt auch im Inventar</div></div>
           <div class="seg klein">${[['aktiv', 'aktiv'], ['inaktiv', 'inaktiv'], ['verliehen', 'verliehen'], ['defekt', 'defekt']].map(([v, t]) => html`<button data-v=${v} class=${f.status === v ? 'on' : ''} @click=${() => { f.status = v; p.neuZeichnen(); }}>${t}</button>`)}</div></div>
         ${!g.leistung ? html`<div class="zeile"><div><b>Leistung ohne Messung</b><div class="leise">zählt so in der Staffelung, wenn das Gerät an ist${f.nennKw === null ? ' · Standard' : ''}</div></div><span class="stepper klein"><button data-d="-0.1" @click=${() => p.geraetNennKw(f, g, -0.1)}>−</button><b class=${f.nennKw !== null ? 'eigen' : ''}>${de(f.nennKw ?? g.kw, 1)} kW</b><button data-d="0.1" @click=${() => p.geraetNennKw(f, g, 0.1)}>+</button></span></div>` : nothing}
-        ${g.heizer && b.geraete.filter(x => x.heizer).length >= 2 ? html`<div class="zeile" data-zeile="zusatz"><div><b>🔥 Zusatz-Heizkörper</b><div class="leise">${b.stufenAn ? 'heizt nur dazu, wenn einer nicht reicht' : 'wirkt, wenn im Container „Zusatz nur bei Bedarf“ an ist'}${b.stufen && b.stufen.haupt.includes(g.id) && !f.zusatz ? ' · jetzt der erste' : ''}</div></div>${schalterVorlage(f.zusatz, () => { f.zusatz = !f.zusatz; p.neuZeichnen(); })}</div>` : nothing}
+        ${g.heizer && b.stufen ? html`<div class="zeile" data-zeile="rolle"><div><b>Rolle im Container: ${b.stufen.haupt.includes(g.id) ? '★ Primär' : '🔥 Zusatz'}</b><div class="leise">${!b.stufenAn ? 'alle heizen gemeinsam' : b.stufen.haupt.includes(g.id) ? 'heizt zuerst' : `heizt dazu, wenn ${(b.geraete.find(x => b.stufen.haupt.includes(x.id)) || {}).n || 'der Primäre'} nicht reicht`} · festgelegt im Container unter „Bearbeiten“</div></div></div>` : nothing}
         <div class="leise">Neuer Shelly: die Werte des alten bleiben im Verlauf. Anderer Container: der Verbrauch zählt ab jetzt dort.</div>
         ${x ? inventarVorlage(p, x) : nothing}
         ${knopf('Speichern', p.nurAdmin(() => p.geraetSpeichern()), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;

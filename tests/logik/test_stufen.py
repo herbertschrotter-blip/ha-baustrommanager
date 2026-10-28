@@ -45,6 +45,16 @@ def test_haupt_und_zusatz():
     assert haupt_und_zusatz(["a", "b"], {"a"}) == (["b"], ["a"])
     assert haupt_und_zusatz(["a", "b"], {"a", "b"}) == (["a"], ["b"])   # alle markiert: der erste ist Haupt
     assert haupt_und_zusatz(["a"], set()) == (["a"], [])
+    assert haupt_und_zusatz(["a", "b", "c"], {"c"}) == (["a"], ["b", "c"])   # AN-0015: genau einer primär (vorher a und b)
+
+
+def test_primaer_gewaehlt():
+    """AN-0015: der im Container gewählte ist primär, alle anderen Zusatz; fehlt er (entfernt, inaktiv), gilt wieder
+    die alte Markierung bzw. der erste."""
+    assert haupt_und_zusatz(["a", "b", "c"], set(), "c") == (["c"], ["a", "b"])
+    assert haupt_und_zusatz(["a", "b"], {"b"}, "b") == (["b"], ["a"])          # Wahl schlägt die alte Markierung
+    assert haupt_und_zusatz(["a", "b"], {"a"}, "weg") == (["b"], ["a"])        # nicht mehr da: alte Markierung
+    assert haupt_und_zusatz(["a", "b"], set(), None) == (["a"], ["b"])
 
 
 def test_einer_reicht_im_vorheizen():

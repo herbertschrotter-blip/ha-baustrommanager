@@ -249,10 +249,12 @@ class Heizung(Funktion):
         """Aktive Heizkörper eines Containers in fester Reihenfolge."""
         return [g for g in self.st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER and self.st.geraet_aktiv(g)]
 
-    def haupt_und_zusatz(self, bid: str) -> tuple[list[str], list[str]]:
+    def haupt_und_zusatz(self, bid: str, *, mit_wahl: bool = True) -> tuple[list[str], list[str]]:
+        """Primär und Zusatz; `mit_wahl=False`: wer ohne Wahl im Container primär wäre („automatisch“, AN-0015)."""
         heizer = self.heizer_von(bid)
         markiert = {g.id for g in heizer if (self.st.e.get("geraete") or {}).get(g.id, {}).get("zusatz")}
-        return stufen.haupt_und_zusatz([g.id for g in heizer], markiert)
+        primaer = self.st.einstellungen.bereich(bid).get("primaer") if mit_wahl else None   # AN-0015: im Container gewählt
+        return stufen.haupt_und_zusatz([g.id for g in heizer], markiert, primaer)
 
     def stufen_an(self, bid: str) -> bool:
         """„Zusatz nur bei Bedarf“ eingeschaltet und mindestens zwei aktive Heizkörper."""

@@ -523,7 +523,7 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .neu-version .chip { color: var(--amber); background: color-mix(in srgb, var(--amber) 18%, transparent); font-weight: 600; white-space: nowrap; }
 .sheet .zeile { padding: 8px 0; } .sheet .zeile + .zeile { border-top: 1px solid var(--gridc); }
 .sheet input[type=time] { flex: 1; } .x { color: var(--rot) !important; padding: 4px 8px !important; }
-.feld { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ink2); } .feld input, .feld select { font-size: 15px; }
+.feld { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--ink2); } .feld input, .feld select { font-size: 15px; } .feld.gedimmt select { opacity: .55; }   /* AN-0015 */
 .knopf { width: 100%; text-align: center !important; padding: 13px !important; border-radius: 16px !important; background: rgba(120,120,128,.24) !important; font-weight: 600; transition: transform .12s; }
 .knopf:active { transform: scale(.98); } .knopf.amber { background: var(--amber) !important; color: #1a1000 !important; } .knopf.rot { color: var(--rot) !important; }
 .knopf.leise-k { background: transparent !important; color: var(--ink2) !important; }
@@ -1704,6 +1704,7 @@ class BaustellePanel extends LitElement {
       if (e.warmVor !== (x.warmVor ?? null)) await call('warm_vor', e.warmVor);   // BSM-034.01: alles erst bei „Speichern“
       if (e.warmNach !== (x.warmNach ?? null)) await call('warm_nach', e.warmNach);
       if (e.stufen !== !!x.stufenAn) await call('stufen', e.stufen);
+      if ((e.primaer || null) !== (x.primaer || null)) await call('primaer', e.primaer || null);   // AN-0015
       if (e.anschluss && e.anschluss !== x.anschluss) await call('anschluss', e.anschluss);
       if (e.firma !== x.firma) {
         if (x.firma !== 'eigen') await this._hass.callWS({ type: 'baustelle/liste', entry_id: d.entry, liste: 'firmen', aktion: 'speichern', eintrag: { id: x.firma, name: this.firma(x.firma).name, container: d.bereiche.filter(y => y.firma === x.firma && y.id !== x.id).map(y => y.id) } });
@@ -1747,7 +1748,7 @@ class BaustellePanel extends LitElement {
     const d = this.d;
     return s.edit ||= { bedarf: !!x.bedarf, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
       groesseArt: (x.groesse && x.groesse.art) || 'einzel', m2: x.groesse ? x.groesse.m2 : null,
-      warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn,
+      warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn, primaer: x.primaer || '',   // AN-0015
       // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
       geraete: x.geraete.map(g => ({ id: g.id, n: g.n, typ: g.typ, schalter: g.schalter, leistung: g.leistungEigen || undefined, energie: g.energieEigen || undefined, alt: { n: g.n, typ: g.typ } })) };
   }

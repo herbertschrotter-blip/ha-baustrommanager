@@ -90,12 +90,16 @@ def zusatz(r: StufenRegeln, lage: StufenLage) -> tuple[bool, str | None]:
     return False, None
 
 
-def haupt_und_zusatz(heizer: list[str], zusatz_markiert: set[str]) -> tuple[list[str], list[str]]:
-    """Hauptheizkörper und Zusatz eines Containers (Reihenfolge wie `heizer`).
+def haupt_und_zusatz(heizer: list[str], zusatz_markiert: set[str], primaer: str | None = None) -> tuple[list[str], list[str]]:
+    """Primärheizkörper und Zusatz eines Containers (Reihenfolge wie `heizer`).
 
-    Markiert ist der Zusatz im Gerät. Ist keiner oder jeder markiert, ist der erste der Hauptheizkörper.
+    AN-0015 (Herbert, Mockup primaer.html A, 28.10.2026): Je Container ist genau einer primär – der im Container
+    gewählte (`primaer`), solange er aktiv im Container ist; alle anderen sind Zusatz. Ohne Wahl gilt, was vorher im
+    Gerät als Zusatz markiert war (der erste nicht markierte), sonst der erste.
     """
-    haupt = [g for g in heizer if g not in zusatz_markiert]
-    if not haupt or len(haupt) == len(heizer):
-        haupt = heizer[:1]
+    if primaer in heizer:
+        haupt = [primaer]
+    else:
+        frei = [g for g in heizer if g not in zusatz_markiert]
+        haupt = frei[:1] if frei and len(frei) < len(heizer) else heizer[:1]
     return haupt, [g for g in heizer if g not in haupt]
