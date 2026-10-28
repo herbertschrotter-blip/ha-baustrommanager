@@ -238,9 +238,13 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   `stufen_min` (min Laufzeit des ersten), `stufen_anstieg` (°C), `stufen_kalt` (°C außen). `laufzeit.container.<id>.stufen`
   (ab zwei Heizkörpern, sonst `null`): `{an, haupt: [ids], zusatz: [ids], zusatz_an, grund, text}`; `laufzeit.geraete.<id>.zusatz`.
   Aufheizen lernt je Anzahl laufender Heizkörper: `lernen.aufheizen` mit Schlüsseln `kalt|1`, `mild|2` …; `lernen.warm.anzahl`.
-- Ölradiator oder Konvektor (AN-0008): `baustelle/auswertung` → `typ = {oelradiator|konvektor: {kwh_gradh, auf, ab,
-  container: [Namen], ids}, weniger, vergleichbar, ausgeschlossen: [{name, grund}], ersparnis: {faktor, oel, konvektor,
-  oel_kwh, konvektor_kwh, erspart_kwh, erspart_eur} | null}`; Zähler `vgl_kwh`, `vgl_gradh`, `vgl_aufheiz`, `vgl_abkuehl` je Container.
+- Ölradiator oder Konvektor (AN-0008): `baustelle/auswertung` → `typ = {oelradiator|konvektor: {kwh_gradh, kwh_gradh_m2,
+  auf, auf_je_kw, ab, anzahl, kw, m2, container: [Namen], ids}, weniger, vergleichbar, nur_einer, seit,
+  ausgeschlossen: [{name, grund}], ersparnis: {faktor, oel, konvektor, oel_kwh, konvektor_kwh, erspart_kwh,
+  erspart_eur} | null}`; Zähler `vgl_kwh`, `vgl_gradh`, `vgl_aufheiz`, `vgl_abkuehl` je Container (seit `seit`, dem
+  Zählbeginn – nicht je Zeitraum). FE-0023/AN-0016: `weniger` und der Faktor der Ersparnis je Gradstunde und m²;
+  `anzahl`/`kw`/`m2` = Heizkörper, eingebaute Leistung und Fläche der zählenden Container; `auf_je_kw` = Aufheizen je kW;
+  `nur_einer` = eine Seite hat nur einen Container.
 - Ohne Automatik je Container (WU-0013): `baustelle/ohne` mit `entry_id`, `bereich`, `zeitraum`, `versatz`, `basis`
   (`geraet` | `typ`) → `{zeitraum, basis, preis, kw, reihe: [kWh je Periode], ohne_kwh, kwh, ergebnis: {ohne_eur,
   gespart_eur, prozent} | null, geraete: [{id, typ, kw}]}`; 24/7 ab Beginn der Baustelle bis jetzt.

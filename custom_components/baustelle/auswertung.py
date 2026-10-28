@@ -410,9 +410,11 @@ async def async_auswertung(
          "fuehler": bool(q.st and q.st.bereiche.get(b["id"]) and q.st.bereiche[b["id"]].fuehler),
          "modus": Heizung.von(q.st).modus(b["id"]) if q.st is not None else None,
          "kwh": z.get(f"vgl_kwh:{b['id']}"), "gradh": z.get(f"vgl_gradh:{b['id']}"),
-         "auf": z.get(f"vgl_aufheiz:{b['id']}"), "ab": z.get(f"vgl_abkuehl:{b['id']}"), "m2": q.m2(b["id"])}
+         "auf": z.get(f"vgl_aufheiz:{b['id']}"), "ab": z.get(f"vgl_abkuehl:{b['id']}"), "m2": q.m2(b["id"]),
+         **_heizkoerper_kw(q, b["id"])}   # FE-0023/AN-0016: Geräte und kW je Seite, Aufheizen je kW
         for b in q.bereiche if b["art"] == ART_CONTAINER
     ])
+    typ["seit"] = z.get("seit")   # FE-0023: die vgl-Zähler laufen seit Zählbeginn, nicht nur im gewählten Zeitraum
     # Was die Ölradiatoren gegenüber Konvektoren gespart haben – ihr Verbrauch im Zeitraum, umgerechnet (AN-0008)
     oel_ids = [i for bid in typ["oelradiator"]["ids"] for i in q.energie_ids(bid)]
     typ["ersparnis"] = None
@@ -460,6 +462,15 @@ def _prognose_v2(q: Quelle) -> dict[str, Any] | None:
     from .funktionen.heizung.prognose_schatten import zusammenfassung   # noqa: PLC0415
 
     return zusammenfassung(Heizung.von(q.st).prognose_v2)
+
+
+def _heizkoerper_kw(q: Quelle, bid: str) -> dict[str, Any]:
+    """Heizkörper eines Containers: wie viele und ihre eingebaute Leistung (kW); ohne Steuerung (andere Baustelle) nur
+    die Anzahl."""
+    if q.st is None:
+        return {"anzahl": sum(1 for g in q.geraete if g["bereich"] == bid and g["rolle"] == ROLLE_HEIZKOERPER), "kw": None}
+    heizer = [g for g in q.st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER]
+    return {"anzahl": len(heizer), "kw": round(sum(q.st.nenn_kw(g) for g in heizer), 2) if heizer else None}
 
 
 def _hochrechnung(q: Quelle) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:

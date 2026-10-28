@@ -4316,8 +4316,21 @@ function bausteine(p4) {
   const kz = (wert2, text2, dl) => b2`<div><b>${wert2}</b><span>${text2}</span>${dl !== null ? b2`<em class="${dl > 0 ? "mehr" : "weniger"}">${dl > 0 ? "▲" : "▼"} ${Math.abs(dl)} %</em>` : A}</div>`;
   const T2 = ["oelradiator", "konvektor"].map((t5) => {
     const x2 = A2 && A2.typ && A2.typ[t5] || {};
-    return { kwhG: x2.kwh_gradh ?? null, kwhGm2: x2.kwh_gradh_m2 ?? null, auf: x2.auf ?? null, ab: x2.ab ?? null, container: x2.container || [] };
+    return {
+      kwhG: x2.kwh_gradh ?? null,
+      kwhGm2: x2.kwh_gradh_m2 ?? null,
+      auf: x2.auf ?? null,
+      ab: x2.ab ?? null,
+      aufKw: x2.auf_je_kw ?? null,
+      anzahl: x2.anzahl ?? null,
+      kw: x2.kw ?? null,
+      m2: x2.m2 ?? null,
+      container: x2.container || []
+    };
   });
+  const seite = (t5) => zahl(t5.anzahl) ? [`${t5.anzahl} Heizkörper`, zahl(t5.kw) ? `${de(t5.kw, 1)} kW` : null, zahl(t5.m2) ? `${de(t5.m2, 0)} m²` : null].filter(Boolean).join(" · ") : "–";
+  const seit = A2 && A2.typ && A2.typ.seit ? `${A2.typ.seit.slice(8, 10)}.${A2.typ.seit.slice(5, 7)}.${A2.typ.seit.slice(0, 4)}` : null;
+  const nurEiner = !!(A2 && A2.typ && A2.typ.nur_einer);
   const vglOk = !!(A2 && A2.typ && A2.typ.vergleichbar), aussen = A2 && A2.typ && A2.typ.ausgeschlossen || [];
   const er = A2 && A2.typ && A2.typ.ersparnis, zrE = p4.zeitraum(z2, vs);
   const ersparT = !er ? "" : b2`<div class="kennz"><div><b>${de(er.oel_kwh, er.oel_kwh < 100 ? 1 : 0)}</b><span>kWh Ölradiatoren</span></div>
@@ -4332,7 +4345,7 @@ function bausteine(p4) {
     z2 === "Tag" ? 6 : z2 === "Monat" ? 7 : z2 === "Woche" ? 1 : 3,
     { name: "mit Konvektoren", v: er.konvektor }
   ))}</div>
-      <div class="leise">„Mit Konvektoren“ = der tatsächliche Verbrauch der Ölradiatoren mal ${de(er.faktor, 2)} – so viel mehr bzw. weniger brauchen Konvektoren hier je Gradstunde.</div>`;
+      <div class="leise">„Mit Konvektoren“ = der tatsächliche Verbrauch der Ölradiatoren im gewählten Zeitraum mal ${de(er.faktor, 2)} – so viel mehr bzw. weniger brauchen Konvektoren hier je Gradstunde und m².</div>`;
   const f3 = (v2, fn) => zahl(v2) ? fn(v2) : "–";
   const nachteil = (i7, hoch) => {
     const a3 = T2[0][i7], b3 = T2[1][i7];
@@ -4371,15 +4384,19 @@ function bausteine(p4) {
     hochrechnung: alle ? "" : heizperiodeVorlage(p4, A2),
     vergleich: b2`<div class="glas-panel block"><div class="block-kopf"><b>Ölradiator oder Konvektor</b><span class="leise">fair: gleiche Regelung · aus eigenen Messungen</span></div>
         <table class="vergleich"><tr><th></th><th>Ölradiator</th><th>Konvektor</th></tr>
+          <tr class="vgl-geraete"><td>im Vergleich</td><td class="leise">${seite(T2[0])}</td><td class="leise">${seite(T2[1])}</td></tr>
           ${zeile3("kWh je Gradstunde", "kwhG", true, (v2) => de(v2, 3))}
           ${zeile3("kWh je Gradstunde und m²", "kwhGm2", true, (v2) => de(v2, 4))}
           ${zeile3("Aufheizen", "auf", false, (v2) => `${de(v2, 1)} °C/h`)}
+          ${zeile3("Aufheizen je kW", "aufKw", false, (v2) => `${de(v2, 2)} °C/h`)}
           ${zeile3("Abkühlen nach Aus", "ab", true, (v2) => `${de(v2, 1)} °C/h`)}
           <tr><td>zählt</td><td class="leise">${T2[0].container.join(", ") || "–"}</td><td class="leise">${T2[1].container.join(", ") || "–"}</td></tr></table>
         <div class="leise fuss">${fussSatz}</div>
+        ${vglOk && nurEiner ? b2`<div class="hp-grob vgl-einer">⚠ Nur ein Container je Art – das vergleicht eher diese Container (Dämmung, Größe, Tür) als Ölradiator und Konvektor.</div>` : A}
+        <div class="leise vgl-bezug">Tabelle: ${seit ? `seit ${seit} (Zählbeginn)` : "seit Zählbeginn"}, unabhängig vom gewählten Zeitraum; Aufheizen und Abkühlen als gleitendes Mittel der letzten Messungen. Die Prozentzahl rechnet je m².</div>
         ${ersparT}
         ${aussen.length ? b2`<div class="leise">Nicht im Vergleich: ${aussen.map((x2) => `${x2.name} (${x2.grund})`).join(", ")}.</div>` : A}
-        <div class="leise">kWh je Gradstunde = Strom je Stunde und °C, um den es drinnen wärmer ist als draußen. Gezählt werden nur Zeiten, in denen ein Container mit Fühler im Modus Thermostat geregelt wird; Container mit beiden Typen zählen nicht.</div></div>`
+        <div class="leise">kWh je Gradstunde = Strom je Stunde und °C, um den es drinnen wärmer ist als draußen. Verglichen wird je Container, nicht je Gerät: Ein Container braucht die Wärme, die er verliert, egal wie viele Heizkörper sie liefern – Elektroheizer setzen Strom gleich in Wärme um, Unterschiede kommen vor allem vom Container und vom Nachheizen. Gezählt werden nur Zeiten, in denen ein Container mit Fühler im Modus Thermostat geregelt wird; Container mit beiden Typen zählen nicht.</div></div>`
   };
   return { B: B2, A: A2, z: z2, alle };
 }
@@ -5451,7 +5468,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.143";
+var SEITE_VERSION = "0.8.144";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS)];

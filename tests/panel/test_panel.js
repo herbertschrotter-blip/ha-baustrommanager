@@ -1389,6 +1389,9 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     // AN-0008: fairer Vergleich – kWh je Gradstunde, zählende und ausgeschlossene Container (Werte des Beispiel-hass)
     erwarte('Ölradiator/Konvektor: Werte der Integration (fair)', h.includes('kWh je Gradstunde') && h.includes(`>${deT(0.085, 3)}<`) && h.includes(`${deT(0.102, 3)}`)
       && h.includes('verbraucht rund 17 % weniger') && h.includes('Poliercontainer</td>') && h.includes('Mannschaft (Ölradiator und Konvektor gemischt)'));
+    erwarte('FE-0023/AN-0016: Geräte · kW · m² je Seite, Aufheizen je kW, Bezug (Zählbeginn), Hinweis nur ein Container',
+      h.includes('3 Heizkörper · 6,0 kW · 14 m²') && h.includes('2 Heizkörper · 4,0 kW · 14 m²') && h.includes('Aufheizen je kW') && h.includes(`>${deT(0.35, 2)} °C/h<`)
+      && h.includes('seit 29.09.2026 (Zählbeginn)') && h.includes('Nur ein Container je Art') && h.includes('nicht je Gerät'));
     erwarte('AN-0008: Ersparnis Ölradiator gegen Konvektor mit Diagramm', h.includes('kWh mit Konvektoren') && h.includes('erspart') && h.includes('data-chart="typ-er-') && h.includes('mit Konvektoren</span>'));
     const Z = fall('abrechnung', 'dobl diese Monat').zeilen;
     erwarte('Abrechnung nach Firma: Firmen und kWh der Integration', Z.length > 1 && Z.every(z => h.includes(`<b>${esc(z.firma)}</b>`) && h.includes(`${deT(z.kwh, 0)} kWh · `)));

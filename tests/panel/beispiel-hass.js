@@ -157,8 +157,10 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       je_geraet: (g ? g.erwartet.zeilen : b.geraete.map(x => ({ bereich: x.bereich, geraet: x.id, mittel: null, kwh: 1.5, std: null }))).map(z => ({ ...z, eur: z.kwh === null ? null : z.kwh * preis })),
       wetter: w ? { punkte: w.erwartet.punkte, gerade: w.erwartet.regression && { ...w.erwartet.regression, eur_je_grad: w.erwartet.regression.k < 0 ? -w.erwartet.regression.k * preis : null } } : { punkte: [], gerade: null },
       // AN-0008: fairer Vergleich (kWh je Gradstunde, nur Thermostat mit Fühler, ein Typ je Container)
-    typ: REFERENZ ? { oelradiator: { kwh_gradh: 0.085, auf: 2.1, ab: 0.6, container: ['Poliercontainer'] }, konvektor: { kwh_gradh: 0.102, auf: 3.0, ab: 1.1, container: ['Sanitär'] },
-      weniger: 17, vergleichbar: true, ausgeschlossen: [{ name: 'Mannschaft', grund: 'Ölradiator und Konvektor gemischt' }, { name: 'Magazin', grund: 'ohne Fühler' }],
+    // FE-0023/AN-0016: je Seite Geräte · kW · m², Aufheizen je kW, Zählbeginn, nur ein Container je Art
+    typ: REFERENZ ? { oelradiator: { kwh_gradh: 0.085, kwh_gradh_m2: 0.0061, auf: 2.1, auf_je_kw: 0.35, ab: 0.6, anzahl: 3, kw: 6, m2: 14, container: ['Poliercontainer'] },
+      konvektor: { kwh_gradh: 0.102, kwh_gradh_m2: 0.0073, auf: 3.0, auf_je_kw: 0.75, ab: 1.1, anzahl: 2, kw: 4, m2: 14, container: ['Sanitär'] },
+      weniger: 17, vergleichbar: true, nur_einer: true, seit: '2026-09-29T07:00:00+02:00', ausgeschlossen: [{ name: 'Mannschaft', grund: 'Ölradiator und Konvektor gemischt' }, { name: 'Magazin', grund: 'ohne Fühler' }],
       ersparnis: (() => { const n = perioden(m.zeitraum, b.baustelle.heute || '2026-09-29'), oel = Array.from({ length: n }, (_, i) => m.zeitraum === 'Tag' ? (i >= 6 && i < 17 ? 1.4 : 0) : 9 + (i % 4)),
         f = 0.102 / 0.085, k = oel.map(v => +(v * f).toFixed(3)), so = oel.reduce((a, x) => a + x, 0), sk = k.reduce((a, x) => a + x, 0);
         return { faktor: f, oel, konvektor: k, oel_kwh: so, konvektor_kwh: sk, erspart_kwh: sk - so, erspart_eur: (sk - so) * preis }; })() }

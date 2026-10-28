@@ -419,3 +419,26 @@ def test_je_m2_rangliste_und_vergleich():
         {"id": "b", "name": "M01", "typen": ["konvektor"], "fuehler": True, "modus": "thermo", "kwh": 27.0, "gradh": 200.0},
     ])
     assert t["oelradiator"]["kwh_gradh_m2"] == 0.01 and t["konvektor"]["kwh_gradh_m2"] == 0.01
+
+
+def test_vergleich_je_m2_kw_und_geraete():
+    """FE-0023/AN-0016: Doppelcontainer mit 3 Ölradiatoren gegen Einzelcontainer mit 2 Konvektoren – „weniger“ und der
+    Faktor der Ersparnis zählen je m² (je Container wäre der große um 54 % schlechter), Aufheizen auch je kW, je Seite
+    Geräte, kW und m²; nur ein Container je Seite → Hinweis."""
+    from logik.auswertung import typ_ersparnis, typ_vergleich_fair
+    t = typ_vergleich_fair([
+        {"id": "a", "name": "Polier", "typen": ["oelradiator"], "fuehler": True, "modus": "thermo", "kwh": 60.0, "gradh": 300.0,
+         "m2": 28, "kw": 6.0, "anzahl": 3, "auf": 3.0},
+        {"id": "b", "name": "M01", "typen": ["konvektor"], "fuehler": True, "modus": "thermo", "kwh": 39.0, "gradh": 300.0,
+         "m2": 14, "kw": 4.0, "anzahl": 2, "auf": 2.0},
+    ])
+    o, k = t["oelradiator"], t["konvektor"]
+    assert (o["anzahl"], o["kw"], o["m2"], k["anzahl"], k["kw"], k["m2"]) == (3, 6.0, 28.0, 2, 4.0, 14.0)
+    assert o["kwh_gradh"] == 0.2 and k["kwh_gradh"] == 0.13           # je Container: Ölradiator 54 % mehr …
+    assert t["weniger"] == 23                                          # … je m²: 23 % weniger
+    assert o["auf_je_kw"] == 0.5 and k["auf_je_kw"] == 0.5 and t["nur_einer"]
+    er = typ_ersparnis([10.0], t, 0.3)
+    assert er["faktor"] == pytest.approx(1.3)                          # nach m², nicht 0,65 je Container
+    ohne_kw = typ_vergleich_fair([{**x, "kw": None} for x in [
+        {"id": "a", "name": "A", "typen": ["oelradiator"], "fuehler": True, "modus": "thermo", "kwh": 1.0, "gradh": 30.0, "auf": 2.0}]])
+    assert ohne_kw["oelradiator"]["kw"] is None and ohne_kw["oelradiator"]["auf_je_kw"] is None and not ohne_kw["nur_einer"]

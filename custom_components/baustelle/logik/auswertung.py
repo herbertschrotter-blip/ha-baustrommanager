@@ -638,7 +638,14 @@ def typ_vergleich_fair(container: Sequence[Mapping[str, Any]]) -> dict[str, Any]
     (Strom je Stunde und °C, um den es drinnen wärmer ist als draußen), dazu Aufheiz- und Abkühlrate und – für
     verschieden große Container – kWh je Gradstunde und m² (AN-0014; ohne Größe ein Einzelcontainer).
 
-    `container`: `[{"id", "name", "typen": [..], "fuehler": bool, "modus", "kwh", "gradh", "auf", "ab"[, "m2"]}]`.
+    FE-0023/AN-0016 (Herbert 28.10.2026): verglichen wird der Strom je Container und Grad, nicht je Gerät – ein
+    Container braucht die Wärme, die er verliert, egal wie viele Heizkörper sie liefern; Elektroheizer setzen Strom
+    gleich in Wärme um. Darum zählt „weniger“ (und der Faktor der Ersparnis) je m², das Aufheizen gibt es zusätzlich je
+    kW eingebauter Leistung (`auf_je_kw`), und je Seite stehen Geräte, kW und m² (`anzahl`, `kw`, `m2`). `nur_einer`:
+    eine Seite hat nur einen Container – dann vergleicht man eher zwei Container als zwei Gerätearten.
+
+    `container`: `[{"id", "name", "typen": [..], "fuehler": bool, "modus", "kwh", "gradh", "auf", "ab"[, "m2", "kw",
+    "anzahl"]}]` (`kw`: eingebaute Leistung der Heizkörper, `anzahl`: wie viele).
     """
     zaehlen: dict[str, list[Mapping[str, Any]]] = {"oelradiator": [], "konvektor": []}
     ausgeschlossen: list[dict[str, str]] = []
@@ -667,12 +674,19 @@ def typ_vergleich_fair(container: Sequence[Mapping[str, Any]]) -> dict[str, Any]
         gradh = summe(float(c["gradh"]) for c in liste)
         kwh = summe(float(c["kwh"]) for c in liste if ist_zahl(c.get("kwh")))
         gradh_m2 = summe(float(c["gradh"]) * groesse.flaeche(c.get("m2")) for c in liste)
+        je_kw = [float(c["auf"]) / float(c["kw"]) for c in liste if ist_zahl(c.get("auf")) and ist_zahl(c.get("kw")) and float(c["kw"]) > 0]
+        kws = [float(c["kw"]) for c in liste if ist_zahl(c.get("kw"))]
         ergebnis[typ] = {"kwh_gradh": kwh / gradh if gradh else None, "kwh_gradh_m2": kwh / gradh_m2 if gradh_m2 else None, "auf": mittel_von(liste, "auf"),
                          "ab": mittel_von(liste, "ab"), "container": [str(c.get("name") or c.get("id")) for c in liste],
-                         "ids": [str(c.get("id")) for c in liste]}
-    o, k = ergebnis["oelradiator"]["kwh_gradh"], ergebnis["konvektor"]["kwh_gradh"]
+                         "ids": [str(c.get("id")) for c in liste],
+                         "auf_je_kw": summe(je_kw) / len(je_kw) if je_kw else None,
+                         "anzahl": int(summe(int(c["anzahl"]) for c in liste if ist_zahl(c.get("anzahl")))) if liste else None,
+                         "kw": summe(kws) if liste and len(kws) == len(liste) else None,
+                         "m2": summe(groesse.flaeche(c.get("m2")) for c in liste) if liste else None}
+    o, k = ergebnis["oelradiator"]["kwh_gradh_m2"], ergebnis["konvektor"]["kwh_gradh_m2"]
     ergebnis["weniger"] = js_runden((1 - o / k) * 100) if o is not None and k is not None and k > 0 else None
     ergebnis["vergleichbar"] = o is not None and k is not None
+    ergebnis["nur_einer"] = ergebnis["vergleichbar"] and min(len(zaehlen.get(t, [])) for t in ("oelradiator", "konvektor")) == 1
     ergebnis["ausgeschlossen"] = ausgeschlossen
     return ergebnis
 
@@ -685,9 +699,11 @@ WETTER_MIN_TAGE = 5
 
 def typ_ersparnis(oel: Sequence[float], typ: Mapping[str, Any], preis: float) -> dict[str, Any] | None:
     """Was die Ölradiatoren gegenüber Konvektoren gespart haben (AN-0008): ihr tatsächlicher Verbrauch je Periode und
-    derselbe Verbrauch mal dem Faktor Konvektor ÷ Ölradiator (kWh je Gradstunde) – „mit Konvektoren“. None, solange
-    der faire Vergleich fehlt."""
-    o, k = typ["oelradiator"]["kwh_gradh"], typ["konvektor"]["kwh_gradh"]
+    derselbe Verbrauch mal dem Faktor Konvektor ÷ Ölradiator (kWh je Gradstunde und m², FE-0023/AN-0016; ohne m²-Wert
+    je Gradstunde) – „mit Konvektoren“. None, solange der faire Vergleich fehlt."""
+    m2 = typ["oelradiator"].get("kwh_gradh_m2") is not None and typ["konvektor"].get("kwh_gradh_m2") is not None
+    schluessel = "kwh_gradh_m2" if m2 else "kwh_gradh"
+    o, k = typ["oelradiator"][schluessel], typ["konvektor"][schluessel]
     if not typ.get("vergleichbar") or not o or k is None:
         return None
     faktor = k / o

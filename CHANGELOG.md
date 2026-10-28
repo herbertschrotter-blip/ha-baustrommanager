@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.144] – 2026-10-28
+
+- Auswertung „Ölradiator oder Konvektor“ klarer und fairer (FE-0023, AN-0016). Unter der Tabelle steht jetzt, worauf
+  sich die Zahlen beziehen: seit Zählbeginn (Datum), unabhängig vom gewählten Zeitraum; Aufheizen und Abkühlen als
+  gleitendes Mittel; die Ersparnis darunter im gewählten Zeitraum. Je Seite stehen Heizkörper, kW und m² der zählenden
+  Container, das Aufheizen gibt es zusätzlich je kW. Die Prozentzahl („−17 %“) und der Faktor der Ersparnis rechnen
+  jetzt je m² – vorher stand ein Doppelcontainer gegen einen Einzelcontainer schlechter da, nur weil er größer ist.
+  Verglichen wird weiter je Container und nicht je Gerät: Ein Container braucht die Wärme, die er verliert, egal wie
+  viele Heizkörper sie liefern; das erklärt die Seite jetzt. Zählt je Art nur ein Container, weist sie darauf hin, dass
+  dann eher zwei Container als zwei Gerätearten verglichen werden.
+
 ## [0.8.143] – 2026-10-28
 
 - Melden mit Screenshots robuster (FE-0027): Das Melde-Fenster bleibt offen, bis die Meldung angekommen ist – schlägt
