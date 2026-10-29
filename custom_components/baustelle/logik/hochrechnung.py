@@ -398,24 +398,59 @@ def ohne_container(
     return Ohne(sig, len(gemessen), summe)
 
 
+GLEICH = "gleich"   # Container ohne Heizkörper: die Automatik schaltet dort nichts, „ohne“ = „mit“
+EIGEN = "eigen"     # Container mit eigener Signatur „ohne“
+
+
+def quelle_ohne(
+    bid: str, typen: Mapping[str, str], gemessen: Collection[str], ohne_lauf: Collection[str] = (),
+) -> str | tuple[str, ...] | None:
+    """Woher „ohne Automatik“ eines Containers kommt (IPMVP, Bauplan Hochrechnung §6): `EIGEN` (eigene Signatur „ohne“),
+    `GLEICH` (ohne Heizkörper – nichts zu messen, „ohne“ = „mit“), die gemessenen Container, deren Verhältnis ohne ÷ mit
+    gilt (derselbe Heizkörper-Typ; ein Container, der nie einen Lauf bekommt – `ohne_lauf`, z. B. Modus aus –, nimmt alle
+    gemessenen, wenn es keinen desselben Typs gibt), oder None (noch nicht möglich)."""
+    if bid in gemessen:
+        return EIGEN
+    typ = typen.get(bid, "")
+    if not typ:
+        return GLEICH
+    gleich_typ = tuple(b for b in gemessen if typen.get(b, "") == typ)
+    if gleich_typ:
+        return gleich_typ
+    if bid in ohne_lauf and gemessen:
+        return tuple(gemessen)
+    return None
+
+
+def gemessen_ohne(ohne: Mapping[str, Ohne], mit_kwh: Mapping[str, float]) -> list[str]:
+    """Container mit eigener Signatur „ohne“, deren Verhältnis ohne ÷ mit taugt (Heizperiode „ohne“ und „mit“ > 0)."""
+    return [bid for bid, o in ohne.items() if o.heizperiode_kwh is not None and mit_kwh.get(bid)]
+
+
+def quellen(
+    ohne: Mapping[str, Ohne], mit_kwh: Mapping[str, float], typen: Mapping[str, str], ohne_lauf: Collection[str] = (),
+) -> dict[str, str | tuple[str, ...] | None]:
+    """Je Container die Quelle von „ohne Automatik“ (`quelle_ohne`) – dieselbe Regel für die Rechnung und die Anzeige."""
+    gemessen = gemessen_ohne(ohne, mit_kwh)
+    return {bid: EIGEN if (o := ohne.get(bid)) is not None and o.heizperiode_kwh is not None
+            else quelle_ohne(bid, typen, gemessen, ohne_lauf) for bid in mit_kwh}
+
+
 def ohne_baustelle(
-    ohne: Mapping[str, Ohne], mit_kwh: Mapping[str, float], typen: Mapping[str, str],
+    ohne: Mapping[str, Ohne], mit_kwh: Mapping[str, float], typen: Mapping[str, str], ohne_lauf: Collection[str] = (),
 ) -> float | None:
     """„Ohne Automatik“ der ganzen Heizperiode aus den Baseline-Messungen: gemessene Container mit ihrer Signatur, die
-    anderen mit dem Verhältnis ohne ÷ mit gemessener Container desselben Heizkörper-Typs; None, solange das nicht für
-    jeden Container geht (dann bleibt die Schätzung 24/7)."""
-    verh: dict[str, list[float]] = {}
-    for bid, o in ohne.items():
-        if o.heizperiode_kwh is not None and mit_kwh.get(bid):
-            verh.setdefault(typen.get(bid, ""), []).append(o.heizperiode_kwh / mit_kwh[bid])
+    anderen nach `quellen` (Verhältnis ohne ÷ mit gemessener Container, ohne Heizkörper „ohne“ = „mit“); None, solange
+    das nicht für jeden Container geht (dann bleibt die Schätzung 24/7)."""
+    verh = {bid: ohne[bid].heizperiode_kwh / mit_kwh[bid] for bid in gemessen_ohne(ohne, mit_kwh)}   # type: ignore[operator]
     summe = 0.0
-    for bid, mit in mit_kwh.items():
-        o = ohne.get(bid)
-        if o is not None and o.heizperiode_kwh is not None:
-            summe += o.heizperiode_kwh
-        elif verh.get(typen.get(bid, "")):
-            r = verh[typen[bid]]
-            summe += mit * sum(r) / len(r)
+    for bid, q in quellen(ohne, mit_kwh, typen, ohne_lauf).items():
+        if q == EIGEN:
+            summe += ohne[bid].heizperiode_kwh   # type: ignore[operator]
+        elif q == GLEICH:
+            summe += mit_kwh[bid]
+        elif isinstance(q, tuple):
+            summe += mit_kwh[bid] * sum(verh[b] for b in q) / len(q)
         else:
             return None
     return summe if mit_kwh else None

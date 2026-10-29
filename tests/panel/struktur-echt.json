@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.157",
+   "version": "0.8.159",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -630,6 +630,7 @@
      },
      "start": null,
      "takt": null,
+     "baseline": null,
      "eingestellt": [
       {
        "k": "prio",
@@ -805,6 +806,7 @@
      "lernen": null,
      "start": null,
      "takt": null,
+     "baseline": null,
      "eingestellt": [
       {
        "k": "frost",
@@ -970,6 +972,7 @@
      },
      "start": null,
      "takt": null,
+     "baseline": null,
      "eingestellt": [
       {
        "k": "trocknen",
@@ -1142,6 +1145,7 @@
      "lernen": null,
      "start": null,
      "takt": null,
+     "baseline": null,
      "eingestellt": null,
      "stufen": null,
      "bedarf": null,
@@ -1956,6 +1960,56 @@
     "rueck": [],
     "schritt": 0.15
    },
+   "baseline": {
+    "an": false,
+    "rahmen": {
+     "monat": "2026-09",
+     "budget_eur": 60.0,
+     "gemessen_eur": 0.0,
+     "geplant_eur": 0.0,
+     "rest_eur": 60.0
+    },
+    "vorschau": null,
+    "container": [
+     {
+      "bereich": "polier",
+      "name": "Polier",
+      "typ": "gemischt",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     },
+     {
+      "bereich": "mannschaft",
+      "name": "Mannschaft",
+      "typ": "konvektor",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": "bei Bedarf",
+      "uebernimmt": []
+     },
+     {
+      "bereich": "magazin",
+      "name": "Magazin",
+      "typ": "oelradiator",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     }
+    ],
+    "laeufe": [],
+    "offen": null,
+    "hinweis": "Prognose ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.",
+    "stand_t": "Baseline messen ist aus."
+   },
    "warnungen": [
     {
      "key": "offline:magazin:magazin_t1",
@@ -2377,7 +2431,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.157",
+   "version": "0.8.159",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2613,6 +2667,7 @@
      "lernen": null,
      "start": null,
      "takt": null,
+     "baseline": null,
      "eingestellt": [
       {
        "k": "frost",
@@ -2855,6 +2910,34 @@
     "rang": []
    },
    "soll_gleitend": null,
+   "baseline": {
+    "an": false,
+    "rahmen": {
+     "monat": "2026-09",
+     "budget_eur": 60.0,
+     "gemessen_eur": 0.0,
+     "geplant_eur": 0.0,
+     "rest_eur": 60.0
+    },
+    "vorschau": null,
+    "container": [
+     {
+      "bereich": "buero",
+      "name": "Büro",
+      "typ": "oelradiator",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     }
+    ],
+    "laeufe": [],
+    "offen": null,
+    "hinweis": "Prognose ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.",
+    "stand_t": "Baseline messen ist aus."
+   },
    "warnungen": [],
    "wetter": {
     "aussen": null,

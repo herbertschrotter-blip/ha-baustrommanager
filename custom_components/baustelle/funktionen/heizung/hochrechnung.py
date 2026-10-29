@@ -123,9 +123,13 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     # Ersparnis nach IPMVP: Signatur „ohne“ je Container, Heizperiode damit; andere über das Verhältnis je Heizkörper-Typ
     ohne = {bid: h.ohne_container(roh[bid], ohne_tage.get(bid, set()), heute, beginn, ende, vor, klima) for bid in ids}
     mit = {bid: sum(t.kwh or 0.0 for t in roh[bid] if beginn <= t.datum <= heute) + reste[bid].rest_kwh for bid in ids}
+    # Typ nach allen Heizkörpern (auch inaktiven – der Verbrauch der Heizperiode stammt von ihnen); J4b: ohne Heizkörper
+    # „ohne“ = „mit“; Container, die keinen Lauf bekommen (Planen kennt nur aktive Heizkörper), nehmen das Verhältnis der gemessenen
     typen = {bid: h_baseline._typ({g.typ for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER}) for bid in ids}
-    ohne_kwh = h.ohne_baustelle(ohne, mit, typen)
-    _kosten_nachtragen(hz, roh)
+    ohne_lauf = [bid for bid in ids if typen[bid] and h_baseline.kein_lauf_von(hz, bid)]
+    ohne_kwh = h.ohne_baustelle(ohne, mit, typen, ohne_lauf)
+    quelle = h.quellen(ohne, mit, typen, ohne_lauf)
+    _kosten_nachtragen(hz, roh, heute)
     container = [{
         "bereich": bid, "methode": r.methode, "rest_kwh": r.rest_kwh, "unten_kwh": r.unten_kwh, "oben_kwh": r.oben_kwh,
         "normjahr_kwh": r.normjahr_kwh, "stand": r.signatur.stand, "grund": r.signatur.grund, "tage": r.signatur.tage,
@@ -145,6 +149,7 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
             "reihe": reihe, "perioden": {art: h.perioden(tw, art, heute) for art in h.PERIODEN},
             "ohne": {"methode": "baseline" if ohne_kwh is not None else "schaetzung", "kwh": ohne_kwh,
                      "container": [{"bereich": bid, "stand": o.signatur.stand, "tage": o.tage, "heizperiode_kwh": o.heizperiode_kwh,
+                                    "quelle": list(q) if isinstance(q := quelle.get(bid), tuple) else q,   # J4b: logik/hochrechnung.quellen
                                     "grenze": o.signatur.grenze, "kwh_je_grad": o.signatur.kwh_je_grad,
                                     "grundlast": o.signatur.grundlast, "cv_rmse": o.signatur.cv_rmse,
                                     "kwh_je_tag": (o.heizperiode_kwh / max(1, (ende - beginn).days + 1)) if o.heizperiode_kwh else None}
@@ -154,16 +159,27 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
             "vorhersage": [[d.isoformat(), t] for d, t in sorted(vor.items()) if d <= ende]}
 
 
-def _kosten_nachtragen(hz: Heizung, roh: dict[str, list[h.TagRoh]]) -> None:
-    """Gemessene Kosten beendeter Baseline-Läufe (Verbrauch der Lauftage × Preis) – zählen gegen den Monatsrahmen."""
+def _kosten_nachtragen(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date) -> None:
+    """Gemessene Kosten und kWh beendeter Baseline-Läufe (Verbrauch der Lauftage × Preis) – Kosten zählen gegen den
+    Monatsrahmen. Erst, wenn der letzte Tag (beim Abbruch der Abbruchtag) vorbei ist – sonst stünde ein halber Tag für immer
+    drin. Ein älterer Lauf mit Kosten, aber ohne kWh (vor J4b) bekommt die kWh nur, wenn seine Tage noch da sind."""
     liste, neu = h_baseline.laeufe(hz), False
     for i, l in enumerate(liste):
-        if l.status in ("fertig", "abgebrochen") and l.kosten_eur is None:
-            letzter = l.ende or (l.bis - timedelta(days=1))
-            tage = {t.datum: t for t in roh.get(l.bereich, [])}
-            liste[i] = replace(l, kosten_eur=round(sum((tage[d].kwh or 0.0) * hz.st.preis_am(d)
-                                                       for d in l.tage() if d <= letzter and d in tage), 2))
-            neu = True
+        if l.status not in ("fertig", "abgebrochen") or (l.kosten_eur is not None and l.kwh is not None):
+            continue
+        letzter = l.ende or (l.bis - timedelta(days=1))
+        if letzter >= heute:
+            continue
+        tage = {t.datum: t for t in roh.get(l.bereich, [])}
+        im_lauf = [d for d in l.tage() if d <= letzter]
+        if l.kosten_eur is None:
+            liste[i] = replace(l, kosten_eur=round(sum((tage[d].kwh or 0.0) * hz.st.preis_am(d) for d in im_lauf if d in tage), 2),
+                               kwh=round(sum(tage[d].kwh or 0.0 for d in im_lauf if d in tage), 2))
+        elif all(d in tage for d in im_lauf):
+            liste[i] = replace(l, kwh=round(sum(tage[d].kwh or 0.0 for d in im_lauf), 2))
+        else:
+            continue
+        neu = True
     if neu:
         h_baseline._speichern(hz, liste)
 

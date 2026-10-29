@@ -989,6 +989,31 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await lage(null);
       erwarte('Takt: ohne Takt (z. B. außerhalb der Regelung) Zustandschip wie bisher, kein ◔', lang('zust') === 'heizt auf 22,4 °C' && !litEl('.ck-d .ck-chip[data-k="takt"]'));
       Object.assign(x, alt); panel.s.ck = null; await panel.neuZeichnen(); }
+    /* J4b (Mockup baseline.html B, FE-0033): im Baseline-Lauf unter Jetzt „🧪 Baseline-Lauf bis So 24:00 · Thermostat regelt“
+       (Handy „bis So 24:00“), Antippen: Satz mit bisher kWh/€ und „Lauf abbrechen“ (genau ein Auftrag); Rad gedämpft mit
+       „Thermostat am Heizkörper regelt“, kein Soll ± (wirkt im Lauf nicht). Alle Werte aus laufzeit.container.<id>.baseline. */
+    { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, takt: x.takt, t: x.t, baseline: x.baseline };
+      const lang = k => (litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-l`) || {}).textContent, kurz = k => (litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-k`) || {}).textContent;
+      x.modus = 'thermo'; x.t = 19.5; x.takt = null; x.z = 'heizt'; x.text = 'Baseline-Messung · Thermostat am Gerät regelt';
+      x.baseline = { lauf_id: 'r9', von: '2026-10-03', letzter: '2026-10-04', von_t: 'Sa 03.10.', letzter_t: 'So 04.10.', bis: '2026-10-05T00:00:00+02:00', bis_t: 'So 24:00', bisher_kwh: 13.1, bisher_eur: 2.62 };
+      panel.s.ck = null; await panel.neuZeichnen(); pruefe('Container im Baseline-Lauf');
+      const c = litEl('.ck-d .ckd-g[data-g="Jetzt"] .ck-chip[data-k="zust"]');
+      erwarte('J4b: Kopf-Chip im Lauf (Desktop lang, Handy kurz, blau), statt „heizt · Baseline-Messung …“', !!c && c.querySelector('.ck-ic').textContent === '🧪'
+        && lang('zust') === 'Baseline-Lauf bis So 24:00 · Thermostat regelt' && kurz('zust') === 'bis So 24:00' && c.classList.contains('blau') && !/Baseline-Messung/.test(c.textContent));
+      erwarte('J4b: Rad gedämpft mit Hinweis, kein Soll ± und keine Soll-Chips', !!litEl('.c-rad.bl-ged') && !litEl('.c-rad-pm .c-pm') && !litEl('.ckd-soll')
+        && (litEl('.c-rad .c-ohne-t') || {}).textContent === 'Thermostat am Heizkörper regelt');
+      erwarte('J4b: ohne Antippen kein Satz', !litEl('.ck-d .ck-info'));
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10);
+      const satz = ((litEl('.ck-d .ck-info.tk-info span') || {}).textContent || '').replace(/\s+/g, ' ');
+      erwarte('J4b: Antippen – Satz mit Zeitraum und bisher kWh/€', satz.startsWith('Baseline-Lauf von Sa 03.10. 00:00 bis So 04.10. 24:00: Alle Heizkörper hängen ohne Automatik am Strom')
+        && satz.includes('Bisher 13,1 kWh · 2,62 €.') && satz.includes('Lauf abbrechen – Automatik übernimmt'));
+      neu(); await klick('.ck-d [data-k="bl-kopf-abbrechen"]', 10);
+      const A = letzte('baustelle/aktion');
+      erwarte('J4b: „Lauf abbrechen“ im Kopf = genau ein Auftrag baseline_absagen mit lauf_id', A.length === 1 && A[0].aktion === 'baseline_absagen' && A[0].lauf_id === 'r9');
+      panel.letzterToast = '';   // r9 gibt es im Beispiel nicht: not_found wie die Integration (geprüft unten in Regeln)
+      x.baseline = null; panel.s.ck = null; await panel.neuZeichnen();
+      erwarte('J4b: ohne Lauf wieder Zustand und Soll ±', lang('zust') !== 'Baseline-Lauf bis So 24:00 · Thermostat regelt' && !litEl('.c-rad.bl-ged') && !!litEl('.c-rad-pm .c-pm'));
+      Object.assign(x, alt); panel.s.ck = null; await panel.neuZeichnen(); }
     /* Start-Logik (Mockup start.html, Variante B, Herbert 29.10.2026; FE-0031/FE-0032): Jetzt „⏸ aus bis morgen 03:30“ und Plan
        „morgen ab 03:30 · warm 06:35“ aus derselben Rechnung (laufzeit.container.<id>.start, text); Antippen: Satz + „So rechnet
        der Start ›“ → Lernstand mit Zeitstrahl und Kacheln statt „Heute ab …“. Die Seite rechnet nichts, sie zeichnet nur. */
@@ -1163,6 +1188,42 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     const S = letzte('baustelle/setzen').map(a => `${a.pfad.join('.')}=${a.wert}`);
     erwarte('AN-0012: neue Regler setzen die Integration (' + S.join(', ') + ')', ['heizung.toleranz=0.4', 'heizung.hand_nachfrist_min=35', 'heizung.fuehler_halten_min=20', 'heizung.zieht_strom_w=55'].every(x => S.includes(x)));
     await klick({ act: 'zu' }); }
+  /* J4b (Mockup baseline.html B): Karte „🧪 Baseline messen“ in Heizung › Regeln vor den festen Regeln – Schalter mit Erklärung,
+     Kostenrahmen − 60 € + mit gemessen/geplant/übrig, nächster Lauf (Vorschau, angekündigt mit „Absagen“, läuft mit „Lauf
+     abbrechen“), Link zur Heizperiode; aus: nur der Schalter. Werte aus laufzeit.baseline. */
+  { const W = () => struktur.find(x => x.baustelle.entry_id === panel.d.entry).laufzeit.baseline, alt = JSON.parse(JSON.stringify(W()));
+    const laden = async () => { panel._rohText = null; await panel._laden(); await ruhe(20); };
+    let h = await hzOffen('regeln'); pruefe('Regeln Baseline an');
+    const karte = () => litEl('.sheet .bl-rv'), txt = () => (karte() ? karte().textContent : '').replace(/\s+/g, ' ');
+    erwarte('J4b: Karte „Baseline messen“ zwischen „Immer“ und „Feste Regeln“', !!karte() && h.indexOf('🧪 Baseline messen') > h.indexOf('Messung und Strom') && h.indexOf('🧪 Baseline messen') < h.indexOf('📐 Feste Regeln')
+      && txt().includes('nur sein Thermostat am Heizkörper regelt') && !!karte().querySelector('.sw.on'));
+    erwarte('J4b: Kostenrahmen mit Balken, gemessen und übrig (Werte der Integration)', txt().includes('September: 12,52 € gemessen · 47,48 € übrig') && txt().includes('60 €')
+      && karte().querySelector('.bl-balken i.g').style.width.startsWith('20.8'));
+    erwarte('J4b: Vorschau „voraussichtlich“ mit Container und Zeitpunkt der Planung', txt().includes('voraussichtlich Sa 03.10. – So 04.10. · Magazin · ≈ 8 €') && txt().includes('wird Fr 02.10. 12:00 geplant'));
+    neu(); await klick('.sheet [data-k="bl-rahmen"][data-d="10"]', 10);
+    erwarte('J4b: + am Kostenrahmen setzt heizung.baseline_eur_monat = 70', letzte('baustelle/setzen').length === 1 && letzte('baustelle/setzen')[0].pfad.join('.') === 'heizung.baseline_eur_monat' && letzte('baustelle/setzen')[0].wert === 70);
+    neu(); await klick('.sheet [data-k="bl-rahmen"][data-d="-10"]', 10);
+    erwarte('J4b: − zurück auf 60', letzte('baustelle/setzen').at(-1).wert === 60);
+    W().vorschau = null; W().laeufe.push({ ...W().laeufe[0], id: 'r4', bereich: 'magazin', name: 'Magazin', von: '2026-10-03', letzter: '2026-10-04', bis: '2026-10-05', status: 'geplant', kosten_eur: null, kwh: null,
+      von_t: 'Sa 03.10.', letzter_t: 'So 04.10.', zaehlt: 0, angekuendigt_t: 'Fr 02.10. 12:00', abbruch_t: null, grund: null });
+    W().offen = W().laeufe.at(-1); await laden();
+    erwarte('J4b: angekündigter Lauf mit Ankündigung und „Absagen“', txt().includes('Sa 03.10. – So 04.10. · Magazin') && txt().includes('angekündigt') && txt().includes('Ölradiator · Ankündigung Fr 02.10. 12:00 aufs Handy') && !!litEl('.sheet [data-k="bl-absagen"]'));
+    neu(); await klick('.sheet [data-k="bl-absagen"]', 10);
+    erwarte('J4b: „Absagen“ = genau ein Auftrag baseline_absagen {lauf_id}', letzte('baustelle/aktion').length === 1 && letzte('baustelle/aktion')[0].aktion === 'baseline_absagen' && letzte('baustelle/aktion')[0].lauf_id === 'r4');
+    await ruhe(20);
+    erwarte('J4b: nach dem Absagen kein offener Lauf mehr (Beispiel wie die Integration)', W().laeufe.find(l => l.id === 'r4').status === 'abgesagt' && W().offen === null && !litEl('.sheet [data-k="bl-absagen"]'));
+    Object.assign(W().laeufe.find(l => l.id === 'r4'), { status: 'laeuft', bisher_kwh: 13.1, bisher_eur: 2.62 }); W().offen = W().laeufe.find(l => l.id === 'r4'); await laden();
+    erwarte('J4b: laufender Lauf mit bisher und „Lauf abbrechen“', txt().includes('🧪 Läuft jetzt') && txt().includes('bis So 24:00') && txt().includes('bisher 13,1 kWh · 2,62 €') && !!litEl('.sheet [data-k="bl-abbrechen"]'));
+    neu(); await klick('.sheet [data-k="bl-abbrechen"]', 10);
+    erwarte('J4b: „Lauf abbrechen“ = genau ein Auftrag', letzte('baustelle/aktion').length === 1 && letzte('baustelle/aktion')[0].lauf_id === 'r4');
+    neu(); await klick('.sheet .bl-rv .sw', 10);
+    erwarte('J4b: Schalter setzt heizung.baseline = false', letzte('baustelle/setzen').length === 1 && letzte('baustelle/setzen')[0].pfad.join('.') === 'heizung.baseline' && letzte('baustelle/setzen')[0].wert === false);
+    erwarte('J4b: aus – nur Schalter mit Erklärung, kein Rahmen, kein Lauf', !!karte() && !karte().querySelector('.sw.on') && !karte().querySelector('.bl-rahmen') && !karte().querySelector('.bl-lauf'));
+    neu(); await klick('.sheet .bl-rv .sw', 10);
+    erwarte('J4b: wieder ein', letzte('baustelle/setzen')[0].wert === true && !!karte().querySelector('.bl-rahmen'));
+    await klick('.sheet [data-k="bl-heizperiode"]', 20);
+    erwarte('J4b: „Auswertung › Heizperiode ›“ öffnet den Reiter Baseline', panel.s.view === 'auswertung' && panel.s.sheet && panel.s.sheet.k === 'hochrechnung' && panel.s.hpReiter === 'bl' && !!litEl('.bl-stand'));
+    Object.assign(W(), alt); await laden(); panel.s.hpReiter = null; await klick({ act: 'zu' }); await klick({ act: 'tab', v: 'heizung' }, 20); }
   /* Strompreis mit „gilt ab“ und Preis simulieren (Herbert 04.10.2026) */
   { panel.s.evGruppe = 'strom'; await klick({ act: 'tab', v: 'einst' }, 10); pruefe('Strompreis-Liste');
     erwarte('Strompreis: Liste mit „gilt jetzt“ und „Neuer Preis ab“', ui.innerHTML.includes('Neuer Preis ab') && ui.innerHTML.includes('gilt jetzt'));
@@ -1328,6 +1389,41 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick('.hp-aufl [data-v="monat"]'); pruefe('Heizperiode Monat');
     erwarte('BSM-033.04: Monate der Heizperiode', (ui.innerHTML.match(/class="hp-b[ "]/g) || []).length === 7 && ui.innerHTML.includes('Prognose Rest des Monats'));
     await klick('.hp-aufl [data-v="hp"]'); erwarte('BSM-033.04: Heizperiode wie bisher', ui.innerHTML.includes('hp-band'));
+    /* J4b (Mockup baseline.html B): Hinweis unter der Legende statt „… bis zur gemessenen Baseline …“, Reiter „Baseline“ mit Stand
+       je Container und Läufen (zählt/abgebrochen/abgesagt, „alle n Läufe ▾“), „einstellen ›“ → Heizung › Regeln */
+    { const W = () => struktur.find(x => x.baustelle.entry_id === panel.d.entry).laufzeit.baseline, alt = JSON.parse(JSON.stringify(W()));
+      const laden = async () => { panel._rohText = null; await panel._laden(); await ruhe(20); };      const leg = () => ((litEl('.hp-karte .bl-leg') || {}).textContent || '').replace(/\s+/g, ' ');
+      erwarte('J4b: vier Reiter, der vierte heißt Baseline', litEls('.hp-reiter button').map(b => b.dataset.v).join() === 'hoch,sig,klima,bl' && litEl('.hp-reiter [data-v="bl"]').textContent === 'Baseline');
+      erwarte('J4b: Hinweis unter der Legende mit Stand und „Baseline ›“, alte Zeile weg', leg().includes('Prognose ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.')
+        && leg().includes('0 von 5 Containern gemessen · nächster Lauf voraussichtlich Sa 03.10.') && leg().includes('Baseline ›') && !ui.innerHTML.includes('bis zur gemessenen Baseline eine Schätzung'));
+      W().an = false; W().stand_t = 'Baseline messen ist aus.'; await laden();
+      erwarte('J4b: aus – „einschalten ›“', leg().includes('Baseline messen ist aus. einschalten ›'));
+      W().hinweis = null; await laden();
+      erwarte('J4b: „ohne“ gemessen – kein Hinweis', !litEl('.hp-karte .bl-leg'));
+      Object.assign(W(), JSON.parse(JSON.stringify(alt))); await laden();
+      await klick('.hp-karte [data-k="bl-zum-reiter"]'); pruefe('Heizperiode Baseline');
+      const zeilen = litEls('.bl-stand .bl-s'), z = id => ((litEl(`.bl-stand .bl-s[data-b="${id}"]`) || {}).textContent || '').replace(/\s+/g, ' ');
+      erwarte('J4b: Reiter Baseline – Kopf mit „einstellen ›“, Stand je Container (6)', panel.s.hpReiter === 'bl' && !!litEl('.hp-karte [data-k="bl-einstellen"]') && zeilen.length === 6
+        && /Baseline messen · an/.test(litEl('.hp-karte').textContent.replace(/\s+/g, ' ')));
+      erwarte('J4b: Stand – lernt n/10, gemischt nach den reinen Typen, Modus aus kein Lauf', z('sanitaer').includes('Signatur ohne: lernt · 1/10 Tage') && z('polier').includes('noch nicht gemessen · nach den reinen Typen')
+        && z('besprechung').includes('Modus aus – kein Lauf') && litEl('.bl-stand .bl-s[data-b="besprechung"]').classList.contains('aus') && z('lager').includes('2/10'));
+      Object.assign(W().container.find(c => c.bereich === 'sanitaer'), { tage: 10, stand: 'gut', fertig: true });
+      W().container.find(c => c.bereich === 'magazin').kein_lauf = 'ohne Heizkörper'; await laden();
+      erwarte('J4b: fertig ✓ (Balken grün) und „ohne Heizkörper – kein Lauf“', z('sanitaer').includes('Signatur ohne: gut · fertig ✓') && !!litEl('.bl-stand .bl-s[data-b="sanitaer"] .bl-tbahn i.ok') && z('magazin').includes('ohne Heizkörper – kein Lauf'));
+      const L = () => litEls('.bl-liste .bl-l'), lz = id => ((litEl(`.bl-liste .bl-l[data-l="${id}"]`) || {}).textContent || '').replace(/\s+/g, ' ');
+      erwarte('J4b: Läufe neueste zuerst, zählt/abgebrochen/abgesagt mit Grund und Uhrzeit', L().map(e => e.dataset.l).join() === 'r3,r2,r1'
+        && lz('r3').includes('1/2 Tg') && lz('r3').includes('15,7 kWh') && lz('r3').includes('4,40 €') && lz('r3').includes('abgebrochen') && lz('r3').includes('So 27.09. 09:12: Tür oder Fenster offen · erster Tag zählt')
+        && lz('r2').includes('abgesagt') && lz('r2').includes('über die Nachricht abgesagt') && lz('r1').includes('2/2 Tg') && lz('r1').includes('zählt') && !ui.innerHTML.includes('alle 3 Läufe'));
+      for (let i = 0; i < 5; i++) W().laeufe.unshift({ ...W().laeufe[0], id: `a${i}`, von: `2026-08-${String(1 + i * 7).padStart(2, '0')}`, letzter: `2026-08-${String(2 + i * 7).padStart(2, '0')}` });
+      await laden();
+      erwarte('J4b: mehr als 5 Läufe – 5 und „alle 8 Läufe ▾“', L().length === 5 && litEl('[data-k="bl-alle"]').textContent === 'alle 8 Läufe ▾');
+      await klick('[data-k="bl-alle"]');
+      erwarte('J4b: „alle“ zeigt alle, dann „weniger ▴“', L().length === 8 && litEl('[data-k="bl-alle"]').textContent === 'weniger ▴');
+      await klick('[data-k="bl-alle"]');
+      Object.assign(W(), JSON.parse(JSON.stringify(alt))); await laden();
+      await klick('.hp-karte [data-k="bl-einstellen"]', 20);
+      erwarte('J4b: „einstellen ›“ → Heizung › Regeln', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'regeln' && !!litEl('.sheet .bl-rv'));
+      await klick({ act: 'zu' }); await klick({ act: 'tab', v: 'auswertung' }, 20); panel.s.hpReiter = 'hoch'; panel.awDetail('hochrechnung'); await ruhe(); }
     const klima = async k => { neu(); await klick({ act: 'sheet', s: 'hp-klima' }); pruefe('Klimamittel'); await klick(`[data-k="${k}"]`, 30); return letzte('baustelle/setzen').at(-1); };
     const k = await klima('hp-speichern');
     erwarte('BSM-033.03: 12 Klimamittel gespeichert', k && k.entry_id === panel.d.entry && k.pfad.join('.') === 'heizung.klimamittel' && Array.isArray(k.wert) && k.wert.length === 12);

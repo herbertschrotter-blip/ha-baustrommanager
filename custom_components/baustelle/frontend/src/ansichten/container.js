@@ -10,14 +10,15 @@ import { IC_MINUS, IC_PLUS, IC_POWER } from '../symbole.js';
 import { schalterVorlage } from './allgemein.js';
 import { zeitraumVorlage } from './zeitraum.js';
 import { blaetterZeile } from './wischen.js';   // WU-0020
+import { baselineChip } from './baseline.js';   // J4b
 
 const OHNE_SOLL = { plan: 'Zeitplan – der Heizkörperthermostat regelt', hand: 'Hand – kein Soll', aus: 'Aus – nur Frostschutz' };
 
 /* Thermostat-Rad (SVG der Seite) mit − + in der Öffnung unten */
 function rad(p, b) {
-  const mitSoll = p.sollAktiv(b);
-  return html`<div class="c-rad">${unsafeHTML(p.cRadSvg(b))}
-      ${mitSoll ? html`<div class="c-rad-pm"><button class="c-pm" data-d="-0.5" aria-label="Soll niedriger" @click=${() => p.sollSchritt(b, -0.5)}>${unsafeHTML(IC_MINUS)}</button><button class="c-pm" data-d="0.5" aria-label="Soll höher" @click=${() => p.sollSchritt(b, 0.5)}>${unsafeHTML(IC_PLUS)}</button></div>`
+  const mitSoll = p.sollAktiv(b) && !b.baseline;   // J4b: im Baseline-Lauf wirkt das Soll nicht (gedämpft, Hinweis)
+  return html`<div class=${b.baseline ? 'c-rad bl-ged' : 'c-rad'}>${unsafeHTML(p.cRadSvg(b))}
+      ${b.baseline ? html`<div class="leise c-ohne-t">Thermostat am Heizkörper regelt</div>` : mitSoll ? html`<div class="c-rad-pm"><button class="c-pm" data-d="-0.5" aria-label="Soll niedriger" @click=${() => p.sollSchritt(b, -0.5)}>${unsafeHTML(IC_MINUS)}</button><button class="c-pm" data-d="0.5" aria-label="Soll höher" @click=${() => p.sollSchritt(b, 0.5)}>${unsafeHTML(IC_PLUS)}</button></div>`
         : html`<div class="leise c-ohne-t">${OHNE_SOLL[b.modus] || ''}</div>`}</div>`;
 }
 
@@ -83,7 +84,8 @@ function kopfChips(p, b) {
   const d = p.d, L = [], text = TEXT(b), lern = b.lern && b.lern.an && ['thermo', 'bedarf'].includes(b.modus) ? b.lern : null, T = b.takt;
   const erst = text.split(' · ')[0].replace(/^⚡\s*/, '') || b.z;   // erster Teil des Zustandstexts der Integration
   const S = lern && b.start, bis = S && !T && S.aus_bis;   // „aus bis …“ liefert die Integration (start.aus_bis)
-  if (T) L.push(taktJetzt(p, b, T));   // Takt: was gerade läuft und bis wann (statt des Zustandstexts)
+  if (b.baseline) L.push(baselineChip(p, b));   // J4b: Baseline-Lauf (baseline.html B) statt „heizt · Baseline-Messung …“
+  else if (T) L.push(taktJetzt(p, b, T));   // Takt: was gerade läuft und bis wann (statt des Zustandstexts)
   else if (bis) L.push({ k: 'zust', ic: '⏸', ton: '', lang: bis.lang, kurz: bis.kurz, breit: true, info: html`${S.satz} ${startLink(p)}` });
   else L.push({ k: 'zust', ic: ZUST_IC[b.z] || '•', ton: b.z === 'heizt' ? 'warm' : b.z === 'frost' ? 'blau' : b.z === 'offline' ? 'rot' : '',
     lang: erst, kurz: ZUST_KURZ[b.z] || erst, info: text });
@@ -180,7 +182,7 @@ function kopf(p, b) {
   const GR = [['Steuerung', steuerung, modi, []], ['Jetzt', null, null, von(['zust', 'tuer', 'fenster'])], ['Plan', null, null, von(['warm', 'regel'])],
     ['Lernen', null, null, von(['lern', 'nach', 'takt'])], ['Hinweise', null, null, von(['bat'])]];
   const gruppe = ([t, fest, dazu, X]) => fest || X.length ? html`<div class="ckd-g" data-g=${t}><div class="ckd-gt">${t}</div><div class="ck-chips">${fest || nothing}${X.map(c => chip(p, c))}</div>${dazu || info(p, X)}</div>` : nothing;
-  const mitRad = b.fuehler && b.t !== null, mitSoll = mitRad && p.sollAktiv(b);
+  const mitRad = b.fuehler && b.t !== null, mitSoll = mitRad && p.sollAktiv(b) && !b.baseline;
   return html`<div class="glas-panel ck ck-d ck-d2 ${b.z}" style="--c:${FARBE[b.z]}">
       <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b.name}</span></div>${eingestellt(p, b)}</div>
       <div class="ckd-rad c-kern">${mitRad ? rad(p, b) : ohneFuehler(b)}${mitSoll ? html`<div class="ckd-soll"><div class="ckd-gt">Soll</div>${sollChips(p, b)}${gefuehl(p, b)}</div>` : nothing}</div>

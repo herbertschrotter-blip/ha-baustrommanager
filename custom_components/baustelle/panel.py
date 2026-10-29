@@ -309,7 +309,8 @@ def _benutzer(connection: websocket_api.ActiveConnection) -> str | None:
 
 def _aktion_merken(hass: HomeAssistant, connection: websocket_api.ActiveConnection, st: Steuerung, msg: dict[str, Any]) -> None:
     """Eigene Datenbank (BSM-007, §6): Bedienung vor Ort als Ereignis ohne Person, alles andere als Einstellung mit Benutzer."""
-    felder = {k: msg[k] for k in ("bereich", "geraet", "minuten", "bis", "boost", "an", "key", "art", "wert", "d", "kwh", "eur") if k in msg}
+    felder = {k: msg[k] for k in ("bereich", "geraet", "minuten", "bis", "boost", "an", "key", "art", "wert", "d", "kwh", "eur", "lauf_id")
+              if k in msg}
     if msg["aktion"] in AKTIONEN_ALLE:
         ereignis_merken(hass, st.entry.entry_id, msg["aktion"], felder, "seite", bereich_id=msg.get("bereich"), geraet_id=msg.get("geraet"))
     else:
@@ -664,7 +665,7 @@ def ws_liste(hass: HomeAssistant, connection: websocket_api.ActiveConnection, ms
     vol.Required("aktion"): vol.In(
         ["bedarf", "bedarf_aus", "boost", "jetzt_heizen", "schalten", "automatik", "warnung_stumm", "bericht_senden",
          "test_meldung", "lern_reset", "aktiv", "gefuehl", "soll_versch", "soll_versch_weg", "gefuehl_vergessen",
-         "zuruecksetzen", "energie_korrektur"]
+         "zuruecksetzen", "energie_korrektur", "baseline_absagen"]
     ),
     vol.Optional("bereich"): str,
     vol.Optional("geraet"): str,
@@ -678,6 +679,7 @@ def ws_liste(hass: HomeAssistant, connection: websocket_api.ActiveConnection, ms
     vol.Optional("d"): vol.All(vol.Coerce(float), vol.Range(-5, 5)),   # + / − am Rad (Soll gleitend)
     vol.Optional("kwh"): vol.All(vol.Coerce(float), vol.Range(0, 1000)),   # FE-0016: falsch gezählte Energie
     vol.Optional("eur"): vol.All(vol.Coerce(float), vol.Range(0, 1000)),   # … bzw. nur Kosten
+    vol.Optional("lauf_id"): str,                                    # J4b: Baseline-Lauf absagen bzw. abbrechen
 })
 @websocket_api.async_response
 async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -798,6 +800,13 @@ async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnect
             hz.soll_verschieben(bid, float(msg["d"]), jetzt)
         else:
             hz.soll_versch_weg(bid)
+    elif aktion == "baseline_absagen":   # J4b: wie der Knopf „Absagen“ der Nachricht – geplant: abgesagt, läuft: abgebrochen
+        from .funktionen.heizung.baseline import absagen   # noqa: PLC0415
+
+        wer = _benutzer(connection)
+        if not absagen(Heizung.von(st), msg.get("lauf_id") or "", f"über die Seite{f' ({wer})' if wer else ''}"):
+            connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Kein geplanter oder laufender Baseline-Lauf mit dieser ID")
+            return
     elif aktion == "gefuehl_vergessen":
         lz["gefuehl"] = []
         st.protokoll("einstellung", None, "Soll gleitend: gelerntes Gefühl vergessen")

@@ -4,10 +4,12 @@
 // Normjahr), dazu die Einblendung „Klimamittel“. Im Reiter Hochrechnung Umschalter Heizperiode · Monat · Woche · Tag
 // (BSM-033.04, Mockup hochrechnung-j4b.html: Balken je Zeitraum aus `perioden`, Antippen zeigt die Zahlen; beim Tag der
 // Verlauf 24 h aus `baustelle/tagesverlauf`). Alle Zahlen kommen von der Integration (`A.hochrechnung`, logik/hochrechnung,
-// logik/signatur); die Seite rechnet nur Pixel. Die Heizperiode stellt ✎ über die Einblendung „zeitraum-bs“ ein.
+// logik/signatur); die Seite rechnet nur Pixel. Die Heizperiode stellt ✎ über die Einblendung „zeitraum-bs“ ein. Vierter
+// Reiter „Baseline“ (J4b, Mockup baseline.html B): Stand je Container und Läufe aus laufzeit.baseline (ansichten/baseline.js).
 import { html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { MONATE, de, zahl } from '../hilfen.js';
+import { baselineHinweis, baselineReiter } from './baseline.js';
 
 const GRIFF = html`<div class="griff"></div>`;
 const LAEDT = html`<div class="leer">Lädt …</div>`;
@@ -59,14 +61,14 @@ function diagramm(h) {
     ${heute ? `<path class="hp-ist" d="${pfad(1, 0, heute)}"/>` : ''}
     <line class="hp-heute" x1="${x(heute)}" y1="${O}" x2="${x(heute)}" y2="${H - U}"/><text class="hp-ht" x="${x(heute) + 3}" y="${O + 8}">heute</text></svg>`);
 }
-function legende(h) {
+function legende(p, h) {
   return html`<div class="hp-leg">
       <span><i class="l-ist"></i>tatsächlich <b>${eur(h.bisher_eur)}</b></span>
       <span><i class="l-prog"></i>Prognose mit Automatik <b>${eur(h.mit_eur)}</b>${zahl(h.unten_eur) ? html`<span class="leise"> (${de(h.unten_eur, 0)}–${de(h.oben_eur, 0)})</span>` : nothing}</span>
       ${zahl(h.ohne_eur) ? html`<span><i class="l-ohne"></i>Prognose ohne Automatik <b>${eur(h.ohne_eur)}</b></span>` : nothing}
       ${zahl(h.gespart_eur) ? html`<span>gespart ≈ <b>${eur(h.gespart_eur)}</b></span>` : nothing}</div>
     ${h.ohne_hinweis ? html`<div class="hp-grob">⚠ „ohne Automatik“ und „gespart“: ${h.ohne_hinweis}</div>` : nothing}
-    <div class="leise">„ohne Automatik“ ist bis zur gemessenen Baseline eine Schätzung (jeder Heizkörper rund um die Uhr).</div>`;
+    ${p.d.baseline ? baselineHinweis(p) : h.ohne_methode !== 'baseline' ? html`<div class="leise">„ohne Automatik“ ist bis zur gemessenen Baseline eine Schätzung (jeder Heizkörper rund um die Uhr).</div>` : nothing}`;   // J4b: Hinweis mit Stand; ohne laufzeit.baseline wie bisher
 }
 /* Woher die Zahl kommt: Text von der Integration (FE-0030, logik/auswertung.hochrechnung_herkunft) */
 function herkunft(h) {
@@ -182,7 +184,7 @@ function zeitraeume(p, h, art) {
 function hochrechnung(p, h) {
   const a = p.s.hpAufl || 'hp';
   const seg = html`<div class="seg glas-panel hp-aufl">${AUFL.map(([k, t]) => html`<button data-v=${k} class=${a === k ? 'on' : ''} @click=${() => { p.s.hpAufl = k; p.s.hpAb = 0; p.s.hpWahl = null; p.neuZeichnen(); }}>${t}</button>`)}</div>`;
-  return html`${zahlZeile(h)}${seg}${a === 'hp' ? html`${diagramm(h)}${legende(h)}<div class="leise hp-her">${herkunft(h)}</div>` : zeitraeume(p, h, a)}`;
+  return html`${zahlZeile(h)}${seg}${a === 'hp' ? html`${diagramm(h)}${legende(p, h)}<div class="leise hp-her">${herkunft(h)}</div>` : zeitraeume(p, h, a)}`;
 }
 
 /* ---------- Signatur ---------- */
@@ -225,13 +227,13 @@ function klima(p, h) {
 }
 
 /* ---------- Karte ---------- */
-const REITER = [['hoch', 'Hochrechnung', 'Prognose'], ['sig', 'Signatur'], ['klima', 'Klima']];
+const REITER = [['hoch', 'Hochrechnung', 'Prognose'], ['sig', 'Signatur'], ['klima', 'Klima'], ['bl', 'Baseline']];   // Baseline: J4b (hochrechnung-j4b.html)
 export function heizperiodeVorlage(p, A, start = 'hoch') {
   const d = p.d, h = A && A.hochrechnung, r = p.s.hpReiter || start, [von, bis] = d.hp;
   return html`<div class="glas-panel block hp-karte"><div class="block-kopf"><b>Heizperiode</b>
       <button class="chip glas-panel hp-zeit nur-admin" @click=${p.nurAdmin(() => p.einblenden('zeitraum-bs'))}>${MONATE[von - 1]}–${MONATE[bis - 1]}${h && h.ende ? ` · bis ${tagText(h.ende)}` : ''} ✎</button></div>
     <div class="seg glas-panel hp-reiter">${REITER.map(([k, t, kurz]) => html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s.hpReiter = k; p.neuZeichnen(); }}>${p.narrow && kurz ? kurz : t}</button>`)}</div>
-    ${!A ? LAEDT : !h || !zahl(h.mit_kwh) ? html`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>`
+    ${r === 'bl' ? baselineReiter(p) : !A ? LAEDT : !h || !zahl(h.mit_kwh) ? html`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>`
       : r === 'sig' ? signatur(p, h) : r === 'klima' ? klima(p, h)
       : hochrechnung(p, h)}</div>`;
 }

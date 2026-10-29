@@ -57,7 +57,8 @@ export function bauen(r, hass, ersatzZone) {
     dauer_min: v(me.dauerlauf_min, 20), kalt_min: v(me.kalt_min, 60), hand_h: v(me.hand_h, 8), zyklen_h: v(me.zyklen_h, 10), trocken_w: v(me.trocken_unter_w, 30),
     auto: !!e0.automatik,
     frost_aus: v(h.frost_aus, v(h.frost_grenze, 5) + 2), urlaub: FREI_TEXT[h.frei_modus] ? h.frei_modus : 'frost', absenk: v(h.absenk, 10),
-    offline_min: v(me.offline_min, 5), erklaer: e0.erklaer !== false, frost_immer: !!h.frost_immer, notprogramm: !!h.notprogramm, taste: !!h.taste };
+    offline_min: v(me.offline_min, 5), erklaer: e0.erklaer !== false, frost_immer: !!h.frost_immer, notprogramm: !!h.notprogramm, taste: !!h.taste,
+    baseline: !!h.baseline, baseline_eur: v(h.baseline_eur_monat, 60) };   // J4b: Baseline-Läufe (startet aus)
   for (const [k, art] of Object.entries(ARTEN)) e[k] = ar[art] !== false;
   const anschluesse = (e0.anschluesse || []).map(a => ({ id: a.id, name: a.name || a.id, ampere: v(a.ampere, 16), phasen: v(a.phasen, 3), reserve: v(a.reserve_kw, 0) }));
   const firmen = (e0.firmen && e0.firmen.length ? e0.firmen : [{ id: 'eigen', name: 'Eigene Firma', eigen: true }]).map(f => ({ ...f }));
@@ -81,7 +82,7 @@ export function bauen(r, hass, ersatzZone) {
       bedarfBisIso: c.bedarf_bis || null, bedarfBis: c.bedarf_bis ? lokalZ(c.bedarf_bis, zone).slice(11, 16) : null,
       boost: !!c.boost_bis, boostBis: c.boost_bis || null,
       modus: pumpe ? null : MODI.some(m => m[0] === c.modus) ? c.modus : eb.bedarf ? 'bedarf' : eb.auto === false ? 'hand' : b.fuehler ? 'thermo' : 'plan',
-      lern: c.lernen || null, start: c.start || null, takt: c.takt || null, eingestellt: Array.isArray(c.eingestellt) ? c.eingestellt : [], groesse: c.groesse || null, symbol: c.symbol || null, warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null, warmNach: zahl(eb.warm_nach) ? Number(eb.warm_nach) : null };   // lernende Regelung (0.8): Lernstand von der Integration
+      lern: c.lernen || null, start: c.start || null, takt: c.takt || null, baseline: c.baseline || null, eingestellt: Array.isArray(c.eingestellt) ? c.eingestellt : [], groesse: c.groesse || null, symbol: c.symbol || null, warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null, warmNach: zahl(eb.warm_nach) ? Number(eb.warm_nach) : null };   // lernende Regelung (0.8): Lernstand von der Integration
   });
   const plan = {}, frei = {};
   const freiName = {};
@@ -102,7 +103,7 @@ export function bauen(r, hass, ersatzZone) {
     bereiche, anschluesse, firmen, zuordnung, arbeitszeiten, ausnahmen: (e0.ausnahmen || []).map(a => ({ datum: a.datum, art: a.art in AUSNAHME ? a.art : 'zeiten', von: a.von || '07:00', bis: a.bis || '16:30', notiz: a.notiz || '' })),
     warnungen, termine, plan, frei, freiName, abschnitte: lz.abschnitte || {}, staffel: lz.staffel || null, sollG: lz.soll_gleitend || null, wetter: lz.wetter || {}, heizgrenze: lz.heizgrenze || {},
     status: lz.status || (aktiv ? 'bereit' : 'abgeschlossen'), statusText: lz.status_text || '', jetztBis: lz.jetzt_bis ? lokalZ(lz.jetzt_bis, zone).slice(11, 16) : null,
-    np: lz.notprogramm || null, protokoll: (lz.protokoll || []).map(p => protokollZeile(p, z, ersatzZone)), zaehler: zl, termineKal: e0.termine_kalender || null, wetterEid,
+    np: lz.notprogramm || null, baseline: lz.baseline || null, protokoll: (lz.protokoll || []).map(p => protokollZeile(p, z, ersatzZone)), zaehler: zl, termineKal: e0.termine_kalender || null, wetterEid,
     beginn: bs.beginn || opt.beginn || null, beginnAuto: bs.beginn_auto === true, ende: opt.ende || null,   // Beginn leer = Tag der Anlage (AN-0002)
     hp: [Math.min(12, Math.max(1, parseInt(opt.heizperiode_von, 10) || 10)), Math.min(12, Math.max(1, parseInt(opt.heizperiode_bis, 10) || 4))] };
 }

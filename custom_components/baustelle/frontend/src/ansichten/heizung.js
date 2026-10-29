@@ -8,6 +8,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { TAGE, datum, dauer, de, erkl, kurzDatum, minu, plusTage, uhr, wtag, zahl } from '../hilfen.js';
 import { AUSNAHME, MODI } from '../tabellen.js';
 import { kopfVorlage, schalterVorlage, stepperVorlage } from './allgemein.js';
+import { baselineRegeln } from './baseline.js';
 
 const LAEDT = html`<div class="leer">Lädt …</div>`;
 const ACHSE = html`<div class="tl-achse">${['04', '08', '12', '16', '20'].map(h => html`<span>${h}</span>`)}</div>`;
@@ -205,7 +206,7 @@ function regelnInhalt(p) {
     ['Lernen: kalt / mild', 'unter 5 °C außen', 'Aufheizraten getrennt nach kaltem und mildem Wetter'],
     ['Tür vermutlich offen', '−0,3 °C in 10 min', 'beim Heizen, während es draußen kaum kälter wurde – danach 10 min nichts lernen'],
   ];
-  return html`${karte('🌅', 'Vor der Arbeit', 'warm, wenn es losgeht', ['vorheizen', 'frueh', 'lernend', 'warm_vor', 'warm_max'])}${karte('👷', 'In der Arbeitszeit', 'auf das Soll halten', ['soll', 'toleranz', 'grenze', 'basis', 'boost', 'zusatz', 'tuer'])}${karte('🌇', 'Nach der Arbeit', 'warm halten, trocknen, übernehmen', ['nachheizen', 'warm_nach', 'trocknen', 'hand'])}${karte('🌙', 'Nachts, frei, Urlaub', 'nur Frostschutz', ['frost', 'urlaub'])}${karte('⏱', 'Immer', 'Messung und Strom', ['zieht', 'fuehler', 'staffel'])}<div class="rv-kopf"><b>📐 Feste Regeln</b><span class="leise">bewährte Schwellen, nicht änderbar</span></div><div class="rv-karte">${FEST.map(([t, w, x]) => html`<div class="rv-fest"><span>${t}</span><b>${w}</b><div class="leise">${x}</div></div>`)}</div>${unsafeHTML(erkl(e.erklaer, 'Vorheizen und Nachheizen gelten jeden Arbeitstag. Die Verlängerungen zählen zusammen: vor der Arbeit Vorheizen + Kälte-Frühstart + früher nach Regen, danach Nachheizen + Kleidung trocknen (AN-0003). Die Heizgrenze verhindert Heizen an warmen Tagen. Der Frostschutz springt unter „ein“ an und hört erst über „aus“ wieder auf, damit der Heizkörper nicht dauernd ein- und ausschaltet.'))}`;
+  return html`${karte('🌅', 'Vor der Arbeit', 'warm, wenn es losgeht', ['vorheizen', 'frueh', 'lernend', 'warm_vor', 'warm_max'])}${karte('👷', 'In der Arbeitszeit', 'auf das Soll halten', ['soll', 'toleranz', 'grenze', 'basis', 'boost', 'zusatz', 'tuer'])}${karte('🌇', 'Nach der Arbeit', 'warm halten, trocknen, übernehmen', ['nachheizen', 'warm_nach', 'trocknen', 'hand'])}${karte('🌙', 'Nachts, frei, Urlaub', 'nur Frostschutz', ['frost', 'urlaub'])}${karte('⏱', 'Immer', 'Messung und Strom', ['zieht', 'fuehler', 'staffel'])}${baselineRegeln(p)}<div class="rv-kopf"><b>📐 Feste Regeln</b><span class="leise">bewährte Schwellen, nicht änderbar</span></div><div class="rv-karte">${FEST.map(([t, w, x]) => html`<div class="rv-fest"><span>${t}</span><b>${w}</b><div class="leise">${x}</div></div>`)}</div>${unsafeHTML(erkl(e.erklaer, 'Vorheizen und Nachheizen gelten jeden Arbeitstag. Die Verlängerungen zählen zusammen: vor der Arbeit Vorheizen + Kälte-Frühstart + früher nach Regen, danach Nachheizen + Kleidung trocknen (AN-0003). Die Heizgrenze verhindert Heizen an warmen Tagen. Der Frostschutz springt unter „ein“ an und hört erst über „aus“ wieder auf, damit der Heizkörper nicht dauernd ein- und ausschaltet.'))}`;
 }
 
 const regeln = (p, cls) => html`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">nach Tagesablauf</span></div>

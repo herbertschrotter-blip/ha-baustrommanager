@@ -90,7 +90,7 @@ Fehler `unauthorized` („Nur Admins dürfen ändern“). Auch ohne Admin gehen 
 |---|---|---|
 | `baustelle/setzen` | `pfad: [str]`, `wert` | Einstellung setzen, geprüft nach Schema (erlaubte Pfade: `automatik`, `preis`, `melden_knopf`, `termine_kalender`, `heizung.*`, `staffel.*`, `bericht.*`, `meldungen_einst.*`, `bereiche.<bid>.(auto\|trocknen\|soll\|bedarf\|prio\|anschluss\|tuer)`; `meldungen_einst.empfaenger` = Namen von notify-Diensten, z. B. `mobile_app_handy`) |
 | `baustelle/liste` | `liste: arbeitszeiten\|ausnahmen\|anschluesse\|firmen`, `aktion: speichern\|loeschen`, `eintrag` | Eintrag anlegen/ändern/löschen. `firmen`/`anschluesse` mit `container: [bid]` ordnen zu (Firma: neuer `zuordnung`-Eintrag „ab jetzt“). Arbeitszeit mit gleichem `ab` → Fehler; ändern mit `alt_ab` (bisheriges `ab`). Neue Anschlüsse/Firmen antworten `{ok, id}`. |
-| `baustelle/aktion` | `aktion` + Felder | `bedarf` (`bereich`, `minuten` oder `bis`, `boost`), `bedarf_aus` (`bereich`), `boost` (`bereich`, `an`), `jetzt_heizen` (`minuten` oder null = beenden), `schalten` (`geraet`, `an` → Handbetrieb bis zum nächsten Schaltpunkt), `automatik` (`geraet` → Handbetrieb beenden), `warnung_stumm` (`key`, `bis` oder null; ohne `bis` = morgen 07:00), `bericht_senden` (`art`: woche\|monat) |
+| `baustelle/aktion` | `aktion` + Felder | `bedarf` (`bereich`, `minuten` oder `bis`, `boost`), `bedarf_aus` (`bereich`), `boost` (`bereich`, `an`), `jetzt_heizen` (`minuten` oder null = beenden), `schalten` (`geraet`, `an` → Handbetrieb bis zum nächsten Schaltpunkt), `automatik` (`geraet` → Handbetrieb beenden), `warnung_stumm` (`key`, `bis` oder null; ohne `bis` = morgen 07:00), `bericht_senden` (`art`: woche\|monat), `baseline_absagen` (`lauf_id`, §8) |
 | `baustelle/protokoll` | `filter: alle\|warnung\|schalten\|wetter\|nachricht\|einstellung`, `vor: ISO\|null`, `limit` (Standard 50) | Liste `[ISO, art, bid\|null, Text]`, neueste zuerst; `warnung` enthält auch `ok`; `vor` = nur ältere Einträge (Nachladen) |
 | `baustelle/bericht` | `art: woche\|monat` | Vorschau des Berichts, wie er jetzt ginge (dieselben Zahlen und Texte wie beim Senden): `{art, von, bis, betreff, summe, vergleich, firmen: [{name, kwh, eur}], container: [{name, kwh}], heiztage, gespart_eur\|null, warnungen: [{bereich\|null, titel}], mail_an, anhang\|null, handy}` |
 | `baustelle/meldungen` | – | alle Meldungen (eine Liste für die ganze Integration) |
@@ -423,6 +423,36 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
   `container[].methode` ebenso; `herkunft` (Text unter dem Diagramm, von der Integration) und `herkunft_lernt` (Seite
   setzt davor fett „lernt noch“). Signatur, `punkte` und Rest zählen nur **Heiztage** nach Heizplan (Arbeitszeit,
   Ausnahmen, Feiertag/Urlaub der ganzen Heizperiode, Container nicht „aus“); Tage ohne Heizplan haben im Rest 0 kWh.
+- **Baseline-Läufe (J4b, FE-0033, Mockup `baseline.html` Variante B; Regeln in `logik/baseline.py`):** `laufzeit.baseline`
+  in `baustelle/struktur` (Heizung aktiv, sonst `null`; `baustelle/auswertung` › `hochrechnung.baseline` bleibt `{an,
+  laeufe}` aus der letzten Hochrechnung):
+  `{an, rahmen: {monat: "2026-10", budget_eur, gemessen_eur, geplant_eur, rest_eur}, vorschau, container, laeufe, offen,
+  hinweis, stand_t}`. `rahmen`: Monat von heute; gemessen = Kosten beendeter Läufe (bis sie nachgetragen sind – am Tag
+  nach dem letzten Tag – ihre Schätzung), geplant = Schätzung geplanter und laufender Läufe, Rest wie beim Planen (`monat_rest`, abgesagte zählen nicht, Monat des ersten Tags). `vorschau` (nur an, mit
+  Automatik und ohne geplanten/laufenden Lauf): nächster Block und Container nach `planen` – `{von, letzter, bereich,
+  name, von_t, letzter_t, schaetzung_eur, plant_am, plant_am_t}` (geplant und angekündigt am Vortag 12:00; ist heute schon
+  geplant worden, frühestens übermorgen), sonst `null`. `container[]`
+  je Container der Heizung: `{bereich, name, typ: oelradiator|konvektor|gemischt|"", tage (zählende Baseline-Tage), noetig
+  (10), stand (Signatur „ohne“: lernt|gut|brauchbar|unsicher, ohne Tage null), fertig (gut – dann kein Lauf mehr),
+  kein_lauf ("ohne Heizkörper"|"Modus aus"|"ohne Automatik"|"bei Bedarf"|null), uebernimmt ([bereich] – gemessene
+  Container, deren Verhältnis ohne ÷ mit gilt – aus `hochrechnung.ohne.container[].quelle`, `logik/hochrechnung.quellen`)}`. `laeufe[]` (letzte 12) = `Lauf.als_dict` (`id, bereich, von, bis`
+  (ausschließlich), `status geplant|laeuft|fertig|abgebrochen|abgesagt, schaetzung_eur, kosten_eur, kwh, grund, ende,
+  angekuendigt, abbruch_um`, Metadaten) und dazu `name, typ, letzter` (letzter Tag inklusive), `von_t, letzter_t`
+  („Sa 31.10.“), `tage, zaehlt` (zählende
+  Tage, abgebrochen: die vor dem Abbruchtag), `angekuendigt_t, abbruch_t` („Fr 30.10. 12:00“), `bis_t` („So 24:00“),
+  `bisher_kwh, bisher_eur` (nur während des Laufs: Zähler des Containers seit dem Start, sonst `null`; `kwh` und
+  `kosten_eur` kommen erst am Tag nach dem letzten Tag). `offen` = der geplante bzw. laufende Lauf (wie in `laeufe`) oder `null`. `hinweis` = „Prognose
+  ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.“, solange `ohne_methode` `schaetzung` ist, sonst
+  `null`; `stand_t` = Satz darunter („1 von 4 Containern gemessen · nächster Lauf Sa 31.10. (003_C_MAN).“, aus: „Baseline
+  messen ist aus.“). Während eines Laufs `laufzeit.container.<id>.baseline` = `{lauf_id, von, letzter, von_t, letzter_t,
+  bis (ISO, Ende ausschließlich), bis_t, bisher_kwh, bisher_eur}`, sonst `null`. `baustelle/aktion` `baseline_absagen`
+  mit `lauf_id` (nur Admins): wie der Knopf „Absagen“ der Nachricht – geplant → abgesagt, läuft → abgebrochen (der Tag
+  zählt nicht), Grund „über die Seite (Benutzer)“, Uhrzeit in `abbruch_um`; kein offener Lauf mit dieser ID → `not_found`.
+  Einschalten und Kostenrahmen über `baustelle/setzen` `heizung.baseline` bzw. `heizung.baseline_eur_monat`.
+  „Ohne Automatik“ der Baustelle (`ohne_methode: baseline`) gilt, sobald jeder Container eine Quelle hat
+  (`logik/hochrechnung.quelle_ohne`): eigene Signatur „ohne“, das Verhältnis gemessener Container desselben Typs, ohne
+  Heizkörper „ohne“ = „mit“ (bis 0.8.158 blieb es dann für immer bei der Schätzung), ein Container, der nie einen Lauf
+  bekommt (Modus aus, ohne Automatik, bei Bedarf), ohne gleichartigen gemessenen das Verhältnis aller gemessenen.
 
 `baustelle/auswertung`, `teil: verlauf` (Reiter Verlauf, Detailseite; `zeitraum`/`scope` ohne Bedeutung):
 

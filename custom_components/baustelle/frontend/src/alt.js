@@ -36,6 +36,7 @@ import { npPlugEinblendung } from './ansichten/notprogramm.js';
 import { INVENTAR_EINBLENDUNGEN, INV_BREIT, INV_CSS } from './ansichten/inventar.js';
 import { GERAETE_CSS, GERAETE_EINBLENDUNGEN } from './ansichten/geraete.js';
 import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN } from './ansichten/heizperiode.js';
+import { BASELINE_CSS } from './ansichten/baseline.js';
 import { uebersichtVorlage } from './ansichten/uebersicht.js';
 import { katalogEinblendung } from './ansichten/kacheln.js';
 import { UEBERSICHT_EINBLENDUNGEN } from './ansichten/einblendungen-uebersicht.js';
@@ -999,7 +1000,7 @@ const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
 const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -1927,6 +1928,10 @@ class BaustellePanel extends LitElement {
   /* Reiter Heizung (src/ansichten/heizung.js, BSM-022 3d); Einstellungen und Einblendungen nutzen sie über klick() */
   automatikUmschalten() { const e = this.d.e; return this.setzen(['automatik'], !e.auto, !e.auto ? 'Automatik ein' : 'Automatik aus – Geräte bleiben, wie sie sind'); }
   hzAuf(k) { this.s.sheet = { art: 'hz', k }; return this.neuZeichnen(); }
+  /* J4b: Baseline-Läufe (ansichten/baseline.js) – einschalten, Kostenrahmen in 10-€-Schritten (0–1000 wie panel.py), absagen bzw. abbrechen */
+  baselineUmschalten() { const an = !this.d.e.baseline; return this.setzen(['heizung', 'baseline'], an, an ? 'Baseline messen ein – Läufe werden am Vortag angekündigt' : 'Baseline messen aus'); }
+  baselineRahmen(schritt) { const alt = this.d.e.baseline_eur, wert = Math.min(1000, Math.max(0, alt + schritt)); return wert === alt ? undefined : this.setzen(['heizung', 'baseline_eur_monat'], wert); }
+  baselineAbsagen(l) { return this.aktion('baseline_absagen', { lauf_id: l.id }, l.status === 'laeuft' ? 'Lauf abgebrochen – die Automatik übernimmt' : 'Lauf abgesagt'); }
   einstellungUmschalten(k) { const e = this.d.e; if (ARTEN[k]) return this.setzen(['meldungen_einst', 'arten', ARTEN[k]], !e[k]); return this.setzen(PFAD[k], !e[k]); }
   einstellungWert(k, v) { return this.setzen(PFAD[k], isNaN(+v) ? v : +v); }
   heizgrenzeBasis(v) { return this.setzen(PFAD.basis, v === 'jetzt' ? 'jetzt' : 'tageshoechst'); }

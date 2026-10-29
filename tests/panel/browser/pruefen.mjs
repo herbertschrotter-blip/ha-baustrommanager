@@ -609,6 +609,37 @@ await fall('B9 Kacheln S am Handy', browser, async (page, erwarte) => {
   erwarte('Handy 390 px: kurze Zahlen bleiben 34 px', h.filter(kurz).every(z => z.px === 34), JSON.stringify(h.filter(kurz).map(z => [z.text, z.px])));
 });
 
+/* B10 Baseline-Läufe am Handy (J4b, Mockup baseline.html B, FE-0033): Karte „🧪 Baseline messen“ in Heizung › Regeln und der
+   Reiter „Baseline“ der Heizperiode ragen nicht hinaus (Kostenrahmen bricht um, Stand und Läufe zweizeilig); im Container-Kopf
+   während eines Laufs der kurze Chip „🧪 bis So 24:00“ */
+await fall('B10 Baseline am Handy', browser, async (page, erwarte) => {
+  await page.setViewport({ width: 390, height: 844 });
+  const raus = () => panel(page, T, () => { const sc = sr.querySelector('.sheet') || sr.querySelector('.scroll'), re = sc.getBoundingClientRect().right;
+    return [...sc.querySelectorAll('.bl-rv *, .bl-stand *, .bl-liste *, .bl-lauf *, .bl-leg *')].filter(x => x.getBoundingClientRect().right > re + 1 && !x.closest('svg'))
+      .slice(0, 3).map(x => `${x.tagName.toLowerCase()}.${String(x.className).trim()} +${Math.round(x.getBoundingClientRect().right - re)}px`); });
+  await panel(page, T, () => { p.gehe('heizung'); return p.hzAuf('regeln'); }); await warte(800);
+  const k = await panel(page, T, () => { const c = sr.querySelector('.sheet .bl-rv'); if (!c) return null; c.scrollIntoView(); const r = c.querySelector('.bl-rahmen');
+    return { rahmen: !!r && getComputedStyle(r).flexWrap === 'wrap', lauf: !!c.querySelector('.bl-lauf') }; });
+  const r1 = await raus();
+  erwarte('Regeln: Karte da, Kostenrahmen bricht um, nichts ragt hinaus', k && k.rahmen && k.lauf && !r1.length, JSON.stringify(k) + ' ' + r1.join(', '));
+  await bild(page, 'b10-regeln');
+  await panel(page, T, () => { p.s.hpReiter = 'bl'; p.gehe('auswertung'); return p.awDetail('hochrechnung'); }); await warte(1200);
+  const s = await panel(page, T, () => { const z = sr.querySelector('.bl-stand .bl-s'), l = sr.querySelector('.bl-liste .bl-l');
+    return z && l && { stand: getComputedStyle(z).gridTemplateColumns.split(' ').length, lauf: getComputedStyle(l).gridTemplateColumns.split(' ').length }; });
+  const r2 = await raus();
+  erwarte('Reiter Baseline: Stand und Läufe zweispaltig, nichts ragt hinaus', s && s.stand === 2 && s.lauf === 3 && !r2.length, JSON.stringify(s) + ' ' + r2.join(', '));
+  await bild(page, 'b10-reiter');
+  const c = await panel(page, T, async () => { const b = p.d.bereiche.find(x => !x.pumpe && x.fuehler) || p.d.bereiche.find(x => !x.pumpe); p.containerOeffnen(b.id);
+    await new Promise(r => setTimeout(r, 300)); const x = p.d.bereiche.find(y => y.id === b.id);
+    x.baseline = { lauf_id: 'r9', von: '2026-10-03', letzter: '2026-10-04', von_t: 'Sa 03.10.', letzter_t: 'So 04.10.', bis: '2026-10-05T00:00:00+02:00', bis_t: 'So 24:00', bisher_kwh: 13.1, bisher_eur: 2.62 };
+    p.s.ck = null; await p.neuZeichnen(); await new Promise(r => setTimeout(r, 200));
+    const ch = sr.querySelector('.ck-d .ck-chip[data-k="zust"]'), sc = sr.querySelector('.scroll');
+    return ch && { kurz: getComputedStyle(ch.querySelector('.ck-k')).display !== 'none' && getComputedStyle(ch.querySelector('.ck-l')).display === 'none', text: ch.querySelector('.ck-k').textContent,
+      drin: ch.getBoundingClientRect().right <= sc.getBoundingClientRect().right + 1 }; });
+  erwarte('Container-Kopf im Lauf: kurzer Chip „bis So 24:00“ am Handy', c && c.kurz && c.text === 'bis So 24:00' && c.drin, JSON.stringify(c));
+  await bild(page, 'b10-kopf');
+});
+
 server.close();
 const gesamt = Date.now() - t0;
 let rot = 0; const bekannteTreffer = [];

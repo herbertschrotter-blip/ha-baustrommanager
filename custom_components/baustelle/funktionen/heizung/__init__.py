@@ -334,6 +334,14 @@ class Heizung(Funktion):
         """Takt der lernenden Regelung (api: laufzeit.container.<id>.takt); None, wenn sie gerade nicht im Takt regelt."""
         return self.takt.get(bid)
 
+    def baseline_anzeige(self) -> dict[str, Any]:
+        """Baseline-Läufe (J4b, api: laufzeit.baseline): an, Kostenrahmen, Läufe, Vorschau, Stand je Container, Hinweis."""
+        return h_baseline.anzeige(self, dt_util.now())
+
+    def baseline_container(self, bid: str) -> dict[str, Any] | None:
+        """Laufender Baseline-Lauf des Containers (J4b, api: laufzeit.container.<id>.baseline), sonst None."""
+        return h_baseline.container_anzeige(self, bid, dt_util.now())
+
     def eingestellt_anzeige(self, bid: str) -> list[dict[str, Any]]:
         """Eingeschaltete Einstellungen des Containers (api: laufzeit.container.<id>.eingestellt, logik/eingestellt)."""
         return h_anzeige.eingestellt(self, bid)

@@ -324,6 +324,14 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         case 'auth/sign_path': return { path: `${m.path}?authSig=abc` };
         case 'baustelle/setzen': { const b = welt().find(x => x.baustelle.entry_id === m.entry_id); let o = b.einstellungen;   // wie die Integration: Wert bleibt gespeichert
           for (const k of m.pfad.slice(0, -1)) o = o[k] ||= {}; o[m.pfad.at(-1)] = m.wert; return { ok: true }; }
+        case 'baustelle/aktion': { if (m.aktion !== 'baseline_absagen') return { ok: true };   // J4b: wie funktionen/heizung/baseline.absagen
+          const b = welt().find(x => x.baustelle.entry_id === m.entry_id), B = b && b.laufzeit && b.laufzeit.baseline;
+          const l = B && B.laeufe.find(x => x.id === m.lauf_id && (x.status === 'geplant' || x.status === 'laeuft'));
+          if (!l) throw { code: 'not_found', message: 'Kein geplanter oder laufender Baseline-Lauf mit dieser ID' };
+          Object.assign(l, l.status === 'geplant' ? { status: 'abgesagt' } : { status: 'abgebrochen', ende: b.baustelle.heute }, { grund: 'über die Seite', bisher_kwh: null, bisher_eur: null });
+          for (const c of Object.values(b.laufzeit.container || {})) if (c.baseline && c.baseline.lauf_id === l.id) c.baseline = null;
+          if (B.offen && B.offen.id === l.id) B.offen = null;
+          return { ok: true }; }
         case 'baustelle/inventar': return kopie(inventar());
         case 'baustelle/inventar_vorschau': return kopie(invVorschau(m.container_id));
         case 'baustelle/inventar_umbenennen': return kopie(invUmbenennen(m.container_id));

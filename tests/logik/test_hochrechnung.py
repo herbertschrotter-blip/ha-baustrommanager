@@ -6,7 +6,7 @@ import pytest
 
 from logik.hochrechnung import (
     KLIMA_GRAZ, VOLL_ANTEIL, WINTER_K, ContainerRest, Ohne, TagRoh, baustelle, baustelle_tage, bisher, container_rest, heiztag,
-    heiztage_container, hgt, hgt_summe, klima_tag, klimamittel, klimamittel_pruefen, kwh_je_hgt, ohne_baustelle, ohne_container, perioden, reihe, tag_zaehlt, tage, tageswerte, temperaturen,
+    heiztage_container, hgt, hgt_summe, klima_tag, klimamittel, klimamittel_pruefen, kwh_je_hgt, ohne_baustelle, ohne_container, perioden, quelle_ohne, quellen, reihe, tag_zaehlt, tage, tageswerte, temperaturen,
 )
 from logik.signatur import Signatur
 
@@ -323,6 +323,26 @@ def test_ohne_baustelle_mit_verhaeltnis_je_typ():
     v = ohne_baustelle({"a": g, "b": lernt, "c": k}, mit, typen)
     assert v == pytest.approx(3000.0 + 1000.0 * 2.0 + 1200.0)                              # b: Verhältnis von a
     assert ohne_baustelle({}, {}, {}) is None
+
+
+def test_ohne_baustelle_ohne_heizkoerper_und_ohne_lauf():
+    """J4b (offener Punkt 1): ein Container ohne Heizkörper hielt „ohne“ für immer bei der Schätzung 24/7 – jetzt zählt
+    er mit „ohne“ = „mit“; ein Container ohne Lauf (z. B. Modus aus) ohne gleichartigen gemessenen nimmt alle gemessenen."""
+    g = Ohne(Signatur("gut", 12), 12, 3000.0)
+    mit = {"a": 1500.0, "m": 40.0}
+    typen = {"a": "oelradiator", "m": ""}
+    assert ohne_baustelle({"a": g}, mit, typen) == pytest.approx(3000.0 + 40.0)            # bisher None
+    mit2, typen2 = {"a": 1500.0, "k": 1000.0}, {"a": "oelradiator", "k": "konvektor"}
+    assert ohne_baustelle({"a": g}, mit2, typen2) is None                                    # Konvektor wird noch gemessen
+    assert ohne_baustelle({"a": g}, mit2, typen2, ohne_lauf=["k"]) == pytest.approx(3000.0 + 1000.0 * 2.0)
+    assert quelle_ohne("a", typen, ["a"]) == "eigen" and quelle_ohne("m", typen, ["a"]) == "gleich"
+    assert quelle_ohne("k", typen2, ["a"]) is None and quelle_ohne("k", typen2, ["a"], ["k"]) == ("a",)
+    assert quelle_ohne("k", typen2, [], ["k"]) is None                                       # noch gar nichts gemessen
+    assert quelle_ohne("b", {"a": "oelradiator", "b": "oelradiator"}, ["a"]) == ("a",)
+    # dieselbe Regel für Anzeige und Rechnung: ein Container mit „ohne“, aber ohne „mit“ taugt nicht als Verhältnis
+    leer = {"a": 0.0, "k": 1000.0}, {"a": "konvektor", "k": "konvektor"}
+    assert quellen({"a": g}, *leer) == {"a": "eigen", "k": None} and ohne_baustelle({"a": g}, *leer) is None
+    assert quellen({"a": g}, mit, typen) == {"a": "eigen", "m": "gleich"}
 
 
 def test_tageswerte_und_perioden():

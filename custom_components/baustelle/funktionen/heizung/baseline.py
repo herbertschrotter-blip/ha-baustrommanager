@@ -9,6 +9,7 @@ ankündigen (Nachricht mit „Absagen“). Startet aus (`heizung.baseline`); ges
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
@@ -16,10 +17,11 @@ import uuid
 
 from homeassistant.util import dt as dt_util
 
-from ...const import ROLLE_HEIZKOERPER
 from ...kern.staffelung import nenn_kw
 from ...logik import baseline as b
+from ...logik.signatur import MIN_TAGE
 from ...logik.arbeitszeit import ausnahme_am, frei_gilt
+from ..basis import mitternacht
 
 if TYPE_CHECKING:
     from . import Heizung
@@ -61,15 +63,26 @@ def _typ(typen: set[str]) -> str:
     return "" if not typen else next(iter(typen)) if len(typen) == 1 else "gemischt"
 
 
+def typ_von(hz: Heizung, bid: str) -> str:
+    """Heizkörper-Typ des Containers nach seinen aktiven Heizkörpern (oelradiator | konvektor | gemischt | '' ohne)."""
+    return _typ({g.typ for g in hz.heizer_von(bid)})
+
+
+def kein_lauf_von(hz: Heizung, bid: str, typ: str | None = None) -> str | None:
+    """Warum der Container keinen Lauf bekommt (logik/baseline.kein_lauf)."""
+    e = hz.st.einstellungen.bereich(bid)
+    return b.kein_lauf(typ=typ_von(hz, bid) if typ is None else typ, auto=bool(e.get("auto", True)),
+                       bedarf=bool(e.get("bedarf")), modus=hz.modus(bid))
+
+
 def kandidaten(hz: Heizung, heute: date) -> list[b.Kandidat]:
     st, aus = hz.st, []
     tage = b.zaehlende_tage(laeufe(hz))
     ohne = {c["bereich"]: c for c in ((hz.hochrechnung or {}).get("ohne") or {}).get("container", [])}
     for info in hz.bereiche():
-        e = st.einstellungen.bereich(info.id)
-        if not e.get("auto", True) or e.get("bedarf") or hz.modus(info.id) == "aus":
-            continue   # Container ohne Automatik, bei Bedarf oder aus: kein Lauf
-        heizer = [g for g in st.geraete_in(info.id) if g.rolle == ROLLE_HEIZKOERPER and st.geraet_aktiv(g)]
+        heizer = hz.heizer_von(info.id)
+        if kein_lauf_von(hz, info.id, _typ({g.typ for g in heizer})):
+            continue   # Container ohne Heizkörper, ohne Automatik, bei Bedarf oder aus: kein Lauf
         gesperrt = frozenset(d for von, bis, _ in hz.termin_fenster(info.id)
                              for d in (von.date() + timedelta(days=i) for i in range((bis.date() - von.date()).days + 1)))
         o = ohne.get(info.id) or {}
@@ -86,10 +99,11 @@ def _bedarf_oder_termin(hz: Heizung, bid: str, jetzt: datetime) -> tuple[bool, b
 
 def absagen(hz: Heizung, lauf_id: str, grund: str) -> bool:
     """Lauf absagen (vor dem Start) bzw. abbrechen (Knopf in der Nachricht, Seite)."""
-    liste, heute = laeufe(hz), dt_util.now().date()
+    jetzt = dt_util.now()
+    liste, heute = laeufe(hz), jetzt.date()
     for i, l in enumerate(liste):
         if l.id == lauf_id and l.status in b.OFFEN:
-            liste[i] = b.abbrechen(l, heute, grund)
+            liste[i] = b.abbrechen(l, heute, grund, jetzt)
             _speichern(hz, liste)
             hz.st.protokoll("schalten", l.bereich, f"Baseline {'abgesagt' if l.status == 'geplant' else 'abgebrochen'}: {grund}")
             return True
@@ -115,13 +129,14 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
         if l.status not in b.OFFEN:
             continue
         if not an:
-            liste[i] = b.abbrechen(l, heute, "Baseline ausgeschaltet")
+            liste[i] = b.abbrechen(l, heute, "Baseline ausgeschaltet", jetzt)
         elif l.status == "geplant" and heute >= l.von:
             if heute >= l.bis:
-                liste[i] = b.abbrechen(l, heute, "verpasst")
+                liste[i] = b.abbrechen(l, heute, "verpasst", jetzt)
             else:
                 # BSM-033.06: Konfiguration und Annahme „Thermostate unverändert“ beim Start einfrieren
                 liste[i] = l = b.starten(l, dt_util.utcnow(), _konfiguration(hz, l.bereich))
+                _zaehler_merken(hz, l)
                 st.protokoll("schalten", l.bereich, f"Baseline startet: alle Heizkörper ohne Automatik bis {l.bis - timedelta(days=1):%d.%m.}")
         if liste[i].status == "laeuft":
             l = liste[i]
@@ -138,7 +153,7 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
                     tuer_pause_min=float(st.e["heizung"]["tuer_pause_min"]),
                     taste=hz.bis("taste_bis", l.bereich, jetzt) is not None, bedarf=bedarf, termin=termin)
                 if grund:
-                    liste[i] = b.abbrechen(l, heute, grund)
+                    liste[i] = b.abbrechen(l, heute, grund, jetzt)
                     st.protokoll("schalten", l.bereich, f"Baseline abgebrochen: {grund}")
                     st.nachrichten.melden("Baseline abgebrochen", f"{namen.get(l.bereich, l.bereich)}: {grund}. Die Automatik übernimmt.",
                                           tag="baseline", bereich=l.bereich, protokoll=False)
@@ -149,6 +164,7 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
         lauf = b.planen(heute, lambda d: frei(hz, d), kandidaten(hz, heute), liste,
                         float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR)), st.preis_am(morgen), uuid.uuid4().hex[:8])
         if lauf is not None and lauf.von == morgen:
+            lauf = replace(lauf, angekuendigt=jetzt)
             liste.append(lauf)
             name, letzter = namen.get(lauf.bereich, lauf.bereich), lauf.bis - timedelta(days=1)
             zeit = f"{lauf.von:%d.%m.}" if lauf.von == letzter else f"{lauf.von:%d.%m.}–{letzter:%d.%m.}"
@@ -161,3 +177,66 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
             st.einstellungen.speichern()
     if liste != vorher:
         _speichern(hz, liste)
+        ids = {l.id for l in liste}   # Zählerstände beim Start nur für Läufe, die es noch gibt
+        stand["zaehler_start"] = {k: v for k, v in (stand.get("zaehler_start") or {}).items() if k in ids}
+
+
+# ------------------------------------------------------------------ Anzeige (J4b, Mockup baseline.html Variante B)
+
+def _zaehler_merken(hz: Heizung, l: b.Lauf) -> None:
+    """Zählerstand des Containers beim Start – daraus „bisher“ während des Laufs (kWh, €)."""
+    z = hz.st.zaehler
+    _lz(hz).setdefault("zaehler_start", {})[l.id] = {"kwh": float(z.get(f"energie:{l.bereich}", 0.0)),
+                                                     "eur": float(z.get(f"kosten:{l.bereich}", 0.0))}
+
+
+def _bisher(hz: Heizung, l: b.Lauf) -> tuple[float, float] | None:
+    """kWh und € seit dem Start (Zähler des Containers), nur während des Laufs."""
+    s = (_lz(hz).get("zaehler_start") or {}).get(l.id)
+    if l.status != "laeuft" or not s:
+        return None
+    z = hz.st.zaehler
+    kwh, eur = float(z.get(f"energie:{l.bereich}", 0.0)) - s["kwh"], float(z.get(f"kosten:{l.bereich}", 0.0)) - s["eur"]
+    return (kwh, eur) if kwh >= 0 and eur >= 0 else None   # Zähler im Lauf zurückgesetzt/korrigiert: kein „bisher“
+
+
+def container_anzeige(hz: Heizung, bid: str, jetzt: datetime) -> dict[str, Any] | None:
+    """Laufender Lauf des Containers für den Kopf der Seite (api: laufzeit.container.<id>.baseline), sonst None."""
+    if not eingeschaltet(hz) or not any(d.get("bereich") == bid and d.get("status") == "laeuft" for d in _lz(hz)["laeufe"]):
+        return None   # schnell: je Container bei jeder Struktur, ohne alle Läufe zu lesen
+    if (l := b.laeuft_am(laeufe(hz), bid, jetzt.date())) is None:
+        return None
+    return b.kopf_anzeige(l, _bisher(hz, l), mitternacht(l.bis).isoformat())
+
+
+def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
+    """Baseline-Läufe für die Seite (api: laufzeit.baseline, auch baustelle/auswertung › hochrechnung.baseline): an,
+    Kostenrahmen, Läufe (letzte 12), nächster Lauf als Vorschau, Stand je Container, Hinweis der Hochrechnung."""
+    st, heute = hz.st, jetzt.date()
+    liste, an = laeufe(hz), eingeschaltet(hz)
+    namen = {i.id: i.name for i in hz.bereiche()}
+    typen = {bid: typ_von(hz, bid) for bid in namen}
+    budget = float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR))
+    offen = b.offener(liste)
+    vor = None
+    if an and st.automatik and offen is None:
+        # heute schon geplant (ab 12:00, ohne Lauf für morgen): der nächste Lauf beginnt frühestens übermorgen
+        ab = heute + timedelta(days=1) if _lz(hz).get("geplant_am") == heute.isoformat() else heute
+        lauf = b.planen(ab, lambda d: frei(hz, d), kandidaten(hz, heute), liste, budget,
+                        st.preis_am(ab + timedelta(days=1)), "vorschau")
+        vor = b.vorschau(lauf, namen.get(lauf.bereich, lauf.bereich), jetzt) if lauf else None
+    hr = hz.hochrechnung or {}
+    ohne = {c["bereich"]: c for c in (hr.get("ohne") or {}).get("container", [])}
+    tage = b.zaehlende_tage(liste)
+    container = []
+    for bid, name in namen.items():
+        o = ohne.get(bid) or {}
+        q = o.get("quelle")   # logik/hochrechnung.quellen – dieselbe Regel wie die Rechnung „ohne“
+        container.append(b.stand_anzeige(b.Stand(bid, name, typen[bid], len(tage.get(bid, ())), o.get("stand"),
+                                                 kein_lauf_von(hz, bid, typen[bid]), tuple(q) if isinstance(q, list) else ()), MIN_TAGE))
+    methode = (hr.get("ohne") or {}).get("methode") or "schaetzung"
+    anz = {l.id: b.lauf_anzeige(l, namen.get(l.bereich, l.bereich), typen.get(l.bereich, ""), _bisher(hz, l)) for l in liste[-12:]}
+    return {"an": an, "rahmen": b.rahmen(liste, heute, budget), "vorschau": vor, "container": container,
+            "laeufe": list(anz.values()), "offen": anz.get(offen.id) if offen is not None else None,
+            "hinweis": b.HINWEIS if methode != "baseline" else None,
+            "stand_t": b.stand_text(an=an, automatik=st.automatik, container=container, offen=offen, vor=vor, namen=namen)}

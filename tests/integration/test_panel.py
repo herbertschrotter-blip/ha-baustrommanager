@@ -561,7 +561,7 @@ async def test_nur_admins_aendern(hass: HomeAssistant, baustelle, ws, shellys, f
                                     eintrag={"datum": "2026-10-02", "art": "frei"}))
     for aktion, felder in [("automatik", {"geraet": HK2}), ("schalten", {"geraet": HK2, "an": True}),
                            ("lern_reset", {"bereich": C1}), ("zuruecksetzen", {}), ("test_meldung", {}),
-                           ("soll_versch", {"bereich": C1, "d": 1})]:
+                           ("soll_versch", {"bereich": C1, "d": 1}), ("baseline_absagen", {"lauf_id": "x"})]:   # J4b
         assert abgewiesen(await ws.rufe("baustelle/aktion", aktion=aktion, **felder)), aktion
     assert abgewiesen(await ws.rufe("baustelle/meldung", mit_entry=False, aktion="status", meldung_id=mid, status="geschlossen"))
     assert abgewiesen(await ws.rufe("baustelle/meldung", mit_entry=False, aktion="loeschen", meldung_id=mid))

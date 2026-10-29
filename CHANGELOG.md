@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.159] – 2026-10-29
+
+- FE-0033 / J4b – Baseline-Läufe sichtbar (Mockup `baseline.html` Variante B, abgenommen 29.10.2026): Die Testläufe
+  ohne Automatik (seit 0.8.127, startet aus) haben jetzt eine Anzeige. Heizung › Regeln: Karte „🧪 Baseline messen“ mit
+  Schalter, Kostenrahmen je Monat, nächstem Lauf mit „Absagen“ bzw. „Lauf abbrechen“. Heizperiode: Reiter „Baseline“
+  mit Stand je Container (Tage, Signatur „ohne“ lernt/gut, fertig ✓) und Liste der Läufe; unter der Legende der Hinweis,
+  dass „ohne“ bis dahin nur geschätzt ist. Während eines Laufs zeigt der Container-Kopf „🧪 Baseline-Lauf bis … ·
+  Thermostat regelt“, das Soll-Rad ist gedämpft. Korrigiert: Ein Container ohne Heizkörper verhinderte bisher, dass die
+  gemessene Baseline je die 24/7-Schätzung ersetzt.
+
 ## [0.8.158] – 2026-10-29
 
 - FE-0033: Die rote Prognose-Linie der Heizperiode wirkte gerade, obwohl sie seit 0.8.155 im Winter steiler steigt –

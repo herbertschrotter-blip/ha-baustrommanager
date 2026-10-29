@@ -6,7 +6,7 @@ Ersparnis wirkt dadurch zu groß. Ziel (Herbert 07.10.2026): nach professionelle
 Energiesignatur je Container (ASHRAE Guideline 14), eine Hochrechnung mit Heizgradtagen als Spanne (ÖNORM B 8135,
 Klimamittel GeoSphere Austria) und die Ersparnis aus einer gemessenen Baseline (IPMVP Option B).
 
-Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026), .05–.09 fertig (0.8.132–0.8.137). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
+Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126), .04a fertig (0.8.127, 11.10.2026), .04b fertig (J4b, FE-0033, 29.10.2026), .05–.09 fertig (0.8.132–0.8.137). Aufgabe BSM-033, Unteraufgaben .01–.09 = Stufen in §2. Audit 11.10.2026: altes Modell fachlich nicht belastbar, Umbau nach §8.
 
 ## 1. Grundsätze
 
@@ -22,7 +22,7 @@ Stand: .01 fertig (0.8.123), .02 fertig (0.8.124), .03 fertig (0.8.125/0.8.126),
 | .01 | Energiesignatur je Container: `logik/signatur.py` | ☑ 0.8.123 |
 | .02 | Hochrechnung mit Heizgradtagen und Spanne, Witterungsbereinigung; Daten aus `tag_bereich` an die Signatur | ☑ 0.8.124 |
 | .03 | Anzeige: Karte „Heizperiode“ (Mockup `hochrechnung.html`, abgenommen 10.10.2026) | ☑ 0.8.125 |
-| .04 | Automatische Baseline-Läufe (§6): **a** Logik und Integration ☑ 0.8.127, **b** Anzeige (Mockup zuerst) ☐ | ◐ |
+| .04 | Automatische Baseline-Läufe (§6): **a** Logik und Integration ☑ 0.8.127, **b** Anzeige ☑ (FE-0033, Mockup `baseline.html` B) | ☑ |
 | .05 | P0: „ohne Automatik“ und „gespart“ als „grobe Obergrenze, nicht belastbar“ kennzeichnen (Zahlen bleiben) | ☑ 0.8.132 |
 | .06 | P1: Klassifikation, Qualitätsvertrag, vier Minutenspalten, Erfassung am Kernpfad, Baseline-Metadaten (§8) | ☑ 0.8.133 |
 | .07 | P2: Tagesmerkmale, Exposition R/F, Abdeckung, Starts, Abkühlepisoden (§8) | ☑ 0.8.134 |
@@ -81,7 +81,8 @@ nach ÖNORM); es zählen nur **ganze Tage ohne Ausfall und ohne Notbetrieb** (mi
   von heute (Vorhersage, sonst gemessen bis jetzt, sonst Klimamittel) – sonst liegt die Hochrechnung tagsüber zu niedrig.
 - Sensor `prognose_heizperiode` (und Kosten) zeigt den neuen Wert, `baustelle/auswertung` › `hochrechnung` dazu
   `methode`, `unten_*`, `oben_*`, `normjahr_*`, `hgt_rest`, `vorhersage_tage` und je Container Signatur und Rest.
-- **Ohne Automatik** bleibt bis zur gemessenen Baseline (.04) die bisherige Schätzung; dann aus der Signatur „ohne“.
+- **Ohne Automatik** bleibt bis zur gemessenen Baseline (.04) die bisherige Schätzung; dann aus der Signatur „ohne“
+  (J4b: Hinweis unter der Legende, solange geschätzt wird – §6).
 - Arbeitszeitplan, Vorheizen und Frostschutz stecken in der Signatur, weil sie aus dem echten Betrieb gelernt ist.
   Getrennte Signaturen für Arbeits- und freie Tage erst, wenn das Gütemaß zeigt, dass es nötig ist.
 
@@ -154,6 +155,24 @@ Nachrichtenknopf `baseline_absagen`, Einstellungen `heizung.baseline` (aus) und 
 `baustelle/auswertung` › `hochrechnung` liefert `baseline` (an, Läufe) und `ohne_methode` (baseline/schaetzung); der
 Sensor „Heizperiode ohne Automatik“ nimmt die Baseline, sobald es sie gibt. Kosten eines beendeten Laufs = Verbrauch der
 Lauftage × Preis (stündlich nachgetragen). Einschalten erst mit J4b (Seite).
+
+Gebaut J4b (FE-0033, Mockup `baseline.html` Variante B, abgenommen 29.10.2026): **Seite** `frontend/src/ansichten/baseline.js` –
+Karte „🧪 Baseline messen“ in Heizung › Regeln (nach „Immer“, vor den festen Regeln wie im Mockup): Schalter mit Erklärung,
+Kostenrahmen − 60 € + (10-€-Schritte, `heizung.baseline_eur_monat`) mit Balken gemessen · geplant · frei, nächster Lauf
+(voraussichtlich / angekündigt mit „Absagen“ / läuft mit bisher und „Lauf abbrechen“), Link „Auswertung › Heizperiode ›“;
+vierter Reiter „Baseline“ der Karte Heizperiode (Stand je Container mit Tagen/10, Signatur „ohne“, fertig ✓, gemischt „nach
+den reinen Typen“, „… – kein Lauf“; Läufe neueste zuerst, „alle n Läufe ▾“; „einstellen ›“); Hinweis unter der Legende der
+Hochrechnung statt der Zeile „… bis zur gemessenen Baseline …“ mit Stand und „einschalten ›“/„Baseline ›“; im Container-Kopf
+während eines Laufs der Chip „🧪 Baseline-Lauf bis So 24:00 · Thermostat regelt“ (Handy „bis So 24:00“, Antippen: Satz mit
+bisher kWh/€ und „Lauf abbrechen“), das Rad gedämpft mit „Thermostat am Heizkörper regelt“ (das Soll wirkt im Lauf nicht,
+± und Soll-Chips fehlen). **Integration:** `laufzeit.baseline`, `laufzeit.container.<id>.baseline`, Aktion `baseline_absagen` {lauf_id} (api-0.7 §8); Regeln in `logik/baseline`
+(`rahmen`, `lauf_anzeige`, `vorschau`/`plant_am`, `kein_lauf` – auch für `kandidaten` –, `stand_anzeige`, `stand_text`),
+`Lauf` dazu mit `kwh`, `angekuendigt`, `abbruch_um`; „bisher“ aus dem Zählerstand des Containers beim Start. **Korrektur
+(offener Punkt 1 aus dem Mockup-Bericht):** `ohne_baustelle` gab bei einem Container ohne Heizkörper (Typ '') immer `None`
+– die Baseline hätte die Schätzung 24/7 nie ersetzt. Jetzt `logik/hochrechnung.quelle_ohne`: ohne Heizkörper „ohne“ = „mit“
+(die Automatik schaltet dort nichts), ein Container, der nie einen Lauf bekommt (Modus aus, ohne Automatik, bei Bedarf), ohne
+gleichartigen gemessenen das Verhältnis aller gemessenen; dieselbe Regel (`quellen`) liefert der Seite „rechnet wie …“. Kosten und
+kWh eines beendeten Laufs trägt die Hochrechnung erst am Tag nach seinem letzten Tag nach.
 
 ## 7. Tests
 

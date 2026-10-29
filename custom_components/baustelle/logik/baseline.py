@@ -51,6 +51,9 @@ class Lauf:
     annahme_am: datetime | None = None
     konfiguration_id: str | None = None
     p_ref_belege: tuple[str, ...] = ()
+    kwh: float | None = None          # gemessen (Tage des Laufs), mit `kosten_eur` nachgetragen (J4b)
+    angekuendigt: datetime | None = None   # Zeitpunkt der Nachricht am Vortag (J4b)
+    abbruch_um: datetime | None = None     # Zeitpunkt von Abbruch bzw. Absage (J4b)
 
     def tage(self) -> list[date]:
         return [self.von + timedelta(days=i) for i in range((self.bis - self.von).days)]
@@ -61,7 +64,9 @@ class Lauf:
                 "grund": self.grund, "ende": self.ende.isoformat() if self.ende else None,
                 "thermostat_unveraendert": self.thermostat_unveraendert, "thermostatstellung": self.thermostatstellung,
                 "annahme_am": self.annahme_am.isoformat() if self.annahme_am else None,
-                "konfiguration_id": self.konfiguration_id, "p_ref_belege": list(self.p_ref_belege)}
+                "konfiguration_id": self.konfiguration_id, "p_ref_belege": list(self.p_ref_belege),
+                "kwh": self.kwh, "angekuendigt": self.angekuendigt.isoformat() if self.angekuendigt else None,
+                "abbruch_um": self.abbruch_um.isoformat() if self.abbruch_um else None}
 
     @staticmethod
     def aus_dict(d: dict[str, object]) -> Lauf:
@@ -74,7 +79,10 @@ class Lauf:
                     stellung if stellung in THERMOSTATSTELLUNGEN else "unbekannt",   # type: ignore[arg-type]
                     datetime.fromisoformat(str(d["annahme_am"])) if d.get("annahme_am") else None,
                     str(d["konfiguration_id"]) if d.get("konfiguration_id") else None,
-                    tuple(str(b) for b in belege) if isinstance(belege, (list, tuple)) else ())
+                    tuple(str(b) for b in belege) if isinstance(belege, (list, tuple)) else (),
+                    None if d.get("kwh") is None else float(d["kwh"]),   # type: ignore[arg-type]
+                    datetime.fromisoformat(str(d["angekuendigt"])) if d.get("angekuendigt") else None,
+                    datetime.fromisoformat(str(d["abbruch_um"])) if d.get("abbruch_um") else None)
 
 
 @dataclass(frozen=True)
@@ -166,11 +174,11 @@ def starten(l: Lauf, jetzt: datetime, konfiguration_id: str | None, p_ref_belege
                    annahme_am=jetzt, konfiguration_id=konfiguration_id, p_ref_belege=tuple(p_ref_belege))
 
 
-def abbrechen(l: Lauf, heute: date, grund: str) -> Lauf:
-    """Abbruch: Tage ab heute zählen nicht mehr; vor dem Start heißt es „abgesagt“."""
+def abbrechen(l: Lauf, heute: date, grund: str, um: datetime | None = None) -> Lauf:
+    """Abbruch: Tage ab heute zählen nicht mehr; vor dem Start heißt es „abgesagt“. `um` = Uhrzeit für die Anzeige."""
     if l.status == "geplant":
-        return replace(l, status="abgesagt", grund=grund)
-    return replace(l, status="abgebrochen", grund=grund, ende=heute)
+        return replace(l, status="abgesagt", grund=grund, abbruch_um=um)
+    return replace(l, status="abgebrochen", grund=grund, ende=heute, abbruch_um=um)
 
 
 def zaehlende_tage(laeufe: Iterable[Lauf]) -> dict[str, set[date]]:
@@ -186,3 +194,136 @@ def zaehlende_tage(laeufe: Iterable[Lauf]) -> dict[str, set[date]]:
 
 def laeuft_am(laeufe: Iterable[Lauf], bereich: str, tag: date) -> Lauf | None:
     return next((l for l in laeufe if l.bereich == bereich and l.status == "laeuft" and l.von <= tag < l.bis), None)
+
+
+# ------------------------------------------------------------------ Anzeige (J4b, Mockup baseline.html Variante B)
+
+TAGE_KURZ = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+HINWEIS = "Prognose ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt."
+PLAN_UHR = 12               # Planen und Ankündigen am Vortag ab 12:00
+
+
+def tag_t(d: date) -> str:
+    """„Sa 31.10.“"""
+    return f"{TAGE_KURZ[d.weekday()]} {d:%d.%m.}"
+
+
+def zeit_t(z: datetime) -> str:
+    """„Fr 30.10. 12:00“ (in der Zone, in der `z` steht)."""
+    return f"{tag_t(z.date())} {z:%H:%M}"
+
+
+def letzter_tag(l: Lauf) -> date:
+    return l.bis - timedelta(days=1)
+
+
+def kein_lauf(*, typ: str, auto: bool, bedarf: bool, modus: str) -> str | None:
+    """Warum ein Container keinen Lauf bekommt (None = er kann einen bekommen)."""
+    if not typ:
+        return "ohne Heizkörper"
+    if modus == "aus":
+        return "Modus aus"
+    if not auto:
+        return "ohne Automatik"
+    if bedarf or modus == "bedarf":
+        return "bei Bedarf"
+    return None
+
+
+def rahmen(laeufe: Iterable[Lauf], heute: date, budget: float) -> dict[str, object]:
+    """Kostenrahmen des laufenden Monats: gemessen (Kosten beendeter Läufe), geplant (Schätzung geplanter und laufender
+    Läufe), Rest wie `monat_rest` (abgesagte zählen nicht; gezählt im Monat des ersten Tags)."""
+    im_monat = [l for l in laeufe if l.status != "abgesagt" and (l.von.year, l.von.month) == (heute.year, heute.month)]
+    # beendet, aber noch ohne gemessene Kosten (bis zur nächsten Hochrechnung): mit der Schätzung unter „gemessen“
+    gemessen = sum((l.kosten_eur if l.kosten_eur is not None else l.schaetzung_eur for l in im_monat if l.status not in OFFEN), 0.0)
+    geplant = sum((l.schaetzung_eur for l in im_monat if l.status in OFFEN), 0.0)
+    return {"monat": f"{heute:%Y-%m}", "budget_eur": round(budget, 2), "gemessen_eur": round(gemessen, 2),
+            "geplant_eur": round(geplant, 2), "rest_eur": round(monat_rest(im_monat, heute.year, heute.month, budget), 2)}
+
+
+def bis_t(l: Lauf) -> str:
+    """Ende eines Laufs als Text: „So 24:00“ (Ende des letzten Tags)."""
+    return f"{TAGE_KURZ[letzter_tag(l).weekday()]} 24:00"
+
+
+def _bisher(l: Lauf, bisher: tuple[float, float] | None) -> tuple[float | None, float | None]:
+    if l.status != "laeuft" or bisher is None:
+        return None, None
+    return round(bisher[0], 2), round(bisher[1], 2)
+
+
+def kopf_anzeige(l: Lauf, bisher: tuple[float, float] | None, bis: str) -> dict[str, object]:
+    """Laufender Lauf für den Kopf des Containers (`bis` = Ende als ISO-Zeitpunkt in der Zone der Baustelle)."""
+    kwh, eur = _bisher(l, bisher)
+    return {"lauf_id": l.id, "von": l.von.isoformat(), "letzter": letzter_tag(l).isoformat(), "von_t": tag_t(l.von),
+            "letzter_t": tag_t(letzter_tag(l)), "bis": bis, "bis_t": bis_t(l), "bisher_kwh": kwh, "bisher_eur": eur}
+
+
+def lauf_anzeige(l: Lauf, name: str, typ: str, bisher: tuple[float, float] | None = None) -> dict[str, object]:
+    """Ein Lauf für die Seite: dazu letzter Tag (inklusive), Anzahl Tage, zählende Tage, Texte für Uhrzeiten und – solange
+    er läuft – `bisher` (kWh, €) seit dem Start."""
+    zaehlt = len(zaehlende_tage([l]).get(l.bereich, ()))
+    kwh, eur = _bisher(l, bisher)
+    return {**l.als_dict(), "name": name, "typ": typ, "letzter": letzter_tag(l).isoformat(), "tage": len(l.tage()), "zaehlt": zaehlt,
+            "von_t": tag_t(l.von), "letzter_t": tag_t(letzter_tag(l)),
+            "kwh": None if l.kwh is None else round(l.kwh, 2),
+            "angekuendigt_t": zeit_t(l.angekuendigt) if l.angekuendigt else None,
+            "abbruch_t": zeit_t(l.abbruch_um) if l.abbruch_um else None,
+            "bis_t": bis_t(l), "bisher_kwh": kwh, "bisher_eur": eur}
+
+
+def plant_am(von: date, jetzt: datetime) -> datetime:
+    """Wann ein Lauf, der am Tag `von` beginnt, geplant und angekündigt wird: am Vortag um 12:00 (frühestens jetzt)."""
+    vortag = von - timedelta(days=1)
+    return max(jetzt, jetzt.replace(year=vortag.year, month=vortag.month, day=vortag.day, hour=PLAN_UHR, minute=0, second=0, microsecond=0))
+
+
+def vorschau(l: Lauf | None, name: str, jetzt: datetime) -> dict[str, object] | None:
+    """Nächster Lauf nach `planen`, solange noch keiner geplant ist (Seite: „voraussichtlich …“)."""
+    if l is None:
+        return None
+    am = plant_am(l.von, jetzt)
+    return {"von": l.von.isoformat(), "letzter": letzter_tag(l).isoformat(), "von_t": tag_t(l.von), "letzter_t": tag_t(letzter_tag(l)),
+            "bereich": l.bereich, "name": name,
+            "schaetzung_eur": round(l.schaetzung_eur, 2), "plant_am": am.isoformat(), "plant_am_t": zeit_t(am)}
+
+
+@dataclass(frozen=True)
+class Stand:
+    """Stand eines Containers für die Anzeige (Signatur „ohne“ aus der Hochrechnung)."""
+    bereich: str
+    name: str
+    typ: str
+    tage: int                       # zählende Baseline-Tage
+    stand: str | None               # Stand der Signatur „ohne“ (lernt|gut|brauchbar|unsicher)
+    kein_lauf: str | None = None
+    uebernimmt: tuple[str, ...] = ()   # gemessene Container, deren Verhältnis gilt (ohne eigene Messung)
+
+
+def stand_anzeige(c: Stand, noetig: int) -> dict[str, object]:
+    """Stand je Container: Tage/nötig, Signatur „ohne“ (ohne Tage kein Stand), fertig = gut (dann kein Lauf mehr)."""
+    stand = c.stand if c.tage else None
+    return {"bereich": c.bereich, "name": c.name, "typ": c.typ, "tage": c.tage, "noetig": noetig, "stand": stand,
+            "fertig": stand == "gut", "kein_lauf": c.kein_lauf, "uebernimmt": list(c.uebernimmt)}
+
+
+def offener(laeufe: Iterable[Lauf]) -> Lauf | None:
+    """Der geplante bzw. laufende Lauf (es gibt höchstens einen)."""
+    return next((l for l in laeufe if l.status in OFFEN), None)
+
+
+def stand_text(*, an: bool, automatik: bool, container: Sequence[dict[str, object]], offen: Lauf | None,
+               vor: dict[str, object] | None, namen: dict[str, str]) -> str:
+    """Stand unter dem Hinweis der Hochrechnung: „1 von 4 Containern gemessen · nächster Lauf Sa 31.10. (003_C_MAN).“"""
+    if not an:
+        return "Baseline messen ist aus."
+    mit = [c for c in container if not c["kein_lauf"]]
+    text = f"{sum(1 for c in mit if c['fertig'])} von {len(mit)} {'Container' if len(mit) == 1 else 'Containern'} gemessen"
+    if offen is not None:
+        art = "Lauf läuft" if offen.status == "laeuft" else "nächster Lauf"
+        text += f" · {art} {tag_t(offen.von)} ({namen.get(offen.bereich, offen.bereich)})"
+    elif not automatik:
+        text += " · Läufe nur mit eingeschalteter Automatik"
+    elif vor is not None:
+        text += f" · nächster Lauf voraussichtlich {tag_t(date.fromisoformat(str(vor['von'])))}"
+    return text if text.endswith(".") else text + "."

@@ -503,7 +503,9 @@
     "tuer_melden_min": 10,
     "boost_min": 30,
     "feiertag_frei": true,
-    "notprogramm": true
+    "notprogramm": true,
+    "baseline": true,
+    "baseline_eur_monat": 60
    },
    "staffel": {
     "an": true,
@@ -1296,7 +1298,8 @@
        "grund": null,
        "ziel": "notprogramm"
       }
-     ]
+     ],
+     "baseline": null
     },
     "mannschaft": {
      "zustand": "trocknen",
@@ -1472,7 +1475,8 @@
        "grund": null,
        "ziel": "notprogramm"
       }
-     ]
+     ],
+     "baseline": null
     },
     "magazin": {
      "zustand": "pause",
@@ -1633,7 +1637,8 @@
        "grund": null,
        "ziel": "notprogramm"
       }
-     ]
+     ],
+     "baseline": null
     },
     "sanitaer": {
      "zustand": "frost",
@@ -1769,7 +1774,8 @@
        "grund": null,
        "ziel": "notprogramm"
       }
-     ]
+     ],
+     "baseline": null
     },
     "lager": {
      "zustand": "offline",
@@ -1905,7 +1911,8 @@
        "grund": null,
        "ziel": "notprogramm"
       }
-     ]
+     ],
+     "baseline": null
     },
     "besprechung": {
      "zustand": "bereit",
@@ -2008,7 +2015,8 @@
        "grund": null,
        "ziel": "notprogramm"
       }
-     ]
+     ],
+     "baseline": null
     },
     "schacht": {
      "zustand": "laeuft",
@@ -2021,7 +2029,8 @@
      "tuer": null,
      "firma": "eigen",
      "symbol": null,
-     "eingestellt": null
+     "eingestellt": null,
+     "baseline": null
     }
    },
    "geraete": {
@@ -3251,6 +3260,193 @@
    "notprogramm": {
     "an": true,
     "geprueft": "2026-09-29T16:48:00+02:00"
+   },
+   "baseline": {
+    "an": true,
+    "rahmen": {
+     "monat": "2026-09",
+     "budget_eur": 60.0,
+     "gemessen_eur": 12.52,
+     "geplant_eur": 0.0,
+     "rest_eur": 47.48
+    },
+    "vorschau": {
+     "von": "2026-10-03",
+     "letzter": "2026-10-04",
+     "bereich": "magazin",
+     "name": "Magazin",
+     "schaetzung_eur": 8.4,
+     "plant_am": "2026-10-02T12:00:00+02:00",
+     "plant_am_t": "Fr 02.10. 12:00",
+     "von_t": "Sa 03.10.",
+     "letzter_t": "So 04.10."
+    },
+    "container": [
+     {
+      "bereich": "polier",
+      "name": "Poliercontainer",
+      "typ": "gemischt",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     },
+     {
+      "bereich": "mannschaft",
+      "name": "Mannschaft",
+      "typ": "gemischt",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     },
+     {
+      "bereich": "magazin",
+      "name": "Magazin",
+      "typ": "oelradiator",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     },
+     {
+      "bereich": "sanitaer",
+      "name": "Sanitär",
+      "typ": "konvektor",
+      "tage": 1,
+      "noetig": 10,
+      "stand": "lernt",
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     },
+     {
+      "bereich": "lager",
+      "name": "Lager Süd",
+      "typ": "oelradiator",
+      "tage": 2,
+      "noetig": 10,
+      "stand": "lernt",
+      "fertig": false,
+      "kein_lauf": null,
+      "uebernimmt": []
+     },
+     {
+      "bereich": "besprechung",
+      "name": "Besprechung",
+      "typ": "oelradiator",
+      "tage": 0,
+      "noetig": 10,
+      "stand": null,
+      "fertig": false,
+      "kein_lauf": "Modus aus",
+      "uebernimmt": []
+     }
+    ],
+    "laeufe": [
+     {
+      "id": "r1",
+      "bereich": "lager",
+      "von": "2026-09-12",
+      "bis": "2026-09-14",
+      "status": "fertig",
+      "schaetzung_eur": 8.4,
+      "kosten_eur": 8.12,
+      "grund": null,
+      "ende": null,
+      "thermostat_unveraendert": "angenommen",
+      "thermostatstellung": "unbekannt",
+      "annahme_am": "2026-09-12T00:00:00+02:00",
+      "konfiguration_id": null,
+      "p_ref_belege": [],
+      "kwh": 29.0,
+      "angekuendigt": "2026-09-11T12:00:00+02:00",
+      "abbruch_um": null,
+      "name": "Lager Süd",
+      "typ": "oelradiator",
+      "letzter": "2026-09-13",
+      "tage": 2,
+      "zaehlt": 2,
+      "angekuendigt_t": "Fr 11.09. 12:00",
+      "abbruch_t": null,
+      "bis_t": "So 24:00",
+      "bisher_kwh": null,
+      "bisher_eur": null,
+      "von_t": "Sa 12.09.",
+      "letzter_t": "So 13.09."
+     },
+     {
+      "id": "r2",
+      "bereich": "sanitaer",
+      "von": "2026-09-19",
+      "bis": "2026-09-21",
+      "status": "abgesagt",
+      "schaetzung_eur": 9.2,
+      "kosten_eur": null,
+      "grund": "über die Nachricht abgesagt",
+      "ende": null,
+      "thermostat_unveraendert": "unbekannt",
+      "thermostatstellung": "unbekannt",
+      "annahme_am": null,
+      "konfiguration_id": null,
+      "p_ref_belege": [],
+      "kwh": null,
+      "angekuendigt": "2026-09-18T12:00:00+02:00",
+      "abbruch_um": "2026-09-18T14:05:00+02:00",
+      "name": "Sanitär",
+      "typ": "konvektor",
+      "letzter": "2026-09-20",
+      "tage": 2,
+      "zaehlt": 0,
+      "angekuendigt_t": "Fr 18.09. 12:00",
+      "abbruch_t": "Fr 18.09. 14:05",
+      "bis_t": "So 24:00",
+      "bisher_kwh": null,
+      "bisher_eur": null,
+      "von_t": "Sa 19.09.",
+      "letzter_t": "So 20.09."
+     },
+     {
+      "id": "r3",
+      "bereich": "sanitaer",
+      "von": "2026-09-26",
+      "bis": "2026-09-28",
+      "status": "abgebrochen",
+      "schaetzung_eur": 9.2,
+      "kosten_eur": 4.4,
+      "grund": "Tür oder Fenster offen",
+      "ende": "2026-09-27",
+      "thermostat_unveraendert": "angenommen",
+      "thermostatstellung": "unbekannt",
+      "annahme_am": "2026-09-26T00:00:00+02:00",
+      "konfiguration_id": null,
+      "p_ref_belege": [],
+      "kwh": 15.7,
+      "angekuendigt": "2026-09-25T12:00:00+02:00",
+      "abbruch_um": "2026-09-27T09:12:00+02:00",
+      "name": "Sanitär",
+      "typ": "konvektor",
+      "letzter": "2026-09-27",
+      "tage": 2,
+      "zaehlt": 1,
+      "angekuendigt_t": "Fr 25.09. 12:00",
+      "abbruch_t": "So 27.09. 09:12",
+      "bis_t": "So 24:00",
+      "bisher_kwh": null,
+      "bisher_eur": null,
+      "von_t": "Sa 26.09.",
+      "letzter_t": "So 27.09."
+     }
+    ],
+    "hinweis": "Prognose ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.",
+    "stand_t": "0 von 5 Containern gemessen · nächster Lauf voraussichtlich Sa 03.10.",
+    "offen": null
    }
   },
   "geraete_links": {
