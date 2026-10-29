@@ -29,8 +29,6 @@ export const illu = b => b.pumpe ? bcSchacht(b.z === 'laeuft') : bcContainer(BER
 const TEXT_MOCKUP = b => b.boost ? '⚡ schnell aufheizen' : ({ heizt: b.bedarf && b.bedarfBis ? `heizt bis ${b.bedarfBis}` : b.t === null ? 'an · Thermostat regelt' : 'heizt · Arbeitszeit',
   trocknen: 'Kleidung trocknen', aus: 'aus', frost: 'Frostschutz', offline: 'nicht erreichbar', laeuft: 'Pumpe läuft', pause: 'pausiert · Tür offen', bereit: 'bei Bedarf · nur Frostschutz' })[b.z] || '';
 export const TEXT = b => b.text || TEXT_MOCKUP(b);
-/* Fühler-Batterie „schwach“ in der Anzeige (Geräteliste, Kopf der Container-Ansicht) – die Warnung der Integration kommt erst unter 10 % */
-export const BATTERIE_SCHWACH = 25;
 
 /* Warum ein Gerät wartet (Staffelung der Integration) */
 export const WARTE = { anschluss_voll: a => `${a} ausgelastet`, max_gleichzeitig: () => 'höchstens gleichzeitig erreicht', mindestpause: () => 'Mindestpause',

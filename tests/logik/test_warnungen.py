@@ -166,6 +166,11 @@ def test_fuehler_fehlt_ohne_messwert_oder_batterie_schwach():
     (w,) = nur(Art.FUEHLER_FEHLT, zustand(container=[schwach]))
     assert titel(w) == "Fühler-Batterie schwach: 8 %"
     assert nur(Art.FUEHLER_FEHLT, zustand(container=[ContainerZustand(id="lager")])) == []  # ohne Fühler
+    # Grenze = Stufe „kritisch“ aus logik/sensoren (< 10 %); „schwach“ (< 25 %) zeigt nur die Seite, keine Warnung
+    for prozent, warnt in ((10, False), (9.9, True), (20, False)):
+        c = ContainerZustand(id="polier", fuehler=True, temperatur=19.0, batterie=prozent,
+                             batterien=(("Tür 1", "binary_sensor.t1", prozent),))
+        assert len(nur(Art.FUEHLER_FEHLT, zustand(container=[c]))) == (2 if warnt else 0), prozent
 
 
 def test_batterie_jedes_sensors():

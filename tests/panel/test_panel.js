@@ -486,6 +486,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       && seit(n0).some(m => m.type === 'baustelle/abrechnung' && m.versatz === 1) && !!litEl('.zr-zeile[data-ziel="aw"] .zr-akt'));
     const vormonat = (() => { let m = +h.slice(5, 7) - 2, j = +h.slice(0, 4); if (m < 0) { m = 11; j--; } return `${j}-${String(m + 1).padStart(2, '0')}-01`; })();
     erwarte('FE-0008: Diagramm holt die Statistik des Vormonats', seit(n0).some(m => m.type === 'baustelle/statistik' && panel.lokal(Date.parse(m.start_time), panel.z.zone).slice(0, 10) === vormonat));
+    { const oid = panel.eid(panel.d, panel.d.entry, 'energie_ohne_automatik'), st = alleAufrufe.filter(m => m.type === 'baustelle/statistik');   // Gespart liest gespart_reihen (0.8.152)
+      erwarte('Statistik ohne „energie_ohne_automatik“ (Gespart kommt aus baustelle/auswertung)', !!oid && st.length > 0 && st.every(m => !(m.statistic_ids || []).includes(oid))); }
     for (const [z, art, gesucht] of [['Tag', 'Monat mit Tagen', 'zr-woche-z'], ['Woche', 'Monat mit KW', 'class="zr-woche'], ['Monat', 'Jahr mit Monaten', 'zr-kal-monate'], ['Jahr', 'Jahre', 'zr-kal-monate']]) {
       await klick({ act: 'vb-zeitraum', ziel: 'aw', v: z }, 20); await klick({ act: 'zr-kal', ziel: 'aw', max: '9' }, 10);
       erwarte(`FE-0008: Kalender ${z} = ${art}`, panel.s.aw.v === 0 && ui.innerHTML.includes('zr-kal ') && ui.innerHTML.includes(gesucht) && !/undefined|NaN/.test(ui.innerHTML.slice(ui.innerHTML.indexOf('zr-kal '), ui.innerHTML.indexOf('zr-kal-fuss'))));
@@ -904,23 +906,26 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       x.modus = 'thermo'; x.z = 'pause'; x.text = 'pausiert · Tür offen'; x.boost = false; x.takt = null;   // Tür offen: kein Takt (api-0.7)
       x.tuer = { ...(x.tuer || { eid: 'binary_sensor.tuer_polier', sensor: 'Tür Polier' }), offen: 4 };
       x.symbol = { ...(x.symbol || {}), fenster: [{ sensor: 'binary_sensor.polier_fenster_1', zustand: 'gekippt' }, { sensor: null, zustand: 'zu' }] };
-      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 78 } : s);
+      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 18, batterie_stufe: null } : s);   // ohne Stufe kein Hinweis (auch unter 25 %: die Grenze kennt nur die Integration)
       await panel.neuZeichnen(); pruefe('Container Kopf D2 Tür offen');
       erwarte('Kopf D2: Rad links (ckd-rad mit c-rad), Name, Gruppen Steuerung · Jetzt · Plan', !!litEl('.ck-d.ck-d2 .ckd-rad .c-rad') && litEl('.ck-d .ck-titel').textContent === x.name
         && /^Steuerung,Jetzt,Plan/.test(gruppen()) && !litEl('.c-d-held'));
       erwarte('Kopf D2: Jetzt = Zustand, Tür, Fenster (nur offene/gekippte)', chipK('Jetzt') === 'zust,tuer,fenster0' && /Tür offen seit 4 min/.test(litEl('.ck-chip[data-k="tuer"]').textContent)
         && /Fenster gekippt/.test(litEl('.ck-chip[data-k="fenster0"]').textContent));
       erwarte('Kopf D2: Chips mit langem und kurzem Text (Handy)', litEl('.ck-chip[data-k="tuer"] .ck-l').textContent === 'Tür offen seit 4 min' && litEl('.ck-chip[data-k="tuer"] .ck-k').textContent === '4 min');
-      erwarte('Kopf D2: Hinweise-Gruppe fehlt bei voller Batterie', !gruppen().includes('Hinweise'));
+      erwarte('Kopf D2: Hinweise-Gruppe fehlt ohne Batterie-Stufe', !gruppen().includes('Hinweise'));
       erwarte('Kopf D2: ohne Antippen kein Satz', !litEl('.ck-d .ck-info'));
       await klick('.ck-chip[data-k="tuer"]', 10);
       erwarte('Kopf D2: Antippen „Tür“ zeigt den Satz', /class="ck-info"[^]*?offen seit 4 min – Heizung pausiert nach \d+ min, Meldung nach \d+ min/.test(ui.innerHTML) && litEl('.ck-chip[data-k="tuer"]').getAttribute('aria-expanded') === 'true');
       await klick('.ck-chip[data-k="zust"]', 10);
       erwarte('Kopf D2: anderer Chip ersetzt den Satz (Zustandstext der Integration)', litEls('.ck-d .ck-info').length === 1 && litEl('.ck-d .ck-info span').textContent === 'pausiert · Tür offen');
       await klick('.ck-chip[data-k="zust"]', 10);
-      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 8 } : s); await panel.neuZeichnen();
       const mitF = (x.sensoren || []).some(s => s.art === 'fuehler');
-      erwarte('Kopf D2: Hinweise-Gruppe nur bei schwacher Fühler-Batterie, zuletzt, rot unter 10 %', mitF && (/,Hinweise$/.test(gruppen()) && /Fühler schwach 8 %/.test(litEl('.ckd-g[data-g="Hinweise"]').textContent)
+      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 30, batterie_stufe: 'schwach' } : s); await panel.neuZeichnen();
+      erwarte('Kopf D2: Hinweise bei Stufe „schwach“ (gelb), auch über 25 %', mitF && /,Hinweise$/.test(gruppen()) && /Fühler schwach 30 %/.test(litEl('.ckd-g[data-g="Hinweise"]').textContent)
+        && litEl('.ckd-g[data-g="Hinweise"] .ck-chip').classList.contains('amber'));
+      x.sensoren = (x.sensoren || []).map(s => s.art === 'fuehler' ? { ...s, batterie: 8, batterie_stufe: 'kritisch' } : s); await panel.neuZeichnen();
+      erwarte('Kopf D2: Hinweise-Gruppe bei Stufe „kritisch“, zuletzt, rot', mitF && (/,Hinweise$/.test(gruppen()) && /Fühler schwach 8 %/.test(litEl('.ckd-g[data-g="Hinweise"]').textContent)
         && litEl('.ckd-g[data-g="Hinweise"] .ck-chip').classList.contains('rot')));
       neu(); await klick('.ck-d .ck-chip.ck-boost', 10);
       erwarte('Kopf D2: „Schnell aufheizen“-Chip = genau ein boost-Auftrag', letzte('baustelle/aktion').length === 1 && letzte('baustelle/aktion')[0].aktion === 'boost' && letzte('baustelle/aktion')[0].an === true);
@@ -1752,6 +1757,14 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         erwarte('BSM-034.05: eine Liste nach Container mit Zählern und Filter', ['g-zahlen', 'erreichbar', 'data-v="probleme"', 'Container ›'].every(t => h.includes(t)) && panel.d.bereiche.filter(b => b.geraete.length).every(b => h.includes(b.name)));
         erwarte('AN-0009: Statuspunkt und Signalbalken', h.includes('class="ger-punkt da"') && /class="ger-sig s[0-4]" title="Signal -\d+ dBm"/.test(h));
         erwarte('BSM-019: Heizungs-Plugs mit 🛟', h.includes('🛟 Notprogramm'));
+        { // Batterie: Farbe nur nach der Stufe der Integration (sensoren[].batterie_stufe), die Seite vergleicht keine Grenze
+          const S = panel.d.bereiche.flatMap(b => b.sensoren || []).slice(0, 3), vorher = S.map(x => ({ batterie: x.batterie, batterie_stufe: x.batterie_stufe }));
+          const stufen = [[8, 'kritisch'], [50, 'schwach'], [12, null]];
+          S.forEach((x, i) => Object.assign(x, { batterie: stufen[i][0], batterie_stufe: stufen[i][1] })); await panel.neuZeichnen();
+          const bat = eid => { const z = litEl(`.g-zeile[data-id="${eid}"] [title="Batterie"]`); return z ? z.className + ' ' + z.textContent : ''; };
+          erwarte('Batterie-Stufe: kritisch rot, schwach gelb, ohne Stufe leise (auch bei 12 %)', S.length === 3
+            && /^rot-t .*8 %/.test(bat(S[0].entity_id)) && /^amber-t .*50 %/.test(bat(S[1].entity_id)) && /^leise .*12 %/.test(bat(S[2].entity_id)));
+          S.forEach((x, i) => Object.assign(x, vorher[i])); await panel.neuZeichnen(); }
         neu(); await klick('.g-filter [data-v="sensor"]', 10);
         erwarte('BSM-034.05: Filter Sensoren', !ui.innerHTML.includes('class="zeile ger g-zeile" data-id="' + panel.d.bereiche.flatMap(b => b.geraete)[0].id + '"'));
         await klick('.g-filter [data-v="alle"]', 10);

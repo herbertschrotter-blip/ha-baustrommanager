@@ -22,7 +22,7 @@ from .logik import groesse, symbol as symbol_logik
 from .logik.abrechnung import EIGEN, firma_von
 from .logik.arbeitszeit import Plan, uhrzeit
 from .logik.regelung import heizgrenze_bezug
-from .logik.sensoren import kontakte
+from .logik.sensoren import batterie_stufe, kontakte
 from .logik.warnungen import titel as warn_titel
 from .notprogramm import DATA_NOTPROGRAMM
 from . import texte
@@ -134,6 +134,11 @@ def _drehung(hass: HomeAssistant, entity_id: str) -> float | None:
         if e.domain == "sensor" and (s := hass.states.get(e.entity_id)) is not None and s.attributes.get("unit_of_measurement") == "°":
             return _zahl(hass, e.entity_id)
     return None
+
+
+def _sensor(sensor: dict[str, Any], batterie: float | None) -> dict[str, Any]:
+    """Ein Sensor der Liste mit Batterie (%) und Stufe (logik/sensoren.batterie_stufe: None, schwach, kritisch)."""
+    return {**sensor, "batterie": batterie, "batterie_stufe": batterie_stufe(batterie)}
 
 
 def _symbol(st: Steuerung, bid: str) -> dict[str, Any]:
@@ -271,8 +276,8 @@ def struktur(hass: HomeAssistant, entry: ConfigEntry, version: str = "") -> dict
         return daten
     daten.update(
         bereiche=[{"id": b.id, "name": b.name, "art": b.art, "fuehler": b.fuehler, "nr": b.nr,
-                   # BSM-034.03: die eine Sensorliste (Fühler, Türen, Fenster, Licht) mit Batterie (%)
-                   "sensoren": [{**x.als_dict(), "batterie": st.batterie(x.entity_id)} for x in st.sensoren(b.id)]}
+                   # BSM-034.03: die eine Sensorliste (Fühler, Türen, Fenster, Licht) mit Batterie (%) und ihrer Stufe
+                   "sensoren": [_sensor(x.als_dict(), st.batterie(x.entity_id)) for x in st.sensoren(b.id)]}
                   for b in st.bereiche.values()],
         geraete=[
             {"id": g.id, "name": g.name, "bereich": g.bereich, "schalter": g.schalter,

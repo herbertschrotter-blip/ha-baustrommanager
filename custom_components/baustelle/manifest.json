@@ -26,5 +26,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/herbertschrotter-blip/ha-baustrommanager/issues",
   "requirements": ["psycopg[binary]==3.3.6"],
-  "version": "0.8.159"
+  "version": "0.8.160"
 }

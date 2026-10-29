@@ -32,7 +32,7 @@ Entscheidungen, wo der Bauplan offen ist (im Sinne des Mockups):
   Ohne Messwert (`leistung is None`, Gerät misst nicht) keine Warnung.
 - `frostgefahr`: Container-Temperatur unter `frost_grenze`, nur wenn der Frostschutz eingeschaltet ist
   („Frostgefahr trotz Frostschutz“).
-- `fuehler_fehlt`: Fühler eingerichtet, aber kein Messwert, oder Batterie unter `batterie_unter` %
+- `fuehler_fehlt`: Fühler eingerichtet, aber kein Messwert, oder Batterie „kritisch“ (logik/sensoren.batterie_stufe, < 10 %)
   („Fühler meldet nichts / Batterie schwach“).
 - `zyklen_oft` ab `zyklen_h` Zyklen in der letzten Stunde („ab 10 je Stunde“).
 - Das Mockup zeigt unter „nachrichten“ auch „Steckdose Magazin seit 8 h auf Hand“ als Handy-Nachricht. Bauplan §5
@@ -50,6 +50,7 @@ from enum import StrEnum
 from typing import Any
 
 from . import pumpen
+from .sensoren import batterie_stufe
 
 
 class Stufe(StrEnum):
@@ -194,7 +195,6 @@ class WarnEinstellungen:
     tuer_melden_min: float = 10.0
     keine_leistung_unter_w: float = 5.0
     keine_leistung_nach_min: float = 15.0   # Radiator-Thermostat pausiert 3–7 min (004_C_MAN, 07.10.2026)
-    batterie_unter: float = 10.0
     pumpe_laeuft_ab_w: float = 20.0
     trocken_nach_min: float = 1.0
 
@@ -364,13 +364,12 @@ def _pruefe_container(c: ContainerZustand, einst: WarnEinstellungen, jetzt: date
         w.append(_warnung(Art.FUEHLER_FEHLT, jetzt, c.id))
     elif (
         c.fuehler
-        and c.batterie is not None
-        and c.batterie < einst.batterie_unter
+        and batterie_stufe(c.batterie) == "kritisch"
         and einst.aktiv(Art.FUEHLER_FEHLT)
     ):
         w.append(_warnung(Art.FUEHLER_FEHLT, jetzt, c.id, batterie=c.batterie))
     for name, eid, prozent in c.batterien:   # BSM-034.03: jeder Sensor des Containers, eigene Warnung
-        if prozent is not None and prozent < einst.batterie_unter and einst.aktiv(Art.FUEHLER_FEHLT):
+        if batterie_stufe(prozent) == "kritisch" and einst.aktiv(Art.FUEHLER_FEHLT):
             w.append(_warnung(Art.FUEHLER_FEHLT, jetzt, c.id, eid, name=name, batterie=prozent))
     if t is not None and einst.frost and t < einst.frost_grenze and einst.aktiv(Art.FROSTGEFAHR):
         w.append(_warnung(Art.FROSTGEFAHR, jetzt, c.id, temperatur=t, grenze=einst.frost_grenze))

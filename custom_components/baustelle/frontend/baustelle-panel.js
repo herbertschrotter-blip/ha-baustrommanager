@@ -407,7 +407,6 @@ var TEXT_MOCKUP = (b3) => b3.boost ? "⚡ schnell aufheizen" : {
   bereit: "bei Bedarf · nur Frostschutz"
 }[b3.z] || "";
 var TEXT = (b3) => b3.text || TEXT_MOCKUP(b3);
-var BATTERIE_SCHWACH = 25;
 var WARTE = {
   anschluss_voll: (a3) => `${a3} ausgelastet`,
   max_gleichzeitig: () => "höchstens gleichzeitig erreicht",
@@ -2377,6 +2376,7 @@ function geraeteZeilen(p4) {
         weg: !g2.erreichbar,
         status: g2.status || "aktiv",
         bat: null,
+        batStufe: null,
         sig: zahlVon(l4.signal),
         w: d3.warnungen.filter((w2) => w2.g === g2.id)
       });
@@ -2396,6 +2396,7 @@ function geraeteZeilen(p4) {
         weg: leer(z2),
         status: "aktiv",
         bat: zahl(s4.batterie) ? Number(s4.batterie) : null,
+        batStufe: s4.batterie_stufe || null,
         sig: zahlVon(l4.signal),
         w: d3.warnungen.filter((w2) => w2.key && w2.key.endsWith(":" + s4.entity_id))
       });
@@ -2410,7 +2411,7 @@ var zaehlen = (X) => ({
   bat: X.filter((x2) => x2.w.some((w2) => /Batterie/.test(w2.titel))).length,
   nicht: X.filter((x2) => x2.status !== "aktiv").length
 });
-var batterie = (b3) => b3 === null ? A : b2`<span class=${b3 < 10 ? "rot-t" : b3 < BATTERIE_SCHWACH ? "amber-t" : "leise"} title="Batterie">🔋 ${de(b3, 0)} %</span>`;
+var batterie = (x2) => x2.bat === null ? A : b2`<span class=${x2.batStufe === "kritisch" ? "rot-t" : x2.batStufe === "schwach" ? "amber-t" : "leise"} title="Batterie">🔋 ${de(x2.bat, 0)} %</span>`;
 var signal = (db) => db === null ? A : o5(sigHtml(db));
 var oeffnen = (p4, x2) => x2.art === "schalt" ? p4.geraetOeffnen(x2.b.id, x2.id) : p4.sensorOeffnen(x2.b.id, x2.eid);
 function zeile(p4, x2) {
@@ -2418,7 +2419,7 @@ function zeile(p4, x2) {
       <span class="ger-ic">${x2.ic}<i class="ger-punkt ${x2.weg ? "weg" : "da"}" title=${x2.weg ? "nicht erreichbar" : "erreichbar"}></i></span>
       <div><b>${x2.name}${ST_TEXT2[x2.status] ? b2` <span class="g-st ${x2.status}">${ST_TEXT2[x2.status]}</span>` : A}</b>
         <div class="leise">${x2.unter}${x2.np ? " · 🛟 Notprogramm" : ""}</div>${x2.w.map((w2) => b2`<div class="g-w ${w2.stufe}">⚠ ${w2.titel}</div>`)}</div>
-      <span class="ger-z ${x2.weg ? "rot-t" : ""}">${x2.zustand}<span class="g-z2">${batterie(x2.bat)}${x2.weg ? A : signal(x2.sig)}</span></span><span class="chev">›</span></button>`;
+      <span class="ger-z ${x2.weg ? "rot-t" : ""}">${x2.zustand}<span class="g-z2">${batterie(x2)}${x2.weg ? A : signal(x2.sig)}</span></span><span class="chev">›</span></button>`;
 }
 function uebersicht(p4) {
   const X = geraeteZeilen(p4), Z2 = zaehlen(X), f3 = p4.s.gerFilter || "alle";
@@ -2455,7 +2456,7 @@ function geraeteGruppeVorlage(p4) {
 function sensorLeisteVorlage(p4, b3) {
   const X = geraeteZeilen(p4).filter((x2) => x2.b === b3 && x2.art === "sensor");
   return X.length ? b2`<div class="glas-panel g-sensoren">${X.map((x2) => b2`<button class="chip g-sensor ${x2.weg ? "weg" : ""} ${x2.w.length ? "warn" : ""}" data-eid=${x2.eid}
-      @click=${() => oeffnen(p4, x2)}>${x2.ic} ${x2.name} · ${x2.zustand} ${batterie(x2.bat)}${x2.weg ? A : signal(x2.sig)}</button>`)}</div>` : A;
+      @click=${() => oeffnen(p4, x2)}>${x2.ic} ${x2.name} · ${x2.zustand} ${batterie(x2)}${x2.weg ? A : signal(x2.sig)}</button>`)}</div>` : A;
 }
 function jetztVorlage(p4, x2) {
   const zl = (k2, v2) => b2`<div class="zeile"><span>${k2}</span><span class="leise g-wert">${v2}</span></div>`;
@@ -2464,7 +2465,7 @@ function jetztVorlage(p4, x2) {
       ${zl("Zustand", b2`<span class=${x2.weg ? "rot-t" : ""}>${x2.zustand}</span>`)}
       ${zl("Erreichbar", b2`<i class="ger-punkt-i ${x2.weg ? "weg" : "da"}"></i> ${x2.weg ? "nein" : "ja"}`)}
       ${x2.weg || x2.sig === null ? A : zl("Signal", b2`${signal(x2.sig)} ${de(x2.sig, 0)} dBm`)}
-      ${x2.bat !== null ? zl("Batterie", batterie(x2.bat)) : A}
+      ${x2.bat !== null ? zl("Batterie", batterie(x2)) : A}
       ${href ? b2`<a class="zeile" href=${href} target="_blank" rel="noopener"><span>${l4.geraet || "Gerät"}${l4.modell ? b2` <span class="leise">· ${l4.modell}</span>` : A}</span><span class="blau">${l4.web ? "Website" : "in Home Assistant"} ↗</span></a>` : A}
       ${x2.np ? zl("Notprogramm", `🛟 ${{ bereit: "bereit", not: "im Notbetrieb", fehler: "Fehler", aus: "aus", offen: "noch nicht geprüft" }[x2.np.zustand] || x2.np.zustand || "–"}`) : A}</div>
     ${x2.w.length ? b2`<div class="glas-panel liste g-liste"><div class="gruppe">Warnungen · ${x2.w.length}</div>${x2.w.map((w2) => b2`<div class="zeile g-wz"><div><b class=${w2.stufe === "stoerung" ? "rot-t" : "amber-t"}>⚠ ${w2.titel}</b>${w2.hilfe ? b2`<div class="leise">${w2.hilfe}</div>` : A}</div>
@@ -2932,12 +2933,12 @@ function kopfChips(p4, b3) {
   });
   for (const [i7, f3] of (b3.symbol && b3.symbol.fenster || []).entries()) if (f3.sensor && f3.zustand && f3.zustand !== "zu")
     L2.push({ k: `fenster${i7}`, g: "fenster", ic: "🪟", ton: "amber", lang: `Fenster ${f3.zustand}`, kurz: f3.zustand, info: `Fenster (${p4.name(f3.sensor)}): ${f3.zustand}` });
-  for (const s4 of b3.sensoren || []) if (s4.art === "fuehler" && zahl(s4.batterie) && s4.batterie < BATTERIE_SCHWACH)
+  for (const s4 of b3.sensoren || []) if (s4.art === "fuehler" && zahl(s4.batterie) && s4.batterie_stufe)
     L2.push({
       k: `bat-${s4.entity_id}`,
       g: "bat",
       ic: "🔋",
-      ton: s4.batterie < 10 ? "rot" : "amber",
+      ton: s4.batterie_stufe === "kritisch" ? "rot" : "amber",
       lang: `Fühler schwach ${de(s4.batterie, 0)} %`,
       kurz: `${de(s4.batterie, 0)} %`,
       info: `${s4.name || p4.name(s4.entity_id)}: Batterie ${de(s4.batterie, 0)} % – bald tauschen`
@@ -6283,7 +6284,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.159";
+var SEITE_VERSION = "0.8.160";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -6686,6 +6687,8 @@ var BaustellePanel = class extends i4 {
     const j2 = J - versatz;
     return { von: `${j2}-01-01`, bis: `${j2 + 1}-01-01`, periode: "month", n: 12, labels: MONATE, index: (l4) => +l4.slice(0, 4) === j2 ? +l4.slice(5, 7) - 1 : -1, jahr: j2 };
   }
+  /* Statistik-IDs der Seite; „ohne Automatik“ (energie_ohne_automatik) nicht mehr – Kachel Gespart und Auswertung lesen
+     summen.ohne_automatik und gespart_reihen aus baustelle/auswertung (0.8.152/153) */
   statIds(d3, mitTemp) {
     const ids = [];
     for (const b3 of d3.bereiche) {
@@ -6697,7 +6700,6 @@ var BaustellePanel = class extends i4 {
       for (const g2 of b3.geraete) if (g2.rolle === "pumpe") ids.push(this.eid(d3, g2.id, "pumpzeit"), this.eid(d3, g2.id, "pumpzyklen"));
       if (mitTemp && b3.fuehler) ids.push(b3.fuehler);
     }
-    ids.push(this.eid(d3, d3.entry, "energie_ohne_automatik"));
     if (mitTemp) ids.push(this.eid(d3, d3.entry, "aussen"));
     return [...new Set(ids.filter(Boolean))].sort();
   }

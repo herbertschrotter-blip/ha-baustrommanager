@@ -8,7 +8,9 @@ eigenen Sensor hat. Dieselbe Liste gilt überall: Pause der Heizung, Beobachten,
 Regeln:
 - Jede Tür und jedes Fenster pausiert wie früher der Türkontakt – offen oder gekippt (der Kontakt meldet bei beidem
   „offen“; Herbert 09.10.2026: Fenster nach derselben Regel). Maßgeblich ist der am längsten offene Kontakt.
-- Batterie schwach: unter der Grenze aus den Meldungen (Prozent) – je Sensor eine Warnung.
+- Batterie (Prozent) in zwei Stufen, `batterie_stufe`: unter `BATTERIE_KRITISCH` (10 %) „kritisch“ – je Sensor eine
+  Warnung `fuehler_fehlt` (logik/warnungen) –, unter `BATTERIE_SCHWACH` (25 %) „schwach“ – nur Anzeige (Geräteliste,
+  Kopf der Container-Ansicht, rot bei kritisch). Die Seite bekommt die Stufe fertig (`struktur.bereiche[].sensoren[]`).
 """
 
 from __future__ import annotations
@@ -74,5 +76,14 @@ def offen_seit(zeiten: Iterable[datetime | None]) -> datetime | None:
     return min(offen) if offen else None
 
 
-def batterie_schwach(prozent: float | None, grenze: float) -> bool:
-    return prozent is not None and prozent < grenze
+BATTERIE_SCHWACH = 25.0    # % – Anzeige „schwach“
+BATTERIE_KRITISCH = 10.0   # % – „kritisch“, ab hier warnt die Integration (fuehler_fehlt, logik/warnungen)
+
+
+def batterie_stufe(prozent: float | None) -> str | None:
+    """None (ok oder unbekannt), „schwach“ (< BATTERIE_SCHWACH) oder „kritisch“ (< BATTERIE_KRITISCH)."""
+    if prozent is None:
+        return None
+    if prozent < BATTERIE_KRITISCH:
+        return "kritisch"
+    return "schwach" if prozent < BATTERIE_SCHWACH else None

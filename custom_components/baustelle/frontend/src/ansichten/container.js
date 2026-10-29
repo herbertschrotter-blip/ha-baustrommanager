@@ -5,7 +5,7 @@ import { html, nothing } from 'lit';
 import { sensorLeisteVorlage } from './geraete.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { TAGE, de, kurzDatum, minu, naechsterTermin, plusTage, uhr, wtag, zahl } from '../hilfen.js';
-import { BATTERIE_SCHWACH, FARBE, MODI, TEXT, WIEDER, kwVon } from '../tabellen.js';
+import { FARBE, MODI, TEXT, WIEDER, kwVon } from '../tabellen.js';
 import { IC_MINUS, IC_PLUS, IC_POWER } from '../symbole.js';
 import { schalterVorlage } from './allgemein.js';
 import { zeitraumVorlage } from './zeitraum.js';
@@ -25,7 +25,7 @@ function rad(p, b) {
 /* ---------- Kopf der Container-Ansicht (Mockup container-kopf.html, Variante D2, Herbert 28.10.2026) ----------
    Rad ganz links mit Soll und Gefühl darunter, rechts Name und die Gruppen als Kästchen: Steuerung · Jetzt · Plan · Lernen ·
    Hinweise (nur wenn da). Jeder Chip zeigt ein Feld, das die Integration liefert (laufzeit.container.<id>: text, tuer,
-   boost_bis, modus, lernen, soll, symbol.fenster; struktur: sensoren[].batterie); Antippen zeigt den Satz, den die Seite
+   boost_bis, modus, lernen, soll, symbol.fenster; struktur: sensoren[].batterie, batterie_stufe); Antippen zeigt den Satz, den die Seite
    schon schreibt (TEXT, cRegelText, warmText, offenText, Tür-Zeile, Soll-Zeile). Handy: kurze Chips (.ck-k). */
 const ZUST_IC = { heizt: '🔥', pause: '⏸', aus: '○', frost: '❄', trocknen: '👕', offline: '⚠', bereit: '💤' };
 const ZUST_KURZ = { heizt: 'heizt', pause: 'Pause', aus: 'aus', frost: 'Frost', trocknen: 'trocknet', offline: 'offline', bereit: 'bereit' };
@@ -93,8 +93,8 @@ function kopfChips(p, b) {
     info: `${b.tuer.sensor}: offen seit ${b.tuer.offen} min – Heizung pausiert nach ${d.e.tuer_pause} min, Meldung nach ${d.e.tuer_melden} min` });
   for (const [i, f] of ((b.symbol && b.symbol.fenster) || []).entries()) if (f.sensor && f.zustand && f.zustand !== 'zu')
     L.push({ k: `fenster${i}`, g: 'fenster', ic: '🪟', ton: 'amber', lang: `Fenster ${f.zustand}`, kurz: f.zustand, info: `Fenster (${p.name(f.sensor)}): ${f.zustand}` });
-  for (const s of b.sensoren || []) if (s.art === 'fuehler' && zahl(s.batterie) && s.batterie < BATTERIE_SCHWACH)   // Grenze wie die Geräteliste
-    L.push({ k: `bat-${s.entity_id}`, g: 'bat', ic: '🔋', ton: s.batterie < 10 ? 'rot' : 'amber', lang: `Fühler schwach ${de(s.batterie, 0)} %`, kurz: `${de(s.batterie, 0)} %`,
+  for (const s of b.sensoren || []) if (s.art === 'fuehler' && zahl(s.batterie) && s.batterie_stufe)   // Stufe von der Integration (wie die Geräteliste)
+    L.push({ k: `bat-${s.entity_id}`, g: 'bat', ic: '🔋', ton: s.batterie_stufe === 'kritisch' ? 'rot' : 'amber', lang: `Fühler schwach ${de(s.batterie, 0)} %`, kurz: `${de(s.batterie, 0)} %`,
       info: `${s.name || p.name(s.entity_id)}: Batterie ${de(s.batterie, 0)} % – bald tauschen` });
   if (lern) {
     const w = lern.warm;

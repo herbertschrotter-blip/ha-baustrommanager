@@ -1039,6 +1039,13 @@ async def test_geraete_links(hass: HomeAssistant, baustelle) -> None:
     assert links["switch.hk1"]["ha"] == f"/config/devices/device/{shelly.id}" and links["switch.hk1"]["signal"] == "sensor.hk1_signal"
     assert links["sensor.temp_c1"]["web"] is None and links["sensor.temp_c1"]["batterie"] == "sensor.temp_c1_batterie"
     assert links["sensor.aussen"] == {"web": None, "ha": None, "geraet": None, "hersteller": None, "modell": None, "batterie": None, "signal": None}
+    # Batterie-Stufe je Sensor fertig von der Integration (logik/sensoren.batterie_stufe): die Seite rechnet nichts
+    fuehler = lambda: next(x for b in struktur(hass, baustelle)["bereiche"] if b["id"] == C1 for x in b["sensoren"] if x["art"] == "fuehler")
+    for wert, stufe in (("90", None), ("25", None), ("24", "schwach"), ("10", "schwach"), ("9", "kritisch")):
+        hass.states.async_set("sensor.temp_c1_batterie", wert)
+        assert (fuehler()["batterie"], fuehler()["batterie_stufe"]) == (float(wert), stufe), wert
+    hass.states.async_set("sensor.temp_c1_batterie", "unknown")
+    assert fuehler()["batterie"] is None and fuehler()["batterie_stufe"] is None
 
 
 async def test_fairer_vergleich_zaehlt_nur_im_thermostat(hass: HomeAssistant, baustelle, freezer, shellys) -> None:

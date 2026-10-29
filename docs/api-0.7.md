@@ -18,8 +18,11 @@ Zeiten: ISO 8601 mit Zeitzone; Uhrzeiten `"HH:MM"`; Minuten seit Mitternacht als
                 "beginn": "2026-09-08", "beginn_auto": false},   // geltender Beginn; auto = ohne `beginn` → Tag der Anlage (AN-0002)
   "entitaeten": {"<unique_id>": "<entity_id>"},
   "bereiche": [{"id": "", "name": "", "art": "container|pumpenschacht", "fuehler": "sensor.x|null", "nr": 0,
-                "sensoren": [{"art": "fuehler|tuer|fenster|licht", "entity_id": "", "nr": 1, "name": "Tür 1", "batterie": 87}]}],
-                // sensoren (0.8.118, BSM-034.03): die eine Liste aus Fühler, Türkontakt (= Tür 1) und Aussehen; batterie in % oder null
+                "sensoren": [{"art": "fuehler|tuer|fenster|licht", "entity_id": "", "nr": 1, "name": "Tür 1", "batterie": 87,
+                              "batterie_stufe": null}]}],
+                // sensoren (0.8.118, BSM-034.03): die eine Liste aus Fühler, Türkontakt (= Tür 1) und Aussehen; batterie in % oder null;
+                // batterie_stufe null|"schwach"|"kritisch" (logik/sensoren.batterie_stufe: < 25 % schwach, < 10 % kritisch) –
+                // die Seite färbt danach (Geräteliste, Hinweise im Container-Kopf) und kennt keine Grenze
   "geraete": [{"id": "", "name": "", "bereich": "", "schalter": "switch.x", "rolle": "heizung|trockner|pumpe|steckdose",
                "typ": "oelradiator|konvektor|…", "leistung": "sensor.x|null", "energie": "sensor.x|null", "nenn_kw": 2.0}],
   "einstellungen": {"…": "Store v2 ohne zaehler, protokoll, meldungen, laufzeit (siehe bauplan §1)"},
@@ -145,8 +148,9 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
 - Die Seite liest außer `struktur` nur die Langzeitstatistik (`recorder/statistics_during_period`, `change` bzw. `mean`)
   dieser Entitäten (Schlüssel in `entitaeten`): je Container `<bid>_energie` (Verbrauch, Abrechnung, Bericht-Beispiel),
   `<bid>_heizzeit` (Heizzeit), je Pumpe `<gid>_pumpzeit`, `<gid>_pumpzyklen`; je Baustelle `<entry>_energie`
-  (Verlauf, Monate; Heiztage nur, wenn `zaehler.heiztage` fehlt), `<entry>_energie_ohne_automatik` („Ohne Automatik“), `<entry>_aussen` (Außen-Linie,
-  Wetter-Einfluss); Zustand von `<entry>_ersparnis`, `<entry>_energie_<typ>`/`<entry>_heizzeit_<typ>` (Vergleich
+  (Verlauf, Monate; Heiztage nur, wenn `zaehler.heiztage` fehlt), `<entry>_aussen` (Außen-Linie,
+  Wetter-Einfluss); „Ohne Automatik“ nicht aus der Statistik, sondern aus `baustelle/auswertung` (`summen.ohne_automatik`,
+  `gespart_reihen`); Zustand von `<entry>_ersparnis`, `<entry>_energie_<typ>`/`<entry>_heizzeit_<typ>` (Vergleich
   Ölradiator/Konvektor) und die Fühler der Container (`mean` je Stunde). Aus `zaehler`: `energie`, `kosten`, `ohne`,
   `energie_heizen`, `aufheiz:<bid>`, `abkuehl:<bid>` (°C/h).
 - Gemessene Heizzeiten: `history/history_during_period` der `leistung`-Sensoren (ohne Sensor: `schalter`) ab Montag
@@ -633,5 +637,6 @@ Tür und jedes Fenster (offen oder gekippt) pausiert wie früher der Türkontakt
 `laufzeit.container.<id>.tuer` = `{offen, seit}` über alle Kontakte (null ohne Kontakt). Alle Sensoren werden beobachtet,
 als fehlend gemeldet (Reparatur-Hinweis), stehen in `geraete_links`, im Mitschreiben (`tuer_offen_s` = irgendein Kontakt
 offen; Ereignis `tuer` mit `sensor`) und im Inventar (Bestand, Vorschau; Zuordnen eines Tür- oder Fensterkontakts trägt ihn
-ins Aussehen ein). Batterie unter der Grenze der Meldungen: Warnung `fuehler_fehlt` je Sensor („Tür 1: Batterie schwach,
-5 %“, Schlüssel `fuehler_fehlt:<bereich>:<entity_id>`).
+ins Aussehen ein). Batterie-Stufe `logik/sensoren.batterie_stufe` (Grenzen `BATTERIE_SCHWACH` 25 %, `BATTERIE_KRITISCH`
+10 %, je genau einmal): `sensoren[].batterie_stufe` für die Anzeige; bei „kritisch“ Warnung `fuehler_fehlt` je Sensor
+(„Tür 1: Batterie schwach, 5 %“, Schlüssel `fuehler_fehlt:<bereich>:<entity_id>`), „schwach“ zeigt nur die Seite.

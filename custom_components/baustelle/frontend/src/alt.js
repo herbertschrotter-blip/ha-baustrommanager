@@ -1237,6 +1237,8 @@ class BaustellePanel extends LitElement {
     const j = J - versatz;
     return { von: `${j}-01-01`, bis: `${j + 1}-01-01`, periode: 'month', n: 12, labels: MONATE, index: l => +l.slice(0, 4) === j ? +l.slice(5, 7) - 1 : -1, jahr: j };
   }
+  /* Statistik-IDs der Seite; „ohne Automatik“ (energie_ohne_automatik) nicht mehr – Kachel Gespart und Auswertung lesen
+     summen.ohne_automatik und gespart_reihen aus baustelle/auswertung (0.8.152/153) */
   statIds(d, mitTemp) {
     const ids = [];
     for (const b of d.bereiche) {
@@ -1246,7 +1248,6 @@ class BaustellePanel extends LitElement {
       for (const g of b.geraete) if (g.rolle === 'pumpe') ids.push(this.eid(d, g.id, 'pumpzeit'), this.eid(d, g.id, 'pumpzyklen'));
       if (mitTemp && b.fuehler) ids.push(b.fuehler);
     }
-    ids.push(this.eid(d, d.entry, 'energie_ohne_automatik'));
     if (mitTemp) ids.push(this.eid(d, d.entry, 'aussen'));
     return [...new Set(ids.filter(Boolean))].sort();
   }

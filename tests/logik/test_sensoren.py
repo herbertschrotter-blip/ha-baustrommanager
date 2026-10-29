@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from logik.sensoren import aus_einstellungen, batterie_schwach, kontakte, offen_seit, sensoren
+from logik.sensoren import BATTERIE_KRITISCH, BATTERIE_SCHWACH, aus_einstellungen, batterie_stufe, kontakte, offen_seit, sensoren
 
 SYM = {"tueren": [{"wand": "front", "pos": 0.15, "sensor": None}, {"wand": "seite", "pos": 0.5, "sensor": "binary_sensor.t2"}],
        "fenster": [{"wand": "front", "pos": 0.67, "sensor": None}, {"wand": "front", "pos": 0.85, "sensor": "binary_sensor.f2"}],
@@ -34,7 +34,10 @@ def test_offen_seit_und_batterie() -> None:
     t = datetime(2026, 10, 9, 8, 0)
     assert offen_seit([None, t + timedelta(minutes=5), t]) == t   # der am längsten offene zählt
     assert offen_seit([None, None]) is None and offen_seit([]) is None
-    assert batterie_schwach(9, 10) and not batterie_schwach(10, 10) and not batterie_schwach(None, 10)
+    # zwei Stufen, je Grenze genau einmal (kritisch = Grenze der Warnung fuehler_fehlt)
+    assert (BATTERIE_KRITISCH, BATTERIE_SCHWACH) == (10.0, 25.0)
+    assert [batterie_stufe(x) for x in (None, 100, 25, 24.9, 10, 9.9, 0)] == [
+        None, None, None, "schwach", "schwach", "kritisch", "kritisch"]
 
 
 def test_aus_einstellungen() -> None:

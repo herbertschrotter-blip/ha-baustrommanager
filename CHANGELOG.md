@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.160] – 2026-10-29
+
+- Aufräumen: Ab wann eine Fühler-Batterie „schwach“ (unter 25 %) oder „kritisch“ (unter 10 %) ist, entscheidet jetzt
+  die Integration – eine Regel in `logik/sensoren.py`, die auch die Warnung nutzt; die Seite zeigt nur noch die Stufe
+  (`batterie_stufe`) im Container-Kopf und in der Geräteliste. Die Seite fragt die Statistik „ohne Automatik“ nicht mehr
+  ab; sie wird seit der Kachel „Gespart“ (0.8.152) nicht mehr gebraucht.
+
 ## [0.8.159] – 2026-10-29
 
 - FE-0033 / J4b – Baseline-Läufe sichtbar (Mockup `baseline.html` Variante B, abgenommen 29.10.2026): Die Testläufe

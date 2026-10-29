@@ -125,14 +125,16 @@
       "entity_id": "sensor.polier_temperatur",
       "nr": 1,
       "name": "Fühler",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      },
      {
       "art": "tuer",
       "entity_id": "binary_sensor.tuer_polier",
       "nr": 1,
       "name": "Tür 1",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },
@@ -148,7 +150,8 @@
       "entity_id": "sensor.mannschaft_temperatur",
       "nr": 1,
       "name": "Fühler",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },
@@ -164,7 +167,8 @@
       "entity_id": "binary_sensor.tuer_magazin",
       "nr": 1,
       "name": "Tür 1",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },
@@ -180,7 +184,8 @@
       "entity_id": "sensor.sanitaer_temperatur",
       "nr": 1,
       "name": "Fühler",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },
@@ -204,7 +209,8 @@
       "entity_id": "sensor.besprechung_temperatur",
       "nr": 1,
       "name": "Fühler",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },
@@ -3931,7 +3937,8 @@
       "entity_id": "sensor.k_polier_temperatur",
       "nr": 1,
       "name": "Fühler",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },
@@ -3947,7 +3954,8 @@
       "entity_id": "sensor.k_mannschaft_temperatur",
       "nr": 1,
       "name": "Fühler",
-      "batterie": null
+      "batterie": null,
+      "batterie_stufe": null
      }
     ]
    },

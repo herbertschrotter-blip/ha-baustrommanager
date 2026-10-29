@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.160",
+    "datum": "2026-10-29",
+    "punkte": [
+      "Aufräumen: Ab wann eine Fühler-Batterie „schwach“ (unter 25 %) oder „kritisch“ (unter 10 %) ist, entscheidet jetzt die Integration – eine Regel in `logik/sensoren.py`, die auch die Warnung nutzt; die Seite zeigt nur noch die Stufe (`batterie_stufe`) im Container-Kopf und in der Geräteliste. Die Seite fragt die Statistik „ohne Automatik“ nicht mehr ab; sie wird seit der Kachel „Gespart“ (0.8.152) nicht mehr gebraucht."
+    ]
+  },
+  {
     "version": "0.8.159",
     "datum": "2026-10-29",
     "punkte": [
