@@ -73,6 +73,14 @@ const aufrufZahl = page => page.evaluate(() => window.baustelleBeispiel.TEST.auf
 const ruhig = async (page, sel, innen, prop) => { await warte(400); let alt = null, gleich = 0;
   for (let i = 0; i < 40; i++) { const w = await page.evaluate((sel, innen, prop) => document.querySelector(sel).shadowRoot.querySelector(innen)[prop], sel, innen, prop);
     gleich = w === alt ? gleich + 1 : 0; if (gleich >= 2) return w; alt = w; await warte(120); } return alt; };
+// Mausrad an der Mausposition drehen und warten, bis es angekommen ist: erst die Ruhelage, dann das Rad, dann warten, bis sich die
+// Position geändert hat (unter Last kommt das Rad-Ereignis erst nach über einer Sekunde an – eine feste Wartezeit las
+// dann noch die alte Position, BSM-035), dann wieder die Ruhelage. Kommt nichts an (Ende der Fläche), zählt die Ruhelage.
+const rad = async (page, sel, innen, prop, delta) => { const vorher = await ruhig(page, sel, innen, prop);
+  await page.mouse.wheel(delta);
+  await page.waitForFunction((sel, innen, prop, vorher) => document.querySelector(sel).shadowRoot.querySelector(innen)[prop] !== vorher,
+    { timeout: 10000, polling: 'raf' }, sel, innen, prop, vorher).catch(() => {});
+  return ruhig(page, sel, innen, prop); };
 const bild = async (page, name) => { if (BILDER) await page.screenshot({ path: join(BILDER, name + '.jpg'), type: 'jpeg', quality: 70, clip: { x: 0, y: 0, width: 1400, height: 1000 } }); };
 
 async function fall(name, browser, ablauf, himmel) {
@@ -153,8 +161,8 @@ await fall('B2 Eingabeschutz', browser, async (page, erwarte) => {
 await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
   const update = (sel, wert) => panel(page, sel, async () => { BB.welt[0].bereiche[0].name = a0; await p._laden(); await new Promise(r => setTimeout(r, 150)); return sr.querySelector('.ui').textContent.includes(a0); }, wert);
   // Hauptansicht (Desktop)
-  await page.mouse.move(900, 600); await page.mouse.wheel({ deltaY: 500 });
-  const vor = await ruhig(page, D, '.scroll', 'scrollTop');
+  await page.mouse.move(900, 600);
+  const vor = await rad(page, D, '.scroll', 'scrollTop', { deltaY: 500 });
   const neu1 = await update(D, 'Polier-Container');
   const nach = await ruhig(page, D, '.scroll', 'scrollTop');
   erwarte('Hauptansicht: Position bleibt (±1 px)', vor > 50 && Math.abs(nach - vor) <= 1 && neu1, `vor ${vor}, nach ${nach}, verarbeitet ${neu1}`);
@@ -162,8 +170,7 @@ await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .warn-chip`); await warte(900);   // Einblendung fährt ein
   const sbox = await (await page.$(`${D} >>> .sheet.an`)).boundingBox();
   await page.mouse.move(sbox.x + sbox.width / 2, sbox.y + Math.min(sbox.height, 800) / 2); await warte(150);
-  for (let i = 0; i < 3 && await ruhig(page, D, '.sheet', 'scrollTop') < 20; i++) await page.mouse.wheel({ deltaY: 300 });
-  await ruhig(page, D, '.sheet', 'scrollTop');
+  for (let i = 0; i < 3 && await ruhig(page, D, '.sheet', 'scrollTop') < 20; i++) await rad(page, D, '.sheet', 'scrollTop', { deltaY: 300 });
   const unter = await panel(page, D, () => { const t = sr.elementFromPoint(a0, a1); return t ? t.tagName + '.' + t.className : String(t); }, sbox.x + sbox.width / 2, sbox.y + Math.min(sbox.height, 800) / 2);
   const svor = await panel(page, D, () => ({ top: sr.querySelector('.sheet').scrollTop, hoch: sr.querySelector('.sheet').scrollHeight - sr.querySelector('.sheet').clientHeight }));
   const neu2 = await update(D, 'Polier-Contain3r');
@@ -174,8 +181,8 @@ await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
   await klick(page, `${T} >>> nav button[data-v="einst"]`);
   await klick(page, `${T} >>> .ev-chips [data-v="firmen"]`); await warte(200);
   const box = await (await page.$(`${T} >>> .ev-chips`)).boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.wheel({ deltaX: 30 });
-  const cvor = await ruhig(page, T, '.ev-chips', 'scrollLeft');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const cvor = await rad(page, T, '.ev-chips', 'scrollLeft', { deltaX: 30 });
   const neu3 = await update(T, 'Polier-Contain4r');
   const cnach = await ruhig(page, T, '.ev-chips', 'scrollLeft');
   erwarte('Chipleiste: Position bleibt (±1 px)', cvor > 0 && Math.abs(cnach - cvor) <= 1, `vor ${cvor}, nach ${cnach}, verarbeitet ${neu3}`);
@@ -186,7 +193,7 @@ await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
    (2) neuer Sensorwert bei offener Einblendung → angekommen, aber Diagramm unverändert (heutige Unterdrückung) */
 await fall('B4 Container live', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .glas-k[data-id="polier"]`); await warte(400);
-  await page.mouse.move(900, 600); await page.mouse.wheel({ deltaY: 200 }); await ruhig(page, D, '.scroll', 'scrollTop');
+  await page.mouse.move(900, 600); await rad(page, D, '.scroll', 'scrollTop', { deltaY: 200 });
   const merken = () => panel(page, D, () => { window.__rest = [sr.querySelector('.ck-d .ckd-name'), sr.querySelector('.ck-d .ck-chip.modus'), sr.querySelector('.c-chip .c-power'), sr.querySelector('.c-live .seg button')]; window.__wrap = sr.querySelector('.c-live .chart-wrap');
     return { w: window.__wrap.innerHTML, k: sr.querySelector('.c-live-kennz').textContent, scroll: sr.querySelector('.scroll').scrollTop, lg: p._liveGezeichnet || 0 }; });
   const zustand = (statistik) => panel(page, D, () => {
