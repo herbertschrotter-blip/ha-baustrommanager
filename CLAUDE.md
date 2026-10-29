@@ -8,7 +8,7 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 
 - **Quelle der Wahrheit ist dieses Repo.** In `/config` nur über `tools/deploy.sh` ausliefern, dort nie direkt ändern.
   Direkt in `custom_components/**` von `/config` schreibt Claude nicht; eingespielt wird nur mit `tools/deploy.sh`, das
-  Claude selbst ausführt (Herbert, 29.10.2026), danach Neustart mit dem Skill neustart (prüft die Konfiguration, stimmt sich mit den anderen Claude-Sitzungen ab).
+  Claude selbst ausführt (Herbert, 29.10.2026), danach Neustart mit dem Skill neustart (prüft die Konfiguration, prüft still, ob in einer anderen Claude-Sitzung etwas läuft; keine Nachrichten an andere Sitzungen).
 - **Bewährte Lösungen statt Eigenbau** (Herbert, 29.09.2026): Aufbau nach `integration_blueprint` und den Kern-Helfern
   (Vorbild `bayesian`: Subentries, Update-Listener mit Reload); eingebaute Integrationen nutzen, wo es sie gibt
   (Feiertage/`holiday`, lokaler Kalender, `weather.get_forecasts`, `notify.mobile_app_*`, später `history_stats`).
