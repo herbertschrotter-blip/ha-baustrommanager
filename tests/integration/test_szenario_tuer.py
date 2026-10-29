@@ -423,6 +423,36 @@ async def test_trotzdem_heizen_ueberlebt_neuladen(hass: HomeAssistant, baustelle
     assert C1 not in Heizung.von(st).tuer_trotzdem and st.lz["tuer_trotzdem"] == []
 
 
+async def test_tuer_offen_ueberlebt_neustart(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
+    """FE-0036/37: Tür seit 10:00 offen, um 12:00 startet HA neu – der Kontakt meldet sich mit neuem Wechsel (HA setzt
+    last_changed neu). Die Pause läuft weiter, offen seit 10:00. Fehlt der Kontakt beim Start kurz, vergisst die Warnung
+    „schon gemeldet“ (wie bisher) – die erneute Nachricht nennt jetzt die richtige Dauer."""
+    st = baustelle.runtime_data
+    await _start(hass, freezer, st)
+    await _tuer(hass, TUER1, "on")
+    await _zu(hass, freezer, "10:10:00", st)
+    assert not _an(hass, "switch.hk1") and len(_tuer_nachr(nachrichten)) == 1
+    freezer.move_to(_um("12:00:00"))
+    assert await hass.config_entries.async_reload(baustelle.entry_id)
+    await hass.async_block_till_done()
+    shellys.anmelden()
+    st = baustelle.runtime_data
+    freezer.move_to(_um("12:01:00"))
+    hass.states.async_remove(TUER1)
+    await _tuer(hass, TUER1, "on")                                   # neuer last_changed wie nach dem HA-Neustart
+    await _zu(hass, freezer, "12:01:30", st)
+    assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "tuer_offen"
+    assert _c(hass, baustelle)["tuer"] == {"offen": True, "seit": dt_util.parse_datetime(_um("10:00:00")).isoformat()}
+    assert _tuer_nachr(nachrichten)[1:] == ["🚪 Container 1: Tür seit 121 min offen"]
+    # Tür zu: Merker weg, nächste Öffnung zählt neu
+    await _tuer(hass, TUER1, "off")
+    await _zu(hass, freezer, "12:20:00", st)
+    assert _an(hass, "switch.hk1") and TUER1 not in st.lz["kontakt_offen"]
+    await _tuer(hass, TUER1, "on")
+    await _zu(hass, freezer, "12:21:00", st)
+    assert _an(hass, "switch.hk1")
+
+
 # ====================================================================== Türkontakt nicht erreichbar
 async def test_kontakt_unavailable_gilt_als_zu(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
     """FRAGE: Kontakt geht während der Pause auf „unavailable“ → gilt als zu: Heizung läuft sofort wieder,

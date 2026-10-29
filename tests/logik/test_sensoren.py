@@ -2,7 +2,9 @@
 
 from datetime import datetime, timedelta
 
-from logik.sensoren import BATTERIE_KRITISCH, BATTERIE_SCHWACH, aus_einstellungen, batterie_stufe, kontakte, offen_seit, sensoren
+from logik.sensoren import (
+    ANLAUF, BATTERIE_KRITISCH, BATTERIE_SCHWACH, aus_einstellungen, batterie_stufe, kontakte, offen_merken, offen_seit, sensoren,
+)
 
 SYM = {"tueren": [{"wand": "front", "pos": 0.15, "sensor": None}, {"wand": "seite", "pos": 0.5, "sensor": "binary_sensor.t2"}],
        "fenster": [{"wand": "front", "pos": 0.67, "sensor": None}, {"wand": "front", "pos": 0.85, "sensor": "binary_sensor.f2"}],
@@ -43,3 +45,37 @@ def test_offen_seit_und_batterie() -> None:
 def test_aus_einstellungen() -> None:
     assert aus_einstellungen("sensor.temp", {"tuer": "binary_sensor.t1", "symbol": SYM}) == sensoren("sensor.temp", "binary_sensor.t1", SYM)
     assert [s.art for s in aus_einstellungen(None, {})] == []
+
+
+# ---------------------------------------------------------------- FE-0036/37: offen seit übersteht einen Neustart
+T0 = datetime(2026, 10, 29, 13, 0)      # Tür auf
+START = datetime(2026, 10, 29, 15, 20)  # HA neu gestartet
+
+
+def test_neustart_behaelt_die_oeffnungszeit() -> None:
+    """Der Fall aus FE-0036: Tür seit 13:00 offen, HA startet 15:20 neu und setzt den Wechsel auf 15:21 –
+    offen bleibt seit 13:00 (nicht „1 min“)."""
+    seit, merker = offen_merken(None, True, T0, T0 - timedelta(hours=5))
+    assert seit == T0 and merker == (T0, T0)
+    neu = START + timedelta(minutes=1)
+    seit, merker = offen_merken(merker, True, neu, START)
+    assert seit == T0 and merker == (T0, neu)
+    # danach unverändert, auch lange nach dem Anlauf
+    assert offen_merken(merker, True, neu, START)[0] == T0
+    assert offen_merken(merker, True, neu, START - timedelta(hours=1))[0] == T0
+    # Kontakt meldete sich kurz vor dem Start der Integration (HA lädt ihn zuerst): auch Neustart
+    assert offen_merken((T0, T0), True, START - ANLAUF, START)[0] == T0
+
+
+def test_neuer_wechsel_ausserhalb_des_anlaufs_ist_eine_neue_oeffnung() -> None:
+    merker = (T0, T0)
+    for t in (START + ANLAUF + timedelta(seconds=1), START - ANLAUF - timedelta(seconds=1)):
+        assert offen_merken(merker, True, t, START) == (t, (t, t))
+
+
+def test_zu_vergisst_nicht_erreichbar_behaelt() -> None:
+    merker = (T0, T0)
+    assert offen_merken(merker, False, START, START) == (None, None)
+    assert offen_merken(merker, None, START, START) == (None, merker)   # gilt als zu, Merker bleibt
+    assert offen_merken(merker, True, None, START) == (None, merker)    # Sensor fehlt
+    assert offen_merken(None, False, START, START) == (None, None)

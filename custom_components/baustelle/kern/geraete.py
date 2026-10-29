@@ -17,7 +17,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigSubentry
-from homeassistant.const import STATE_ON
+from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.util import dt as dt_util
@@ -27,6 +27,7 @@ from ..const import (
 )
 from ..db import DATA_DB
 from ..db import inventar as db_inventar
+from ..funktionen.basis import zeit as _zeit
 from ..logik import geraete as logik, sensoren as sensor_logik
 from .typen import GeraetInfo
 
@@ -200,11 +201,28 @@ def sensoren(st: Steuerung, bid: str) -> list[sensor_logik.Sensor]:
 
 
 def kontakt_offen_seit(st: Steuerung, bid: str) -> datetime | None:
-    """Seit wann ein Kontakt des Bereichs offen ist (der am längsten offene, logik/sensoren); None = alle zu."""
-    zeiten = []
+    """Seit wann ein Kontakt des Bereichs offen ist (der am längsten offene, logik/sensoren); None = alle zu.
+
+    FE-0036/37: je Kontakt im Store gemerkt (`lz["kontakt_offen"]`), damit ein HA-Neustart die Zeit nicht zurücksetzt.
+    """
+    gemerkt: dict[str, list[str]] = st.lz.setdefault("kontakt_offen", {})
+    zeiten, geaendert = [], False
     for eid in sensor_logik.kontakte(sensoren(st, bid)):
         s = st.hass.states.get(eid)
-        zeiten.append(dt_util.as_local(s.last_changed) if s is not None and s.state == STATE_ON else None)
+        offen = None if s is None or s.state in (STATE_UNAVAILABLE, STATE_UNKNOWN) else s.state == STATE_ON
+        alt = gemerkt.get(eid)
+        merker = (z0, z1) if alt and (z0 := _zeit(alt[0])) and (z1 := _zeit(alt[1])) else None
+        seit, neu = sensor_logik.offen_merken(merker, offen, None if s is None else dt_util.as_local(s.last_changed),
+                                              st._gestartet)
+        if neu != merker:
+            if neu is None:
+                gemerkt.pop(eid, None)
+            else:
+                gemerkt[eid] = [neu[0].isoformat(), neu[1].isoformat()]
+            geaendert = True
+        zeiten.append(seit)
+    if geaendert:
+        st.einstellungen.speichern()
     return sensor_logik.offen_seit(zeiten)
 
 

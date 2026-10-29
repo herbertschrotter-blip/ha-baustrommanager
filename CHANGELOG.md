@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.162] – 2026-10-29
+
+- FE-0036, FE-0037: Nach einem HA-Neustart stand bei offener Tür „Tür offen seit 1 min“, und die Heizung lief wieder an –
+  HA setzt beim Neustart den letzten Wechsel jedes Sensors neu, die Integration las daraus die Öffnungszeit. Jetzt merkt
+  sie sich je Tür und Fenster, seit wann es offen ist (übersteht den Neustart, Regel in `logik/sensoren.py`); erst
+  „zu“ löscht den Merker. Meldet sich der Kontakt nach dem Start kurz nicht, kann die Tür-Nachricht noch einmal kommen –
+  jetzt mit der richtigen Dauer.
+
 ## [0.8.161] – 2026-10-29
 
 - FE-0034: Im Wochenplan waren die Balken der Tage verschieden lang, heute fehlte er manchmal ganz – zwei CSS-Regeln mit

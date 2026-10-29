@@ -11,13 +11,18 @@ Regeln:
 - Batterie (Prozent) in zwei Stufen, `batterie_stufe`: unter `BATTERIE_KRITISCH` (10 %) „kritisch“ – je Sensor eine
   Warnung `fuehler_fehlt` (logik/warnungen) –, unter `BATTERIE_SCHWACH` (25 %) „schwach“ – nur Anzeige (Geräteliste,
   Kopf der Container-Ansicht, rot bei kritisch). Die Seite bekommt die Stufe fertig (`struktur.bereiche[].sensoren[]`).
+- Offen seit (FE-0036/37): HA setzt beim Neustart den letzten Wechsel jedes Sensors neu – die Tür wäre wieder „1 min
+  offen“ und die Pause begänne von vorn. Darum merkt die Integration je Kontakt, seit wann er offen ist, und wann sie
+  den Wechsel gesehen hat (`offen_merken`). Ein neuer Wechsel zählt als neue Öffnung, außer er liegt höchstens `ANLAUF`
+  um den Start der Integration (Neustart, Kontakt meldet sich neu). Zu vergisst den Merker, nicht
+  erreichbar lässt ihn stehen (gilt solange als zu).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from .symbol import standard
@@ -74,6 +79,25 @@ def offen_seit(zeiten: Iterable[datetime | None]) -> datetime | None:
     """Seit wann offen: der am längsten offene Kontakt (None = alle zu)."""
     offen = [z for z in zeiten if z is not None]
     return min(offen) if offen else None
+
+
+ANLAUF = timedelta(minutes=10)   # FE-0036/37: so lange um den Start meldet sich ein Kontakt noch neu
+
+Merker = tuple[datetime, datetime]   # (offen seit, zuletzt gesehener Wechsel des Sensors)
+
+
+def offen_merken(merker: Merker | None, offen: bool | None, geaendert: datetime | None,
+                 gestartet: datetime) -> tuple[datetime | None, Merker | None]:
+    """Seit wann ein Kontakt offen ist und der neue Merker. `offen` None = nicht erreichbar, `geaendert` = letzter
+    Wechsel laut HA, `gestartet` = Start der Integration (FE-0036/37)."""
+    if offen is None or geaendert is None:
+        return None, merker
+    if not offen:
+        return None, None
+    if merker is not None and (geaendert == merker[1] or abs(geaendert - gestartet) <= ANLAUF):
+        seit = min(merker[0], geaendert)
+        return seit, (seit, geaendert)
+    return geaendert, (geaendert, geaendert)
 
 
 BATTERIE_SCHWACH = 25.0    # % – Anzeige „schwach“
