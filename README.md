@@ -242,11 +242,11 @@ Symbol: `custom_components/baustelle/brand/icon.png` (+ `icon@2x.png`), gezeichn
    `python3 tools/changelog.py && node custom_components/baustelle/frontend/bauen.mjs && node mockups/quelle/glas.js`;
    Tests grün, committen. `deploy.sh` liefert aus `frontend/` nur `baustelle-panel.js` und `changelog.json` aus und
    entfernt im Ziel, was dort nicht hingehört (Quellen, npm-Dateien).
-2. Herbert spielt ein: `! /config/projekte/ha-baustrommanager/tools/deploy.sh`
+2. Claude spielt ein: `tools/deploy.sh`
    (kopiert die Integration samt Seite nach `/config/custom_components/baustelle/`).
-3. Konfiguration prüfen, dann **Neustart durch Herbert** (neue oder geänderte Integration braucht immer einen Neustart):
+3. Konfiguration prüfen, dann **Neustart mit dem Skill neustart** (neue oder geänderte Integration braucht immer einen Neustart):
    `tools/neustart.sh` prüft die Konfiguration über die HA-API und startet nur bei gültiger neu, dann wartet es, bis HA
-   wieder läuft. Claude darf Einspielen und Neustart nur, wenn Herbert es für eine Sitzung per `--allowedTools` freigibt.
+   wieder läuft. Der Skill neustart stimmt sich vorher mit den anderen Claude-Sitzungen ab.
 4. Einstellungen → Geräte & Dienste → Baustelle prüfen; Protokoll auf Meldungen von `custom_components.baustelle` ansehen.
 5. **Datenbank zurück auf SQLite** (nach `db_url`, BSM-026): Dienst `baustelle.datenbank_rueckweg` (nur Admins) legt
    `/config/baustelle/baustelle-aus-postgres-<Zeit>.db` mit den Daten dieser Instanz an; dann `db_url` entfernen, die

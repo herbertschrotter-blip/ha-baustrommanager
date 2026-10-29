@@ -7,8 +7,8 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 ## Regeln
 
 - **Quelle der Wahrheit ist dieses Repo.** In `/config` nur über `tools/deploy.sh` ausliefern, dort nie direkt ändern.
-  `custom_components/**` in `/config` ist für Claude gesperrt: Das Einspielen führt Herbert aus
-  (`! /config/projekte/ha-baustrommanager/tools/deploy.sh`), danach Neustart durch Herbert.
+  Direkt in `custom_components/**` von `/config` schreibt Claude nicht; eingespielt wird nur mit `tools/deploy.sh`, das
+  Claude selbst ausführt (Herbert, 29.10.2026), danach Neustart mit dem Skill neustart (prüft die Konfiguration, stimmt sich mit den anderen Claude-Sitzungen ab).
 - **Bewährte Lösungen statt Eigenbau** (Herbert, 29.09.2026): Aufbau nach `integration_blueprint` und den Kern-Helfern
   (Vorbild `bayesian`: Subentries, Update-Listener mit Reload); eingebaute Integrationen nutzen, wo es sie gibt
   (Feiertage/`holiday`, lokaler Kalender, `weather.get_forecasts`, `notify.mobile_app_*`, später `history_stats`).
@@ -28,7 +28,7 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 - **Die Staffelung bleibt im Kern** (alle Funktionen teilen sich die Stromanschlüsse); eine Funktion liefert nur
   `schaltbar`, `standard_kw`, `staffel_vorrang`, `staffel_feld`.
 - **Die Automatik startet ausgeschaltet.** Die Integration schaltet Shellys nur, wenn Herbert sie einschaltet.
-- **Neustart nur durch Herbert** oder nach seiner ausdrücklichen Bestätigung, vorher die Konfiguration prüfen.
+- **Neustart macht Claude mit dem Skill neustart** (Konfiguration prüfen, andere Sitzungen abstimmen, kontrollieren).
 - **Geräte steuern** (Shellys, Verbraucher auf der Baustelle) nur auf Auftrag.
 - **Keine Geheimnisse:** Zugangsdaten nur als `!secret <schlüssel>`; keine Koordinaten, Gerätekennungen oder Tokens im
   Repo.
@@ -57,7 +57,7 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 - Module: Integration=custom_components/**; Tests=tests/**; Werkzeuge=tools/**, .github/**; Doku=*.md, mockups/**
 - Versionsquelle: changelog:CHANGELOG.md
 - Versionsregel: MINOR nur für eine wirklich neue Funktion, die es vorher nicht gab; Verbesserungen, Korrekturen und Umbauten (auch neue Gestaltung bestehender Seiten, z. B. neue Übersicht) sind PATCH – im Zweifel PATCH; Commits nur an Doku, Tests oder Werkzeugen behalten die Nummer; `custom_components/baustelle/manifest.json#version` zieht mit (Herbert, 29.09.2026)
-- Push-Policy: user-only
+- Push-Policy: required-after-commit
 - Pre-Commit-Checks: seite-gebaut; logik; integration; integration-pg; panel; notprogramm; browser
 - Doku-Check: none
 
