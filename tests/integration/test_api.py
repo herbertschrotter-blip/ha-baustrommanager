@@ -19,7 +19,7 @@ BEISPIEL = Path(__file__).resolve().parents[1] / "panel" / "struktur-0.7.json"
 # Maps mit IDs als Schlüssel: jeder Wert wird mit dem ersten Beispielwert verglichen
 ID_MAPS = {
     "entitaeten", "einstellungen.bereiche", "einstellungen.stumm", "laufzeit.container", "laufzeit.geraete",
-    "laufzeit.abschnitte", "laufzeit.abschnitte.*", "geraete_links",
+    "laufzeit.abschnitte", "laufzeit.abschnitte.*", "laufzeit.plan_abweichung", "geraete_links",
 }
 # frei belegte Schlüssel (hängen von der Einrichtung ab)
 FREI = {"baustelle.optionen", "zaehler"}

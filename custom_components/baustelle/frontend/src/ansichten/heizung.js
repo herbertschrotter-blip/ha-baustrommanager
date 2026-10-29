@@ -6,13 +6,13 @@ import { html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { TAGE, datum, dauer, de, erkl, kurzDatum, minu, plusTage, uhr, wtag, zahl } from '../hilfen.js';
-import { AUSNAHME, MODI } from '../tabellen.js';
+import { ACHSE_TEXT, AUSNAHME, AUSN_LEGENDE, MODI, TAG_MIN } from '../tabellen.js';
 import { kopfVorlage, schalterVorlage, stepperVorlage } from './allgemein.js';
 import { baselineRegeln } from './baseline.js';
 import { KEIN_URLAUBSKALENDER, beschreibbar } from './einblendungen-baustelle.js';
 
 const LAEDT = html`<div class="leer">Lädt …</div>`;
-const ACHSE = html`<div class="tl-achse">${['04', '08', '12', '16', '20'].map(h => html`<span>${h}</span>`)}</div>`;
+const ACHSE = unsafeHTML(ACHSE_TEXT);   // FE-0034: 0–24 Uhr
 const grad = v => `${de(v, 1)} °C`, min = v => `${v} min`, minus = v => `${de(v, 0).replace('-', '−')} °C`, mm = v => `${de(v, 1)} mm`;
 
 /* Kopf mit Automatik-Schalter (Reiter und Block „Heute“) */
@@ -57,30 +57,27 @@ export function heizungVorlage(p) {
 
 /* ---- Blöcke (cls: „glas-panel block“ im Reiter/in den Einstellungen, „block hz-innen“ in der Einblendung) ---- */
 
+/* AN-0019 (Mockup heizung-neu.html C, Herbert 29.10.2026): Übersichtskarten in 2 Spalten – Name, Kurzwert und ●/○ je Regel,
+   „mehr ▾“ zeigt den ganzen Satz darunter. Zeilen, Sätze, Kurzwerte und Gruppen liefert die Integration (laufzeit.heute,
+   logik/heute.py); unter der Arbeitszeit stehen wie bisher die Rechnung des Plans und die lernenden Container. */
 function heute(p, cls) {
-  const d = p.d, e = d.e, pl = p.planTag(p.z.HEUTE_TAG), az = p.azJetzt, hg = d.heizgrenze || {}, w = d.wetter || {}, tr = d.trocknen;
-  const bezug = zahl(hg.bezug) ? hg.bezug : e.basis === 'jetzt' ? w.aussen : w.aussen_max;
-  const ft = p.feiertage(), naechster = ft && ft[0], morgen = plusTage(p.z.HEUTE, 1), wm = p.wetterTag(morgen), pm = d.plan[morgen];
-  const regel = (ic, titel, text, an) => html`<div class="hr-zeile ${an ? 'an' : ''}"><span class="hr-ic">${ic}</span><div><b>${titel}</b><div class="leise">${text}</div></div><span class="hr-an">${an ? '●' : '○'}</span></div>`;
-  const C = d.bereiche.filter(b => !b.pumpe), lernend = C.filter(b => b.lern && b.lern.warm);   // AN-0004
-  const freiT = e.urlaub === 'absenk' ? `heute abgesenkt auf ${de(e.absenk)} °C (mit Fühler), sonst Frostschutz` : e.urlaub === 'aus' ? 'heute alles aus – auch kein Frostschutz' : 'heute nur Frostschutz';
-  const frei = { urlaub: ['Urlaub', freiT], feiertag: ['Feiertag', freiT] }[d.status], feiertagsKal = d.optionen.feiertag_kalender;
-  const L = e.staffel ? p.last() : null;
-  return html`<div class=${cls}><div class="block-kopf"><b>Heute</b><span class="leise">welche Regeln greifen</span></div>
-        ${regel('🕖', `Arbeitszeit ${pl ? `${uhr(pl.a)}–${uhr(pl.b)}` : 'frei'}`, `${az ? `„${az.name}“` : 'keine Arbeitszeit'} · heizt ${pl ? `${uhr(pl.extra)}–${uhr(pl.ende)}` : 'nicht'}`, !!pl)}
-        ${pl ? html`<div class="zeile unter hz-rechnung"><span class="leise">${p.planRechnung(pl)}</span></div>` : nothing}
-        ${lernend.map(b => html`<div class="zeile unter"><span class="leise">🧠 <b>${b.name}</b>: ${p.warmText(b)}</span></div>`)}
-        ${regel('🌡', `Heizgrenze ${de(e.grenze, 0)} °C`, zahl(bezug) ? `${e.basis === 'jetzt' ? 'jetzt' : 'Höchstwert heute'} ${de(bezug, 0)} °C → ${hg.zu_warm ?? bezug > e.grenze ? 'zu warm, es wird nicht geheizt' : 'es wird geheizt'}` : 'kein Wert vom Wetter', !(hg.zu_warm ?? (zahl(bezug) && bezug > e.grenze)))}
-        ${regel('🌧', 'Kleidung trocknen', tr ? `${tr.text}${tr.aktiv && pl ? `, bis ${uhr(pl.ende)}` : ''}` : 'kein Regenwert vom Wetter', !!(tr && (tr.aktiv || tr.frueher_heute_min)))}
-        ${regel('❄', 'Kälte-Frühstart morgen', zahl(wm.kalt) ? `${de(wm.kalt).replace('-', '−')} °C erwartet (unter ${de(e.frueh_temp, 0).replace('-', '−')} °C) → ${wm.kalt < e.frueh_temp ? `${e.frueh_min} min früher` : 'nicht nötig'}${pm && (pm.gruende || []).includes('frueher_nach_regen') ? `, dazu ${tr ? tr.frueher_morgen_min : e.tr_frueher} min nach Regen` : ''}` : 'noch keine Vorhersage für morgen', e.fruehstart && zahl(wm.kalt) && wm.kalt < e.frueh_temp)}
-        ${L ? regel('⚡', `Staffelung: ${L.laufen} von ${L.hk.length} Heizkörpern`, `${L.warten ? `${L.warten} wartet, weil ein Anschluss ausgelastet ist` : 'alle haben Platz'} · höchstens ${e.max_gleich} gleichzeitig · Vorheizen startet 15 min früher, damit alle warm werden`, true) : nothing}
-        ${frei ? regel('🏖', frei[0], frei[1], true) : regel('🏖', 'Kein Urlaub, kein Feiertag', naechster ? `nächster Feiertag ${wtag(naechster.von)} ${kurzDatum(naechster.von)} ${naechster.name}` : feiertagsKal ? (ft === null ? 'Feiertage laden …' : 'kein Feiertag im Kalender') : 'kein Feiertagskalender gewählt', false)}</div>`;
+  const d = p.d, pl = p.planTag(p.z.HEUTE_TAG), R = d.heute || [], sel = R.find(r => r.k === p.s.hrAuf);
+  const lernend = d.bereiche.filter(b => !b.pumpe && b.lern && b.lern.warm);   // AN-0004
+  const zeile = r => html`<div class="hr-zeile ${r.an ? 'an' : ''}"><span class="hr-ic">${r.ic}</span><div><b>${r.titel}</b><div class="leise">${r.text}</div></div><span class="hr-an">${r.an ? '●' : '○'}</span></div>`;
+  const zusatz = r => r.k !== 'arbeitszeit' ? nothing : html`${pl ? html`<div class="zeile unter hz-rechnung"><span class="leise">${p.planRechnung(pl)}</span></div>` : nothing}
+      ${lernend.map(b => html`<div class="zeile unter"><span class="leise">🧠 <b>${b.name}</b>: ${p.warmText(b)}</span></div>`)}`;
+  const um = r => () => { p.s.hrAuf = p.s.hrAuf === r.k ? null : r.k; p.neuZeichnen(); };
+  return html`<div class=${cls}><div class="block-kopf"><b>Heute</b><span class="leise">${R.length ? `${R.filter(r => r.an).length} von ${R.length} greifen · tippen für den ganzen Satz` : 'welche Regeln greifen'}</span></div>
+      ${R.length ? html`<div class="hr-karten">${R.map(r => html`<button class="hr-karte ${r.an ? 'an' : ''} ${sel === r ? 'auf' : ''}" data-k=${r.k} data-g=${r.gruppe} aria-expanded=${sel === r ? 'true' : 'false'} @click=${um(r)}>
+          <span class="hr-ic">${r.ic}</span><span class="hr-name">${r.name}</span><span class="hr-an">${r.an ? '●' : '○'}</span><b class="hr-kurz">${r.kurz}</b>
+          <span class="hr-mehr">${sel === r ? 'weniger ▴' : 'mehr ▾'}</span></button>`)}</div>
+        ${sel ? html`<div class="glas-panel hr-detail">${zeile(sel)}${zusatz(sel)}</div>` : nothing}` : html`<div class="leer">Noch keine Regeln – die Heizung rechnet gerade.</div>`}</div>`;
 }
 
 /* Wann welche Heizung heizt: Tag (gemessen + Plan je Heizkörper) oder Woche (Stunden je Tag) */
 function wann(p, cls) {
   const art = p.s.hzArt || 'tag', tag = p.s.hzTag || p.z.HEUTE_TAG, C = p.d.bereiche.filter(b => !b.pumpe);
-  const A = 4 * 60, B = 21 * 60, x = m => Math.max(0, Math.min(100, (m - A) / (B - A) * 100)), breite = (a, b) => Math.max(0, x(b) - x(a));
+  const x = m => Math.max(0, Math.min(100, m / TAG_MIN * 100)), breite = (a, b) => Math.max(0, x(b) - x(a));   // FE-0034: Achse 0–24 Uhr
   const std = segs => segs.reduce((a, q) => a + (q[1] - q[0]), 0) / 60, HZ = b => b.geraete.filter(g => g.heizer);
   const ohne = b => html`<div class="hz-c"><span class="hz-cn">${b.name}</span><span class="leise hz-cp">noch kein Heizkörper</span></div>
       <div class="hz-ohne"><button class="chip glas-panel" data-id=${b.id} @click=${() => p.containerOeffnen(b.id)}>+ Heizkörper zuordnen</button></div>`;   // FE-0007
@@ -92,20 +89,25 @@ function wann(p, cls) {
   let inhalt;
   if (!C.length) inhalt = html`<div class="leer">Keine Container</div>`;
   else if (art === 'tag') {
-    const zukunft = tagNr > heuteNr, h = tagNr === heuteNr;
+    const zukunft = tagNr > heuteNr, h = tagNr === heuteNr, alle = !!p.s.hzAlle, ausn = p.ausnTeile(p.z.WOCHE_ISO[tagNr]);
     inhalt = html`<div class="vb-wer">${p.z.WOCHE.map(([t, dd]) => html`<button data-v=${t} class=${t === tag ? 'on' : ''} @click=${() => setze(null, t)}>${t === p.z.HEUTE_TAG ? 'heute' : t} ${dd.slice(0, 2)}.</button>`)}</div>
         <div class="leise">${zukunft ? 'Noch nichts gemessen – blass der Plan.' : h ? 'Bis jetzt gemessen, danach blass der Plan.' : 'Gemessen an der Leistung: kräftig = zieht Strom (über 50 W).'}</div>
         <div class="hz-tag">${C.map(b => { if (!HZ(b).length) return ohne(b); const plan = p.heizzeiten(b, tag), ph = std(plan);
+          // AN-0019 (Mockup heizung-neu.html C): eine Spur je Container, „alle Heizkörper ▾“ zeigt jeden Heizkörper; Ausnahme-Teile
+          // (FE-0034) über der Spur, wenn der Container dem Plan folgt
+          const A = HZ(b).map(g => ({ g, a: p.aktiv(b, g, tag) })), folgt = !b.bedarf && b.auto !== false && !(b.lern && b.lern.warm), aus = folgt ? ausn : [];   // lernende haben ihren eigenen Plan
+          const spur = (an, off) => html`<div class="tl-spur hz">${plan.map(q => html`<i class="hz-plan ${!zukunft && (!h || q[1] <= jetzt) ? 'vorbei' : ''}" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
+                  ${zukunft ? nothing : an.map(q => html`<i class="hz-an" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
+                  ${off.map(q => html`<i class="hz-off" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
+                  ${aus.map(q => html`<i class="tl-ausn ${q[2]}" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
+                  ${h ? html`<i class="tl-jetzt" style="left:${x(jetzt)}%"></i>` : nothing}</div>`;
+          const geheizt = Math.max(0, ...A.map(y => std(y.a.an)));
           return html`<div class="hz-c"><span class="hz-cn">${b.name}${b.bedarf ? html` <span class="leise">bei Bedarf</span>` : nothing}${b.offline ? html` <span class="rot-t">offline</span>` : nothing}</span><span class="leise hz-cp">${ph ? `${de(ph)} h geplant` : b.bedarf ? 'kein Termin' : !b.auto ? 'Hand' : 'frei'}</span></div>
-            ${HZ(b).map(g => { const a = p.aktiv(b, g, tag), ah = std(a.an);
-              return html`<div class="hz-zeile"><span class="hz-n hz-g">${g.n}</span>
-                <div class="tl-spur hz">${plan.map(q => html`<i class="hz-plan ${!zukunft && (!h || q[1] <= jetzt) ? 'vorbei' : ''}" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
-                  ${zukunft ? nothing : a.an.map(q => html`<i class="hz-an" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
-                  ${a.off.map(q => html`<i class="hz-off" style="left:${x(q[0])}%;width:${breite(q[0], q[1])}%"></i>`)}
-                  ${h ? html`<i class="tl-jetzt" style="left:${x(jetzt)}%"></i>` : nothing}</div>
-                <span class="hz-h">${zukunft ? '–' : `${de(ah)} h`}</span></div>`; })}`; })}
+            ${alle ? A.map(({ g, a }) => html`<div class="hz-zeile"><span class="hz-n hz-g">${g.n}</span>${spur(a.an, a.off)}<span class="hz-h">${zukunft ? '–' : `${de(std(a.an))} h`}</span></div>`)
+              : html`<div class="hz-zeile" data-c=${b.id}><span class="hz-n hz-g">${A.length} Heizkörper</span>${spur(A.flatMap(y => y.a.an), A.flatMap(y => y.a.off))}<span class="hz-h">${zukunft ? '–' : `${de(geheizt)} h`}</span></div>`}`; })}
           <div class="hz-zeile achse"><span></span>${ACHSE}<span></span></div></div>
-        <div class="hp-legende"><span><i class="hz-an"></i>zieht Strom</span><span><i class="hz-plan"></i>geplant</span><span><i class="hz-off"></i>offline</span><span class="leise">Lücken im Plan: Thermostat, Staffelung, Tür offen</span></div>`;
+        <button class="hz-alle" data-k="hz-alle" @click=${() => { p.s.hzAlle = !alle; p.neuZeichnen(); }}>${alle ? 'nur Container ▴' : 'alle Heizkörper ▾'}</button>
+        <div class="hp-legende"><span><i class="hz-an"></i>zieht Strom</span><span><i class="hz-plan"></i>geplant</span><span><i class="hz-off"></i>offline</span>${ausn.length ? unsafeHTML(AUSN_LEGENDE) : nothing}<span class="leise">Lücken im Plan: Thermostat, Staffelung, Tür offen</span></div>`;
   } else {
     const zeilen = C.flatMap(b => HZ(b).length ? HZ(b).map(g => ({ b, g, h: TAGE.map((t, kk) => kk > heuteNr ? std(p.heizzeiten(b, t)) : std(p.aktiv(b, g, t).an)) })) : [{ b, g: null, h: null }]);
     const max = Math.max(...zeilen.flatMap(z => z.h || []), 1);
@@ -148,9 +150,10 @@ function ausnahmen(p, cls) {
         return html`<div class="am-tag"><div class="am-tag-kopf"><b>${wtag(t)} ${kurzDatum(t)}</b>${frei ? html`<span class="badge">frei</span>` : nothing}</div>${basis}
           ${A.map(a => html`<div class="am-fenster">${a.art === 'frei' ? html`<b>frei</b>` : html`<b>${a.von}–${a.bis}</b>`} ${badge(a)}${a.notiz ? html` <span class="leise">${a.notiz}</span>` : nothing}
             <button class="x nur-admin" title="dieses Zeitfenster löschen" @click=${p.nurAdmin(() => p.ausnahmeWeg(a))}>✕</button></div>`)}
-          ${frei || !pl ? nothing : html`<div class="am-strahl">${unsafeHTML(p.zeitstrahl(pl, t === H))}<div class="tl-achse"><span>04</span><span>12</span><span>20</span></div></div>
-            <div class="am-hinweis">${p.planFensterText(pl)}</div>`}
+          ${!pl && !p.ausnTeile(t).length ? nothing : html`<div class="am-strahl">${unsafeHTML(p.zeitstrahl(pl, t === H, t))}${ACHSE}</div>
+            ${pl && !frei ? html`<div class="am-hinweis">${p.planFensterText(pl)}</div>` : nothing}`}
           ${frei ? nothing : html`<button class="zeile" data-d=${t} @click=${() => p.ausnahmeDazu(t)}><span class="blau">+ weiteres Zeitfenster an diesem Tag</span></button>`}</div>`; }) : html`<div class="leise">Keine Ausnahmen</div>`}
+      ${tage.some(t => p.ausnTeile(t).length) ? html`<div class="hp-legende">${unsafeHTML(AUSN_LEGENDE)}</div>` : nothing}
       <button class="zeile" @click=${() => p.ausnahmeNeu('')}><span class="blau">+ Ausnahme für einen anderen Tag</span></button></div>`;
 }
 
@@ -166,6 +169,36 @@ function soll(p, z, st) {
         <span>dein Gefühl: ${G.n} ${G.n === 1 ? 'Rückmeldung' : 'Rückmeldungen'} bei ähnlichem Wetter (je ${de(G.schritt, 2)} °C)</span><b>${f(G.gefuehl)}</b>
         <span class="summe">Soll heute</span><b class="summe">${grad(G.soll)}</b></div>${unsafeHTML(p.sollKurve(G))}`;
   return html`${k}${heute}${z('mindestens', e.gleit_min < 21 ? html`<span class="amber-t">unter 21 °C – § 36 BauV verlangt für Aufenthaltsräume 21 °C</span>` : 'nie darunter (§ 36 BauV: Aufenthaltsräume 21 °C)', st('gleit_min', .5, grad), true)}${z('höchstens', '', st('gleit_max', .5, grad), true)}${z('wärmer je Grad kälter draußen', `unter ${de(e.gleit_bezug, 0)} °C Außenmittel`, st('gleit_je', .05, v => `+${de(v, 2)} °C`), true)}${z('ab Außenmittel unter', '', st('gleit_bezug', 1, v => `${de(v, 0)} °C`), true)}${z('Außenmittel über', 'wie EN 16798-1: jüngere Tage zählen mehr', st('gleit_tage', 1, v => `${v} ${v === 1 ? 'Tag' : 'Tage'}`), true)}${z('dein Gefühl', '„zu kalt / passt / zu warm“ und + / − im Container verschieben das Soll bei ähnlichem Wetter, höchstens ±1,5 °C', html`<button class="rv-link" @click=${() => p.gefuehlVergessen()}>vergessen</button>`, true)}<div class="leise">Ein eigenes Soll im Container gilt als Verschiebung gegenüber dem der Baustelle (Je Container).</div>`;
+}
+
+/* AN-0020: Gruppen der Regeln (Reihenfolge nach Tagesablauf) und welche Zeile (data-r) in welcher Gruppe steht – für „ändern ›“ */
+const REGEL_GRUPPEN = [['vor', '🌅', 'Vor der Arbeit', 'warm, wenn es losgeht', ['vorheizen', 'frueh', 'lernend', 'warm_vor', 'warm_max']],
+  ['arbeit', '👷', 'In der Arbeitszeit', 'auf das Soll halten', ['soll', 'toleranz', 'grenze', 'basis', 'boost', 'zusatz', 'tuer']],
+  ['nach', '🌇', 'Nach der Arbeit', 'warm halten, trocknen, übernehmen', ['nachheizen', 'warm_nach', 'trocknen', 'hand']],
+  ['nacht', '🌙', 'Nachts, frei, Urlaub', 'nur Frostschutz', ['frost', 'urlaub']],
+  ['immer', '⏱', 'Immer', 'Messung und Strom', ['zieht', 'fuehler', 'staffel']]];
+const DATA_R = { fruehstart: 'frueh' };   // data-r der Zeile → Schlüssel der Regel, wo sie abweichen
+const ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map(k => [k, id]))), baseline: 'bl' };
+/** „ändern ›“ auf eine Regel: ihre Gruppe öffnen, damit die Zeile da ist */
+export const regelGruppeAuf = (p, z) => { p.s.rvAuf = ZEILE_GRUPPE[DATA_R[z] || z] || 'alle'; };   // unbekannt: alles auf, damit die Zeile da ist
+/* Zusammenfassung je Regel: [Name, Wert, an (true/false; null = nur Wert)] – feste Texte mit den Einstellungswerten */
+const zusatzMoeglich = C => C.some(b => b.geraete.filter(g => g.heizer).length >= 2);   // Zeile „Zusatz-Heizkörper“ nur mit 2 Heizkörpern
+function regelSumme(p) {
+  const e = p.d.e, C = p.d.bereiche.filter(b => !b.pumpe), lern = C.filter(b => b.lern && b.lern.warm), zus = C.filter(b => b.stufenAn);
+  return {
+    vorheizen: ['Vorheizen', min(e.vorheizen), null], frueh: ['Kälte-Frühstart', `+${e.frueh_min} min`, !!e.fruehstart],
+    lernend: ['Lernende', lern.length ? `${lern.length}` : 'keiner', null], warm_vor: lern.length ? ['Soll erreicht', e.warm_vor ? `${e.warm_vor} min vorher` : 'bei Beginn', null] : null,
+    warm_max: lern.length ? ['Frühestens', `${e.warm_max} min vorher`, null] : null,
+    soll: ['Soll', e.soll_art === 'gleitend' ? `gleitend ab ${grad(e.gleit_min)}` : grad(e.soll), null], toleranz: ['Abstand', `± ${de(e.toleranz, 1)} °C`, null],
+    grenze: ['Heizgrenze', grad(e.grenze), null], basis: null, boost: ['Schnell', min(e.boost_min), null],
+    zusatz: zusatzMoeglich(C) ? ['Zusatz', zus.length ? `${zus.length} Container` : 'nirgends', zus.length > 0] : null,
+    tuer: ['Tür-Pause', min(e.tuer_pause), null], nachheizen: ['Nachheizen', min(e.nachheizen), null],
+    warm_nach: lern.length ? ['Warm halten', e.warm_nach ? `${e.warm_nach} min` : 'bis Ende', null] : null,
+    trocknen: ['Trocknen', 'nach Regen', null], hand: ['Hand übernehmen', `nach ${e.hand_nachfrist} min`, null],
+    frost: ['Frostschutz', `unter ${grad(e.frost_temp)}`, !!e.frost], urlaub: ['Urlaub', { frost: 'nur Frostschutz', absenk: `absenken ${grad(e.absenk)}`, aus: 'alles aus' }[e.urlaub] || 'nur Frostschutz', null],
+    zieht: ['Heizt ab', `${e.zieht_w} W`, null], fuehler: ['Fühler hält', min(e.fuehler_halten), null],
+    staffel: ['Staffelung', `${e.nutzbar} % · max ${e.max_gleich}`, !!e.staffel], baseline: ['Baseline', 'Testläufe', !!e.baseline],
+  };
 }
 
 /* AN-0012: Regeln nach Tagesablauf gruppiert (Mockup regeln-varianten.html, Variante B, abgenommen 01.10.2026) */
@@ -185,7 +218,7 @@ function regelnInhalt(p) {
     grenze: z('Heizgrenze', 'nicht heizen, wenn es wärmer ist', st('grenze', .5, grad)),
     basis: z('Grundlage', '', html`<div class="seg klein">${['jetzt', 'Tageshöchstwert'].map(v => html`<button data-v=${v} class=${e.basis === v ? 'on' : ''} @click=${() => p.heizgrenzeBasis(v)}>${v}</button>`)}</div>`, true),
     boost: z('⚡ Schnell aufheizen', 'alle Heizkörper eines Containers zugleich, Vorrang in der Staffelung – bis zum Soll, ohne Fühler für', st('boost_min', 5, min)),
-    zusatz: !C.some(b => b.geraete.filter(g => g.heizer).length >= 2) ? nothing : html`${z('🔥 Zusatz-Heizkörper', `in Containern mit „Zusatz nur bei Bedarf“: zuerst heizt einer, der Zusatz kommt dazu, wenn …${(() => { const n = C.filter(b => b.stufenAn); return n.length ? ` Jetzt: ${n.map(b => b.name).join(', ')}.` : ' Einschalten im Container unter Bearbeiten.'; })()}`, '')}${z('… der Raum weiter unter dem Soll ist als', '', st('stufen_abstand', .5, grad), true)}${z('… einer schon so lange läuft', '', st('stufen_min', 5, min), true)}${z('… und es dabei weniger wärmer wurde als', '', st('stufen_anstieg', .1, v => `${de(v)} °C`), true)}${z('… es draußen kälter ist als (beide von Anfang an)', '', st('stufen_kalt', 1, minus), true)}`,
+    zusatz: !zusatzMoeglich(C) ? nothing : html`${z('🔥 Zusatz-Heizkörper', `in Containern mit „Zusatz nur bei Bedarf“: zuerst heizt einer, der Zusatz kommt dazu, wenn …${(() => { const n = C.filter(b => b.stufenAn); return n.length ? ` Jetzt: ${n.map(b => b.name).join(', ')}.` : ' Einschalten im Container unter Bearbeiten.'; })()}`, '')}${z('… der Raum weiter unter dem Soll ist als', '', st('stufen_abstand', .5, grad), true)}${z('… einer schon so lange läuft', '', st('stufen_min', 5, min), true)}${z('… und es dabei weniger wärmer wurde als', '', st('stufen_anstieg', .1, v => `${de(v)} °C`), true)}${z('… es draußen kälter ist als (beide von Anfang an)', '', st('stufen_kalt', 1, minus), true)}`,
     tuer: html`${z('🚪 Tür offen', 'Heizung pausieren nach', st('tuer_pause', 1, min), false, 'tuer')}${z('Nachricht nach', '', st('tuer_melden', 5, min), true)}`,
     nachheizen: z('Nachheizen', html`nach Arbeitsende, jeden Tag${nichtLern}`, st('nachheizen', 5, min), false, 'nachheizen'),
     warm_nach: z('Warm halten (lernende)', 'nach Arbeitsende; Kleidung trocknen kommt dazu', st('warm_nach', 5, v => v ? `${v} min länger` : 'bis Ende'), true),
@@ -207,7 +240,21 @@ function regelnInhalt(p) {
     ['Lernen: kalt / mild', 'unter 5 °C außen', 'Aufheizraten getrennt nach kaltem und mildem Wetter'],
     ['Tür vermutlich offen', '−0,3 °C in 10 min', 'beim Heizen, während es draußen kaum kälter wurde – danach 10 min nichts lernen'],
   ];
-  return html`${karte('🌅', 'Vor der Arbeit', 'warm, wenn es losgeht', ['vorheizen', 'frueh', 'lernend', 'warm_vor', 'warm_max'])}${karte('👷', 'In der Arbeitszeit', 'auf das Soll halten', ['soll', 'toleranz', 'grenze', 'basis', 'boost', 'zusatz', 'tuer'])}${karte('🌇', 'Nach der Arbeit', 'warm halten, trocknen, übernehmen', ['nachheizen', 'warm_nach', 'trocknen', 'hand'])}${karte('🌙', 'Nachts, frei, Urlaub', 'nur Frostschutz', ['frost', 'urlaub'])}${karte('⏱', 'Immer', 'Messung und Strom', ['zieht', 'fuehler', 'staffel'])}${baselineRegeln(p)}<div class="rv-kopf"><b>📐 Feste Regeln</b><span class="leise">bewährte Schwellen, nicht änderbar</span></div><div class="rv-karte">${FEST.map(([t, w, x]) => html`<div class="rv-fest"><span>${t}</span><b>${w}</b><div class="leise">${x}</div></div>`)}</div>${unsafeHTML(erkl(e.erklaer, 'Vorheizen und Nachheizen gelten jeden Arbeitstag. Die Verlängerungen zählen zusammen: vor der Arbeit Vorheizen + Kälte-Frühstart + früher nach Regen, danach Nachheizen + Kleidung trocknen (AN-0003). Die Heizgrenze verhindert Heizen an warmen Tagen. Der Frostschutz springt unter „ein“ an und hört erst über „aus“ wieder auf, damit der Heizkörper nicht dauernd ein- und ausschaltet.'))}`;
+  // AN-0020 (Mockup heizung-neu.html A, Herbert 29.10.2026): je Gruppe eine zugeklappte Zeile mit der Zusammenfassung dessen,
+  // was eingestellt ist (feste Texte mit den Einstellungswerten); antippen öffnet die bisherigen Zeilen, immer nur eine Gruppe offen
+  const S = regelSumme(p), offen = p.s.rvAuf || null;
+  const gruppe = (id, ic, titel, unter, sum, inhalt) => { const auf = offen === id || offen === 'alle';   // „alle“: alles offen (Vorschau, Tests)
+    return html`<div class="rv-gr ${auf ? 'auf' : ''}" data-gr=${id}><button class="rv-gk" aria-expanded=${auf ? 'true' : 'false'} @click=${() => { p.s.rvAuf = auf ? null : id; p.neuZeichnen(); }}>
+        <span class="rv-gic">${ic}</span><span class="rv-gt"><b>${titel} <span class="leise rv-unter">${unter}</span></b><span class="rv-sum">${sum}</span></span><span class="chev">${auf ? '⌃' : '⌄'}</span></button>
+      ${auf ? inhalt() : nothing}</div>`; };
+  const sum = keys => { const L = keys.map(k => S[k]).filter(Boolean), an = L.filter(m => m[2] !== false), aus = L.filter(m => m[2] === false);
+    return html`${an.map((m, i) => html`${i ? ' · ' : ''}<span class="rv-s">${m[0]} <b>${m[1]}</b></span>`)}${aus.length ? html`${an.length ? ' · ' : ''}<span class="rv-s aus">${aus.map(m => m[0]).join(', ')} aus</span>` : nothing}`; };
+  const karteG = (id, ic, titel, unter, teile) => gruppe(id, ic, titel, unter, sum(teile), () => html`<div class="rv-karte">${teile.map(k => R[k])}</div>`);
+  const bl = baselineRegeln(p);
+  return html`${REGEL_GRUPPEN.map(([id, ic, titel, unter, teile]) => karteG(id, ic, titel, unter, teile))}
+    ${bl === nothing ? nothing : gruppe('bl', '🧪', 'Baseline messen', 'Testläufe ohne Automatik', sum(['baseline']), () => bl)}
+    ${gruppe('fest', '📐', 'Feste Regeln', 'bewährte Schwellen, nicht änderbar', html`<span class="leise">${FEST.length} feste Schwellen</span>`,
+      () => html`<div class="rv-karte">${FEST.map(([t, w, x]) => html`<div class="rv-fest"><span>${t}</span><b>${w}</b><div class="leise">${x}</div></div>`)}</div>`)}${unsafeHTML(erkl(e.erklaer, 'Vorheizen und Nachheizen gelten jeden Arbeitstag. Die Verlängerungen zählen zusammen: vor der Arbeit Vorheizen + Kälte-Frühstart + früher nach Regen, danach Nachheizen + Kleidung trocknen (AN-0003). Die Heizgrenze verhindert Heizen an warmen Tagen. Der Frostschutz springt unter „ein“ an und hört erst über „aus“ wieder auf, damit der Heizkörper nicht dauernd ein- und ausschaltet.'))}`;
 }
 
 const regeln = (p, cls) => html`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">nach Tagesablauf</span></div>

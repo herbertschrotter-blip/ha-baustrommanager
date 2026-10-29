@@ -633,7 +633,7 @@ await fall('B10 Baseline am Handy', browser, async (page, erwarte) => {
   const raus = () => panel(page, T, () => { const sc = sr.querySelector('.sheet') || sr.querySelector('.scroll'), re = sc.getBoundingClientRect().right;
     return [...sc.querySelectorAll('.bl-rv *, .bl-stand *, .bl-liste *, .bl-lauf *, .bl-leg *')].filter(x => x.getBoundingClientRect().right > re + 1 && !x.closest('svg'))
       .slice(0, 3).map(x => `${x.tagName.toLowerCase()}.${String(x.className).trim()} +${Math.round(x.getBoundingClientRect().right - re)}px`); });
-  await panel(page, T, () => { p.gehe('heizung'); return p.hzAuf('regeln'); }); await warte(800);
+  await panel(page, T, () => { p.gehe('heizung'); p.s.rvAuf = 'bl'; return p.hzAuf('regeln'); }); await warte(800);   // AN-0020: Gruppe Baseline offen
   const k = await panel(page, T, () => { const c = sr.querySelector('.sheet .bl-rv'); if (!c) return null; c.scrollIntoView(); const r = c.querySelector('.bl-rahmen');
     return { rahmen: !!r && getComputedStyle(r).flexWrap === 'wrap', lauf: !!c.querySelector('.bl-lauf') }; });
   const r1 = await raus();

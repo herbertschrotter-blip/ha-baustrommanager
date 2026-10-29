@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger("custom_components.baustelle.steuerung")
 
 
+FEIERTAGE_VORAUS_TAGE = 366   # Feiertage ein Jahr voraus (für „nächster Feiertag“), Urlaub und Funktionen 15 Tage
+
+
 async def _async_kalender(st: Steuerung, _now: datetime | None = None) -> None:
     """Feiertage, Urlaub und Kalender der Funktionen, laufende und nächste Woche (Dienst calendar.get_events)."""
     heute = dt_util.now().date()
@@ -28,7 +31,8 @@ async def _async_kalender(st: Steuerung, _now: datetime | None = None) -> None:
     ende = start + timedelta(days=15)
     o = st.entry.options
     for art, key in (("feiertag", CONF_FEIERTAG_KALENDER), ("urlaub", CONF_URLAUB_KALENDER)):
-        tage = tage_aus_events(await st.async_events(o.get(key), start, ende))
+        bis = start + timedelta(days=FEIERTAGE_VORAUS_TAGE) if art == "feiertag" else ende
+        tage = tage_aus_events(await st.async_events(o.get(key), start, bis))
         if art == "feiertag":
             st.kalender_namen.update({tag: name or "Feiertag" for tag, name in tage.items()})
         st.kalender_tage[art] = set(tage)

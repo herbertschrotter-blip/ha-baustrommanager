@@ -455,3 +455,41 @@ def status(heute: date, minute: int, plan_am: Callable[[date], Plan | None]) -> 
         if naechster is not None:
             return Status(StatusArt.AUS, tag, naechster.naechster_start(-1) if naechster.naechster_start(-1) is not None else naechster.start)
     return Status(StatusArt.AUS)
+
+
+def _spannen(p: Plan | None) -> list[tuple[int, int]]:
+    """Geheizte Zeit eines Plans als sortierte, zusammengelegte Spannen (Minuten)."""
+    if p is None:
+        return []
+    roh = sorted([(p.start, p.ende), *p.eigene])
+    aus: list[tuple[int, int]] = []
+    for a, b in roh:
+        if b <= a:
+            continue
+        if aus and a <= aus[-1][1]:
+            aus[-1] = (aus[-1][0], max(aus[-1][1], b))
+        else:
+            aus.append((a, b))
+    return aus
+
+
+def _ohne(x: list[tuple[int, int]], y: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Spannen aus `x`, die nicht in `y` liegen."""
+    aus = []
+    for a, b in x:
+        teile = [(a, b)]
+        for c, d in y:
+            teile = [t for s, e in teile for t in ((s, min(e, c)), (max(s, d), e)) if t[1] > t[0]]
+        aus.extend(teile)
+    return aus
+
+
+def abweichung(mit: Plan | None, ohne: Plan | None) -> dict[str, Any]:
+    """FE-0034 (Mockup heizung-neu.html, Variante A): wo der Plan eines Tages mit Ausnahme vom Normalplan ohne Ausnahme
+    abweicht – `normal` {start, ende} (None = normal frei), `teile` [[von, bis, „mehr“ | „weniger“]] (mehr = zusätzlich
+    geheizt, weniger = entfällt) und `diff_min` (mehr − weniger). Die Seite legt die Teile nur über die Spur."""
+    m, o = _spannen(mit), _spannen(ohne)
+    teile = [[a, b, "mehr"] for a, b in _ohne(m, o)] + [[a, b, "weniger"] for a, b in _ohne(o, m)]
+    teile.sort(key=lambda t: t[0])
+    return {"normal": {"start": ohne.start, "ende": ohne.ende} if ohne is not None else None, "teile": teile,
+            "diff_min": sum((t[1] - t[0]) * (1 if t[2] == "mehr" else -1) for t in teile)}

@@ -3537,7 +3537,96 @@
      }
     ],
     "stufen_text": "ab 2 mm: +45 min, morgen 15 min früher · ab 5 mm: +100 min, morgen 30 min früher"
-   }
+   },
+   "plan_abweichung": {
+    "2026-09-30": {
+     "normal": {
+      "start": 330,
+      "ende": 1005
+     },
+     "teile": [
+      [
+       1005,
+       1095,
+       "mehr"
+      ]
+     ],
+     "diff_min": 90
+    },
+    "2026-10-03": {
+     "normal": null,
+     "teile": [
+      [
+       375,
+       735,
+       "mehr"
+      ]
+     ],
+     "diff_min": 360
+    }
+   },
+   "heute": [
+    {
+     "k": "arbeitszeit",
+     "ic": "🕖",
+     "name": "Arbeitszeit",
+     "titel": "Arbeitszeit 07:00–16:30",
+     "text": "„Winter 2026/27“ · heizt 06:15–17:30",
+     "an": true,
+     "kurz": "07:00–16:30",
+     "gruppe": "zeit"
+    },
+    {
+     "k": "grenze",
+     "ic": "🌡",
+     "name": "Heizgrenze",
+     "titel": "Heizgrenze 15 °C",
+     "text": "Höchstwert heute 9 °C → es wird geheizt",
+     "an": true,
+     "kurz": "es wird geheizt",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "trocknen",
+     "ic": "🌧",
+     "name": "Kleidung trocknen",
+     "titel": "Kleidung trocknen",
+     "text": "3,5 mm Regen in der Arbeitszeit heute → 45 min länger, morgen 15 min früher, bis 17:30",
+     "an": true,
+     "kurz": "+45 min bis 17:30",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "fruehstart",
+     "ic": "❄",
+     "name": "Frühstart morgen",
+     "titel": "Kälte-Frühstart morgen",
+     "text": "−4 °C erwartet (unter 0 °C) → 30 min früher, dazu 15 min nach Regen",
+     "an": true,
+     "kurz": "30 min früher, dazu 15 min nach Regen",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "staffel",
+     "ic": "⚡",
+     "name": "Staffelung",
+     "titel": "Staffelung: 4 von 8 Heizkörpern",
+     "text": "1 wartet, weil ein Anschluss ausgelastet ist · höchstens 5 gleichzeitig · Vorheizen startet 15 min früher, damit alle warm werden",
+     "an": true,
+     "kurz": "4 von 8 laufen",
+     "gruppe": "strom"
+    },
+    {
+     "k": "frei",
+     "ic": "🏖",
+     "name": "Frei & Feiertage",
+     "titel": "Kein Urlaub, kein Feiertag",
+     "text": "nächster Feiertag Mo 26.10. Nationalfeiertag",
+     "an": false,
+     "kurz": "nächster Mo 26.10.",
+     "gruppe": "frei"
+    }
+   ]
   },
   "geraete_links": {
    "binary_sensor.tuer_magazin": {
@@ -4988,6 +5077,69 @@
      null,
      "Alle Container jetzt heizen bis 17:20"
     ]
+   ],
+   "plan_abweichung": {},
+   "heute": [
+    {
+     "k": "arbeitszeit",
+     "ic": "🕖",
+     "name": "Arbeitszeit",
+     "titel": "Arbeitszeit 07:00–16:30",
+     "text": "„Herbst 2026“ · heizt 06:15–17:30",
+     "an": true,
+     "kurz": "07:00–16:30",
+     "gruppe": "zeit"
+    },
+    {
+     "k": "grenze",
+     "ic": "🌡",
+     "name": "Heizgrenze",
+     "titel": "Heizgrenze 15 °C",
+     "text": "Höchstwert heute 9 °C → es wird geheizt",
+     "an": true,
+     "kurz": "es wird geheizt",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "trocknen",
+     "ic": "🌧",
+     "name": "Kleidung trocknen",
+     "titel": "Kleidung trocknen",
+     "text": "kein Regenwert vom Wetter",
+     "an": false,
+     "kurz": "kein Regenwert",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "fruehstart",
+     "ic": "❄",
+     "name": "Frühstart morgen",
+     "titel": "Kälte-Frühstart morgen",
+     "text": "−4 °C erwartet (unter 0 °C) → 30 min früher",
+     "an": true,
+     "kurz": "30 min früher",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "staffel",
+     "ic": "⚡",
+     "name": "Staffelung",
+     "titel": "Staffelung: 3 von 4 Heizkörpern",
+     "text": "alle haben Platz · höchstens 5 gleichzeitig · Vorheizen startet 15 min früher, damit alle warm werden",
+     "an": true,
+     "kurz": "3 von 4 laufen",
+     "gruppe": "strom"
+    },
+    {
+     "k": "frei",
+     "ic": "🏖",
+     "name": "Frei & Feiertage",
+     "titel": "Kein Urlaub, kein Feiertag",
+     "text": "nächster Feiertag Mo 26.10. Nationalfeiertag",
+     "an": false,
+     "kurz": "nächster Mo 26.10.",
+     "gruppe": "frei"
+    }
    ]
   },
   "geraete_links": {},
@@ -5314,7 +5466,9 @@
    "wetter": {},
    "heizgrenze": {},
    "termine": [],
-   "protokoll": []
+   "protokoll": [],
+   "heute": [],
+   "plan_abweichung": {}
   },
   "geraete_links": {},
   "rechte": {
@@ -5586,7 +5740,9 @@
    "wetter": {},
    "heizgrenze": {},
    "termine": [],
-   "protokoll": []
+   "protokoll": [],
+   "heute": [],
+   "plan_abweichung": {}
   },
   "geraete_links": {},
   "rechte": {

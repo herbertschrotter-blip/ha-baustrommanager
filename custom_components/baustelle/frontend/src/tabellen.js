@@ -37,3 +37,10 @@ export const WARTE = { anschluss_voll: a => `${a} ausgelastet`, max_gleichzeitig
 /* Zustand des Wetters (weather.*) → Text */
 export const WETTER_TEXT = { sunny: 'Sonnig', 'clear-night': 'Klar', exceptional: 'Unwetter', partlycloudy: 'Heiter', 'partlycloudy-night': 'Heiter', cloudy: 'Bewölkt', windy: 'Windig', 'windy-variant': 'Windig',
   rainy: 'Regen', pouring: 'Starkregen', hail: 'Hagel', lightning: 'Gewitter', 'lightning-rainy': 'Gewitter', fog: 'Nebel', snowy: 'Schnee', 'snowy-rainy': 'Schneeregen' };
+
+/* FE-0034 (Mockup heizung-neu.html, Herbert 29.10.2026): eine Zeitachse 0–24 Uhr für alle Spuren und die Legende der
+   Ausnahme (zusätzlich kräftig in --s5, entfällt blass) */
+export const TAG_MIN = 24 * 60;
+export const ACHSE_H = ['00', '06', '12', '18', '24'];
+export const ACHSE_TEXT = `<div class="tl-achse">${ACHSE_H.map(h => `<span>${h}</span>`).join('')}</div>`;
+export const AUSN_LEGENDE = '<span><i class="tl-ausn mehr"></i>Ausnahme · zusätzlich</span><span><i class="tl-ausn weniger"></i>entfällt</span>';

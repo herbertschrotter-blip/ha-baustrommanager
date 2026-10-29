@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.163",
+   "version": "0.8.164",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -1542,6 +1542,95 @@
      ]
     }
    },
+   "plan_abweichung": {
+    "2026-09-30": {
+     "normal": {
+      "start": 315,
+      "ende": 1005
+     },
+     "teile": [
+      [
+       1005,
+       1095,
+       "mehr"
+      ]
+     ],
+     "diff_min": 90
+    },
+    "2026-10-03": {
+     "normal": null,
+     "teile": [
+      [
+       345,
+       735,
+       "mehr"
+      ]
+     ],
+     "diff_min": 390
+    }
+   },
+   "heute": [
+    {
+     "k": "arbeitszeit",
+     "ic": "🕖",
+     "name": "Arbeitszeit",
+     "titel": "Arbeitszeit 07:00–16:30",
+     "text": "„Herbst 2026“ · heizt 06:15–18:25",
+     "an": true,
+     "kurz": "07:00–16:30",
+     "gruppe": "zeit"
+    },
+    {
+     "k": "grenze",
+     "ic": "🌡",
+     "name": "Heizgrenze",
+     "titel": "Heizgrenze 15 °C",
+     "text": "Höchstwert heute 7 °C → es wird geheizt",
+     "an": true,
+     "kurz": "es wird geheizt",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "trocknen",
+     "ic": "🌧",
+     "name": "Kleidung trocknen",
+     "titel": "Kleidung trocknen",
+     "text": "6,2 mm Regen in der Arbeitszeit heute → 100 min länger, morgen 30 min früher, bis 18:25",
+     "an": true,
+     "kurz": "+100 min bis 18:25",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "fruehstart",
+     "ic": "❄",
+     "name": "Frühstart morgen",
+     "titel": "Kälte-Frühstart morgen",
+     "text": "−0,5 °C erwartet (unter 0 °C) → 30 min früher, dazu 30 min nach Regen",
+     "an": true,
+     "kurz": "30 min früher, dazu 30 min nach Regen",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "staffel",
+     "ic": "⚡",
+     "name": "Staffelung",
+     "titel": "Staffelung: 1 von 5 Heizkörpern",
+     "text": "alle haben Platz · höchstens 5 gleichzeitig · Vorheizen startet 15 min früher, damit alle warm werden",
+     "an": true,
+     "kurz": "1 von 5 laufen",
+     "gruppe": "strom"
+    },
+    {
+     "k": "frei",
+     "ic": "🏖",
+     "name": "Frei & Feiertage",
+     "titel": "Kein Urlaub, kein Feiertag",
+     "text": "nächster Feiertag Mo 26.10. Nationalfeiertag",
+     "an": false,
+     "kurz": "nächster Mo 26.10.",
+     "gruppe": "frei"
+    }
+   ],
    "abschnitte": {
     "polier": {
      "2026-09-28": [
@@ -2502,7 +2591,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.163",
+   "version": "0.8.164",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2957,6 +3046,69 @@
     }
    ],
    "plan_ausnahmen": {},
+   "plan_abweichung": {},
+   "heute": [
+    {
+     "k": "arbeitszeit",
+     "ic": "🕖",
+     "name": "Arbeitszeit",
+     "titel": "Arbeitszeit frei",
+     "text": "keine Arbeitszeit · heizt nicht",
+     "an": false,
+     "kurz": "frei",
+     "gruppe": "zeit"
+    },
+    {
+     "k": "grenze",
+     "ic": "🌡",
+     "name": "Heizgrenze",
+     "titel": "Heizgrenze 15 °C",
+     "text": "kein Wert vom Wetter",
+     "an": true,
+     "kurz": "kein Wert",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "trocknen",
+     "ic": "🌧",
+     "name": "Kleidung trocknen",
+     "titel": "Kleidung trocknen",
+     "text": "kein Regenwert für die Arbeitszeit",
+     "an": false,
+     "kurz": "kein Regenwert",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "fruehstart",
+     "ic": "❄",
+     "name": "Frühstart morgen",
+     "titel": "Kälte-Frühstart morgen",
+     "text": "noch keine Vorhersage für morgen",
+     "an": false,
+     "kurz": "keine Vorhersage",
+     "gruppe": "wetter"
+    },
+    {
+     "k": "staffel",
+     "ic": "⚡",
+     "name": "Staffelung",
+     "titel": "Staffelung: 0 von 1 Heizkörpern",
+     "text": "alle haben Platz · höchstens 5 gleichzeitig · Vorheizen startet 15 min früher, damit alle warm werden",
+     "an": true,
+     "kurz": "0 von 1 laufen",
+     "gruppe": "strom"
+    },
+    {
+     "k": "frei",
+     "ic": "🏖",
+     "name": "Frei & Feiertage",
+     "titel": "Kein Urlaub, kein Feiertag",
+     "text": "kein Feiertagskalender gewählt",
+     "an": false,
+     "kurz": "keiner",
+     "gruppe": "frei"
+    }
+   ],
    "abschnitte": {
     "buero": {
      "2026-09-28": [],

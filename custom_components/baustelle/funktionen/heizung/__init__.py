@@ -233,6 +233,9 @@ class Heizung(Funktion):
     def plan(self, tag: date, trocknen: bool, warm: WarmAb | None = None) -> Plan | None:
         return h_plan.plan(self, tag, trocknen, warm)
 
+    def plan_normal(self, tag: date, trocknen: bool) -> Plan | None:
+        return h_plan.plan_normal(self, tag, trocknen)
+
     def plan_bereich(self, tag: date, bid: str, jetzt: datetime | None = None) -> Plan | None:
         """Heizplan eines Containers: mit „Warm ab“, wenn er lernt (AN-0004), sonst der Plan der Baustelle."""
         e = self.st.einstellungen.bereich(bid)

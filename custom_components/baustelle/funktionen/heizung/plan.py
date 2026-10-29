@@ -103,6 +103,14 @@ def plan(hz: Heizung, tag: date, trocknen: bool, warm: WarmAb | None = None) -> 
     return p
 
 
+def plan_normal(hz: Heizung, tag: date, trocknen: bool) -> Plan | None:
+    """FE-0034: Plan des Tages, wie er ohne Ausnahmen wäre (Vergleich für die Ausnahme-Teile, logik/arbeitszeit.abweichung)."""
+    st = hz.st
+    p = tagesplan(tag, st.arbeitszeiten(), [], hz.heiz_regeln(), st.wetter_tag_plan(tag), trocknen, frei=hz.ist_frei(tag))
+    extra = int(st.lz.get("frueher", {}).get(tag.isoformat()) or 0)   # „Noch früher“ gilt auch ohne Ausnahme (wie plan())
+    return replace(p, start=max(0, p.start - extra)) if p is not None and extra else p
+
+
 def warm_ab(hz: Heizung, bid: str, tag: date, jetzt: datetime) -> WarmAb | None:
     """„Warm ab“ eines lernenden Containers im Modus Thermostat; None für alle anderen.
 

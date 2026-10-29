@@ -13,14 +13,15 @@ from homeassistant.util import dt as dt_util
 
 from .auswertung import beginn_der_baustelle
 from .const import (
-    ART_CONTAINER, CONF_ENERGIE, CONF_LEISTUNG, CONF_REGEN_SENSOR, CONF_STATUS, CONF_TEMP_SENSOR, CONF_WETTER, STATUS_AKTIV,
+    ART_CONTAINER, CONF_ENERGIE, CONF_FEIERTAG_KALENDER, CONF_LEISTUNG, CONF_REGEN_SENSOR, CONF_STATUS, CONF_TEMP_SENSOR, CONF_WETTER, STATUS_AKTIV,
 )
 from .funktionen import aktive
 from .funktionen.heizung import Heizung
 from .funktionen.pumpen import Pumpen
 from .logik import groesse, symbol as symbol_logik
 from .logik.abrechnung import EIGEN, firma_von
-from .logik.arbeitszeit import Plan, uhrzeit
+from .logik import heute as heute_logik
+from .logik.arbeitszeit import Plan, abweichung, gueltige_arbeitszeit, uhrzeit
 from .logik.regelung import heizgrenze_bezug
 from .logik.sensoren import batterie_stufe, kontakte
 from .logik.warnungen import titel as warn_titel
@@ -76,6 +77,38 @@ def _plan_ausnahmen(st: Steuerung, heute: date) -> dict[str, Any]:
     """FE-0012: Heizplan jedes künftigen Tages mit Ausnahmen (auch nach dieser Woche) – für die Liste der Ausnahmen."""
     tage = sorted({a.datum for a in st.ausnahmen() if a.datum >= heute})
     return {t.isoformat(): plan_dict(Heizung.von(st).plan(t, True)) for t in tage[:31]}
+
+
+def _plan_abweichung(st: Steuerung, heute: date) -> dict[str, Any]:
+    """FE-0034: je Tag dieser Woche und je künftigem Ausnahmetag, wo der Plan wegen einer Ausnahme vom Normalplan abweicht
+    (logik/arbeitszeit.abweichung) – nur Tage mit Ausnahme."""
+    hz, woche = Heizung.von(st), set(_woche(heute))
+    tage = sorted({a.datum for a in st.ausnahmen() if a.datum in woche or a.datum >= heute})[:31]   # wie plan_ausnahmen
+    return {t.isoformat(): abweichung(hz.plan(t, True), hz.plan_normal(t, True)) for t in tage}
+
+
+def _heute(st: Steuerung, heute: date, d: Any) -> list[dict[str, Any]]:
+    """AN-0019: die Zeilen „Heute · welche Regeln greifen“ (logik/heute) aus Plan, Einstellungen, Wetter und Staffel."""
+    hz, h, w = Heizung.von(st), st.e["heizung"], d.wetter
+    az = gueltige_arbeitszeit(st.arbeitszeiten(), heute)
+    morgen = heute + timedelta(days=1)
+    s = d.staffel or {}
+    heizkoerper = sum(len(hz.heizer_von(b.id)) for b in hz.bereiche())
+    feiertage = sorted(t for t in st.kalender_tage.get("feiertag", set()) if t > heute)
+    lage = heute_logik.HeuteLage(
+        plan=hz.plan(heute, True), arbeitszeit=az.name if az else None,
+        grenze=float(h["heizgrenze"]), basis="jetzt" if h["heizgrenze_basis"] == "jetzt" else "max",
+        bezug=heizgrenze_bezug(str(h["heizgrenze_basis"]), w.aussen_max, w.aussen), zu_warm=hz.zu_warm(w),
+        trocknen=hz.trocknen_anzeige(heute), morgen_kalt=st.wetter_tag_plan(morgen).frueh_min_temp,
+        fruehstart=bool(h["fruehstart"]), frueh_temp=float(h["fruehstart_unter"]), frueh_min=int(h["fruehstart_min"]),
+        morgen_nach_regen=heute_logik.morgen_nach_regen(hz.plan(morgen, True)),
+        staffel=(int(s.get("laufen") or 0), heizkoerper, int(s.get("warten") or 0), int(s.get("max") or 0)) if st.e["staffel"]["an"] else None,
+        frei=d.status if d.status in ("urlaub", "feiertag") else None, urlaub=str(h.get("frei_modus") or "frost"),
+        absenk=float(h.get("absenk") or 10.0),
+        naechster_feiertag=(feiertage[0], st.kalender_namen.get(feiertage[0], "")) if feiertage else None,
+        feiertag_kalender=bool(st.entry.options.get(CONF_FEIERTAG_KALENDER)),
+    )
+    return heute_logik.regeln(lage)
 
 
 def _minute_im_tag(zeit: datetime, tag: date) -> int:
@@ -234,6 +267,8 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
         "geraete": geraete,
         "plan_woche": _plan_woche(st, heute) if heizung.aktiv() else [],
         "plan_ausnahmen": _plan_ausnahmen(st, heute) if heizung.aktiv() else {},
+        "plan_abweichung": _plan_abweichung(st, heute) if heizung.aktiv() else {},   # FE-0034
+        "heute": _heute(st, heute, d) if heizung.aktiv() else [],   # AN-0019
         "abschnitte": _abschnitte(st, heute, jetzt) if heizung.aktiv() else {},
         "staffel": d.staffel,
         "soll_gleitend": heizung.gleit_anzeige() if heizung.aktiv() else None,   # Soll gleitend (Herbert 01.10.2026)

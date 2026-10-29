@@ -90,7 +90,7 @@ export function baselineReiter(p) {
   const B = p.d.baseline;
   if (!B) return html`<div class="leer">Keine Heizung auf dieser Baustelle</div>`;
   return html`<div class="bl-zeile1"><div><b>Baseline messen</b> <span class="leise">· ${B.an ? 'an' : 'aus'}</span><div class="leise">Testläufe ohne Automatik – Schalter, Kostenrahmen und Absagen unter Heizung › Regeln.</div></div>
-      <button class="chip glas-panel" data-k="bl-einstellen" @click=${() => { p.gehe('heizung'); return p.hzAuf('regeln'); }}>einstellen ›</button></div>
+      <button class="chip glas-panel" data-k="bl-einstellen" @click=${() => { p.gehe('heizung'); p.s.rvAuf = 'bl'; return p.hzAuf('regeln'); }}>einstellen ›</button></div>
     ${B.an ? naechsterLauf(p) : nothing}${standListe(p)}${laufListe(p)}${thermostat}`;
 }
 

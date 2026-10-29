@@ -1220,7 +1220,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick({ act: 'zu' }); }
   await klick({ act: 'tab', v: 'heizung' }, 30);
   erwarte('Heizung als Kacheln: Heute-Karte und 8 Kacheln', ui.innerHTML.includes('hz-held') && (ui.innerHTML.match(/class="glas-panel hz-kachel"/g) || []).length === 8);
-  const hzOffen = async k => { await klick({ act: 'hz-auf', k }, 20); return ui.innerHTML; };
+  const hzOffen = async k => { if (k === 'regeln') panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k }, 20); return ui.innerHTML; };   // AN-0020: alle Gruppen offen
   { // 3d: die Kachel „Kleidung trocknen“ zeigt ihren eigenen Block (bis 0.8.88 fand die Textsuche „So wird geheizt“)
     const h = await hzOffen('trocknen');
     erwarte('3d: Kachel „Kleidung trocknen“ mit ihren Reglern', h.includes('ab Regen in der Arbeitszeit') && ['ab_mm', 'laenger_min', 'frueher_min'].every(k => h.includes(`data-tr="0-${k}+"`)) && !h.includes('So wird geheizt'));
@@ -1242,7 +1242,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     const laden = async () => { panel._rohText = null; await panel._laden(); await ruhe(20); };
     let h = await hzOffen('regeln'); pruefe('Regeln Baseline an');
     const karte = () => litEl('.sheet .bl-rv'), txt = () => (karte() ? karte().textContent : '').replace(/\s+/g, ' ');
-    erwarte('J4b: Karte „Baseline messen“ zwischen „Immer“ und „Feste Regeln“', !!karte() && h.indexOf('🧪 Baseline messen') > h.indexOf('Messung und Strom') && h.indexOf('🧪 Baseline messen') < h.indexOf('📐 Feste Regeln')
+    erwarte('J4b: Karte „Baseline messen“ zwischen „Immer“ und „Feste Regeln“', !!karte() && h.indexOf('data-gr="bl"') > h.indexOf('data-gr="immer"') && h.indexOf('data-gr="bl"') < h.indexOf('data-gr="fest"')
       && txt().includes('nur sein Thermostat am Heizkörper regelt') && !!karte().querySelector('.sw.on'));
     erwarte('J4b: Kostenrahmen mit Balken, gemessen und übrig (Werte der Integration)', txt().includes('September: 12,52 € gemessen · 47,48 € übrig') && txt().includes('60 €')
       && karte().querySelector('.bl-balken i.g').style.width.startsWith('20.8'));
@@ -1605,9 +1605,40 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   erwarte('Alle laufenden: ohne Je Gerät und Temperaturen', !ui.innerHTML.includes('Je Gerät') && !litEl('.seite .seg [data-v="30"]'));
   await klick(AW.scope('diese'), 30);
   await klick({ act: 'tab', v: 'einst' }, 30);
+  /* heizung-neu.html (Herbert 29.10.2026): AN-0019 C Übersichtskarten aus laufzeit.heute, „Wann heizt was“ eine Spur je Container,
+     AN-0020 A Regeln als zugeklappte Gruppen (eine offen), FE-0034 Achse 0–24 und Ausnahme-Teile aus laufzeit.plan_abweichung */
+  { panel.s.hrAuf = null; panel.s.hzAlle = false; await klick({ act: 'hz-auf', k: 'heute' }, 20); pruefe('Heute Karten');
+    const R = panel.d.heute, karten = litEls('.sheet .hr-karte');
+    erwarte('AN-0019: je Regel der Integration eine Karte mit Name, Kurzwert und ●/○', R.length > 0 && karten.length === R.length
+      && R.every((r, i) => karten[i].dataset.k === r.k && karten[i].querySelector('.hr-kurz').textContent === r.kurz && karten[i].querySelector('.hr-an').textContent === (r.an ? '●' : '○')));
+    erwarte('AN-0019: zu – kein Satz', !litEl('.sheet .hr-detail'));
+    await klick('.sheet .hr-karte[data-k="grenze"]', 10);
+    const g = R.find(r => r.k === 'grenze');
+    erwarte('AN-0019: Antippen zeigt Titel und ganzen Satz der Integration', !!litEl('.sheet .hr-detail') && litEl('.sheet .hr-detail').textContent.includes(g.titel) && litEl('.sheet .hr-detail').textContent.includes(g.text));
+    await klick('.sheet .hr-karte[data-k="grenze"]', 10); erwarte('AN-0019: noch einmal antippen schließt', !litEl('.sheet .hr-detail'));
+    const C = panel.d.bereiche.filter(b => !b.pumpe && b.geraete.some(x => x.heizer)), zeilen = () => litEls('.sheet .hz-tag .hz-zeile:not(.achse)').length;
+    erwarte('AN-0019: Wann heizt was – eine Spur je Container', zeilen() === C.length);
+    await klick('.sheet [data-k="hz-alle"]', 10);
+    erwarte('AN-0019: „alle Heizkörper ▾“ zeigt jeden Heizkörper', zeilen() === C.reduce((n, b) => n + b.geraete.filter(x => x.heizer).length, 0) && panel.s.hzAlle);
+    panel.s.hzAlle = false;
+    erwarte('FE-0034: Achse 0–24 Uhr', litEl('.sheet .tl-achse').textContent.replace(/\s+/g, '') === '0006121824');
+    await klick({ act: 'zu' }, 5);
+    await klick({ act: 'hz-auf', k: 'plan' }, 20); pruefe('Diese Woche Ausnahme');
+    const ab = panel.d.abweichung || {}, tage = Object.keys(ab).filter(t => panel.z.WOCHE_ISO.includes(t) && ab[t].teile.length);
+    erwarte('FE-0034: Ausnahme-Teile der Integration über der Spur, mit Legende', tage.length > 0 && litEls('.sheet .tl-spur i.tl-ausn').length >= tage.reduce((n, t) => n + ab[t].teile.length, 0)
+      && !!litEl('.sheet .hp-legende .tl-ausn.mehr'));
+    await klick({ act: 'zu' }, 5);
+    panel.s.rvAuf = null; await klick({ act: 'hz-auf', k: 'regeln' }, 20); pruefe('Regeln Gruppen zu');
+    erwarte('AN-0020: Regeln zugeklappt – je Gruppe eine Zeile mit Zusammenfassung, keine Bedienelemente', litEls('.sheet .rv-gr').length >= 6 && !litEl('.sheet .rv-gr .rv-karte')
+      && litEl('.sheet .rv-gr[data-gr="vor"] .rv-sum').textContent.includes('Vorheizen'));
+    await klick('.sheet .rv-gr[data-gr="vor"] .rv-gk', 10);
+    erwarte('AN-0020: Antippen öffnet die Gruppe mit den bisherigen Zeilen', !!litEl('.sheet .rv-gr[data-gr="vor"] [data-r="vorheizen"]'));
+    await klick('.sheet .rv-gr[data-gr="nacht"] .rv-gk', 10);
+    erwarte('AN-0020: immer nur eine Gruppe offen', litEls('.sheet .rv-gr.auf').length === 1 && !!litEl('.sheet .rv-gr[data-gr="nacht"] [data-r="frost"]') && !litEl('.sheet [data-r="vorheizen"]'));
+    panel.s.rvAuf = null; await klick({ act: 'zu' }, 5); }
   /* AN-0003: Zusammensetzung der Heizzeit sichtbar (Verlängerungen zählen zusammen) */
   { const p = panel.planTag(panel.z.HEUTE_TAG), uhr2 = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-    if (p) { await klick({ act: 'hz-auf', k: 'heute' }, 20); const h = ui.innerHTML;
+    if (p) { panel.s.hrAuf = 'arbeitszeit'; await klick({ act: 'hz-auf', k: 'heute' }, 20); const h = ui.innerHTML;   // AN-0019: unter der Karte Arbeitszeit
       erwarte('AN-0003: Rechnung der Heizzeit unter „Heute“', h.includes(`Heizt ${uhr2(p.extra)}–`) && h.includes(`= ${p.extra === p.ende ? '' : ''}`) && /Arbeit/.test(h));
       const q = { ...p, extra: p.a - 90, vor: p.a - 30, codes: ['fruehstart', 'frueher_nach_regen'], nach: p.b + 15, ende: p.b + 45 };
       erwarte('AN-0003: 30 Vorheizen + 60 Kälte und Regen', /60 min früher \(Kälte \+ Regen gestern\) \+ 30 min Vorheizen \+ Arbeit/.test(panel.planRechnung(q)) && panel.planRechnung(q).includes('30 min Kleidung trocknen'));
@@ -1667,7 +1698,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { const b0 = panel.d.bereiche.find(x => x.geraete.filter(g => g.heizer).length >= 2);
     if (b0) {
       const welt = struktur.find(x => x.baustelle.entry_id === panel.d.entry), c = welt.laufzeit.container[b0.id], alt = JSON.parse(JSON.stringify(c));
-      await klick({ act: 'tab', v: 'heizung' }, 10); await klick({ act: 'hz-auf', k: 'regeln' }, 10);
+      await klick({ act: 'tab', v: 'heizung' }, 10); panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k: 'regeln' }, 10);
       erwarte('AN-0006: Schwellen unter Regeln', ['🔥 Zusatz-Heizkörper', 'data-k="stufen_abstand"', 'data-k="stufen_min"', 'data-k="stufen_anstieg"', 'data-k="stufen_kalt"'].every(t => ui.innerHTML.includes(t)));
       neu(); await klick({ act: 'st', k: 'stufen_abstand', d: '0.5' }, 10);
       erwarte('AN-0006: Schwelle speichert heizung.stufen_abstand', aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === 'heizung.stufen_abstand' && m.wert === 2));
@@ -1767,11 +1798,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         plan: { start: 330, ziel: 405, a: 420, b: 990, ende: 990, begrenzt: false } } };
     const nachPanel = () => { panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen(); };
     nachPanel(); const b = () => panel.d.bereiche.find(x => x.id === b0.id);
-    await klick({ act: 'tab', v: 'heizung' }, 10); await klick({ act: 'hz-auf', k: 'regeln' }, 10);
+    await klick({ act: 'tab', v: 'heizung' }, 10); panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k: 'regeln' }, 10);
     erwarte('AN-0004: Regeln mit Soll erreicht / Warm halten / Frühestens', ['data-k="warm_vor"', 'data-k="warm_nach"', 'data-k="warm_max"', 'nicht für lernende Container'].every(t => ui.innerHTML.includes(t)));
     neu(); await klick({ act: 'st', k: 'warm_vor', d: '5' }, 10);
     erwarte('AN-0004: „Soll erreicht“ speichert heizung.warm_vor_min', aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === 'heizung.warm_vor_min' && m.wert === 5));
-    await klick({ act: 'zu' }, 5); await klick({ act: 'hz-auf', k: 'heute' }, 10);
+    await klick({ act: 'zu' }, 5); panel.s.hrAuf = 'arbeitszeit'; await klick({ act: 'hz-auf', k: 'heute' }, 10);
     erwarte('AN-0004: Heute zeigt den gelernten Beginn', ui.innerHTML.includes(`<b>${b0.name}</b>: heizt ab 05:30, damit um 06:45 20,0 °C (jetzt 16,4 °C, 3,2 °C/h gelernt) · warm bis 16:30`));
     await klick({ act: 'zu' }, 5); await klick({ act: 'container', id: b0.id }, 10);
     erwarte('AN-0004: Container-Kopf mit „warm um 06:45 · ab 05:30“ in der Gruppe Plan', /data-g="Plan"[^]*?warm um 06:45 · ab 05:30/.test(ui.innerHTML));
@@ -1919,10 +1950,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('AN-0002: Beginn leer → ohne Beginn gespeichert (Tag der Anlage)', o && !('beginn' in o[2])); }
   neu(); await klick({ act: 'e-bool', k: 'erklaer' });
   erwarte('Erklärungen abschalten', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["erklaer"]' && a.wert === false));
-  await klick({ act: 'tab', v: 'heizung' }, 20); await klick({ act: 'hz-auf', k: 'regeln' }, 20); erwarte('ohne Erklärungen keine „ⓘ“', !ui.innerHTML.includes('class="erkl"'));
-  await klick({ act: 'e-bool', k: 'erklaer' }); await klick({ act: 'tab', v: 'heizung' }, 20); await klick({ act: 'hz-auf', k: 'regeln' }, 20); erwarte('mit Erklärungen „ⓘ“', ui.innerHTML.includes('class="erkl"'));
+  await klick({ act: 'tab', v: 'heizung' }, 20); panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k: 'regeln' }, 20); erwarte('ohne Erklärungen keine „ⓘ“', !ui.innerHTML.includes('class="erkl"'));
+  await klick({ act: 'e-bool', k: 'erklaer' }); await klick({ act: 'tab', v: 'heizung' }, 20); panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k: 'regeln' }, 20); erwarte('mit Erklärungen „ⓘ“', ui.innerHTML.includes('class="erkl"'));
   /* Kleinigkeiten nach 0.7.8: Frostschutz auch bei Automatik aus, Kälte-Frühstart unter 0 °C */
-  await klick({ act: 'tab', v: 'heizung' }, 20); await klick({ act: 'hz-auf', k: 'regeln' }, 20);
+  await klick({ act: 'tab', v: 'heizung' }, 20); panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k: 'regeln' }, 20);
   erwarte('Schalter „auch bei Automatik aus“', /auch bei Automatik aus[^]*?class="sw /.test(ui.innerHTML));
   neu(); await klick({ act: 'e-bool', k: 'frost_immer' });
   erwarte('frost_immer über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["heizung","frost_immer"]' && a.wert === true));

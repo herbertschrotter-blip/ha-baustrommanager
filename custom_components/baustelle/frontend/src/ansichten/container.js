@@ -3,6 +3,7 @@
 // Stufe 4 SVG-Text (unsafeHTML). Neue Messwerte zeichnen nur, was sich geändert hat (B4).
 import { html, nothing } from 'lit';
 import { geraeteKachelnVorlage } from './geraete.js';
+import { regelGruppeAuf } from './heizung.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { TAGE, de, kurzDatum, minu, naechsterTermin, plusTage, uhr, wtag, zahl } from '../hilfen.js';
 import { FARBE, MODI, TEXT, WIEDER, kwVon } from '../tabellen.js';
@@ -130,7 +131,7 @@ const hin = (p, sel) => p.updateComplete.then(() => { const el = p.ui && p.ui.qu
 export function eiSpringen(p, ziel) {
   const [art, z] = String(ziel || '').split(':');
   if (art === 'bearbeiten' || art === 'container') { p.einblenden('bereich'); return hin(p, `.sheet [data-zeile="${z}"]`); }   // Container bearbeiten (container: = ältere Integration, AN-0018)
-  if (art === 'regeln') { p.hzAuf('regeln'); return hin(p, `.sheet [data-r="${z}"]`); }   // Heizung › Regeln
+  if (art === 'regeln') { regelGruppeAuf(p, z); p.hzAuf('regeln'); return hin(p, `.sheet [data-r="${z}"]`); }   // Heizung › Regeln (AN-0020: Gruppe auf)
   if (art === 'urlaub') return p.hzAuf('urlaub');   // Urlaub & Feiertage
   if (art === 'strom') { p.einstGruppe('strom'); return z ? hin(p, `.ev-inhalt [data-r="${z}"]`) : p.updateComplete; }   // Einstellungen › Strom
   if (art === 'notprogramm') return p.einstGruppe('notprogramm');   // Einstellungen › Notprogramm

@@ -6,7 +6,7 @@
    (Subentry-/Options-Dialoge, calendar/event/*, Diagnose). Gerechnet wird in der Integration, nicht hier.
    ========================================================================================= */
 import { AW_BAUSTEINE, AW_HOEHE, AW_SPEICHER, AW_VORLAGEN, KK, KK_JEDES, KK_SPEICHER, KK_START, ST_KACHEL, awStufe, awStufen } from './kacheln-daten.js';
-import { ARTEN, AUSNAHME, MODI, TEXT, TICKET_STATUS, WETTER_TEXT, WIEDER, illu, kwVon } from './tabellen.js';
+import { ACHSE_TEXT, ARTEN, AUSNAHME, AUSN_LEGENDE, MODI, TAG_MIN, TEXT, TICKET_STATUS, WETTER_TEXT, WIEDER, illu, kwVon } from './tabellen.js';
 
 import { Himmel, himmelLauf, partikel, phaseAusSonne } from './himmel.js';
 import { CHARTS, balken, flaeche, funke, kkBalken, linie, luecke, streu, stufen } from './diagramme.js';
@@ -323,6 +323,8 @@ const GLAS_CSS = `:host { display: block; height: 100%; }
 .tl-spur { position: relative; height: 22px; border-radius: 8px; background: rgba(120,120,128,.2); overflow: hidden; }
 .tl-spur i { position: absolute; top: 0; bottom: 0; }
 .tl-heiz { background: var(--amber); opacity: .85; }
+.tl-spur i.tl-ausn.mehr, .hp-legende .tl-ausn.mehr { background: var(--s5); opacity: 1; }   /* FE-0034: Ausnahme zusätzlich */
+.tl-spur i.tl-ausn.weniger, .hp-legende .tl-ausn.weniger { background: color-mix(in srgb, var(--s5) 30%, transparent); }   /* entfällt */
 .tl-trock { background: repeating-linear-gradient(45deg, var(--amber) 0 3px, transparent 3px 7px); }
 .tl-jetzt { width: 2px; background: var(--ink); box-shadow: 0 0 6px var(--ink); }
 .tl-achse { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink2); margin-top: 4px; }
@@ -435,6 +437,14 @@ const GLAS_CSS = `:host { display: block; height: 100%; }
 .tl-termin { background: color-mix(in srgb, var(--amber) 70%, #bf5af2); }
 .hz-tag { display: flex; flex-direction: column; gap: 6px; }
 .hz-zeile { display: grid; grid-template-columns: 96px 1fr 40px; gap: 8px; align-items: center; } .hz-zeile.aus { opacity: .45; }
+.hz-alle { border: 0; background: none; font: inherit; font-size: 13px; color: var(--blau); cursor: pointer; padding: 6px 0 0; }   /* AN-0019 C */
+.hr-karten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 4px 0 8px; }
+.hr-karte { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic name an" "wert wert wert" "mehr mehr mehr"; gap: 2px 8px; align-items: center;
+  text-align: left; font: inherit; color: inherit; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--panel-rand, rgba(127,127,127,.25)); background: rgba(127,127,127,.08); cursor: pointer; }
+.hr-karte .hr-ic { grid-area: ic; } .hr-karte .hr-name { grid-area: name; font-size: 12px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hr-karte .hr-an { grid-area: an; } .hr-karte .hr-kurz { grid-area: wert; font-size: 15px; } .hr-karte .hr-mehr { grid-area: mehr; font-size: 11px; color: var(--blau); }
+.hr-karte.an .hr-an { color: var(--amber); } .hr-karte.auf { border-color: var(--amber); }
+.hr-detail { padding: 4px 12px 8px; border-radius: 14px; margin-bottom: 8px; }
 .hz-n { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .hz-h { font-size: 11px; color: var(--ink2); text-align: right; }
 .tl-spur.hz { height: 14px; border-radius: 5px; }
 .hz-woche { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
@@ -862,6 +872,12 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .sg-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--ink2); margin-bottom: 6px; } .sg-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 /* AN-0012: Regeln nach Tagesablauf */
 .rv-kopf { display: flex; align-items: baseline; gap: 8px; margin: 14px 2px 4px; } .rv-kopf b { font-size: 16px; } .rv-kopf .leise { font-size: 12px; }
+.rv-gr { border-radius: 16px; background: rgba(120,120,128,.10); margin-bottom: 6px; } .rv-gr .rv-karte { background: none; margin: 0; padding-top: 0; }   /* AN-0020 A */
+.rv-gk { display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; gap: 8px; align-items: center; width: 100%; border: 0; background: none; font: inherit; color: inherit; text-align: left; padding: 10px 12px; cursor: pointer; }
+.rv-gic { font-size: 18px; } .rv-gt { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .rv-unter { font-weight: 400; font-size: 12px; }
+.rv-sum { font-size: 12px; color: var(--ink2); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.rv-sum b { color: var(--ink); font-weight: 600; } .rv-s.aus { color: var(--ink2); font-style: italic; }
+.rv-gr .bl-regeln { display: none; }
 .rv-karte { border-radius: 16px; background: rgba(120,120,128,.10); padding: 2px 12px; margin-bottom: 6px; } .rv-karte > .zeile:first-child { border-top: 0; }
 .rv-fest { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 8px 0; font-size: 13px; border-top: 1px solid var(--gridc); }
 .rv-fest:first-child { border-top: 0; } .rv-fest b { font-weight: 600; text-align: right; } .rv-fest .leise { grid-column: 1 / -1; margin-top: -4px; font-size: 12px; }
@@ -1487,7 +1503,7 @@ class BaustellePanel extends LitElement {
       : c === 'frueher_nach_regen' ? 'früher nach Regen'
       : c === 'gelernt' ? '🧠 gelernter Beginn'
       : c === 'trocknen' ? (zahl(this.d.regenAz[iso]) ? `Kleidung trocknen, ${de(this.d.regenAz[iso], this.d.regenAz[iso] % 1 ? 1 : 0)} mm Regen in der Arbeitszeit` : 'Kleidung trocknen') : String(c));   // AN-0021
-    return { vor: q.vor, extra: zahl(q.start) ? q.start : q.vor, a: q.a, b: q.b, nach: q.nach, ende: q.ende, gruende, codes: q.gruende || [], ausnahme: q.ausnahme || null,
+    return { iso, vor: q.vor, extra: zahl(q.start) ? q.start : q.vor, a: q.a, b: q.b, nach: q.nach, ende: q.ende, gruende, codes: q.gruende || [], ausnahme: q.ausnahme || null,
       eigene: q.eigene || [], ausnahmen: q.ausnahmen || [] };
   }
   statusText() {
@@ -1501,14 +1517,17 @@ class BaustellePanel extends LitElement {
     if (p && j < p.extra) return `Start um ${uhr(p.extra)}`;
     return 'aus';
   }
-  zeitstrahl(p, jetzt = false) {
+  zeitstrahl(p, jetzt = false, iso = p && p.iso) {
     const seg = p ? [[p.extra, p.vor, 'extra'], [p.vor, p.a, 'vor'], [p.a, p.b, 'heiz'], [p.b, p.nach, 'vor'], [p.nach, p.ende, 'trock'], ...(p.eigene || []).map(f => [f[0], f[1], 'eigen'])] : [];   // FE-0012
-    return this.zeitstrahlSeg(seg, jetzt);
+    return this.zeitstrahlSeg(seg, jetzt, this.ausnTeile(iso));
   }
-  zeitstrahlSeg(liste, jetzt = false) {
-    const A = 4 * 60, B = 20 * 60, x = m => Math.max(0, Math.min(100, (m - A) / (B - A) * 100));
+  /* FE-0034 (Mockup heizung-neu.html A): wo der Plan wegen einer Ausnahme abweicht – von der Integration (plan_abweichung) */
+  ausnTeile(iso) { const a = iso && this.d.abweichung && this.d.abweichung[iso]; return a ? a.teile || [] : []; }
+  /* gemeinsame Achse 0–24 Uhr (FE-0034, Herbert 29.10.2026): alle Spuren gleich breit; Ausnahme zusätzlich kräftig, entfällt blass */
+  zeitstrahlSeg(liste, jetzt = false, ausn = []) {
+    const x = m => Math.max(0, Math.min(100, m / TAG_MIN * 100));
     const seg = (von, bis, k) => bis > von ? `<i class="tl-${k}" style="left:${x(von)}%;width:${x(bis) - x(von)}%"></i>` : '';
-    return `<div class="tl-spur">${liste.map(q => seg(q[0], q[1], q[2])).join('')}${jetzt ? `<i class="tl-jetzt" style="left:${x(minu(this.z.JETZT))}%"></i>` : ''}</div>`;
+    return `<div class="tl-spur">${liste.map(q => seg(q[0], q[1], q[2])).join('')}${ausn.map(q => seg(q[0], q[1], `ausn ${q[2]}`)).join('')}${jetzt ? `<i class="tl-jetzt" style="left:${x(minu(this.z.JETZT))}%"></i>` : ''}</div>`;
   }
   bName(id) { return id ? (this.d.bereiche.find(b => b.id === id) || { name: id }).name : 'Baustelle'; }
   /* Staffelung: gemessene Last, Grenze und freier Platz – gerechnet von der Integration (laufzeit.staffel) */
@@ -1569,13 +1588,13 @@ class BaustellePanel extends LitElement {
     return 'frei · nur Frostschutz';
   }
   heizplanInhalt() {
-    const e = this.d.e;
-    return `<div class="hp-legende"><span><i class="tl-extra"></i>Frühstart</span><span><i class="tl-eigen"></i>eigenes Zeitfenster</span><span><i class="tl-vor"></i>Vor- und Nachheizen ${e.vorheizen}/${e.nachheizen} min</span><span><i class="tl-heiz"></i>Arbeitszeit</span><span><i class="tl-trock"></i>Kleidung trocknen</span></div>
+    const e = this.d.e, ausn = this.z.WOCHE_ISO.some(iso => this.ausnTeile(iso).length);
+    return `<div class="hp-legende"><span><i class="tl-extra"></i>Frühstart</span><span><i class="tl-eigen"></i>eigenes Zeitfenster</span><span><i class="tl-vor"></i>Vor- und Nachheizen ${e.vorheizen}/${e.nachheizen} min</span><span><i class="tl-heiz"></i>Arbeitszeit</span><span><i class="tl-trock"></i>Kleidung trocknen</span>${ausn ? AUSN_LEGENDE : ''}</div>
       <div class="hp">${this.z.WOCHE.map(([t, d], k) => { const p = this.planTag(t), h = t === this.z.HEUTE_TAG, iso = this.z.WOCHE_ISO[k];
         return `<div class="hp-zeile ${h ? 'heute' : ''} ${this.d.ausnahmen.some(x => x.datum === iso) ? 'ausn' : ''}"><div class="hp-tag"><b>${h ? 'heute' : t}</b><span>${d}</span></div>
-          <div class="hp-mitte">${this.zeitstrahl(p, h)}<div class="leise">${p ? p.gruende.map(esc).join(' · ') : this.freiText(iso)}</div></div>
+          <div class="hp-mitte">${this.zeitstrahl(p, h, iso)}<div class="leise">${p ? p.gruende.map(esc).join(' · ') : this.freiText(iso)}</div></div>
           <div class="hp-zeit">${p ? `${uhr(p.extra)}<br>${uhr(p.ende)}` : '–'}</div></div>`; }).join('')}
-        <div class="hp-zeile achse"><div></div><div class="tl-achse">${['04', '08', '12', '16', '20'].map(h => `<span>${h}</span>`).join('')}</div><div></div></div></div>`;
+        <div class="hp-zeile achse"><div></div>${ACHSE_TEXT}<div></div></div></div>`;
   }
   get b() { return this.d && this.d.bereiche.find(x => x.id === this.s.cid); }
   gehe(view, cid = null) { this.s.view = view; this.s.cid = cid; this.s.leeren(); this.s.zrKal = null; this.neuZeichnen(true); }
@@ -2500,7 +2519,7 @@ class BaustellePanel extends LitElement {
           dia: id => zy ? balken(id, zy, lab(c.zc, zrc.labels), 'Zyklen', 0) : '' }; }
       case 'h-plan': { const pl = this.planTag(this.z.HEUTE_TAG);
         return { zahl: pl ? `${uhr(pl.vor)}–${uhr(pl.ende)}` : 'frei', einh: '', wo: 'heute', vgl: esc(this.statusText()) + (pl && pl.gruende && pl.gruende.length ? ` · ${esc(pl.gruende[0])}` : ''),
-          mini: `${this.zeitstrahl(pl, true)}<div class="tl-achse"><span>4</span><span>12</span><span>20</span></div>`,
+          mini: `${this.zeitstrahl(pl, true)}${ACHSE_TEXT}`,
           kennz: [['Vorheizen ab', pl ? uhr(pl.vor) : '–'], ['Arbeitszeit', pl ? `${uhr(pl.a)}–${uhr(pl.b)}` : '–'], ['Nachheizen bis', pl ? uhr(pl.nach) : '–'], ['Trocknen bis', pl && pl.ende > pl.nach ? uhr(pl.ende) : '–']],
           dia: () => `<div class="kk-dia-in">${this.z.WOCHE.map(([t, dt]) => `<div class="kk-dz ${t === this.z.HEUTE_TAG ? 'heute' : ''}"><span>${t} ${dt.slice(0, 2)}.</span>${this.zeitstrahl(this.planTag(t), t === this.z.HEUTE_TAG)}</div>`).join('')}</div>`, zeilen: true }; }
       case 'h-wann': { const C = d.bereiche.filter(bb => !bb.pumpe), Z = C.map(bb => ({ bb, seg: this.heizzeiten(bb, this.z.HEUTE_TAG) })), mit = Z.filter(q => q.seg.length);

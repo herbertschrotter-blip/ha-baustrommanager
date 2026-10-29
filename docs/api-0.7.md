@@ -45,6 +45,11 @@ Zeiten: ISO 8601 mit Zeitzone; Uhrzeiten `"HH:MM"`; Minuten seit Mitternacht als
     //   und "ausnahmen": [ … alle des Tages ]; laufzeit.plan_ausnahmen = {"JJJJ-MM-TT": plan} für künftige Tage mit
     //   Ausnahmen. baustelle/liste ausnahmen: mehrere je Tag; „frei“ ersetzt alle des Tages; loeschen mit art/von/bis
     //   löscht nur dieses Fenster, nur mit datum alle des Tages.
+    // FE-0034: laufzeit.plan_abweichung = {"JJJJ-MM-TT": {"normal": {"start", "ende"} | null, "teile": [[von, bis,
+    //   "mehr"|"weniger"]], "diff_min"}} je Tag dieser Woche und je künftigem Tag mit Ausnahme (logik/arbeitszeit.abweichung):
+    //   wo der Plan wegen der Ausnahme vom Normalplan abweicht; die Seite legt die Teile über die Spuren (Achse 0–24 Uhr).
+    // AN-0019: laufzeit.heute = [{"k", "ic", "name", "titel", "text", "an", "kurz", "gruppe": "zeit|wetter|strom|frei"}] –
+    //   „Heute · welche Regeln greifen“ fertig von der Integration (logik/heute.py); die Seite zeigt Karten und Satz.
     "staffel": {"an": true, "laufen": 4, "warten": 1, "max": 5,
                 "anschluesse": [{"id": "", "name": "", "voll_kw": 22.1, "grenze_kw": 14.8, "reserve_kw": 4,
                                  "heiz_kw": 7.99, "pumpe_kw": 0, "sonst_kw": 1.79, "frei_kw": 1.01}],

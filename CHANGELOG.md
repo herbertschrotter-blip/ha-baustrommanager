@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.164] – 2026-10-29
+
+- AN-0019: Heizung › Heute zeigt Übersichtskarten in zwei Spalten (Arbeitszeit, Heizgrenze, Kleidung trocknen, Frühstart
+  morgen, Staffelung, Frei & Feiertage) mit Kurzwert und ●/○; „mehr ▾“ zeigt den ganzen Satz darunter, bei der Arbeitszeit
+  wie bisher mit der Rechnung des Plans und den lernenden Containern. Die Sätze, Kurzwerte und Gruppen kommen jetzt von
+  der Integration (neue Regel `logik/heute.py`) statt von der Seite. „Wann heizt was“ zeigt eine Spur je Container,
+  „alle Heizkörper ▾“ jeden Heizkörper.
+- AN-0020: Heizung › Regeln als zugeklappte Gruppen (Vor der Arbeit, In der Arbeitszeit, Nach der Arbeit, Nachts/frei,
+  Immer, Baseline, Feste Regeln) mit zweizeiliger Zusammenfassung; antippen öffnet die bisherigen Bedienelemente, immer
+  nur eine Gruppe offen. „ändern ›“ der Chips öffnet die passende Gruppe.
+- FE-0034: Alle Heizplan-Balken haben dieselbe Zeitachse 0–24 Uhr (Diese Woche, Karte Heute, Ausnahmen, Wann heizt was).
+  Ausnahmen sind am Balken zu sehen: zusätzliche Zeit kräftig in eigener Farbe, entfallene Zeit blass, mit Legende – die
+  Abweichung vom Normalplan rechnet die Integration (`plan_abweichung`, `logik/arbeitszeit.abweichung`).
+
 ## [0.8.163] – 2026-10-29
 
 - AN-0018: Der Container unten ist neu geordnet (Mockup `container-unten.html`, Variante B): Kacheln je Geräteart –
