@@ -4120,26 +4120,35 @@ var stand = (c4) => {
 function zahlZeile(h3) {
   return b2`<div class="hp-zahl">≈ ${eur(h3.mit_eur)}<span class="leise"> · ${zahl(h3.unten_eur) ? `${de(h3.unten_eur, 0)}–${eur(h3.oben_eur)}` : `${de(h3.mit_kwh, 0)} kWh`}</span></div>`;
 }
+var mengeText = (v2, mwh) => mwh ? `${de(v2 / 1e3, v2 < 1e4 ? 1 : 0)} MWh` : `${de(v2, 0)} kWh`;
 function diagramm(h3) {
   const R2 = h3.reihe || [];
   if (R2.length < 2) return A;
   const W = 340, H2 = 180, L2 = 36, U = 22, n4 = R2.length;
-  const max = Math.max(...R2.map((r5) => Math.max(r5[2] || 0, r5[4] || 0, r5[5] || 0)), 1) * 1.05;
-  const x2 = (i7) => L2 + i7 / (n4 - 1) * (W - L2 - 6), y3 = (v2) => H2 - U - v2 / max * (H2 - U - 10);
+  const max = Math.max(...R2.map((r5) => Math.max(r5[1] || 0, r5[2] || 0, r5[4] || 0)), 1) * 1.05;
+  const raus = R2.findIndex((r5) => r5[5] !== null && r5[5] > max), O = raus >= 0 ? 22 : 10;
+  const x2 = (i7) => L2 + i7 / (n4 - 1) * (W - L2 - 6), y3 = (v2) => H2 - U - v2 / max * (H2 - U - O);
   const heute2 = Math.max(0, R2.findLastIndex((r5) => r5[1] !== null));
   const pfad = (k2, von, bis) => R2.slice(von, bis + 1).map((r5, j2) => r5[k2] === null ? "" : `${j2 ? "L" : "M"}${x2(von + j2).toFixed(1)},${y3(r5[k2]).toFixed(1)}`).join(" ");
   const band = R2[n4 - 1][3] !== null ? `M${x2(heute2).toFixed(1)},${y3(R2[heute2][3]).toFixed(1)} ${R2.slice(heute2).map((r5, j2) => `L${x2(heute2 + j2).toFixed(1)},${y3(r5[4]).toFixed(1)}`).join(" ")} ${R2.slice(heute2).reverse().map((r5, j2) => `L${x2(n4 - 1 - j2).toFixed(1)},${y3(r5[3]).toFixed(1)}`).join(" ")} Z` : "";
   const stufen2 = [0, 0.25, 0.5, 0.75, 1].map((f3) => max / 1.05 * f3), mwh = max > 4e3;
   const monate = R2.map((r5, i7) => [r5[0], i7]).filter(([t5]) => t5.endsWith("-01"));
+  let pfeil = "";
+  if (raus >= 0) {
+    const a3 = R2[raus - 1], xe = raus && a3[5] !== null ? x2(raus - 1 + (max - a3[5]) / (R2[raus][5] - a3[5])) : x2(raus);
+    const ende = zahl(h3.ohne_kwh) ? h3.ohne_kwh : R2[n4 - 1][5], t5 = `ohne${h3.ohne_hinweis ? " (Schätzung 24/7)" : ""} ${mengeText(ende, mwh)}`;
+    pfeil = `<text class="hp-pfeil" x="${xe.toFixed(1)}" y="${O - 2}">↑</text><text class="hp-raus" x="${(xe + (xe > W / 2 ? -6 : 6)).toFixed(1)}" y="${O - 4}" text-anchor="${xe > W / 2 ? "end" : "start"}">${t5}</text>`;
+  }
   return o5(`<svg class="hp-dia" viewBox="0 0 ${W} ${H2}">
-    ${stufen2.map((v2) => `<line class="hp-gitter" x1="${L2}" y1="${y3(v2)}" x2="${W - 6}" y2="${y3(v2)}"/><text class="hp-yt" x="${L2 - 4}" y="${y3(v2) + 3}">${de(mwh ? v2 / 1e3 : v2, 0)}</text>`).join("")}
+    <defs><clipPath id="hp-feld"><rect x="${L2}" y="${O}" width="${W - L2 - 6}" height="${H2 - U - O}"/></clipPath></defs>
+    ${stufen2.map((v2) => `<line class="hp-gitter" data-v="${Math.round(v2)}" x1="${L2}" y1="${y3(v2)}" x2="${W - 6}" y2="${y3(v2)}"/><text class="hp-yt" x="${L2 - 4}" y="${y3(v2) + 3}">${de(mwh ? v2 / 1e3 : v2, mwh && max < 21e3 ? 1 : 0)}</text>`).join("")}
     <text class="hp-yt" x="${L2 - 4}" y="8">${mwh ? "MWh" : "kWh"}</text>
-    ${monate.map(([t5, i7]) => `<line class="hp-gitter" x1="${x2(i7)}" y1="10" x2="${x2(i7)}" y2="${H2 - U}"/><text x="${x2(i7) + 10}" y="${H2 - 6}">${MONATE[+t5.slice(5, 7) - 1]}</text>`).join("")}
+    ${monate.map(([t5, i7]) => `<line class="hp-gitter" x1="${x2(i7)}" y1="${O}" x2="${x2(i7)}" y2="${H2 - U}"/><text x="${x2(i7) + 10}" y="${H2 - 6}">${MONATE[+t5.slice(5, 7) - 1]}</text>`).join("")}
     ${band ? `<path class="hp-band" d="${band}"/>` : ""}
-    ${R2[0][5] !== null ? `<path class="hp-ohne" d="${pfad(5, 0, n4 - 1)}"/>` : ""}
+    ${R2[0][5] !== null ? `<path class="hp-ohne"${raus >= 0 ? ' clip-path="url(#hp-feld)"' : ""} d="${pfad(5, 0, n4 - 1)}"/>${pfeil}` : ""}
     <path class="hp-prog" d="${pfad(2, heute2, n4 - 1)}"/>
     ${heute2 ? `<path class="hp-ist" d="${pfad(1, 0, heute2)}"/>` : ""}
-    <line class="hp-heute" x1="${x2(heute2)}" y1="10" x2="${x2(heute2)}" y2="${H2 - U}"/><text class="hp-ht" x="${x2(heute2) + 3}" y="18">heute</text></svg>`);
+    <line class="hp-heute" x1="${x2(heute2)}" y1="${O}" x2="${x2(heute2)}" y2="${H2 - U}"/><text class="hp-ht" x="${x2(heute2) + 3}" y="${O + 8}">heute</text></svg>`);
 }
 function legende(h3) {
   return b2`<div class="hp-leg">
@@ -4169,9 +4178,14 @@ function fenster(P2, art, ab) {
   const start = Math.max(0, Math.min(P2.length - n4, (art === "monat" ? 0 : jetzt - vor) + ab * n4));
   return { Z: P2.slice(start, start + n4), vor: start > 0, nach: start + n4 < P2.length };
 }
+var balkenMax = (Z2) => Math.max(1, ...Z2.map((z2) => Math.max(z2.oben ?? z2.mit, z2.mit, z2.ist || 0))) * 1.08;
+var ueberRand = (Z2) => {
+  const m3 = balkenMax(Z2);
+  return Z2.some((z2) => zahl(z2.ohne) && z2.ohne > m3);
+};
 function balkenSvg(Z2, art, wahl2) {
   const W = 340, H2 = 190, L2 = 34, U = art === "tag" ? 30 : 22, O = art === "tag" ? 22 : 10;
-  const max = Math.max(1, ...Z2.map((z2) => Math.max(z2.oben ?? z2.mit, z2.ohne ?? 0))) * 1.08, mwh = max > 4e3;
+  const max = balkenMax(Z2), mwh = max > 4e3;
   const bw = (W - L2 - 6) / Z2.length, y3 = (v2) => H2 - U - v2 / max * (H2 - U - O), x2 = (i7) => L2 + i7 * bw;
   const stufen2 = [0, 0.25, 0.5, 0.75, 1].map((f3) => max / 1.08 * f3), jetzt = Z2.findIndex((z2) => !z2.vorbei);
   const b3 = Z2.map((z2, i7) => {
@@ -4182,7 +4196,8 @@ function balkenSvg(Z2, art, wahl2) {
       ${ist ? `<rect class="hp-bi" x="${x0}" y="${y3(ist)}" width="${w2}" height="${y3(0) - y3(ist)}"/>` : ""}
       ${z2.prog ? `<rect class="hp-bp" x="${x0}" y="${y3(z2.mit)}" width="${w2}" height="${y3(ist) - y3(z2.mit)}"/>` : ""}
       ${sp ? `<path class="hp-bs" d="M${m3},${y3(z2.oben)} V${y3(z2.unten)} M${x0 + w2 * 0.3},${y3(z2.oben)} H${x0 + w2 * 0.7} M${x0 + w2 * 0.3},${y3(z2.unten)} H${x0 + w2 * 0.7}"/>` : ""}
-      ${zahl(z2.ohne) ? `<rect class="hp-bo" x="${x0 + w2 + 1}" y="${y3(z2.ohne)}" width="${ow}" height="${y3(0) - y3(z2.ohne)}"/>` : ""}
+      ${zahl(z2.ohne) ? `<rect class="hp-bo" x="${x0 + w2 + 1}" y="${y3(Math.min(z2.ohne, max))}" width="${ow}" height="${y3(0) - y3(Math.min(z2.ohne, max))}"/>` : ""}
+      ${zahl(z2.ohne) && z2.ohne > max ? `<text class="hp-pfeil" x="${x0 + w2 + 1 + ow / 2}" y="${O - 1}">↑</text>` : ""}
       ${art === "tag" && zahl(z2.aussen) ? `<text class="hp-bt${z2.quellen.includes("klima") ? " kl" : ""}" x="${x2(i7) + bw / 2}" y="${O - 8}">${de(z2.aussen, 0)}°</text>` : ""}
       <text class="hp-x${z2.heute ? " heute" : ""}" x="${x2(i7) + bw / 2}" y="${H2 - U + 12}">${art === "monat" ? MONATE[+z2.von.slice(5, 7) - 1] : art === "woche" ? tm(z2.von) : WT[datum3(z2.von).getDay()]}</text>${unterTag}</g>`;
   }).join("");
@@ -4261,6 +4276,7 @@ function zeitraeume(p4, h3, art) {
   }}>${balkenSvg(Z2, art, wahl2)}</div>
     <div class="hp-leg2"><span><i class="q-ist"></i>tatsächlich</span><span><i class="q-prog"></i>Prognose mit Automatik</span><span><i class="q-ohne"></i>ohne Automatik</span>
       ${art === "tag" ? b2`<span class="leise">°C: Vorhersage · <em>kursiv</em> = Klimamittel</span>` : A}</div>
+    ${ueberRand(Z2) ? b2`<div class="leise">↑ ohne Automatik reicht über den Rand – die Zahl zeigt das Antippen.</div>` : A}
     ${detail(h3, Z2[wahl2], art, p4)}`;
 }
 function hochrechnung(p4, h3) {
@@ -4365,6 +4381,7 @@ var HEIZPERIODE_CSS = `
 .hp-dia path { fill: none; stroke-width: 2.4; } .hp-dia .hp-ist { stroke: var(--s3); stroke-width: 3; }
 .hp-dia .hp-prog { stroke: var(--s1); stroke-dasharray: 6 4; } .hp-dia .hp-ohne { stroke: var(--s2); stroke-dasharray: 2 3; }
 .hp-dia .hp-band { fill: var(--s1); opacity: .2; stroke: none; }
+.hp-dia .hp-pfeil { fill: var(--s2) !important; font-size: 11px !important; font-weight: 700; text-anchor: middle; } .hp-dia .hp-raus { fill: var(--s2) !important; }   /* FE-0033 */
 .hp-heute, .hp-grenze { stroke: var(--amber); stroke-dasharray: 3 3; } .hp-ht, .hp-gt { fill: var(--amber) !important; }
 .hp-leg { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 4px 0; }
 .hp-leg i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 3px solid; }
@@ -6113,7 +6130,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.157";
+var SEITE_VERSION = "0.8.158";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS), r(START_STIL)];

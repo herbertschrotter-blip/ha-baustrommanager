@@ -1295,6 +1295,23 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { panel.awDetail('hochrechnung'); await ruhe(); pruefe('Heizperiode Hochrechnung');
     erwarte('BSM-033.03: Diagramm tatsächlich/Prognose mit/ohne', ui.innerHTML.includes('hp-dia') && ui.innerHTML.includes('Prognose mit Automatik') && ui.innerHTML.includes('Prognose ohne Automatik') && ui.innerHTML.includes('hp-band'));
     erwarte('BSM-033.05: ohne/gespart als grobe Obergrenze gekennzeichnet', ui.innerHTML.includes('hp-grob') && ui.innerHTML.includes('grobe Obergrenze, nicht belastbar'));
+    /* FE-0033: die Achse folgt tatsächlich/mit/Spanne; ein großes „ohne“ wird oben abgeschnitten, ↑ mit Endwert; passt es, ganz ohne ↑ */
+    { const h = panel.awDaten(panel.s.aw.zeitraum, panel.zrV('aw')).hochrechnung, alt = [h.reihe, h.ohne_kwh], R = h.reihe, n = R.length;
+      const mitEnde = Math.max(...R.map(r => Math.max(r[1] || 0, r[2] || 0, r[4] || 0))), dia = () => (ui.innerHTML.match(/<svg class="hp-dia"[\s\S]*?<\/svg>/) || [''])[0];
+      const gitter = s => Math.max(...[...s.matchAll(/hp-gitter" data-v="(\d+)"/g)].map(m => +m[1]));
+      const ohne = f => { h.reihe = R.map((r, i) => [...r.slice(0, 5), +(mitEnde * f * (i + 1) / n).toFixed(3)]); h.ohne_kwh = h.reihe[n - 1][5]; return panel.neuZeichnen(); };
+      await ohne(5); let s = dia();
+      erwarte('FE-0033: Achse folgt „mit“, nicht „ohne“', gitter(s) >= Math.floor(mitEnde) && gitter(s) < h.ohne_kwh);
+      erwarte('FE-0033: „ohne“ abgeschnitten, ↑ mit Endwert', /class="hp-ohne" clip-path="url\(#hp-feld\)"/.test(s) && s.includes('class="hp-pfeil"')
+        && s.includes(`ohne (Schätzung 24/7) ${(h.ohne_kwh / 1000).toLocaleString('de-AT', { maximumFractionDigits: h.ohne_kwh < 10000 ? 1 : 0, minimumFractionDigits: h.ohne_kwh < 10000 ? 1 : 0 })} MWh`));
+      await ohne(0.6); s = dia();
+      erwarte('FE-0033: kleines „ohne“ ganz gezeichnet, ohne ↑', s.includes('class="hp-ohne"') && !s.includes('clip-path=') && !s.includes('hp-pfeil') && !s.includes('hp-raus'));
+      [h.reihe, h.ohne_kwh] = alt; await panel.neuZeichnen();
+      /* Woche: „ohne“ je Woche über dem Rand → Balken bis zum Rand, ↑ und Hinweis */
+      const P = h.perioden.woche, altP = P.map(z => z.ohne); P.forEach(z => { z.ohne = (z.oben ?? z.mit) * 5 + 1; });
+      await klick('.hp-aufl [data-v="woche"]'); s = (ui.innerHTML.match(/<svg class="hp-dia hp-balken"[\s\S]*?<\/svg>/) || [''])[0];
+      erwarte('FE-0033: Woche – „ohne“ am Rand abgeschnitten mit ↑', s.includes('class="hp-pfeil"') && ui.innerHTML.includes('reicht über den Rand') && !/class="hp-bo"[^>]*y="-/.test(s));
+      P.forEach((z, i) => { z.ohne = altP[i]; }); await klick('.hp-aufl [data-v="hp"]'); }
     await klick('.hp-reiter [data-v="sig"]'); pruefe('Heizperiode Signatur');
     erwarte('BSM-033.03: Signatur je Container', ui.innerHTML.includes('hp-streu') && ui.innerHTML.includes('Heizgrenze') && ui.innerHTML.includes('kWh je Grad'));
     await klick('.hp-reiter [data-v="klima"]'); pruefe('Heizperiode Klima');

@@ -24,28 +24,40 @@ const stand = c => { const [t, k] = STAND[c.stand] || [c.stand, ''];
 function zahlZeile(h) {
   return html`<div class="hp-zahl">≈ ${eur(h.mit_eur)}<span class="leise"> · ${zahl(h.unten_eur) ? `${de(h.unten_eur, 0)}–${eur(h.oben_eur)}` : `${de(h.mit_kwh, 0)} kWh`}</span></div>`;
 }
-/* Diagramm aus der Tagesreihe [Tag, tatsächlich, mit, unten, oben, ohne] (kWh aufsummiert) – nur Anordnung */
+/* Endwert „ohne“ in der Einheit der Achse (FE-0033) */
+const mengeText = (v, mwh) => mwh ? `${de(v / 1000, v < 10000 ? 1 : 0)} MWh` : `${de(v, 0)} kWh`;
+/* Diagramm aus der Tagesreihe [Tag, tatsächlich, mit, unten, oben, ohne] (kWh aufsummiert) – nur Anordnung. Die Achse folgt
+   tatsächlich, Prognose mit und Spanne (FE-0033); „ohne“ wird bis zum oberen Rand gezeichnet und dort abgeschnitten, am
+   Austritt ↑ mit dem Endwert. */
 function diagramm(h) {
   const R = h.reihe || [];
   if (R.length < 2) return nothing;
   const W = 340, H = 180, L = 36, U = 22, n = R.length;
-  const max = Math.max(...R.map(r => Math.max(r[2] || 0, r[4] || 0, r[5] || 0)), 1) * 1.05;
-  const x = i => L + i / (n - 1) * (W - L - 6), y = v => H - U - v / max * (H - U - 10);
+  const max = Math.max(...R.map(r => Math.max(r[1] || 0, r[2] || 0, r[4] || 0)), 1) * 1.05;
+  const raus = R.findIndex(r => r[5] !== null && r[5] > max), O = raus >= 0 ? 22 : 10;
+  const x = i => L + i / (n - 1) * (W - L - 6), y = v => H - U - v / max * (H - U - O);
   const heute = Math.max(0, R.findLastIndex(r => r[1] !== null));
   const pfad = (k, von, bis) => R.slice(von, bis + 1).map((r, j) => r[k] === null ? '' : `${j ? 'L' : 'M'}${x(von + j).toFixed(1)},${y(r[k]).toFixed(1)}`).join(' ');
   const band = R[n - 1][3] !== null ? `M${x(heute).toFixed(1)},${y(R[heute][3]).toFixed(1)} ${R.slice(heute).map((r, j) => `L${x(heute + j).toFixed(1)},${y(r[4]).toFixed(1)}`).join(' ')} `
     + `${R.slice(heute).reverse().map((r, j) => `L${x(n - 1 - j).toFixed(1)},${y(r[3]).toFixed(1)}`).join(' ')} Z` : '';
   const stufen = [0, 0.25, 0.5, 0.75, 1].map(f => max / 1.05 * f), mwh = max > 4000;
   const monate = R.map((r, i) => [r[0], i]).filter(([t]) => t.endsWith('-01'));
+  let pfeil = '';
+  if (raus >= 0) {   // Austritt am oberen Rand (nur Pixel): zwischen dem letzten Punkt darunter und dem ersten darüber
+    const a = R[raus - 1], xe = raus && a[5] !== null ? x(raus - 1 + (max - a[5]) / (R[raus][5] - a[5])) : x(raus);
+    const ende = zahl(h.ohne_kwh) ? h.ohne_kwh : R[n - 1][5], t = `ohne${h.ohne_hinweis ? ' (Schätzung 24/7)' : ''} ${mengeText(ende, mwh)}`;
+    pfeil = `<text class="hp-pfeil" x="${xe.toFixed(1)}" y="${O - 2}">↑</text><text class="hp-raus" x="${(xe + (xe > W / 2 ? -6 : 6)).toFixed(1)}" y="${O - 4}" text-anchor="${xe > W / 2 ? 'end' : 'start'}">${t}</text>`;
+  }
   return unsafeHTML(`<svg class="hp-dia" viewBox="0 0 ${W} ${H}">
-    ${stufen.map(v => `<line class="hp-gitter" x1="${L}" y1="${y(v)}" x2="${W - 6}" y2="${y(v)}"/><text class="hp-yt" x="${L - 4}" y="${y(v) + 3}">${de(mwh ? v / 1000 : v, 0)}</text>`).join('')}
+    <defs><clipPath id="hp-feld"><rect x="${L}" y="${O}" width="${W - L - 6}" height="${H - U - O}"/></clipPath></defs>
+    ${stufen.map(v => `<line class="hp-gitter" data-v="${Math.round(v)}" x1="${L}" y1="${y(v)}" x2="${W - 6}" y2="${y(v)}"/><text class="hp-yt" x="${L - 4}" y="${y(v) + 3}">${de(mwh ? v / 1000 : v, mwh && max < 21000 ? 1 : 0)}</text>`).join('')}
     <text class="hp-yt" x="${L - 4}" y="8">${mwh ? 'MWh' : 'kWh'}</text>
-    ${monate.map(([t, i]) => `<line class="hp-gitter" x1="${x(i)}" y1="10" x2="${x(i)}" y2="${H - U}"/><text x="${x(i) + 10}" y="${H - 6}">${MONATE[+t.slice(5, 7) - 1]}</text>`).join('')}
+    ${monate.map(([t, i]) => `<line class="hp-gitter" x1="${x(i)}" y1="${O}" x2="${x(i)}" y2="${H - U}"/><text x="${x(i) + 10}" y="${H - 6}">${MONATE[+t.slice(5, 7) - 1]}</text>`).join('')}
     ${band ? `<path class="hp-band" d="${band}"/>` : ''}
-    ${R[0][5] !== null ? `<path class="hp-ohne" d="${pfad(5, 0, n - 1)}"/>` : ''}
+    ${R[0][5] !== null ? `<path class="hp-ohne"${raus >= 0 ? ' clip-path="url(#hp-feld)"' : ''} d="${pfad(5, 0, n - 1)}"/>${pfeil}` : ''}
     <path class="hp-prog" d="${pfad(2, heute, n - 1)}"/>
     ${heute ? `<path class="hp-ist" d="${pfad(1, 0, heute)}"/>` : ''}
-    <line class="hp-heute" x1="${x(heute)}" y1="10" x2="${x(heute)}" y2="${H - U}"/><text class="hp-ht" x="${x(heute) + 3}" y="18">heute</text></svg>`);
+    <line class="hp-heute" x1="${x(heute)}" y1="${O}" x2="${x(heute)}" y2="${H - U}"/><text class="hp-ht" x="${x(heute) + 3}" y="${O + 8}">heute</text></svg>`);
 }
 function legende(h) {
   return html`<div class="hp-leg">
@@ -79,9 +91,12 @@ function fenster(P, art, ab) {
   const start = Math.max(0, Math.min(P.length - n, (art === 'monat' ? 0 : jetzt - vor) + ab * n));
   return { Z: P.slice(start, start + n), vor: start > 0, nach: start + n < P.length };
 }
+const balkenMax = Z => Math.max(1, ...Z.map(z => Math.max(z.oben ?? z.mit, z.mit, z.ist || 0))) * 1.08;
+const ueberRand = Z => { const m = balkenMax(Z); return Z.some(z => zahl(z.ohne) && z.ohne > m); };
 function balkenSvg(Z, art, wahl) {
   const W = 340, H = 190, L = 34, U = art === 'tag' ? 30 : 22, O = art === 'tag' ? 22 : 10;
-  const max = Math.max(1, ...Z.map(z => Math.max(z.oben ?? z.mit, z.ohne ?? 0))) * 1.08, mwh = max > 4000;
+  // FE-0033: die Achse folgt tatsächlich, mit und Spanne; „ohne“ darüber wird am oberen Rand abgeschnitten (↑, Zahl beim Antippen)
+  const max = balkenMax(Z), mwh = max > 4000;
   const bw = (W - L - 6) / Z.length, y = v => H - U - v / max * (H - U - O), x = i => L + i * bw;
   const stufen = [0, 0.25, 0.5, 0.75, 1].map(f => max / 1.08 * f), jetzt = Z.findIndex(z => !z.vorbei);
   const b = Z.map((z, i) => {
@@ -92,7 +107,8 @@ function balkenSvg(Z, art, wahl) {
       ${ist ? `<rect class="hp-bi" x="${x0}" y="${y(ist)}" width="${w}" height="${y(0) - y(ist)}"/>` : ''}
       ${z.prog ? `<rect class="hp-bp" x="${x0}" y="${y(z.mit)}" width="${w}" height="${y(ist) - y(z.mit)}"/>` : ''}
       ${sp ? `<path class="hp-bs" d="M${m},${y(z.oben)} V${y(z.unten)} M${x0 + w * .3},${y(z.oben)} H${x0 + w * .7} M${x0 + w * .3},${y(z.unten)} H${x0 + w * .7}"/>` : ''}
-      ${zahl(z.ohne) ? `<rect class="hp-bo" x="${x0 + w + 1}" y="${y(z.ohne)}" width="${ow}" height="${y(0) - y(z.ohne)}"/>` : ''}
+      ${zahl(z.ohne) ? `<rect class="hp-bo" x="${x0 + w + 1}" y="${y(Math.min(z.ohne, max))}" width="${ow}" height="${y(0) - y(Math.min(z.ohne, max))}"/>` : ''}
+      ${zahl(z.ohne) && z.ohne > max ? `<text class="hp-pfeil" x="${x0 + w + 1 + ow / 2}" y="${O - 1}">↑</text>` : ''}
       ${art === 'tag' && zahl(z.aussen) ? `<text class="hp-bt${z.quellen.includes('klima') ? ' kl' : ''}" x="${x(i) + bw / 2}" y="${O - 8}">${de(z.aussen, 0)}°</text>` : ''}
       <text class="hp-x${z.heute ? ' heute' : ''}" x="${x(i) + bw / 2}" y="${H - U + 12}">${art === 'monat' ? MONATE[+z.von.slice(5, 7) - 1] : art === 'woche' ? tm(z.von) : WT[datum(z.von).getDay()]}</text>${unterTag}</g>`;
   }).join('');
@@ -160,6 +176,7 @@ function zeitraeume(p, h, art) {
     <div @click=${e => { const g = e.target.closest('.hp-b'); if (g) { p.s.hpWahl = +g.dataset.i; p.neuZeichnen(); } }}>${balkenSvg(Z, art, wahl)}</div>
     <div class="hp-leg2"><span><i class="q-ist"></i>tatsächlich</span><span><i class="q-prog"></i>Prognose mit Automatik</span><span><i class="q-ohne"></i>ohne Automatik</span>
       ${art === 'tag' ? html`<span class="leise">°C: Vorhersage · <em>kursiv</em> = Klimamittel</span>` : nothing}</div>
+    ${ueberRand(Z) ? html`<div class="leise">↑ ohne Automatik reicht über den Rand – die Zahl zeigt das Antippen.</div>` : nothing}
     ${detail(h, Z[wahl], art, p)}`;
 }
 function hochrechnung(p, h) {
@@ -263,6 +280,7 @@ export const HEIZPERIODE_CSS = `
 .hp-dia path { fill: none; stroke-width: 2.4; } .hp-dia .hp-ist { stroke: var(--s3); stroke-width: 3; }
 .hp-dia .hp-prog { stroke: var(--s1); stroke-dasharray: 6 4; } .hp-dia .hp-ohne { stroke: var(--s2); stroke-dasharray: 2 3; }
 .hp-dia .hp-band { fill: var(--s1); opacity: .2; stroke: none; }
+.hp-dia .hp-pfeil { fill: var(--s2) !important; font-size: 11px !important; font-weight: 700; text-anchor: middle; } .hp-dia .hp-raus { fill: var(--s2) !important; }   /* FE-0033 */
 .hp-heute, .hp-grenze { stroke: var(--amber); stroke-dasharray: 3 3; } .hp-ht, .hp-gt { fill: var(--amber) !important; }
 .hp-leg { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 4px 0; }
 .hp-leg i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 3px solid; }

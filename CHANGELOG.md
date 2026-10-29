@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.158] – 2026-10-29
+
+- FE-0033: Die rote Prognose-Linie der Heizperiode wirkte gerade, obwohl sie seit 0.8.155 im Winter steiler steigt –
+  die Achse richtete sich nach der Schätzung „ohne Automatik“ (jeder Heizkörper rund um die Uhr, ~40 MWh), und „mit“
+  lag flach unten. Jetzt folgt die Achse „tatsächlich“ und „Prognose mit Automatik“; „ohne“ läuft oben aus dem Bild,
+  am Rand steht ein Pfeil mit dem Endwert („ohne (Schätzung 24/7) … MWh ↑“). Ebenso in Monat/Woche/Tag (Pfeil über den
+  Balken). Die Schätzung „ohne“ ersetzen später die Baseline-Läufe.
+
 ## [0.8.157] – 2026-10-29
 
 - FE-0031/FE-0032 – eine Start-Logik (Mockup `start.html` Variante B, abgenommen 29.10.2026): Abends widersprachen sich
