@@ -17,8 +17,8 @@ entscheidet hier, die Seite zeigt sie nur an (`laufzeit.container.<id>.eingestel
   im Zeitplan: wirkt nur im Modus Thermostat oder Bei Bedarf. Taste am Plug: wirkt nur mit dem Notprogramm.
 - **Reihenfolge** = Anzeige: erst der Container (lernen, warm, trocknen, stufen, prio, tuer), dann die Baustelle
   (frost, vorheizen, nachheizen, fruehstart, feiertag, staffel, notprogramm, taste).
-- `ziel` sagt der Seite, wohin „ändern ›“ springt; sie bildet es nur auf ihre Navigation ab: `container:<zeile>` (unten
-  in der Container-Ansicht), `bearbeiten:<zeile>` (Container bearbeiten), `regeln:<zeile>` (Heizung › Regeln),
+- `ziel` sagt der Seite, wohin „ändern ›“ springt; sie bildet es nur auf ihre Navigation ab: `bearbeiten:<zeile>`
+  (Container bearbeiten; Lernen und Trocknen stehen seit AN-0018 dort, nicht mehr unten in der Container-Ansicht), `regeln:<zeile>` (Heizung › Regeln),
   `strom[:vorrang]` (Einstellungen › Strom), `notprogramm` (Einstellungen › Notprogramm), `urlaub` (Urlaub & Feiertage).
 """
 
@@ -93,7 +93,7 @@ def _liste(lage: Lage) -> list[dict[str, Any]]:
                 "nachwärmt – damit er pünktlich warm ist und nicht zu warm wird.")
         if not bedarf:
             satz += " Im Modus Thermostat heizt er selbst so früh, dass das Soll rechtzeitig erreicht ist – statt Vorheizen, Kälte-Frühstart und Nachheizen."
-        dazu("lernen", "🧠", "Lernende Regelung", "lernend", satz, CONTAINER, "container:lernen")
+        dazu("lernen", "🧠", "Lernende Regelung", "lernend", satz, CONTAINER, "bearbeiten:lernen")
     vor_e, nach_e = b.get("warm_vor"), b.get("warm_nach")
     if lern and (vor_e is not None or nach_e is not None):
         vor_b, nach_b = int(h.get("warm_vor_min", 0)), int(h.get("warm_nach_min", 0))
@@ -116,7 +116,7 @@ def _liste(lage: Lage) -> list[dict[str, Any]]:
         dazu("trocknen", "👕", "Kleidung trocknen", "trocknen",
              "Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten Morgen früher: "
              + "; ".join(f"ab {zahl(x.ab_mm)} mm {x.laenger_min} min länger, {x.frueher_min} min früher" for x in stufen) + ".",
-             CONTAINER, "container:trocknen")
+             CONTAINER, "bearbeiten:trocknen")
     if b.get("stufen") and lage.heizkoerper >= 2:
         erst = f"der Primärheizkörper ({lage.primaer})" if lage.primaer else "der Primärheizkörper"
         wer = ", ".join(lage.zusatz) if lage.zusatz else "der Zusatz"

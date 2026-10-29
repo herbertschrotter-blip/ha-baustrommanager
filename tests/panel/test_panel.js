@@ -513,9 +513,17 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { await klick({ act: 'container', id: 'polier' }, 20);
     const pol0 = () => panel.d.bereiche.find(x => x.id === 'polier'); let pol = pol0(); pol.modus = 'thermo';
     const lern0 = pol.lern = { an: false, zyklen: 0, kint: { wert: .6, start: .6, fort: 0 }, kext: { wert: .01, start: .01, fort: 0 }, nachlauf: {}, treffer: [], anteil: null, erwartet: 0, aus_bei: 20, zyklus_min: 10 };
-    await panel.neuZeichnen(); erwarte('Lernen: Schalter bei Container mit Fühler', /Lernende Regelung[^]*?class="sw /.test(ui.innerHTML));
-    neu(); await klick('.seite > .liste .zeile:not(:last-child) .sw', 20);
-    erwarte('Lernen: Schalter setzt bereiche.polier.lernen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
+    // AN-0018: Lernen und Trocknen stehen nicht mehr unten in der Ansicht, sondern in „Bearbeiten“
+    await panel.neuZeichnen(); erwarte('AN-0018: unten kein Lernen/Trocknen mehr', !litEl('.c-einst') && !/Kleidung trocknen nach Regen/.test(ui.innerHTML));
+    await panel.einblenden('bereich'); await ruhe(10);
+    erwarte('Lernen: Schalter in Bearbeiten bei Container mit Fühler', !!litEl('.sheet [data-zeile="lernen"] .sw') && !!litEl('.sheet [data-zeile="trocknen"] .sw'));
+    neu(); await klick('.sheet [data-zeile="lernen"] .sw', 20); await klick('.sheet [data-zeile="trocknen"] .sw', 20);
+    erwarte('AN-0018: Lernen/Trocknen in Bearbeiten erst mit „Speichern“', !letzte('baustelle/setzen').length);
+    await klick({ act: 'b-speichern' }, 60);
+    erwarte('Lernen: Speichern setzt bereiche.polier.lernen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
+    erwarte('Trocknen: Speichern setzt bereiche.polier.trocknen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","trocknen"]'));
+    await panel.einblenden('bereich'); await ruhe(10); await klick('.sheet [data-zeile="trocknen"] .sw', 20); await klick({ act: 'b-speichern' }, 60);   // zurück (spätere Prüfungen)
+    panel.s.sheet = null; await panel.neuZeichnen();
     pol = pol0(); pol.modus = 'thermo'; pol.lern = Object.assign({ ...lern0 }, { an: true, zyklen: 3, anteil: 38, erwartet: .8, aus_bei: 19.2, kint: { wert: .57, start: .6, fort: .06 },
       nachlauf: { 'oel|lang|kalt': { grad: 1.2, min: 12, n: 3 } }, treffer: [.3, -.1, .2] });
     await panel.neuZeichnen(); erwarte('Lernen: Kopf-Chip „wärmt nach +0,8°“ in der Gruppe Lernen, Satz erst beim Antippen (takt.html)',
@@ -914,7 +922,24 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     neu(); await klick({ act: 'c-soll', d: '0.5' }, 20);
     erwarte('WU-0004: Soll + über baustelle/setzen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","soll"]' && Number.isFinite(x.wert)));
     pol().modus = 'plan'; await panel.neuZeichnen(); erwarte('WU-0004: im Zeitplan nur Ist, kein Soll ±', ui.innerHTML.includes('class="c-rad"') && !litEl('.c-rad-pm .c-pm') && /Zeitplan – der Heizkörperthermostat regelt/.test(ui.innerHTML));
-    erwarte('WU-0004: Geräte-Chips mit ⏻, aktiv, ✎', ['class="c-power', 'class="c-aktiv"', 'class="bs-ic nur-admin"'].every(t => ui.innerHTML.includes(t)));
+    // AN-0018 (Mockup container-unten.html B): Kacheln je Geräteart; ⏻ an der Zeile, Status nur als Etikett, Zeile antippen = Gerätedialog
+    erwarte('AN-0018: Geräte-Kacheln Heizen (⏻ je Heizkörper), Fühler, Türen & Fenster; kein Schalter „aktiv“, kein ✎', !!litEl('.gk-k-heiz .gk-hk .c-power') && !!litEl('.gk-k-fu')
+      && !!litEl('.gk-k-ko') && !ui.innerHTML.includes('class="c-aktiv"') && !litEl('.gk-geraete .bs-ic') && !litEl('.g-sensoren'));
+    { const g0 = pol().geraete[0]; neu(); await klick(`.gk-hk[data-id="${g0.id}"] .c-power`, 20);
+      erwarte('AN-0018: ⏻ schaltet von Hand (baustelle/aktion schalten), öffnet keinen Dialog', letzte('baustelle/aktion').some(x => x.aktion === 'schalten' && x.geraet === g0.id) && !panel.s.sheet);
+      await klick(`.gk-hk[data-id="${g0.id}"]`, 10);
+      erwarte('AN-0018: Zeile antippen öffnet den Gerätedialog', panel.s.sheet && panel.s.sheet.art === 'geraet-edit');
+      panel.s.sheet = null; await panel.neuZeichnen(); }
+    { const x = pol(), alt = { sym: x.symbol, links: panel.d.r.geraete_links }, fu = x.sensoren.find(y => y.art === 'fuehler');
+      panel.d.r.geraete_links = { ...(alt.links || {}), [fu.entity_id]: { ...((alt.links || {})[fu.entity_id] || {}), feuchte: 'sensor.polier_feuchte' } };
+      panel._hass.states['sensor.polier_feuchte'] = { entity_id: 'sensor.polier_feuchte', state: '54', attributes: {} };
+      x.symbol = { ...(x.symbol || {}), tueren: [...((x.symbol || {}).tueren || []).slice(0, 1), { wand: 'seite', pos: 0.5, sensor: null, sensor_aktiv: null }],
+        fenster: [{ wand: 'front', pos: 0.7, sensor: null }] };
+      await panel.neuZeichnen(); pruefe('Container Geräte-Kacheln');
+      erwarte('AN-0018: Fühler-Kachel mit Temperatur und Feuchte vom selben Gerät', !!litEl('.gk-k-fu') && litEl('.gk-k-fu').textContent.includes('54 % Feuchte') && /°C/.test(litEl('.gk-k-fu').textContent));
+      const ko = litEl('.gk-k-ko').textContent;
+      erwarte('AN-0018: Türen & Fenster – Tür ohne Kontakt mit Hinweis, Fenster ohne Kontakt als Zeile', ko.includes('Tür 2 · Seite') && ko.includes('kein Kontakt') && ko.includes('ohne Kontakt: Fenster 1'));
+      x.symbol = alt.sym; panel.d.r.geraete_links = alt.links; delete panel._hass.states['sensor.polier_feuchte']; await panel.neuZeichnen(); }
     /* Kopf der Container-Ansicht (Mockup container-kopf.html, Variante D2): Rad links, Gruppen als Kästchen, Chips aus Feldern der Integration */
     { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, tuer: x.tuer, symbol: x.symbol, sensoren: x.sensoren, boost: x.boost, takt: x.takt };
       const gruppen = () => litEls('.ck-d .ckd-g').map(g => g.dataset.g).join(), chipK = g => litEls(`.ck-d .ckd-g[data-g="${g}"] .ck-chip[data-k]`).map(c => c.dataset.k).join();
@@ -1116,9 +1141,9 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
        (laufzeit.container.<id>.eingestellt, logik/eingestellt.py) – die Seite zählt nur und bildet ziel auf ihre Navigation ab */
     { const x = pol(), alt = { eingestellt: x.eingestellt, modus: x.modus };
       const E = (k, ic, text, kurz, von, ziel, satz) => ({ k, ic, text, kurz, von, ziel, satz, wirkt: true, grund: null });
-      const VIELE = [E('lernen', '🧠', 'Lernende Regelung', 'lernend', 'container', 'container:lernen', 'Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird.'),
+      const VIELE = [E('lernen', '🧠', 'Lernende Regelung', 'lernend', 'container', 'bearbeiten:lernen', 'Lernt bei jedem Heizen mit: wie schnell dieser Container warm wird.'),
         E('warm', '⏱', 'warm 30 min vor Beginn', '−30 min', 'container', 'bearbeiten:warm', 'Eigener Wert dieses Containers.'),
-        E('trocknen', '👕', 'Kleidung trocknen', 'trocknen', 'container', 'container:trocknen', 'Nach Regen ab 2 mm …'),
+        E('trocknen', '👕', 'Kleidung trocknen', 'trocknen', 'container', 'bearbeiten:trocknen', 'Nach Regen ab 2 mm …'),
         E('stufen', '🔥', 'Zusatz nur bei Bedarf', 'Zusatz', 'container', 'bearbeiten:stufen', 'Zuerst heizt der Primärheizkörper.'),
         E('prio', '⬆', 'Vorrang hoch', 'Vorrang', 'container', 'strom:vorrang', 'Kommt vor den anderen dran.'),
         E('tuer', '🚪', 'Tür-Pause 3 min', 'Tür 3′', 'container', 'regeln:tuer', 'Kontakt „Tür 1“: …'),
@@ -1155,7 +1180,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       erwarte('Eingestellt: ändern › Frostschutz → Heizung › Regeln, Zeile Frostschutz', await sprung('frost', () => panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'regeln' && !!litEl('.sheet [data-r="frost"]')));
       erwarte('Eingestellt: ändern › Tür → Regeln, Zeile Tür offen', await sprung('tuer', () => panel.s.sheet && panel.s.sheet.k === 'regeln' && !!litEl('.sheet [data-r="tuer"]')));
       erwarte('Eingestellt: ändern › Zusatz → Container bearbeiten (Zeile Zusatz, falls zwei Heizkörper)', await sprung('stufen', () => panel.s.sheet && panel.s.sheet.art === 'bereich'));
-      erwarte('Eingestellt: ändern › Lernende Regelung → bleibt in der Ansicht, Zeile unten', await sprung('lernen', () => panel.s.view === 'container' && !panel.s.sheet && !!litEl('.c-einst [data-z="lernen"]') && !satzE()));
+      erwarte('Eingestellt: ändern › Lernende Regelung → Bearbeiten, Zeile Lernen (AN-0018)', await sprung('lernen', () => panel.s.sheet && panel.s.sheet.art === 'bereich' && !!litEl('.sheet [data-zeile="lernen"]')));
+      erwarte('Eingestellt: ändern › Kleidung trocknen → Bearbeiten, Zeile Trocknen (AN-0018)', await sprung('trocknen', () => panel.s.sheet && panel.s.sheet.art === 'bereich' && !!litEl('.sheet [data-zeile="trocknen"]')));
       erwarte('Eingestellt: ändern › Feiertage → Urlaub & Feiertage', await sprung('feiertag', () => panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'urlaub'));
       { const st0 = panel.d.e.staffel; panel.d.e.staffel = true;   // Vorrang gibt es nur mit Staffelung (die Integration liefert prio sonst nicht)
         erwarte('Eingestellt: ändern › Vorrang → Einstellungen › Strom, Vorrang', await sprung('prio', () => panel.s.view === 'einst' && panel.s.evGruppe === 'strom' && !!litEl('.ev-inhalt [data-r="vorrang"]')));
@@ -1182,7 +1208,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await klick({ act: 'gf-speichern' }, 30);
       erwarte('BSM-034.02: ✎ setzt den Status über baustelle/geraet', letzte('baustelle/geraet').some(x => x.geraet === g0.id && x.status === 'verliehen'));
       const vorher = g0.status; g0.status = 'defekt'; g0.aktiv = false; await panel.neuZeichnen();
-      erwarte('BSM-034.02: Chip zeigt „defekt“ statt des Schalters', ui.innerHTML.includes('data-status="defekt"') && ui.innerHTML.includes('defekt – die Automatik lässt es aus'));
+      erwarte('BSM-034.02/AN-0018: Zeile zeigt Etikett „defekt“, gedimmt, ⏻ gesperrt', !!litEl(`.gk-hk.inaktiv[data-id="${g0.id}"] .g-st.defekt`) && ui.innerHTML.includes('Automatik lässt es aus')
+        && litEl(`.gk-hk[data-id="${g0.id}"] .c-power`).disabled);
       g0.status = vorher; g0.aktiv = vorher === 'aktiv'; await panel.neuZeichnen(); }
     await klick({ act: 'g-bearbeiten', i: '0' });
     neu(); eingabe({ f: 'n' }, 'Radiator Nord'); await klick({ act: 'gf-speichern' }, 30);
@@ -1257,6 +1284,14 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('Kachel Preis simulieren mit Regler', ui.innerHTML.includes('Preis simulieren') && ui.innerHTML.includes('class="sp-sim"'));
     await klick({ act: 'kk-auf', ort: 'ue', i: '0' }, 10); erwarte('Kachel öffnet die Auswertung simuliert', panel.s.view === 'auswertung' && panel.s.awSim);
     panel.s.awSim = false; panel.s.kkUe = null; }
+  /* AN-0023 (Mockup container-unten.html, Mischung 1+2): Kachel „Hochrechnung“ in L zeigt die Linien der Karte Heizperiode
+     (eine Zeichenfunktion) mit Achse, heute, Spanne, € am Linienende und einzeiliger Legende ohne Werte; M bleibt bei Balken */
+  { panel.s.kkUe = [panel.kkGross({ k: 'b-hoch', an: true }, 'L')]; await klick({ act: 'tab', v: 'uebersicht' }, 30); await ruhe(30); pruefe('Kachel Hochrechnung L');
+    const svg = litEl('.kk-dia svg.hp-dia.hp-ende.kk-breit'), leg = litEl('.kk-dia .kk-hp-leg');
+    erwarte('AN-0023: L mit Liniendiagramm (tatsächlich, Prognose, Spanne, heute, Achse)', !!svg && !!svg.querySelector('.hp-prog') && !!svg.querySelector('.hp-band') && !!svg.querySelector('.hp-heute') && !!svg.querySelector('.hp-yt'));
+    erwarte('AN-0023: € am Linienende (heute und Ende Prognose), Legende eine Zeile ohne Werte', !!svg && svg.querySelectorAll('.hp-wert').length >= 2 && /≈ .+€/.test(svg.textContent)
+      && !!leg && !leg.textContent.includes('€') && !litEl('.kk-dia .kk-balken'));
+    panel.s.kkUe = null; await panel.neuZeichnen(); }
   /* WU-0017: Vergleich kWh / Kosten – 2 bis 4 Container, Zeitraum, Balken oder Linien, Unterschied in Zahlen */
   { panel.s.kkUe = []; await klick({ act: 'tab', v: 'uebersicht' }, 10); await klick({ act: 'kk-plus', ort: 'ue' });
     await klick(KAT.gk('v-kwh', 'L')); pruefe('Vergleich anlegen');
@@ -1656,7 +1691,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await klick({ act: 'container', id: b0.id }, 10);
       c.stufen = { an: true, haupt: [g2.id], zusatz: b0.geraete.filter(g => g.heizer && g !== g2).map(g => g.id), zusatz_an: false, grund: null, text: '' };
       panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen(); await panel.neuZeichnen(); await ruhe();
-      erwarte('AN-0015: Chip zeigt „★ Primär“ und „Zusatz – wartet“', ui.innerHTML.includes('Zusatz – wartet, einer reicht') && ui.innerHTML.includes(' · ★ Primär') && !ui.innerHTML.includes(' · Haupt'));
+      erwarte('AN-0015: Zeile zeigt „★ Primär“ und „🔥 Zusatz“ (wartet, solange er aus ist)', ui.innerHTML.includes(' · ★ Primär') && ui.innerHTML.includes(' · 🔥 Zusatz') && !ui.innerHTML.includes(' · Haupt')
+        && b0.geraete.filter(g => c.stufen.zusatz.includes(g.id) && !g.an && g.aktiv).every(g => litEl(`.gk-hk[data-id="${g.id}"]`).textContent.includes('wartet – einer reicht')));
       await klick({ act: 'g-bearbeiten', i: String(i2) }, 10);
       erwarte('AN-0015: ✎ Gerät zeigt nur die Rolle, kein Zusatz-Schalter mehr', ui.innerHTML.includes('Rolle im Container: ★ Primär') && !ui.innerHTML.includes('data-zeile="zusatz"'));
       // 28.10.2026 (Befund Evidenzbericht): Typenschild-Nennleistung für jeden Heizkörper, auch mit Leistungssensor (P_ref)

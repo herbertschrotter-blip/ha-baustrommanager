@@ -30,14 +30,16 @@ function zahlZeile(h) {
 const mengeText = (v, mwh) => mwh ? `${de(v / 1000, v < 10000 ? 1 : 0)} MWh` : `${de(v, 0)} kWh`;
 /* Diagramm aus der Tagesreihe [Tag, tatsächlich, mit, unten, oben, ohne] (kWh aufsummiert) – nur Anordnung. Die Achse folgt
    tatsächlich, Prognose mit und Spanne (FE-0033); „ohne“ wird bis zum oberen Rand gezeichnet und dort abgeschnitten, am
-   Austritt ↑ mit dem Endwert. */
-function diagramm(h) {
+   Austritt ↑ mit dem Endwert. Eine Zeichenfunktion für die Karte und die Kachel „Hochrechnung“ in L (AN-0023, Mockup
+   container-unten.html, Mischung 1+2): `w` Breite, `ende` setzt die €-Werte der Integration ans Linienende (heute
+   tatsächlich, Ende Prognose, ↑ ohne). */
+export function hochrechnungSvg(h, { w = 340, ende = false, id = 'hp-feld', klasse = '' } = {}) {
   const R = h.reihe || [];
-  if (R.length < 2) return nothing;
-  const W = 340, H = 180, L = 36, U = 22, n = R.length;
+  if (R.length < 2) return '';
+  const W = w, H = ende ? 150 : 180, L = 36, U = 22, Rr = ende ? 64 : 6, n = R.length;
   const max = Math.max(...R.map(r => Math.max(r[1] || 0, r[2] || 0, r[4] || 0)), 1) * 1.05;
   const raus = R.findIndex(r => r[5] !== null && r[5] > max), O = raus >= 0 ? 22 : 10;
-  const x = i => L + i / (n - 1) * (W - L - 6), y = v => H - U - v / max * (H - U - O);
+  const x = i => L + i / (n - 1) * (W - L - Rr), y = v => H - U - v / max * (H - U - O);
   const heute = Math.max(0, R.findLastIndex(r => r[1] !== null));
   const pfad = (k, von, bis) => R.slice(von, bis + 1).map((r, j) => r[k] === null ? '' : `${j ? 'L' : 'M'}${x(von + j).toFixed(1)},${y(r[k]).toFixed(1)}`).join(' ');
   const band = R[n - 1][3] !== null ? `M${x(heute).toFixed(1)},${y(R[heute][3]).toFixed(1)} ${R.slice(heute).map((r, j) => `L${x(heute + j).toFixed(1)},${y(r[4]).toFixed(1)}`).join(' ')} `
@@ -47,20 +49,26 @@ function diagramm(h) {
   let pfeil = '';
   if (raus >= 0) {   // Austritt am oberen Rand (nur Pixel): zwischen dem letzten Punkt darunter und dem ersten darüber
     const a = R[raus - 1], xe = raus && a[5] !== null ? x(raus - 1 + (max - a[5]) / (R[raus][5] - a[5])) : x(raus);
-    const ende = zahl(h.ohne_kwh) ? h.ohne_kwh : R[n - 1][5], t = `ohne${h.ohne_hinweis ? ' (Schätzung 24/7)' : ''} ${mengeText(ende, mwh)}`;
+    const e = zahl(h.ohne_kwh) ? h.ohne_kwh : R[n - 1][5], t = ende ? `ohne ${eur(h.ohne_eur)}` : `ohne${h.ohne_hinweis ? ' (Schätzung 24/7)' : ''} ${mengeText(e, mwh)}`;
     pfeil = `<text class="hp-pfeil" x="${xe.toFixed(1)}" y="${O - 2}">↑</text><text class="hp-raus" x="${(xe + (xe > W / 2 ? -6 : 6)).toFixed(1)}" y="${O - 4}" text-anchor="${xe > W / 2 ? 'end' : 'start'}">${t}</text>`;
   }
-  return unsafeHTML(`<svg class="hp-dia" viewBox="0 0 ${W} ${H}">
-    <defs><clipPath id="hp-feld"><rect x="${L}" y="${O}" width="${W - L - 6}" height="${H - U - O}"/></clipPath></defs>
-    ${stufen.map(v => `<line class="hp-gitter" data-v="${Math.round(v)}" x1="${L}" y1="${y(v)}" x2="${W - 6}" y2="${y(v)}"/><text class="hp-yt" x="${L - 4}" y="${y(v) + 3}">${de(mwh ? v / 1000 : v, mwh && max < 21000 ? 1 : 0)}</text>`).join('')}
+  const ist0 = ende && heute > 0 && R[heute][1] !== null;   // erst ab dem zweiten Tag mit Messwert, sonst stünde der Wert neben der Achse
+  const werte = ende ? (ist0 ? `<circle class="hp-pt ist" cx="${x(heute)}" cy="${y(R[heute][1])}" r="3.5"/><text class="hp-wert ist" x="${x(heute) - 5}" y="${y(R[heute][1]) - 7}" text-anchor="end">${eur(h.bisher_eur)}</text>` : '')
+    + `<circle class="hp-pt prog" cx="${x(n - 1)}" cy="${y(R[n - 1][2])}" r="3.5"/><text class="hp-wert prog" x="${x(n - 1) + 6}" y="${y(R[n - 1][2]) + 4}">≈ ${eur(h.mit_eur)}</text>`
+    + (raus < 0 && R[n - 1][5] !== null && zahl(h.ohne_eur)   // „ohne“ im Feld: € ebenfalls am Linienende, nicht über die Prognose
+      ? `<text class="hp-wert ohne" x="${x(n - 1) + 6}" y="${Math.min(y(R[n - 1][5]), y(R[n - 1][2]) - 12) + 4}">${eur(h.ohne_eur)}</text>` : '') : '';
+  return `<svg class="hp-dia${ende ? ' hp-ende' : ''}${klasse ? ` ${klasse}` : ''}" viewBox="0 0 ${W} ${H}">
+    <defs><clipPath id="${id}"><rect x="${L}" y="${O}" width="${W - L - Rr}" height="${H - U - O}"/></clipPath></defs>
+    ${stufen.map(v => `<line class="hp-gitter" data-v="${Math.round(v)}" x1="${L}" y1="${y(v)}" x2="${W - Rr}" y2="${y(v)}"/><text class="hp-yt" x="${L - 4}" y="${y(v) + 3}">${de(mwh ? v / 1000 : v, mwh && max < 21000 ? 1 : 0)}</text>`).join('')}
     <text class="hp-yt" x="${L - 4}" y="8">${mwh ? 'MWh' : 'kWh'}</text>
     ${monate.map(([t, i]) => `<line class="hp-gitter" x1="${x(i)}" y1="${O}" x2="${x(i)}" y2="${H - U}"/><text x="${x(i) + 10}" y="${H - 6}">${MONATE[+t.slice(5, 7) - 1]}</text>`).join('')}
     ${band ? `<path class="hp-band" d="${band}"/>` : ''}
-    ${R[0][5] !== null ? `<path class="hp-ohne"${raus >= 0 ? ' clip-path="url(#hp-feld)"' : ''} d="${pfad(5, 0, n - 1)}"/>${pfeil}` : ''}
+    ${R[0][5] !== null ? `<path class="hp-ohne"${raus >= 0 ? ` clip-path="url(#${id})"` : ''} d="${pfad(5, 0, n - 1)}"/>${pfeil}` : ''}
     <path class="hp-prog" d="${pfad(2, heute, n - 1)}"/>
     ${heute ? `<path class="hp-ist" d="${pfad(1, 0, heute)}"/>` : ''}
-    <line class="hp-heute" x1="${x(heute)}" y1="${O}" x2="${x(heute)}" y2="${H - U}"/><text class="hp-ht" x="${x(heute) + 3}" y="${O + 8}">heute</text></svg>`);
+    <line class="hp-heute" x1="${x(heute)}" y1="${O}" x2="${x(heute)}" y2="${H - U}"/><text class="hp-ht" x="${x(heute) + 3}" y="${O + 8}">heute</text>${werte}</svg>`;
 }
+const diagramm = h => { const svg = hochrechnungSvg(h); return svg ? unsafeHTML(svg) : nothing; };
 function legende(p, h) {
   return html`<div class="hp-leg">
       <span><i class="l-ist"></i>tatsächlich <b>${eur(h.bisher_eur)}</b></span>
@@ -283,6 +291,10 @@ export const HEIZPERIODE_CSS = `
 .hp-dia .hp-prog { stroke: var(--s1); stroke-dasharray: 6 4; } .hp-dia .hp-ohne { stroke: var(--s2); stroke-dasharray: 2 3; }
 .hp-dia .hp-band { fill: var(--s1); opacity: .2; stroke: none; }
 .hp-dia .hp-pfeil { fill: var(--s2) !important; font-size: 11px !important; font-weight: 700; text-anchor: middle; } .hp-dia .hp-raus { fill: var(--s2) !important; }   /* FE-0033 */
+.kk-dia > svg.hp-dia.kk-breit { max-width: none; margin: 0; } .kk-hp-leg i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 3px solid; }
+.kk-hp-leg .l-ist { border-color: var(--s3); } .kk-hp-leg .l-prog { border-color: var(--s1); border-top-style: dashed; } .kk-hp-leg .l-ohne { border-color: var(--s2); border-top-style: dotted; }
+.hp-ende .hp-wert { font-size: 11px !important; font-weight: 600; } .hp-ende .hp-wert.ist { fill: var(--s3) !important; } .hp-ende .hp-wert.prog { fill: var(--s1) !important; }
+.hp-ende .hp-wert.ohne { fill: var(--s2) !important; } .hp-ende .hp-pt.ist { fill: var(--s3); } .hp-ende .hp-pt.prog { fill: var(--s1); }   /* AN-0023 */
 .hp-heute, .hp-grenze { stroke: var(--amber); stroke-dasharray: 3 3; } .hp-ht, .hp-gt { fill: var(--amber) !important; }
 .hp-leg { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 4px 0; }
 .hp-leg i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 3px solid; }

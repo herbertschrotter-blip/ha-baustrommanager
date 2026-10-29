@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.163] – 2026-10-29
+
+- AN-0018: Der Container unten ist neu geordnet (Mockup `container-unten.html`, Variante B): Kacheln je Geräteart –
+  ♨ Heizen mit kW jetzt und einer Zeile je Heizkörper (⏻ von Hand, ✋ Automatik übernehmen, ★ Primär / 🔥 Zusatz, wartet),
+  🌡 Fühler mit Temperatur, Feuchte vom selben Gerät, „gemessen vor …“, Batterie und Signal, 🚪 Türen & Fenster mit
+  Zustand je Kontakt und den Türen und Fenstern ohne Kontakt, 🔌 Sonstiges. Eine Zeile antippen öffnet den Gerätedialog
+  bzw. den Sensor; der Schalter „aktiv“ entfällt (Status im Gerätedialog, an der Zeile als Etikett). Am Handy stehen die
+  Kacheln in voller Breite untereinander. Tür-Zeile, Lernen und Kleidung trocknen fallen unten weg (Kopf und Chips zeigen
+  sie); die Schalter Lernen und Trocknen stehen jetzt in „Bearbeiten“, „ändern ›“ der Chips springt dorthin.
+- AN-0023: Die Kachel „Hochrechnung Heizperiode“ zeigt in L die Linien der Karte Heizperiode (tatsächlich, Prognose mit
+  Spanne, ohne Automatik) mit Achse, Monaten und heute, die € direkt am Linienende und eine einzeilige Legende; darüber
+  Spanne und gespart. In M bleiben die Balken.
+
 ## [0.8.162] – 2026-10-29
 
 - FE-0036, FE-0037: Nach einem HA-Neustart stand bei offener Tür „Tür offen seit 1 min“, und die Heizung lief wieder an –

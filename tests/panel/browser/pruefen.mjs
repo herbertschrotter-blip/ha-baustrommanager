@@ -194,7 +194,7 @@ await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
 await fall('B4 Container live', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .glas-k[data-id="polier"]`); await warte(400);
   await page.mouse.move(900, 600); await rad(page, D, '.scroll', 'scrollTop', { deltaY: 200 });
-  const merken = () => panel(page, D, () => { window.__rest = [sr.querySelector('.ck-d .ckd-name'), sr.querySelector('.ck-d .ck-chip.modus'), sr.querySelector('.c-chip .c-power'), sr.querySelector('.c-live .seg button')]; window.__wrap = sr.querySelector('.c-live .chart-wrap');
+  const merken = () => panel(page, D, () => { window.__rest = [sr.querySelector('.ck-d .ckd-name'), sr.querySelector('.ck-d .ck-chip.modus'), sr.querySelector('.gk-hk .c-power'), sr.querySelector('.c-live .seg button')]; window.__wrap = sr.querySelector('.c-live .chart-wrap');
     return { w: window.__wrap.innerHTML, k: sr.querySelector('.c-live-kennz').textContent, scroll: sr.querySelector('.scroll').scrollTop, lg: p._liveGezeichnet || 0 }; });
   const zustand = (statistik) => panel(page, D, () => {
     if (a0) BB.TEST.statistik = (m, r) => { if (m.period !== '5minute') return r; for (const id in r) r[id] = r[id].map(x => x.change != null ? { ...x, change: x.change + 2 } : x); return r; };
@@ -466,8 +466,16 @@ await fall('3d Container', browser, async (page, erwarte) => {
       s = sr.querySelector('.ck-d .c-rad svg').getBoundingClientRect(), gs = [...sr.querySelectorAll('.ck-d .ckd-g')].map(x => x.getBoundingClientRect());
       return { links: r.right <= g.left + 1, rad: Math.round(s.width), nebeneinander: gs.length > 1 && Math.abs(gs[0].top - gs[1].top) < 2, lang: getComputedStyle(k.querySelector('.ck-l')).display !== 'none' }; });
     erwarte('Kopf Desktop: Rad 220 px links, Gruppen als Kästchen nebeneinander, lange Chips', l.links && l.rad === 220 && l.nebeneinander && l.lang, JSON.stringify(l)); }
-  await einer('.c-chip[data-i="0"] .c-power', 'baustelle/aktion:schalten', 'Gerät schalten');
-  await einer('.seite > .liste .zeile:last-child .sw', 'baustelle/setzen', 'Kleidung trocknen');
+  await einer('.gk-k-heiz .gk-hk .c-power', 'baustelle/aktion:schalten', 'Gerät schalten (AN-0018: ⏻ an der Zeile der Kachel Heizen)');
+  { const l = await panel(page, D, () => { const k = [...sr.querySelectorAll('.gk-kacheln > .gk-k')].map(x => x.getBoundingClientRect());
+      return { n: k.length, reihe: k.length > 1 && Math.abs(k[0].top - k[1].top) < 2, heiz: Math.round(sr.querySelector('.gk-k-heiz').getBoundingClientRect().width), fu: Math.round(sr.querySelector('.gk-k-fu').getBoundingClientRect().width) }; });
+    erwarte('AN-0018 Desktop: Kacheln je Geräteart nebeneinander, Heizen doppelt so breit', l.n >= 3 && l.reihe && l.heiz > 1.7 * l.fu, JSON.stringify(l)); }
+  await klick(page, `${D} >>> .w-zeile > button.chip:last-of-type`); await warte(200);
+  await klick(page, `${D} >>> .sheet [data-zeile="trocknen"] .sw`); await warte(100);   // AN-0018: in Bearbeiten, gespeichert mit „Speichern“
+  { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .sheet .knopf.amber`); await warte(300);
+    const pf = await page.evaluate(ab => window.baustelleBeispiel.TEST.aufrufe.slice(ab).filter(m => m.type === 'baustelle/setzen').map(m => m.pfad.join('.')), ab);
+    erwarte('Kleidung trocknen (AN-0018: Bearbeiten › Speichern) setzt bereiche.<id>.trocknen', pf.some(x => /^bereiche\.[^.]+\.trocknen$/.test(x)), pf.join(', ')); }
+  await panel(page, D, () => { p.s.sheet = null; return p.neuZeichnen(); });
   await klick(page, `${D} >>> .c-live .seg [data-v="woche"]`);
   erwarte('Diagramm Woche', await panel(page, D, () => p.s.cvd === 'woche' && !!sr.querySelector('.c-live .chart-wrap svg')));
   // Reiter Heizung (3d): Block als Einblendung, Modus je Container (Auswahlliste), Regler – je genau ein Auftrag
@@ -483,9 +491,10 @@ await fall('3d Container', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> nav button[data-v="uebersicht"]`); await klick(page, `${D} >>> .glas-k[data-id="polier"]`);
   await panel(page, D, async () => { for (const b of BB.welt) b.rechte = { aendern: false, aktionen: ['gefuehl', 'warnung_stumm', 'jetzt_heizen', 'boost', 'bedarf', 'bedarf_aus'] }; await p._laden(); await new Promise(r => setTimeout(r, 150)); });
   let ab = await aufrufZahl(page);
-  await klick(page, `${D} >>> .c-chip .bs-ic`);
-  const nl = await panel(page, D, () => ({ sheet: p.s.sheet, toast: sr.querySelector('.toast').textContent, grau: getComputedStyle(sr.querySelector('.c-chip .bs-ic')).opacity }));
-  erwarte('Nicht-Admin: ✎ ausgegraut, Hinweis, keine Einblendung', !nl.sheet && /ansehen/i.test(nl.toast) && +nl.grau < .6 && !(await schreibAnzahl(page, ab)).length, JSON.stringify(nl));
+  await klick(page, `${D} >>> .gk-k-heiz .gk-hk`);   // AN-0018: Zeile antippen zeigt den Gerätedialog (ansehen), Speichern bleibt gesperrt
+  const nl = await panel(page, D, () => ({ sheet: p.s.sheet && p.s.sheet.art }));
+  erwarte('Nicht-Admin: Zeile öffnet den Gerätedialog zum Ansehen, sendet nichts', nl.sheet === 'geraet-edit' && !(await schreibAnzahl(page, ab)).length, JSON.stringify(nl));
+  await panel(page, D, () => { p.s.sheet = null; return p.neuZeichnen(); });
   await einer('.ck-d .ck-chip.ck-boost', 'baustelle/aktion:boost', 'Nicht-Admin: Schnell aufheizen (Vor-Ort)');
   await klick(page, `${D} >>> .ck-d .ck-chip.modus`); ab = await aufrufZahl(page); await klick(page, `${D} >>> .ck-modi [data-v="hand"]`);
   erwarte('Nicht-Admin: Modus ändert nichts', !(await schreibAnzahl(page, ab)).length);

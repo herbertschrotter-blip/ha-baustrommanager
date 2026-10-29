@@ -1032,13 +1032,17 @@ async def test_geraete_links(hass: HomeAssistant, baustelle) -> None:
     ereg.async_get_or_create("sensor", "shelly", "t1-temp", suggested_object_id="temp_c1", device_id=funk.id)
     ereg.async_get_or_create("sensor", "shelly", "t1-bat", suggested_object_id="temp_c1_batterie", device_id=funk.id,
                              original_device_class="battery")
+    ereg.async_get_or_create("sensor", "shelly", "t1-feuchte", suggested_object_id="temp_c1_feuchte", device_id=funk.id,
+                             original_device_class="humidity")
     ereg.async_get_or_create("sensor", "shelly", "hk1-rssi", suggested_object_id="hk1_signal", device_id=shelly.id,
                              original_device_class="signal_strength")
     links = struktur(hass, baustelle)["geraete_links"]
     assert links["switch.hk1"]["web"] == "http://192.0.2.10" and links["switch.hk1"]["modell"] == "Plus Plug S"
     assert links["switch.hk1"]["ha"] == f"/config/devices/device/{shelly.id}" and links["switch.hk1"]["signal"] == "sensor.hk1_signal"
     assert links["sensor.temp_c1"]["web"] is None and links["sensor.temp_c1"]["batterie"] == "sensor.temp_c1_batterie"
-    assert links["sensor.aussen"] == {"web": None, "ha": None, "geraet": None, "hersteller": None, "modell": None, "batterie": None, "signal": None}
+    assert links["sensor.temp_c1"]["feuchte"] == "sensor.temp_c1_feuchte" and links["switch.hk1"]["feuchte"] is None   # AN-0018
+    assert links["sensor.aussen"] == {"web": None, "ha": None, "geraet": None, "hersteller": None, "modell": None, "batterie": None, "signal": None,
+                                     "feuchte": None}
     # Batterie-Stufe je Sensor fertig von der Integration (logik/sensoren.batterie_stufe): die Seite rechnet nichts
     fuehler = lambda: next(x for b in struktur(hass, baustelle)["bereiche"] if b["id"] == C1 for x in b["sensoren"] if x["art"] == "fuehler")
     for wert, stufe in (("90", None), ("25", None), ("24", "schwach"), ("10", "schwach"), ("9", "kritisch")):

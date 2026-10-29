@@ -258,8 +258,8 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   oder Bei Bedarf): Vorheizen, Nachheizen, Kälte-Frühstart; `warm` nur bei lernenden mit eigenem `warm_vor`/`warm_nach`.
   Bei Bedarf: kein Trocknen, Nachheizen, Frühstart, Feiertag; Vorheizen „vor jedem Termin“. `stufen` ab zwei Heizkörpern,
   `prio` nur hoch/niedrig mit Staffelung, `tuer` nur mit Tür- oder Fensterkontakt, `frost` ohne Fühler nur mit
-  `frost_aussen`. `ziel` (Sprungziel für „ändern ›“; die Seite bildet es nur auf ihre Navigation ab): `container:lernen`,
-  `container:trocknen`, `bearbeiten:warm`, `bearbeiten:stufen`, `regeln:<frost|tuer|vorheizen|nachheizen|fruehstart>`,
+  `frost_aussen`. `ziel` (Sprungziel für „ändern ›“; die Seite bildet es nur auf ihre Navigation ab): `bearbeiten:lernen`,
+  `bearbeiten:trocknen` (AN-0018), `bearbeiten:warm`, `bearbeiten:stufen`, `regeln:<frost|tuer|vorheizen|nachheizen|fruehstart>`,
   `strom`, `strom:vorrang`, `notprogramm`, `urlaub`.
 - „Warm ab“ (AN-0004, Optimum Start): Einstellungen `heizung.warm_vor_min` (Soll erreicht … min vor Arbeitsbeginn, 0–240),
   `heizung.warm_nach_min` (warm halten … min nach Arbeitsende, 0–240), `heizung.warm_max_min` (frühestens … min vor
@@ -320,7 +320,7 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   (`geraet` | `typ`) → `{zeitraum, basis, preis, kw, reihe: [kWh je Periode], ohne_kwh, kwh, ergebnis: {ohne_eur,
   gespart_eur, prozent} | null, geraete: [{id, typ, kw}]}`; 24/7 ab Beginn der Baustelle bis jetzt.
 - Geräteübersicht (WU-0010): `geraete_links` = `{entity_id: {web (configuration_url, nur http/https), ha (Geräteseite),
-  geraet, hersteller, modell, batterie (Batterie-Sensor am Gerät), signal (Signalstärke-Sensor am Gerät, AN-0009)}}` für alle benutzten Entitäten (Schalter, Leistung,
+  geraet, hersteller, modell, batterie (Batterie-Sensor am Gerät), signal (Signalstärke-Sensor am Gerät, AN-0009), feuchte (Feuchte-Sensor am Gerät, für die Fühler-Kachel, AN-0018)}}` für alle benutzten Entitäten (Schalter, Leistung,
   Energie, Fühler, Türkontakte, Außen, Regen, Wetter); ohne Geräteeintrag alle Felder `null`.
 - Szenarien (Runde 2): je Gerät `geraete.<id>.nenn_kw` (kW ohne Messung, `null` = Standard: Heizkörper 2,0, Pumpe 0,8;
   seit 28.10.2026 bei jedem Heizkörper als „Nennleistung (Typenschild)“ = P_ref der Prognose, auch mit Leistungssensor –

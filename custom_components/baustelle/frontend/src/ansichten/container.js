@@ -2,12 +2,11 @@
 // Regeltext und Heizzeiten kommen aus der Integration; die Seite ordnet nur zu. Rad, Tagesdiagramm und Balken bleiben bis
 // Stufe 4 SVG-Text (unsafeHTML). Neue Messwerte zeichnen nur, was sich geändert hat (B4).
 import { html, nothing } from 'lit';
-import { sensorLeisteVorlage } from './geraete.js';
+import { geraeteKachelnVorlage } from './geraete.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { TAGE, de, kurzDatum, minu, naechsterTermin, plusTage, uhr, wtag, zahl } from '../hilfen.js';
 import { FARBE, MODI, TEXT, WIEDER, kwVon } from '../tabellen.js';
-import { IC_MINUS, IC_PLUS, IC_POWER } from '../symbole.js';
-import { schalterVorlage } from './allgemein.js';
+import { IC_MINUS, IC_PLUS } from '../symbole.js';
 import { zeitraumVorlage } from './zeitraum.js';
 import { blaetterZeile } from './wischen.js';   // WU-0020
 import { baselineChip } from './baseline.js';   // J4b
@@ -130,8 +129,7 @@ const hin = (p, sel) => p.updateComplete.then(() => { const el = p.ui && p.ui.qu
 /** „ändern ›“: Sprungziel der Integration → vorhandene Wege der Seite (Einblendung, Reiter, Einstellungsgruppe) */
 export function eiSpringen(p, ziel) {
   const [art, z] = String(ziel || '').split(':');
-  if (art === 'container') { ckSetzen(p, { info: null }); return hin(p, `.c-einst [data-z="${z}"]`); }   // unten in dieser Ansicht
-  if (art === 'bearbeiten') { p.einblenden('bereich'); return hin(p, `.sheet [data-zeile="${z}"]`); }   // Container bearbeiten
+  if (art === 'bearbeiten' || art === 'container') { p.einblenden('bereich'); return hin(p, `.sheet [data-zeile="${z}"]`); }   // Container bearbeiten (container: = ältere Integration, AN-0018)
   if (art === 'regeln') { p.hzAuf('regeln'); return hin(p, `.sheet [data-r="${z}"]`); }   // Heizung › Regeln
   if (art === 'urlaub') return p.hzAuf('urlaub');   // Urlaub & Feiertage
   if (art === 'strom') { p.einstGruppe('strom'); return z ? hin(p, `.ev-inhalt [data-r="${z}"]`) : p.updateComplete; }   // Einstellungen › Strom
@@ -219,24 +217,8 @@ function bedarf(p, b) {
       <button class="zeile nur-admin" @click=${p.nurAdmin(() => p.einblenden(kal ? 'termin' : 'wetterquelle', { id: b.id }))}><span class="blau">${kal ? '+ Termin eintragen' : 'Kalender für Termine wählen'}</span></button></div>`;
 }
 
-/* Geräte-Chips: Ein/Aus (Handbetrieb), Schalter „aktiv“, ✎ Gerät bearbeiten */
-function geraete(p, b) {
-  const d = p.d;
-  return b.geraete.map((g, i) => { const off = b.offline || !g.erreichbar, an = g.an && g.aktiv;
-    const st = b.stufen && b.stufen.an ? (b.stufen.zusatz.includes(g.id) ? (b.stufen.zusatz_an ? html` · <em class="warte">Zusatz – ${b.stufen.text}</em>` : ' · Zusatz – wartet, einer reicht') : ' · ★ Primär') : '';   // AN-0006, AN-0015
-    const info = !g.aktiv ? `${g.status} – die Automatik lässt es aus` : off ? html`<span class="rot-t">offline</span>` : html`${g.typ} · ${an ? de(zahl(g.kwJetzt) ? g.kwJetzt : g.kw, 2) + ' kW' : 'aus'}${st}`;
-    return html`<div class="c-chip glas-panel ${an ? 'an' : ''} ${g.aktiv ? '' : 'inaktiv'}" data-i=${i}>
-        <span class="c-chip-t">${g.typ === 'Steckdose' || g.typ === 'Bautrockner' ? '⏻' : '♨'} <b>${g.n}</b><small>${info}${g.hand && g.aktiv ? html` · <em class="hand">✋ Hand</em>` : nothing}${g.warte && g.aktiv ? html` · <em class="warte">wartet – ${(d.anschluesse.find(a => a.id === b.anschluss) || {}).name || 'Anschluss'} ausgelastet</em>` : nothing}</small>
-          ${g.hand && g.aktiv ? html`<button class="link" @click=${() => p.geraetAutomatik(b, i)}>Automatik übernehmen</button>` : nothing}</span>
-        <button class="c-power ${an ? 'an' : ''}" ?disabled=${!g.aktiv || off} aria-label="${g.n} ${g.an ? 'ausschalten' : 'einschalten'}" title="${g.an ? 'Ausschalten' : 'Einschalten'} (Handbetrieb)" @click=${() => p.geraetSchalten(b, i)}>${unsafeHTML(IC_POWER)}</button>
-        ${g.status === 'verliehen' || g.status === 'defekt'   /* BSM-034.02: Status ändern im ✎ Gerät */
-          ? html`<button class="c-aktiv link nur-admin" data-status=${g.status} title="Status ändern" @click=${p.nurAdmin(() => p.geraetBearbeiten(b, i))}><small>${g.status}</small></button>`
-          : html`<label class="c-aktiv" title="Gerät aktiv – aus: die Automatik schaltet es nicht, keine Warnungen">${schalterVorlage(g.aktiv, () => p.geraetAktiv(b, i))}<small>aktiv</small></label>`}
-        <button class="bs-ic nur-admin" title="Gerät bearbeiten" aria-label="${g.n} bearbeiten" @click=${p.nurAdmin(() => p.geraetBearbeiten(b, i))}>✎</button></div>`; });
-}
-
 export function containerVorlage(p) {
-  const d = p.d, b = p.b, { c, chart } = p.containerTeile(b), vT = p.zrV('c-Tag');
+  const b = p.b, { c, chart } = p.containerTeile(b), vT = p.zrV('c-Tag');
   return html`${blaetterZeile(p)}
       ${kopf(p, b)}
       <div class="c-kacheln c-live-kennz">${kacheln(p, b)}</div>
@@ -245,12 +227,5 @@ export function containerVorlage(p) {
         <span class="leise">${c === 'heute' ? (vT ? 'Temperatur und Verbrauch je Stunde' : p.heuteText(b)) : c === 'woche' ? 'kWh je Tag' : 'Stunden geheizt je Tag'}</span></div>
         ${c === 'heute' ? zeitraumVorlage(p, 'c-Tag', 'Tag', p.zrGrenze()) : zeitraumVorlage(p, 'c-Woche', 'Woche', p.zrGrenze())}
         <div class="chart-wrap">${unsafeHTML(chart)}</div></div>
-      <div class="glas-panel block"><div class="block-kopf"><b>Geräte</b><span class="leise">⏻ = Handbetrieb · aktiv aus = die Automatik lässt es aus</span></div>
-        ${b.geraete.length ? html`<div class="c-chips">${geraete(p, b)}</div>` : html`<div class="leise">Noch kein Gerät</div>`}</div>
-      ${sensorLeisteVorlage(p, b)}
-      <div class="glas-panel liste c-einst">
-        ${b.tuer && b.tuer.offen ? html`<div class="zeile"><div><b>🚪 ${b.tuer.sensor}</b><div class="leise">${b.tuer.offen ? `offen seit ${b.tuer.offen} min – Heizung pausiert nach ${d.e.tuer_pause} min, Meldung nach ${d.e.tuer_melden} min` : 'zu'}</div></div></div>` : nothing}
-        ${!b.fuehler || !b.lern ? nothing : html`<div class="zeile" data-z="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${['thermo', 'bedarf'].includes(b.modus) ? 'lernt, wie lange der Raum nach dem Ausschalten nachheizt, und schaltet früher ab' : 'wirkt nur im Modus Thermostat oder Bei Bedarf'}${b.lern.an ? html` · <button class="link" @click=${() => p.einblenden('lernen')}>Lernstand ›</button>` : nothing}</div></div>${schalterVorlage(b.lern.an, () => p.lernenUmschalten(b))}</div>`}
-        <div class="zeile" data-z="trocknen"><span>👕 Kleidung trocknen nach Regen</span>${schalterVorlage(b.trocknen, () => p.trocknenUmschalten(b))}</div>
-      </div>`;
+      ${geraeteKachelnVorlage(p, b)}`;
 }

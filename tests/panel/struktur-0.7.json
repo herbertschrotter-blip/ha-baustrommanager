@@ -1248,7 +1248,7 @@
        "von": "container",
        "wirkt": true,
        "grund": null,
-       "ziel": "container:lernen"
+       "ziel": "bearbeiten:lernen"
       },
       {
        "k": "trocknen",
@@ -1259,7 +1259,7 @@
        "von": "container",
        "wirkt": true,
        "grund": null,
-       "ziel": "container:trocknen"
+       "ziel": "bearbeiten:trocknen"
       },
       {
        "k": "tuer",
@@ -1403,7 +1403,7 @@
        "von": "container",
        "wirkt": true,
        "grund": null,
-       "ziel": "container:trocknen"
+       "ziel": "bearbeiten:trocknen"
       },
       {
        "k": "prio",
@@ -4404,7 +4404,7 @@
        "von": "container",
        "wirkt": true,
        "grund": null,
-       "ziel": "container:trocknen"
+       "ziel": "bearbeiten:trocknen"
       },
       {
        "k": "frost",

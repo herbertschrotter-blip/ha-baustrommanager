@@ -948,7 +948,7 @@ function bauen(r5, hass, ersatzZone) {
   const ebAlle = e0.bereiche || {}, cAlle = lz.container || {}, gAlle = lz.geraete || {};
   const bereiche = (r5.bereiche || []).map((b3, i7) => {
     const eb = ebAlle[b3.id] || {}, c4 = cAlle[b3.id] || {}, pumpe = b3.art === "pumpenschacht";
-    const geraete2 = (r5.geraete || []).filter((g2) => g2.bereich === b3.id).map((g2) => {
+    const geraete = (r5.geraete || []).filter((g2) => g2.bereich === b3.id).map((g2) => {
       const x2 = gAlle[g2.id] || {};
       return {
         id: g2.id,
@@ -977,7 +977,7 @@ function bauen(r5, hass, ersatzZone) {
       };
     });
     let zst = c4.zustand in FARBE ? c4.zustand : pumpe ? "aus" : "aus";
-    const offline = zst === "offline" || geraete2.length > 0 && geraete2.every((g2) => !g2.erreichbar);
+    const offline = zst === "offline" || geraete.length > 0 && geraete.every((g2) => !g2.erreichbar);
     if (offline) zst = "offline";
     const tuerS = eb.tuer && hass && hass.states[eb.tuer];
     const tuer = eb.tuer ? { eid: eb.tuer, sensor: tuerS && tuerS.attributes.friendly_name || eb.tuer, offen: c4.tuer && c4.tuer.offen ? Math.max(1, minSeitAb(c4.tuer.seit, jetztMs) ?? 1) : 0 } : void 0;
@@ -994,7 +994,7 @@ function bauen(r5, hass, ersatzZone) {
       t: zahl(c4.temperatur) ? Number(c4.temperatur) : null,
       kw: zahl(c4.kw) ? Number(c4.kw) : null,
       text: c4.text || "",
-      geraete: geraete2,
+      geraete,
       auto: eb.auto !== false,
       trocknen: !!eb.trocknen,
       stufenAn: !!eb.stufen,
@@ -2456,10 +2456,89 @@ function geraeteGruppeVorlage(p4) {
     inhalt: () => b2`${reiter}${r5 === "inventar" ? inv.inhalt() : uebersicht(p4)}`
   };
 }
-function sensorLeisteVorlage(p4, b3) {
-  const X = geraeteZeilen(p4).filter((x2) => x2.b === b3 && x2.art === "sensor");
-  return X.length ? b2`<div class="glas-panel g-sensoren">${X.map((x2) => b2`<button class="chip g-sensor ${x2.weg ? "weg" : ""} ${x2.w.length ? "warn" : ""}" data-eid=${x2.eid}
-      @click=${() => oeffnen(p4, x2)}>${x2.ic} ${x2.name} · ${x2.zustand} ${batterie(x2)}${x2.weg ? A : signal(x2.sig)}</button>`)}</div>` : A;
+var WAND = { front: "Front", seite: "Seite" };
+var vorText = (p4, iso) => {
+  const m3 = iso ? p4.minSeitAb(iso, p4.d.z.jetztMs) : null;
+  return m3 === null ? "" : m3 < 1 ? "gerade eben" : m3 < 60 ? `vor ${m3} min` : m3 < 48 * 60 ? `vor ${Math.round(m3 / 60)} h` : `vor ${Math.round(m3 / 1440)} Tagen`;
+};
+var zustandHk = (b3, g2) => !g2.aktiv ? "Automatik lässt es aus" : b3.offline || !g2.erreichbar ? b2`<span class="rot-t">nicht erreichbar</span>` : g2.an ? `an · ${de(zahl(g2.kwJetzt) ? g2.kwJetzt : g2.kw, 2)} kW` : "aus";
+var rolleHk = (b3, g2) => !b3.stufen || !b3.stufen.an || !g2.heizer ? "" : b3.stufen.zusatz.includes(g2.id) ? " · 🔥 Zusatz" : " · ★ Primär";
+var etikett = (g2) => ST_TEXT2[g2.status] ? b2` <span class="g-st ${g2.status}">${ST_TEXT2[g2.status]}</span>` : A;
+function zeileHk(p4, b3, g2) {
+  const i7 = b3.geraete.indexOf(g2), an = g2.an && g2.aktiv, zusatz = b3.stufen && b3.stufen.an && b3.stufen.zusatz.includes(g2.id);
+  const warte = zusatz && !g2.an && g2.aktiv ? b2` <span class="leise">· ${b3.stufen.zusatz_an ? b3.stufen.text : "wartet – einer reicht"}</span>` : A;
+  const auf = () => p4.geraetOeffnen(b3.id, g2.id);
+  return b2`<div class="gk-hk ${g2.aktiv ? "" : "inaktiv"} ${an ? "an" : ""}" role="button" tabindex="0" data-id=${g2.id} @click=${auf}
+      @keydown=${(ev) => {
+    if (ev.target === ev.currentTarget && (ev.key === "Enter" || ev.key === " ")) {
+      ev.preventDefault();
+      auf();
+    }
+  }}>
+      <div class="gk-mitte"><b class="gk-name">${g2.n}${etikett(g2)}</b><div class="leise">${g2.typ} · ${de(g2.kw, 1)} kW${rolleHk(b3, g2)}</div>
+        <div class="gk-hz ${an ? "amber-t" : ""}">${zustandHk(b3, g2)}${warte}</div>
+        ${g2.hand && g2.aktiv ? b2`<div class="gk-hand">✋ von Hand · <button class="link" @click=${(ev) => {
+    ev.stopPropagation();
+    p4.geraetAutomatik(b3, i7);
+  }}>Automatik übernehmen</button></div>` : A}
+        ${g2.warte && g2.aktiv ? b2`<div class="gk-hand">wartet – ${(p4.d.anschluesse.find((a3) => a3.id === b3.anschluss) || {}).name || "Anschluss"} ausgelastet</div>` : A}</div>
+      <button class="c-power ${an ? "an" : ""}" ?disabled=${!g2.aktiv || b3.offline || !g2.erreichbar} aria-label="${g2.n} ${g2.an ? "ausschalten" : "einschalten"} (von Hand)"
+        title="${g2.an ? "Ausschalten" : "Einschalten"} (Handbetrieb)" @click=${(ev) => {
+    ev.stopPropagation();
+    p4.geraetSchalten(b3, i7);
+  }}>${o5(IC_POWER)}</button></div>`;
+}
+function fuehlerKachel(p4, b3, x2) {
+  const L2 = p4.d.r && p4.d.r.geraete_links || {}, st = p4._hass && p4._hass.states, z2 = st && st[x2.eid];
+  const f3 = (L2[x2.eid] || {}).feuchte, fz = f3 && st && st[f3], feuchte = fz && zahl(fz.state) ? Number(fz.state) : null;
+  const gemessen = z2 && !leer(z2) ? vorText(p4, z2.last_reported || z2.last_updated) : "";
+  return b2`<button class="glas-panel gk-k gk-k-fu" data-eid=${x2.eid} @click=${() => oeffnen(p4, x2)}><div class="gk-k-t">🌡 ${x2.name}</div>
+      <div class="gk-k-gross ${x2.weg ? "rot-t" : ""}">${x2.weg ? "meldet nichts" : zahl(b3.t) ? b2`${de(b3.t, 1)}<small> °C</small>` : x2.zustand}</div>
+      ${feuchte !== null ? b2`<div class="gk-k-z">💧 ${de(feuchte, 0)} % Feuchte</div>` : A}
+      <div class="gk-k-fuss">${batterie(x2)}${x2.weg ? A : signal(x2.sig)}${gemessen ? b2`<span class="leise">${gemessen}</span>` : A}</div>
+      ${x2.w.map((w2) => b2`<div class="g-w ${w2.stufe}">⚠ ${w2.titel}</div>`)}</button>`;
+}
+function kontakteKachel(p4, b3, K) {
+  const sym = b3.symbol || {}, laut = (art, nr) => ((art === "tuer" ? sym.tueren : sym.fenster) || [])[nr - 1] || null;
+  const wo = (art, nr) => {
+    const o6 = laut(art, nr);
+    return `${art === "tuer" ? "Tür" : "Fenster"} ${nr}${o6 && WAND[o6.wand] ? ` · ${WAND[o6.wand]}` : ""}`;
+  };
+  const zust = (x2) => {
+    const o6 = x2.s.art === "fenster" && laut("fenster", x2.s.nr);
+    return x2.weg ? "meldet nichts" : o6 && o6.zustand && o6.zustand !== "zu" && x2.zustand === "offen" ? o6.zustand : x2.zustand;
+  };
+  const ohneT = (sym.tueren || []).map((o6, i7) => [o6, i7 + 1]).filter(([o6]) => !o6.sensor_aktiv);
+  const ohneF = (sym.fenster || []).map((o6, i7) => [o6, i7 + 1]).filter(([o6]) => !o6.sensor);
+  return b2`<div class="glas-panel gk-k gk-k-ko"><div class="gk-k-t">🚪 Türen & Fenster</div>
+      ${K.map((x2) => {
+    const z2 = zust(x2);
+    return b2`<button class="gk-ko" data-eid=${x2.eid} @click=${() => oeffnen(p4, x2)}><span>${IC2[x2.s.art]} ${wo(x2.s.art, x2.s.nr)}</span>
+        <span class="gk-kz ${z2 === "zu" ? "" : x2.weg ? "rot" : "amber"}">${z2}</span><span class="gk-k-fuss">${batterie(x2)}${x2.weg ? A : signal(x2.sig)}</span>
+        ${x2.w.map((w2) => b2`<span class="g-w ${w2.stufe}">⚠ ${w2.titel}</span>`)}</button>`;
+  })}
+      ${ohneT.map(([o6, nr]) => b2`<button class="gk-ko warn nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("bereich"))}><span>🚪 ${wo("tuer", nr)}</span><span class="amber-t">kein Kontakt</span>
+        <span class="gk-k-fuss blau">Kontakt zuordnen ›</span></button>`)}
+      ${ohneF.length ? b2`<div class="leise gk-k-ohne">ohne Kontakt: ${ohneF.map(([, nr]) => `Fenster ${nr}`).join(", ")}</div>` : A}
+      ${K.length || ohneT.length ? A : b2`<div class="leise">Kein Kontakt eingetragen</div>`}</div>`;
+}
+function geraeteKachelnVorlage(p4, b3) {
+  const X = geraeteZeilen(p4).filter((x2) => x2.b === b3), S3 = X.filter((x2) => x2.art === "sensor");
+  const H2 = b3.geraete.filter((g2) => g2.heizer), A2 = b3.geraete.filter((g2) => !g2.heizer), F = S3.filter((x2) => x2.s.art === "fuehler");
+  const K = S3.filter((x2) => x2.s.art === "tuer" || x2.s.art === "fenster"), Li = S3.filter((x2) => x2.s.art === "licht"), weg = X.filter((x2) => x2.weg).length;
+  const sym = b3.symbol || {}, kontakteDa = K.length || (sym.tueren || []).length || (sym.fenster || []).length;
+  return b2`<div class="gk-geraete"><div class="gk-titel"><b>Geräte</b><span class="leise">${X.length} Geräte · ${weg ? b2`<span class="rot-t">${weg} nicht erreichbar</span>` : "alle erreichbar"}</span>
+      <button class="link blau" @click=${() => p4.einstGruppe("geraete")}>Alle Geräte ›</button></div>
+    <div class="gk-kacheln">
+      ${H2.length ? b2`<div class="glas-panel gk-k gk-k-heiz"><div class="gk-k-t">♨ Heizen</div><div class="gk-k-gross">${de(b3.kw || 0, 2)}<small> kW jetzt</small></div>
+        ${b3.stufen && b3.stufen.an && b3.stufen.text ? b2`<div class="leise gk-k-satz">${b3.stufen.text}</div>` : A}${H2.map((g2) => zeileHk(p4, b3, g2))}</div>` : A}
+      ${F.map((x2) => fuehlerKachel(p4, b3, x2))}
+      ${kontakteDa ? kontakteKachel(p4, b3, K) : A}
+      ${A2.length || Li.length ? b2`<div class="glas-panel gk-k gk-k-so"><div class="gk-k-t">🔌 Sonstiges</div>${A2.map((g2) => zeileHk(p4, b3, g2))}
+        ${Li.map((x2) => b2`<button class="gk-ko" data-eid=${x2.eid} @click=${() => oeffnen(p4, x2)}><span>💡 ${x2.name}</span><span class="gk-kz ${x2.zustand === "an" ? "amber" : ""}">${x2.zustand}</span></button>`)}</div>` : A}
+      ${b3.geraete.length || S3.length ? A : b2`<div class="glas-panel gk-k leise">Noch kein Gerät</div>`}
+    </div>
+    <div class="leise gk-fuss">Zeile antippen: Zustand, Warnungen, Status (aktiv/verliehen/defekt) und Einstellungen · ⏻ schaltet von Hand, bis „Automatik übernehmen“.</div></div>`;
 }
 function jetztVorlage(p4, x2) {
   const zl = (k2, v2) => b2`<div class="zeile"><span>${k2}</span><span class="leise g-wert">${v2}</span></div>`;
@@ -2513,9 +2592,28 @@ var GERAETE_CSS = `
 .g-st { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 8px; background: rgba(120,120,128,.2); } .g-st.defekt { color: var(--rot); } .g-st.verliehen { color: var(--blau); }
 .ger-punkt-i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; } .ger-punkt-i.da { background: #30d158; } .ger-punkt-i.weg { background: var(--rot); }
 .g-wert { display: inline-flex; gap: 6px; align-items: center; } .g-wz { align-items: flex-start; gap: 8px; } .g-wz .chip { font-size: 11px; white-space: nowrap; }
-.g-sensoren { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: 18px; } .g-sensor { font-size: 12px; display: inline-flex; gap: 5px; align-items: center; }
 .g-liste > .zeile, .g-liste > .gruppe { padding-left: 16px; padding-right: 16px; } a.zeile { text-decoration: none; color: inherit; }
-.g-sensor.weg { opacity: .6; } .g-sensor.warn { border-color: var(--amber); }`;
+/* AN-0018: Geräte-Kacheln im Container (Variante B) */
+.gk-geraete { margin-top: 8px; } .gk-titel { display: flex; align-items: baseline; gap: 8px; margin: 2px 4px 8px; } .gk-titel > .leise { flex: 1; }
+.gk-titel .link { border: 0; background: none; font: inherit; font-size: 13px; cursor: pointer; padding: 0; white-space: nowrap; }
+.gk-kacheln { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.gk-k { padding: 12px 14px; border-radius: 18px; display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: inherit; min-width: 0; }
+button.gk-k { cursor: pointer; } .gk-k-heiz, .gk-k-so { grid-column: span 2; }
+.gk-k-t { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink2); }
+.gk-k-gross { font-size: 28px; font-weight: 600; line-height: 1.1; } .gk-k-gross small { font-size: 13px; font-weight: 400; color: var(--ink2); }
+.gk-k-satz { margin-top: -2px; font-size: 12px; } .gk-k-z { font-size: 13px; }
+.gk-k-fuss { display: flex; gap: 8px; align-items: center; font-size: 12px; flex-wrap: wrap; }
+.gk-hk { display: flex; align-items: center; gap: 10px; padding: 8px 0 2px; border-top: 1px solid rgba(127,127,127,.15); cursor: pointer; }
+.gk-hk.inaktiv { opacity: .55; } .gk-mitte { flex: 1; min-width: 0; } .gk-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.gk-hz { font-size: 13px; } .gk-hand { font-size: 12px; color: var(--amber); }
+.gk-hand .link { border: 0; background: none; padding: 0; font: inherit; color: var(--blau); cursor: pointer; }
+.gk-ko { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; border: 0; border-top: 1px solid rgba(127,127,127,.15); background: none;
+  font: inherit; color: inherit; text-align: left; padding: 7px 0 2px; cursor: pointer; font-size: 13px; }
+.gk-ko > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .gk-ko .gk-k-fuss, .gk-ko .g-w { grid-column: 1 / -1; }
+.gk-kz { font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 8px; background: rgba(127,127,127,.18); }
+.gk-kz.amber { background: color-mix(in srgb, var(--amber) 25%, transparent); color: var(--amber); } .gk-kz.rot { color: var(--rot); }
+.gk-k-ohne { font-size: 12px; } .gk-fuss { padding: 8px 4px 0; font-size: 12px; }
+@container (max-width: 640px) { .gk-kacheln { grid-template-columns: minmax(0, 1fr); } .gk-k-heiz, .gk-k-so { grid-column: auto; } .gk-k-gross { font-size: 24px; } }`;
 
 // src/ansichten/wischen.js
 var WISCH_SCHWELLE = 60;
@@ -2982,11 +3080,7 @@ var hin = (p4, sel) => p4.updateComplete.then(() => {
 });
 function eiSpringen(p4, ziel2) {
   const [art, z2] = String(ziel2 || "").split(":");
-  if (art === "container") {
-    ckSetzen(p4, { info: null });
-    return hin(p4, `.c-einst [data-z="${z2}"]`);
-  }
-  if (art === "bearbeiten") {
+  if (art === "bearbeiten" || art === "container") {
     p4.einblenden("bereich");
     return hin(p4, `.sheet [data-zeile="${z2}"]`);
   }
@@ -3097,22 +3191,8 @@ function bedarf(p4, b3) {
           <button class="x nur-admin" title="Termin löschen" @click=${p4.nurAdmin(() => p4.terminWeg(t5))}>✕</button></div>`) : b2`<div class="leise">Keine Termine</div>`}
       <button class="zeile nur-admin" @click=${p4.nurAdmin(() => p4.einblenden(kal ? "termin" : "wetterquelle", { id: b3.id }))}><span class="blau">${kal ? "+ Termin eintragen" : "Kalender für Termine wählen"}</span></button></div>`;
 }
-function geraete(p4, b3) {
-  const d3 = p4.d;
-  return b3.geraete.map((g2, i7) => {
-    const off = b3.offline || !g2.erreichbar, an = g2.an && g2.aktiv;
-    const st = b3.stufen && b3.stufen.an ? b3.stufen.zusatz.includes(g2.id) ? b3.stufen.zusatz_an ? b2` · <em class="warte">Zusatz – ${b3.stufen.text}</em>` : " · Zusatz – wartet, einer reicht" : " · ★ Primär" : "";
-    const info2 = !g2.aktiv ? `${g2.status} – die Automatik lässt es aus` : off ? b2`<span class="rot-t">offline</span>` : b2`${g2.typ} · ${an ? de(zahl(g2.kwJetzt) ? g2.kwJetzt : g2.kw, 2) + " kW" : "aus"}${st}`;
-    return b2`<div class="c-chip glas-panel ${an ? "an" : ""} ${g2.aktiv ? "" : "inaktiv"}" data-i=${i7}>
-        <span class="c-chip-t">${g2.typ === "Steckdose" || g2.typ === "Bautrockner" ? "⏻" : "♨"} <b>${g2.n}</b><small>${info2}${g2.hand && g2.aktiv ? b2` · <em class="hand">✋ Hand</em>` : A}${g2.warte && g2.aktiv ? b2` · <em class="warte">wartet – ${(d3.anschluesse.find((a3) => a3.id === b3.anschluss) || {}).name || "Anschluss"} ausgelastet</em>` : A}</small>
-          ${g2.hand && g2.aktiv ? b2`<button class="link" @click=${() => p4.geraetAutomatik(b3, i7)}>Automatik übernehmen</button>` : A}</span>
-        <button class="c-power ${an ? "an" : ""}" ?disabled=${!g2.aktiv || off} aria-label="${g2.n} ${g2.an ? "ausschalten" : "einschalten"}" title="${g2.an ? "Ausschalten" : "Einschalten"} (Handbetrieb)" @click=${() => p4.geraetSchalten(b3, i7)}>${o5(IC_POWER)}</button>
-        ${g2.status === "verliehen" || g2.status === "defekt" ? b2`<button class="c-aktiv link nur-admin" data-status=${g2.status} title="Status ändern" @click=${p4.nurAdmin(() => p4.geraetBearbeiten(b3, i7))}><small>${g2.status}</small></button>` : b2`<label class="c-aktiv" title="Gerät aktiv – aus: die Automatik schaltet es nicht, keine Warnungen">${schalterVorlage(g2.aktiv, () => p4.geraetAktiv(b3, i7))}<small>aktiv</small></label>`}
-        <button class="bs-ic nur-admin" title="Gerät bearbeiten" aria-label="${g2.n} bearbeiten" @click=${p4.nurAdmin(() => p4.geraetBearbeiten(b3, i7))}>✎</button></div>`;
-  });
-}
 function containerVorlage(p4) {
-  const d3 = p4.d, b3 = p4.b, { c: c4, chart } = p4.containerTeile(b3), vT = p4.zrV("c-Tag");
+  const b3 = p4.b, { c: c4, chart } = p4.containerTeile(b3), vT = p4.zrV("c-Tag");
   return b2`${blaetterZeile(p4)}
       ${kopf(p4, b3)}
       <div class="c-kacheln c-live-kennz">${kacheln(p4, b3)}</div>
@@ -3124,14 +3204,7 @@ function containerVorlage(p4) {
         <span class="leise">${c4 === "heute" ? vT ? "Temperatur und Verbrauch je Stunde" : p4.heuteText(b3) : c4 === "woche" ? "kWh je Tag" : "Stunden geheizt je Tag"}</span></div>
         ${c4 === "heute" ? zeitraumVorlage(p4, "c-Tag", "Tag", p4.zrGrenze()) : zeitraumVorlage(p4, "c-Woche", "Woche", p4.zrGrenze())}
         <div class="chart-wrap">${o5(chart)}</div></div>
-      <div class="glas-panel block"><div class="block-kopf"><b>Geräte</b><span class="leise">⏻ = Handbetrieb · aktiv aus = die Automatik lässt es aus</span></div>
-        ${b3.geraete.length ? b2`<div class="c-chips">${geraete(p4, b3)}</div>` : b2`<div class="leise">Noch kein Gerät</div>`}</div>
-      ${sensorLeisteVorlage(p4, b3)}
-      <div class="glas-panel liste c-einst">
-        ${b3.tuer && b3.tuer.offen ? b2`<div class="zeile"><div><b>🚪 ${b3.tuer.sensor}</b><div class="leise">${b3.tuer.offen ? `offen seit ${b3.tuer.offen} min – Heizung pausiert nach ${d3.e.tuer_pause} min, Meldung nach ${d3.e.tuer_melden} min` : "zu"}</div></div></div>` : A}
-        ${!b3.fuehler || !b3.lern ? A : b2`<div class="zeile" data-z="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${["thermo", "bedarf"].includes(b3.modus) ? "lernt, wie lange der Raum nach dem Ausschalten nachheizt, und schaltet früher ab" : "wirkt nur im Modus Thermostat oder Bei Bedarf"}${b3.lern.an ? b2` · <button class="link" @click=${() => p4.einblenden("lernen")}>Lernstand ›</button>` : A}</div></div>${schalterVorlage(b3.lern.an, () => p4.lernenUmschalten(b3))}</div>`}
-        <div class="zeile" data-z="trocknen"><span>👕 Kleidung trocknen nach Regen</span>${schalterVorlage(b3.trocknen, () => p4.trocknenUmschalten(b3))}</div>
-      </div>`;
+      ${geraeteKachelnVorlage(p4, b3)}`;
 }
 
 // src/ansichten/start.js
@@ -3993,14 +4066,14 @@ function entwicklung(p4) {
     ${dev ? devVorlage(p4, { teil: "meldungen" }) : b2`${devVorlage(p4, { teil: "werkzeuge" })}${liste("Für Tests", b2`<button class="zeile" @click=${() => p4.testMeldung()}><span class="blau">Test-Nachricht senden</span></button><button class="zeile" @click=${() => p4.einblenden("nachrichten")}><span>Beispiel-Nachrichten</span><span class="chev">›</span></button>`)}`}`;
 }
 function gruppen(p4) {
-  const d3 = p4.d, e6 = d3.e, M2 = p4.meldungen(), P2 = d3.bereiche.filter((b3) => b3.pumpe), C2 = d3.bereiche.filter((b3) => !b3.pumpe), geraete2 = d3.bereiche.reduce((a3, b3) => a3 + b3.geraete.length, 0);
+  const d3 = p4.d, e6 = d3.e, M2 = p4.meldungen(), P2 = d3.bereiche.filter((b3) => b3.pumpe), C2 = d3.bereiche.filter((b3) => !b3.pumpe), geraete = d3.bereiche.reduce((a3, b3) => a3 + b3.geraete.length, 0);
   const mAn = ["m_offline", "m_trocken", "m_dauer", "m_zyklen", "m_leistung", "m_frost", "m_selbst", "m_kalt", "m_fuehler", "m_wetter", "m_hand"].filter((k2) => e6[k2]).length;
   const offen = M2 === null ? "–" : M2.filter((m3) => p4.meldungOffen(m3)).length, np = npGruppeVorlage(p4);
   return [
     { k: "baustelle", ic: "🏗", t: "Baustelle", kurz: `${d3.titel} · ${p4.bsZeit(d3)}`, inhalt: () => baustelle(p4) },
     { k: "heizung", ic: "🔥", t: "Heizung", kurz: `Automatik ${e6.auto ? "an" : "aus"} · Soll ${de(e6.soll)} °C · Vorheizen ${e6.vorheizen} min`, inhalt: () => heizung(p4) },
     np,
-    { k: "container", ic: "🏠", t: "Container & Geräte", kurz: `${C2.length} Container · ${P2.length} ${P2.length === 1 ? "Schacht" : "Schächte"} · ${geraete2} Geräte`, inhalt: () => container(p4) },
+    { k: "container", ic: "🏠", t: "Container & Geräte", kurz: `${C2.length} Container · ${P2.length} ${P2.length === 1 ? "Schacht" : "Schächte"} · ${geraete} Geräte`, inhalt: () => container(p4) },
     geraeteGruppeVorlage(p4),
     // BSM-034.05: Übersicht und 📦 Inventar in einer Gruppe
     { k: "pumpen", ic: "💧", t: "Pumpen", kurz: P2.length ? `offline nach ${e6.offline_min} min · Trockenlauf unter ${e6.trocken_w} W` : "keine Schächte", inhalt: () => pumpen(p4) },
@@ -4180,6 +4253,14 @@ function bereich(p4, s4) {
     e6.bedarf = !e6.bedarf;
     z2();
   })}</div>`}
+        ${b3.pumpe || !b3.fuehler || !b3.lern ? A : b2`<div class="zeile" data-zeile="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${["thermo", "bedarf"].includes(b3.modus) ? "lernt, wie schnell der Raum warm wird und wie viel er nachwärmt, und heizt so früh, dass das Soll rechtzeitig da ist" : "wirkt nur im Modus Thermostat oder Bei Bedarf"}${b3.lern.an ? b2` · <button class="link blau" @click=${() => p4.unterDialog({ art: "lernen" })}>Lernstand ›</button>` : A}</div></div>${schalterVorlage(e6.lernen, () => {
+    e6.lernen = !e6.lernen;
+    z2();
+  })}</div>`}
+        ${b3.pumpe ? A : b2`<div class="zeile" data-zeile="trocknen"><div><b>👕 Kleidung trocknen nach Regen</b><div class="leise">nach Regen länger nach der Arbeit und früher am Morgen heizen (Werte unter Heizung › Regeln)</div></div>${schalterVorlage(e6.trocknen, () => {
+    e6.trocknen = !e6.trocknen;
+    z2();
+  })}</div>`}
         ${b3.lern && b3.lern.warm ? warm() : A}
         ${b3.pumpe || !b3.groesse ? A : groesse(p4, b3, e6)}
         ${b3.pumpe ? A : b2`<div class="glas-panel liste"><button class="zeile sym-zeile" @click=${() => p4.aussehenAuf(b3)}><span class="sym-mini">${o5(bcContainer(BEREICH_FARBEN[b3.f % BEREICH_FARBEN.length], "aus", b3))}</span><div><b class="blau">🏠 Aussehen</b><div class="leise">${b3.symbol && b3.symbol.doppel ? "Doppel" : "Einzel"} · ${b3.symbol ? b3.symbol.tueren.length : 1} ${b3.symbol && b3.symbol.tueren.length === 2 ? "Türen" : "Tür"} · ${b3.symbol ? b3.symbol.fenster.length : 1} Fenster · Farbe, Sensoren</div></div><span class="chev">›</span></button></div>`}
@@ -4305,13 +4386,13 @@ function zahlZeile(h3) {
   return b2`<div class="hp-zahl">≈ ${eur2(h3.mit_eur)}<span class="leise"> · ${zahl(h3.unten_eur) ? `${de(h3.unten_eur, 0)}–${eur2(h3.oben_eur)}` : `${de(h3.mit_kwh, 0)} kWh`}</span></div>`;
 }
 var mengeText = (v2, mwh) => mwh ? `${de(v2 / 1e3, v2 < 1e4 ? 1 : 0)} MWh` : `${de(v2, 0)} kWh`;
-function diagramm(h3) {
+function hochrechnungSvg(h3, { w: w2 = 340, ende = false, id = "hp-feld", klasse = "" } = {}) {
   const R2 = h3.reihe || [];
-  if (R2.length < 2) return A;
-  const W = 340, H2 = 180, L2 = 36, U = 22, n4 = R2.length;
+  if (R2.length < 2) return "";
+  const W = w2, H2 = ende ? 150 : 180, L2 = 36, U = 22, Rr = ende ? 64 : 6, n4 = R2.length;
   const max = Math.max(...R2.map((r5) => Math.max(r5[1] || 0, r5[2] || 0, r5[4] || 0)), 1) * 1.05;
   const raus = R2.findIndex((r5) => r5[5] !== null && r5[5] > max), O = raus >= 0 ? 22 : 10;
-  const x2 = (i7) => L2 + i7 / (n4 - 1) * (W - L2 - 6), y3 = (v2) => H2 - U - v2 / max * (H2 - U - O);
+  const x2 = (i7) => L2 + i7 / (n4 - 1) * (W - L2 - Rr), y3 = (v2) => H2 - U - v2 / max * (H2 - U - O);
   const heute2 = Math.max(0, R2.findLastIndex((r5) => r5[1] !== null));
   const pfad = (k2, von, bis) => R2.slice(von, bis + 1).map((r5, j2) => r5[k2] === null ? "" : `${j2 ? "L" : "M"}${x2(von + j2).toFixed(1)},${y3(r5[k2]).toFixed(1)}`).join(" ");
   const band = R2[n4 - 1][3] !== null ? `M${x2(heute2).toFixed(1)},${y3(R2[heute2][3]).toFixed(1)} ${R2.slice(heute2).map((r5, j2) => `L${x2(heute2 + j2).toFixed(1)},${y3(r5[4]).toFixed(1)}`).join(" ")} ${R2.slice(heute2).reverse().map((r5, j2) => `L${x2(n4 - 1 - j2).toFixed(1)},${y3(r5[3]).toFixed(1)}`).join(" ")} Z` : "";
@@ -4320,20 +4401,26 @@ function diagramm(h3) {
   let pfeil = "";
   if (raus >= 0) {
     const a3 = R2[raus - 1], xe = raus && a3[5] !== null ? x2(raus - 1 + (max - a3[5]) / (R2[raus][5] - a3[5])) : x2(raus);
-    const ende = zahl(h3.ohne_kwh) ? h3.ohne_kwh : R2[n4 - 1][5], t5 = `ohne${h3.ohne_hinweis ? " (Schätzung 24/7)" : ""} ${mengeText(ende, mwh)}`;
+    const e6 = zahl(h3.ohne_kwh) ? h3.ohne_kwh : R2[n4 - 1][5], t5 = ende ? `ohne ${eur2(h3.ohne_eur)}` : `ohne${h3.ohne_hinweis ? " (Schätzung 24/7)" : ""} ${mengeText(e6, mwh)}`;
     pfeil = `<text class="hp-pfeil" x="${xe.toFixed(1)}" y="${O - 2}">↑</text><text class="hp-raus" x="${(xe + (xe > W / 2 ? -6 : 6)).toFixed(1)}" y="${O - 4}" text-anchor="${xe > W / 2 ? "end" : "start"}">${t5}</text>`;
   }
-  return o5(`<svg class="hp-dia" viewBox="0 0 ${W} ${H2}">
-    <defs><clipPath id="hp-feld"><rect x="${L2}" y="${O}" width="${W - L2 - 6}" height="${H2 - U - O}"/></clipPath></defs>
-    ${stufen2.map((v2) => `<line class="hp-gitter" data-v="${Math.round(v2)}" x1="${L2}" y1="${y3(v2)}" x2="${W - 6}" y2="${y3(v2)}"/><text class="hp-yt" x="${L2 - 4}" y="${y3(v2) + 3}">${de(mwh ? v2 / 1e3 : v2, mwh && max < 21e3 ? 1 : 0)}</text>`).join("")}
+  const ist0 = ende && heute2 > 0 && R2[heute2][1] !== null;
+  const werte = ende ? (ist0 ? `<circle class="hp-pt ist" cx="${x2(heute2)}" cy="${y3(R2[heute2][1])}" r="3.5"/><text class="hp-wert ist" x="${x2(heute2) - 5}" y="${y3(R2[heute2][1]) - 7}" text-anchor="end">${eur2(h3.bisher_eur)}</text>` : "") + `<circle class="hp-pt prog" cx="${x2(n4 - 1)}" cy="${y3(R2[n4 - 1][2])}" r="3.5"/><text class="hp-wert prog" x="${x2(n4 - 1) + 6}" y="${y3(R2[n4 - 1][2]) + 4}">≈ ${eur2(h3.mit_eur)}</text>` + (raus < 0 && R2[n4 - 1][5] !== null && zahl(h3.ohne_eur) ? `<text class="hp-wert ohne" x="${x2(n4 - 1) + 6}" y="${Math.min(y3(R2[n4 - 1][5]), y3(R2[n4 - 1][2]) - 12) + 4}">${eur2(h3.ohne_eur)}</text>` : "") : "";
+  return `<svg class="hp-dia${ende ? " hp-ende" : ""}${klasse ? ` ${klasse}` : ""}" viewBox="0 0 ${W} ${H2}">
+    <defs><clipPath id="${id}"><rect x="${L2}" y="${O}" width="${W - L2 - Rr}" height="${H2 - U - O}"/></clipPath></defs>
+    ${stufen2.map((v2) => `<line class="hp-gitter" data-v="${Math.round(v2)}" x1="${L2}" y1="${y3(v2)}" x2="${W - Rr}" y2="${y3(v2)}"/><text class="hp-yt" x="${L2 - 4}" y="${y3(v2) + 3}">${de(mwh ? v2 / 1e3 : v2, mwh && max < 21e3 ? 1 : 0)}</text>`).join("")}
     <text class="hp-yt" x="${L2 - 4}" y="8">${mwh ? "MWh" : "kWh"}</text>
     ${monate.map(([t5, i7]) => `<line class="hp-gitter" x1="${x2(i7)}" y1="${O}" x2="${x2(i7)}" y2="${H2 - U}"/><text x="${x2(i7) + 10}" y="${H2 - 6}">${MONATE[+t5.slice(5, 7) - 1]}</text>`).join("")}
     ${band ? `<path class="hp-band" d="${band}"/>` : ""}
-    ${R2[0][5] !== null ? `<path class="hp-ohne"${raus >= 0 ? ' clip-path="url(#hp-feld)"' : ""} d="${pfad(5, 0, n4 - 1)}"/>${pfeil}` : ""}
+    ${R2[0][5] !== null ? `<path class="hp-ohne"${raus >= 0 ? ` clip-path="url(#${id})"` : ""} d="${pfad(5, 0, n4 - 1)}"/>${pfeil}` : ""}
     <path class="hp-prog" d="${pfad(2, heute2, n4 - 1)}"/>
     ${heute2 ? `<path class="hp-ist" d="${pfad(1, 0, heute2)}"/>` : ""}
-    <line class="hp-heute" x1="${x2(heute2)}" y1="${O}" x2="${x2(heute2)}" y2="${H2 - U}"/><text class="hp-ht" x="${x2(heute2) + 3}" y="${O + 8}">heute</text></svg>`);
+    <line class="hp-heute" x1="${x2(heute2)}" y1="${O}" x2="${x2(heute2)}" y2="${H2 - U}"/><text class="hp-ht" x="${x2(heute2) + 3}" y="${O + 8}">heute</text>${werte}</svg>`;
 }
+var diagramm = (h3) => {
+  const svg2 = hochrechnungSvg(h3);
+  return svg2 ? o5(svg2) : A;
+};
 function legende(p4, h3) {
   return b2`<div class="hp-leg">
       <span><i class="l-ist"></i>tatsächlich <b>${eur2(h3.bisher_eur)}</b></span>
@@ -4566,6 +4653,10 @@ var HEIZPERIODE_CSS = `
 .hp-dia .hp-prog { stroke: var(--s1); stroke-dasharray: 6 4; } .hp-dia .hp-ohne { stroke: var(--s2); stroke-dasharray: 2 3; }
 .hp-dia .hp-band { fill: var(--s1); opacity: .2; stroke: none; }
 .hp-dia .hp-pfeil { fill: var(--s2) !important; font-size: 11px !important; font-weight: 700; text-anchor: middle; } .hp-dia .hp-raus { fill: var(--s2) !important; }   /* FE-0033 */
+.kk-dia > svg.hp-dia.kk-breit { max-width: none; margin: 0; } .kk-hp-leg i { display: inline-block; width: 16px; height: 0; margin-right: 5px; vertical-align: middle; border-top: 3px solid; }
+.kk-hp-leg .l-ist { border-color: var(--s3); } .kk-hp-leg .l-prog { border-color: var(--s1); border-top-style: dashed; } .kk-hp-leg .l-ohne { border-color: var(--s2); border-top-style: dotted; }
+.hp-ende .hp-wert { font-size: 11px !important; font-weight: 600; } .hp-ende .hp-wert.ist { fill: var(--s3) !important; } .hp-ende .hp-wert.prog { fill: var(--s1) !important; }
+.hp-ende .hp-wert.ohne { fill: var(--s2) !important; } .hp-ende .hp-pt.ist { fill: var(--s3); } .hp-ende .hp-pt.prog { fill: var(--s1); }   /* AN-0023 */
 .hp-heute, .hp-grenze { stroke: var(--amber); stroke-dasharray: 3 3; } .hp-ht, .hp-gt { fill: var(--amber) !important; }
 .hp-leg { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin: 4px 0; }
 .hp-leg i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 3px solid; }
@@ -6320,7 +6411,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.162";
+var SEITE_VERSION = "0.8.163";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -6903,7 +6994,7 @@ var BaustellePanel = class extends i4 {
     const ganzerTag = s4.lart === "tag";
     const von = this.zoneMs(tag, ganzerTag ? "00:00" : `${String(h3).padStart(2, "0")}:00`, d3.z.zone), bis = ganzerTag ? this.zoneMs(plusTage(tag, 1), "00:00", d3.z.zone) : von + 36e5;
     const laufend = !v2 && (ganzerTag || h3 === jetztH);
-    const geraete2 = b3.geraete.filter((g2) => g2.leistung), ids = geraete2.map((g2) => g2.leistung);
+    const geraete = b3.geraete.filter((g2) => g2.leistung), ids = geraete.map((g2) => g2.leistung);
     const tagVon = this.zoneMs(tag, "00:00", d3.z.zone), tagBis = this.zoneMs(plusTage(tag, 1), "00:00", d3.z.zone);
     const roh2 = !ids.length ? {} : this._holen(`lh:${d3.entry}:${b3.id}:${tag}:tag`, () => this._hass.callWS({
       type: "baustelle/verlauf",
@@ -6936,7 +7027,7 @@ var BaustellePanel = class extends i4 {
       const vorher = alle.filter((p4) => p4[0] <= von).at(-1), drin = alle.filter((p4) => p4[0] > von && p4[0] < bis);
       return [...vorher ? [[von, vorher[1]]] : [], ...drin];
     };
-    const reihen = geraete2.map((g2, k2) => ({ name: g2.n, farbe: farben[k2 % farben.length], punkte: ausschnitt(((roh2 || {})[g2.leistung] || []).map((x2) => [zahl(x2.lu) ? x2.lu * 1e3 : Date.parse(x2.last_updated || x2.last_changed), zahl(x2.s ?? x2.state) ? Number(x2.s ?? x2.state) : null]).filter((p4) => Number.isFinite(p4[0])).sort((p4, q) => p4[0] - q[0])) }));
+    const reihen = geraete.map((g2, k2) => ({ name: g2.n, farbe: farben[k2 % farben.length], punkte: ausschnitt(((roh2 || {})[g2.leistung] || []).map((x2) => [zahl(x2.lu) ? x2.lu * 1e3 : Date.parse(x2.last_updated || x2.last_changed), zahl(x2.s ?? x2.state) ? Number(x2.s ?? x2.state) : null]).filter((p4) => Number.isFinite(p4[0])).sort((p4, q) => p4[0] - q[0])) }));
     const zeiten = [...new Set(reihen.flatMap((r5) => r5.punkte.map((p4) => p4[0])))].sort((a3, b22) => a3 - b22);
     const wert2 = (r5, t5) => {
       let w2 = null;
@@ -6984,9 +7075,9 @@ var BaustellePanel = class extends i4 {
   }
   /* Gemessen: wann zieht ein Gerät Strom (Leistung über „heizt tatsächlich ab“, Standard 50 W) – Verlauf der Leistungssensoren seit Montag */
   messung(d3 = this.d) {
-    const geraete2 = d3.bereiche.flatMap((b3) => b3.geraete.map((g2) => ({ b: b3, g: g2, eid: g2.leistung || g2.schalter }))).filter((x2) => x2.eid);
-    if (!geraete2.length) return {};
-    const ids = [...new Set(geraete2.map((x2) => x2.eid))].sort(), start = this.zoneMs(d3.z.WOCHE_ISO[0], "00:00", d3.z.zone);
+    const geraete = d3.bereiche.flatMap((b3) => b3.geraete.map((g2) => ({ b: b3, g: g2, eid: g2.leistung || g2.schalter }))).filter((x2) => x2.eid);
+    if (!geraete.length) return {};
+    const ids = [...new Set(geraete.map((x2) => x2.eid))].sort(), start = this.zoneMs(d3.z.WOCHE_ISO[0], "00:00", d3.z.zone);
     const roh2 = this._holen(`h:${d3.entry}:${d3.z.HEUTE}:${d3.z.JETZT.slice(0, 4)}`, () => this._hass.callWS({
       type: "baustelle/verlauf",
       entry_id: d3.entry,
@@ -6999,7 +7090,7 @@ var BaustellePanel = class extends i4 {
     }), 6e5);
     if (roh2 === void 0) return null;
     const tagStart = d3.z.WOCHE_ISO.map((t5) => this.zoneMs(t5, "00:00", d3.z.zone)), ende = d3.z.jetztMs, erg = {};
-    for (const { g: g2, eid } of geraete2) {
+    for (const { g: g2, eid } of geraete) {
       const liste2 = ((roh2 || {})[eid] || []).map((x2) => ({ s: x2.s ?? x2.state, t: zahl(x2.lu) ? x2.lu * 1e3 : zahl(x2.lc) ? x2.lc * 1e3 : Date.parse(x2.last_updated || x2.last_changed) })).filter((x2) => Number.isFinite(x2.t)).sort((a3, b3) => a3.t - b3.t);
       const tage = TAGE.map(() => ({ an: [], off: [] }));
       liste2.forEach((x2, i7) => {
@@ -7706,6 +7797,8 @@ var BaustellePanel = class extends i4 {
       if (e6.warmVor !== (x2.warmVor ?? null)) await call("warm_vor", e6.warmVor);
       if (e6.warmNach !== (x2.warmNach ?? null)) await call("warm_nach", e6.warmNach);
       if (e6.stufen !== !!x2.stufenAn) await call("stufen", e6.stufen);
+      if (x2.lern && e6.lernen !== !!x2.lern.an) await call("lernen", e6.lernen);
+      if (e6.trocknen !== !!x2.trocknen) await call("trocknen", e6.trocknen);
       if ((e6.primaer || null) !== (x2.primaer || null)) await call("primaer", e6.primaer || null);
       if (e6.anschluss && e6.anschluss !== x2.anschluss) await call("anschluss", e6.anschluss);
       if (e6.firma !== x2.firma) {
@@ -7795,6 +7888,9 @@ var BaustellePanel = class extends i4 {
       stufen: !!x2.stufenAn,
       primaer: x2.primaer || "",
       // AN-0015
+      lernen: !!(x2.lern && x2.lern.an),
+      trocknen: !!x2.trocknen,
+      // AN-0018: Lernen und Trocknen stehen in „Bearbeiten“, gespeichert mit „Speichern“
       // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
       geraete: x2.geraete.map((g2) => ({ id: g2.id, n: g2.n, typ: g2.typ, schalter: g2.schalter, leistung: g2.leistungEigen || void 0, energie: g2.energieEigen || void 0, alt: { n: g2.n, typ: g2.typ } }))
     };
@@ -8812,14 +8908,18 @@ var BaustellePanel = class extends i4 {
       }
       case "b-hoch": {
         const h3 = A2 && A2.hochrechnung || {};
+        const hoch = (id, w2) => {
+          const svg2 = hochrechnungSvg(h3, { w: Math.max(300, Math.min(w2, 640)), ende: true, id: `${id}-feld`, klasse: "kk-breit" });
+          return svg2 ? `${svg2}<div class="kk-leg kk-hp-leg"><span><i class="l-ist"></i>tatsächlich</span><span><i class="l-prog"></i>${w2 <= 320 ? "mit" : "Prognose mit Automatik"}</span>${zahl(h3.ohne_eur) ? `<span><i class="l-ohne"></i>${w2 <= 320 ? "ohne" : "ohne Automatik"}</span>` : ""}</div>` : "";
+        };
         return {
           zahl: zahl(h3.mit_eur) ? `≈ ${de(h3.mit_eur, 0)}` : "–",
           einh: "€",
           wo: "bis Ende Heizperiode",
-          vgl: `bisher ${f3(h3.bisher_eur, 0)} € · ohne Automatik ${f3(h3.ohne_eur, 0)} €${h3.ohne_hinweis ? ` (${h3.ohne_hinweis})` : ""}`,
+          vgl: `${zahl(h3.unten_eur) && zahl(h3.oben_eur) ? `Spanne ${f3(h3.unten_eur, 0)}–${f3(h3.oben_eur, 0)} €` : `bisher ${f3(h3.bisher_eur, 0)} €`} · gespart ≈ ${f3(h3.gespart_eur, 0)} €${h3.ohne_hinweis ? ` (${h3.ohne_hinweis})` : ""}`,
           mini: kkBalken([["bisher", h3.bisher_eur, `${f3(h3.bisher_eur, 0)} €`, "var(--s3)"], ["mit", h3.mit_eur, `${f3(h3.mit_eur, 0)} €`, "var(--s1)"], ["ohne", h3.ohne_eur, `${f3(h3.ohne_eur, 0)} €`, "var(--s2)"]]),
           kennz: [["bisher", `${f3(h3.bisher_kwh, 0)} kWh`], ["mit Automatik", `${f3(h3.mit_kwh, 0)} kWh`], ["ohne (24/7)", `${f3(h3.ohne_kwh, 0)} kWh`], ["gespart ≈", `${f3(h3.gespart_eur, 0)} €`]],
-          dia: (id) => zahl(h3.mit_eur) ? balken(id, [h3.bisher_eur, h3.mit_eur, h3.ohne_eur], ["bisher", "mit", "ohne"], "€", 0) : ""
+          dia: (id, w2) => zahl(h3.mit_eur) ? hoch(id, w2) : ""
         };
       }
       case "b-wetter": {

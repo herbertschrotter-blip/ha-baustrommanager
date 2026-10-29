@@ -35,7 +35,7 @@ import { EINRICHTUNG_EINBLENDUNGEN } from './ansichten/einblendungen-einrichtung
 import { npPlugEinblendung } from './ansichten/notprogramm.js';
 import { INVENTAR_EINBLENDUNGEN, INV_BREIT, INV_CSS } from './ansichten/inventar.js';
 import { GERAETE_CSS, GERAETE_EINBLENDUNGEN } from './ansichten/geraete.js';
-import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN } from './ansichten/heizperiode.js';
+import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN, hochrechnungSvg } from './ansichten/heizperiode.js';
 import { BASELINE_CSS } from './ansichten/baseline.js';
 import { uebersichtVorlage } from './ansichten/uebersicht.js';
 import { katalogEinblendung } from './ansichten/kacheln.js';
@@ -1810,6 +1810,8 @@ class BaustellePanel extends LitElement {
       if (e.warmVor !== (x.warmVor ?? null)) await call('warm_vor', e.warmVor);   // BSM-034.01: alles erst bei „Speichern“
       if (e.warmNach !== (x.warmNach ?? null)) await call('warm_nach', e.warmNach);
       if (e.stufen !== !!x.stufenAn) await call('stufen', e.stufen);
+      if (x.lern && e.lernen !== !!x.lern.an) await call('lernen', e.lernen);
+      if (e.trocknen !== !!x.trocknen) await call('trocknen', e.trocknen);
       if ((e.primaer || null) !== (x.primaer || null)) await call('primaer', e.primaer || null);   // AN-0015
       if (e.anschluss && e.anschluss !== x.anschluss) await call('anschluss', e.anschluss);
       if (e.firma !== x.firma) {
@@ -1855,6 +1857,7 @@ class BaustellePanel extends LitElement {
     return s.edit ||= { bedarf: !!x.bedarf, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
       groesseArt: (x.groesse && x.groesse.art) || 'einzel', m2: x.groesse ? x.groesse.m2 : null,
       warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn, primaer: x.primaer || '',   // AN-0015
+      lernen: !!(x.lern && x.lern.an), trocknen: !!x.trocknen,   // AN-0018: Lernen und Trocknen stehen in „Bearbeiten“, gespeichert mit „Speichern“
       // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
       geraete: x.geraete.map(g => ({ id: g.id, n: g.n, typ: g.typ, schalter: g.schalter, leistung: g.leistungEigen || undefined, energie: g.energieEigen || undefined, alt: { n: g.n, typ: g.typ } })) };
   }
@@ -2423,10 +2426,15 @@ class BaustellePanel extends LitElement {
           kennz: [['gespart', `${f(oa && oa.gespart_eur, 0)} €`], ['gespart', `${f(su.gespart_kwh, 0)} kWh`], ['ohne (24/7)', `${f(oa && oa.ohne_eur, 0)} €`], ['mit Automatik', `${f(S.eur, 0)} €`]],
           dia: (id, w) => G && oa ? luecke(id, G.mit_eur, G.ohne_eur, G.gespart_eur, zr.labels, KK_JEDES[c.z], w) : '' }; }
       case 'b-hoch': { const h = (A && A.hochrechnung) || {};
-        return { zahl: zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)}` : '–', einh: '€', wo: 'bis Ende Heizperiode', vgl: `bisher ${f(h.bisher_eur, 0)} € · ohne Automatik ${f(h.ohne_eur, 0)} €${h.ohne_hinweis ? ` (${h.ohne_hinweis})` : ''}`,
+        // AN-0023 (Mockup container-unten.html, Mischung 1+2): in L das Liniendiagramm der Karte Heizperiode (eine Zeichenfunktion)
+        // mit Achse, Monaten, heute und Spanne, € am Linienende und einzeiliger Legende; M behält die Balken
+        const hoch = (id, w) => { const svg = hochrechnungSvg(h, { w: Math.max(300, Math.min(w, 640)), ende: true, id: `${id}-feld`, klasse: 'kk-breit' });
+          return svg ? `${svg}<div class="kk-leg kk-hp-leg"><span><i class="l-ist"></i>tatsächlich</span><span><i class="l-prog"></i>${w <= 320 ? 'mit' : 'Prognose mit Automatik'}</span>${zahl(h.ohne_eur) ? `<span><i class="l-ohne"></i>${w <= 320 ? 'ohne' : 'ohne Automatik'}</span>` : ''}</div>` : ''; };
+        return { zahl: zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)}` : '–', einh: '€', wo: 'bis Ende Heizperiode',
+          vgl: `${zahl(h.unten_eur) && zahl(h.oben_eur) ? `Spanne ${f(h.unten_eur, 0)}–${f(h.oben_eur, 0)} €` : `bisher ${f(h.bisher_eur, 0)} €`} · gespart ≈ ${f(h.gespart_eur, 0)} €${h.ohne_hinweis ? ` (${h.ohne_hinweis})` : ''}`,
           mini: kkBalken([['bisher', h.bisher_eur, `${f(h.bisher_eur, 0)} €`, 'var(--s3)'], ['mit', h.mit_eur, `${f(h.mit_eur, 0)} €`, 'var(--s1)'], ['ohne', h.ohne_eur, `${f(h.ohne_eur, 0)} €`, 'var(--s2)']]),
           kennz: [['bisher', `${f(h.bisher_kwh, 0)} kWh`], ['mit Automatik', `${f(h.mit_kwh, 0)} kWh`], ['ohne (24/7)', `${f(h.ohne_kwh, 0)} kWh`], ['gespart ≈', `${f(h.gespart_eur, 0)} €`]],
-          dia: id => zahl(h.mit_eur) ? balken(id, [h.bisher_eur, h.mit_eur, h.ohne_eur], ['bisher', 'mit', 'ohne'], '€', 0) : '' }; }
+          dia: (id, w) => zahl(h.mit_eur) ? hoch(id, w) : '' }; }
       case 'b-wetter': { const W = (A && A.wetter) || {}, g = W.gerade, P = W.punkte || [];
         return { zahl: g && g.k < 0 ? `+${de(-g.k, 1)}` : '–', einh: 'kWh/°C', wo: 'je Grad kälter am Tag', vgl: g ? `≈ ${f(g.eur_je_grad, 2)} € je Grad${zahl(g.null0) ? ` · kaum geheizt ab ${de(g.null0, 0)} °C` : ''}` : W.stand === 'lernt' ? `lernt noch (${W.tage || 0} ganze Tage)` : 'noch keine Signatur',
           kennz: [['je Grad kälter', g ? `+${f(-g.k, 1)} kWh` : '–'], ['je Grad', `${f(g && g.eur_je_grad, 2)} €`], ['ganze Tage', `${P.length}`], ['kaum geheizt ab', `${f(g && g.null0, 0)} °C`]],

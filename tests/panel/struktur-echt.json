@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.162",
+   "version": "0.8.163",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -989,7 +989,7 @@
        "von": "container",
        "wirkt": true,
        "grund": null,
-       "ziel": "container:trocknen"
+       "ziel": "bearbeiten:trocknen"
       },
       {
        "k": "tuer",
@@ -2279,7 +2279,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.aussen": {
     "web": null,
@@ -2288,7 +2289,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.magazin_r1_leistung": {
     "web": null,
@@ -2297,7 +2299,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.magazin_t1_leistung": {
     "web": null,
@@ -2306,7 +2309,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.magazin_temperatur": {
     "web": null,
@@ -2315,7 +2319,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.mannschaft_k1_leistung": {
     "web": null,
@@ -2324,7 +2329,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.mannschaft_k2_leistung": {
     "web": null,
@@ -2333,7 +2339,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.polier_k1_leistung": {
     "web": null,
@@ -2342,7 +2349,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.polier_r1_leistung": {
     "web": null,
@@ -2351,7 +2359,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.polier_temperatur": {
     "web": null,
@@ -2360,7 +2369,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.regen": {
     "web": null,
@@ -2369,7 +2379,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "sensor.schacht_p1_leistung": {
     "web": null,
@@ -2378,7 +2389,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.magazin_r1": {
     "web": null,
@@ -2387,7 +2399,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.magazin_t1": {
     "web": null,
@@ -2396,7 +2409,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.mannschaft_k1": {
     "web": null,
@@ -2405,7 +2419,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.mannschaft_k2": {
     "web": null,
@@ -2414,7 +2429,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.polier_k1": {
     "web": null,
@@ -2423,7 +2439,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.polier_r1": {
     "web": null,
@@ -2432,7 +2449,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.schacht_p1": {
     "web": null,
@@ -2441,7 +2459,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "weather.kalsdorf": {
     "web": null,
@@ -2450,7 +2469,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    }
   },
   "rechte": {
@@ -2482,7 +2502,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.162",
+   "version": "0.8.163",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -3063,7 +3083,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    },
    "switch.buero_r1": {
     "web": null,
@@ -3072,7 +3093,8 @@
     "hersteller": null,
     "modell": null,
     "batterie": null,
-    "signal": null
+    "signal": null,
+    "feuchte": null
    }
   },
   "rechte": {

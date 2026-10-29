@@ -70,7 +70,9 @@ def test_texte_wie_im_mockup():
 
 def test_ziele_nur_bekannte_sprungziele():
     alle = eingestellt(VIELE) + eingestellt(replace(VIELE, bereich={"lernen": False}))
-    assert {x["ziel"] for x in alle} <= {"container:lernen", "container:trocknen", "bearbeiten:warm", "bearbeiten:stufen", "strom:vorrang",
+    # AN-0018: Lernen und Trocknen werden in „Bearbeiten“ geschaltet (unten im Container gibt es sie nicht mehr)
+    assert von(VIELE, "lernen")["ziel"] == "bearbeiten:lernen" and von(VIELE, "trocknen")["ziel"] == "bearbeiten:trocknen"
+    assert {x["ziel"] for x in alle} <= {"bearbeiten:lernen", "bearbeiten:trocknen", "bearbeiten:warm", "bearbeiten:stufen", "strom:vorrang",
                                          "regeln:tuer", "regeln:frost", "regeln:vorheizen", "regeln:nachheizen", "regeln:fruehstart",
                                          "urlaub", "strom", "notprogramm"}
 
