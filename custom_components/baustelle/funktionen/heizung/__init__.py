@@ -35,6 +35,7 @@ from . import (
     lernregelung as h_lernregelung,
     plan as h_plan,
     soll as h_soll,
+    start as h_start,
     zaehlen as h_zaehlen,
 )
 from .typen import FRUEHER_MIN as FRUEHER_MIN, FRUEHSTART_NACHRICHT as FRUEHSTART_NACHRICHT
@@ -101,6 +102,13 @@ class Heizung(Funktion):
         self._haupt_lauf: dict[str, tuple[datetime, float | None]] = {}
         self._zusatz_gelernt: dict[str, bool] = {}
         self._geschaetzt: dict[str, bool] = {}   # AN-0014: Aufheizzeit aus der Größe, noch nichts gelernt
+        # FE-0031/32: Start-Logik je Container (schneller Schlüssel, Eingabe, Ergebnis); Runde zählt je Auswertung hoch
+        self._start_cache: dict[str, tuple[Any, Any, Any]] = {}
+        self._start_runde = 0
+        self.start_gerechnet = 0   # wie oft gerechnet wurde (Test: nicht bei jeder Frage)
+        self.start_eingaben = 0    # wie oft die Eingabe gebaut wurde (Test: nicht bei jeder Auswertung)
+        self._aus_bis: dict[str, str] = {}   # Zeit aus „aus bis …“ des Zustandstexts je Container (Jetzt-Chip)
+        self._vorhersage_cache: tuple[Any, int, Any] | None = None
         # Bedarf in °C für die Staffelung (Herbert 01.10.2026): Temperaturen der letzten Minuten, Heizzeit der letzten
         # Stunde, Zielzeit (Arbeitsbeginn bzw. „Soll erreicht … vorher“) und der zuletzt gerechnete Bedarf
         self._temp_punkte: dict[str, list[tuple[datetime, float]]] = {}
@@ -190,6 +198,7 @@ class Heizung(Funktion):
         return {eid for b in self.bereiche() for eid in sensor_logik.kontakte(self.st.sensoren(b.id))}
 
     def kalender_neu(self, pfad: tuple[str, ...]) -> bool:
+        self._start_runde += 1   # jede Einstellung kann den Start ändern (Kern ruft dies bei jeder Änderung)
         # Termine gehören nur zu Bedarfs-Containern: nach dem Umstellen gleich neu zuordnen, nicht erst in 15 min
         return pfad[0] == "termine_kalender" or pfad[-1] == "bedarf"
 
@@ -223,12 +232,18 @@ class Heizung(Funktion):
     def warm_ab(self, bid: str, tag: date, jetzt: datetime) -> WarmAb | None:
         return h_plan.warm_ab(self, bid, tag, jetzt)
 
-    def _warm_festhalten(self, bid: str, warm: WarmAb | None, plan: Plan | None, heute: date, minute: int) -> None:
-        h_plan._warm_festhalten(self, bid, warm, plan, heute, minute)
+    def _warm_festhalten(self, bid: str, warm: WarmAb | None, plan: Plan | None, jetzt: datetime) -> None:
+        h_plan._warm_festhalten(self, bid, warm, plan, jetzt)
+
+    def start_neu(self) -> None:
+        """Start-Logik neu rechnen lassen (Lernstand, Einstellung, Festhalten geändert) – sonst gilt das Ergebnis der
+        Minute weiter (funktionen/heizung/start.start)."""
+        self._start_runde += 1
 
     def plan_neu(self) -> None:
         """Nach einer Änderung an Arbeitszeit, Ausnahmen oder „Noch früher“ neu rechnen."""
         self._plan_cache.clear()
+        self._start_runde += 1
 
     def zu_warm(self, wetter: WetterWerte) -> bool:
         return h_plan.zu_warm(self, wetter)
@@ -309,6 +324,11 @@ class Heizung(Funktion):
 
     def warm_anzeige(self, bid: str) -> dict[str, Any] | None:
         return h_lernregelung.warm_anzeige(self, bid)
+
+    def start_anzeige(self, bid: str) -> dict[str, Any] | None:
+        """Start-Logik (FE-0031/32, api: laufzeit.container.<id>.start); None, wenn der Container nicht lernend im
+        Thermostat regelt."""
+        return h_start.anzeige(self, bid)
 
     def takt_anzeige(self, bid: str) -> dict[str, Any] | None:
         """Takt der lernenden Regelung (api: laufzeit.container.<id>.takt); None, wenn sie gerade nicht im Takt regelt."""

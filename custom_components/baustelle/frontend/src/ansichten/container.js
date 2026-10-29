@@ -69,10 +69,22 @@ function taktRunde(T) {   // ◔ immer sichtbar, solange die Integration einen T
     info: html`In jeder ${Z}-Minuten-Runde läuft die Heizung gerade etwa ${minT(T.an_min)} min (${T.anteil} %). Das rechnet die Automatik laufend neu – je näher am Soll, desto kürzer.${rundeBalken(T)}` };
 }
 
+/* Start-Logik (Mockup start.html, Variante B, Herbert 29.10.2026; FE-0031/FE-0032): Jetzt „⏸ aus bis morgen 03:30“ und
+   Plan „morgen ab 03:30 · warm 06:35“ aus derselben Rechnung der Integration (laufzeit.container.<id>.start, text);
+   Antippen: der Satz + „So rechnet der Start ›“ öffnet den Lernstand. */
+const startLink = p => html`<button class="st-link" @click=${() => { ckSetzen(p, { info: null }); p.einblenden('lernen'); }}>So rechnet der Start ›</button>`;
+function planChip(p, S) {
+  return { k: 'warm', ic: '⏱', ton: S.begrenzt ? 'amber' : '', breit: true, kurz: S.kurz,
+    lang: html`${S.tag_t} ab ${S.beginn} · warm ${S.begrenzt ? '≈ ' : ''}${S.warm}${S.geschaetzt ? html` <span class="st-mini">geschätzt</span>` : nothing}`,
+    info: html`${S.satz}${S.begrenzt ? html` <b>Grenze erreicht.</b>` : nothing} <span class="st-stand">Rechnet laufend nach · Stand ${S.jetzt}.</span> ${startLink(p)}` };
+}
+
 function kopfChips(p, b) {
   const d = p.d, L = [], text = TEXT(b), lern = b.lern && b.lern.an && ['thermo', 'bedarf'].includes(b.modus) ? b.lern : null, T = b.takt;
   const erst = text.split(' · ')[0].replace(/^⚡\s*/, '') || b.z;   // erster Teil des Zustandstexts der Integration
+  const S = lern && b.start, bis = S && !T && S.aus_bis;   // „aus bis …“ liefert die Integration (start.aus_bis)
   if (T) L.push(taktJetzt(p, b, T));   // Takt: was gerade läuft und bis wann (statt des Zustandstexts)
+  else if (bis) L.push({ k: 'zust', ic: '⏸', ton: '', lang: bis.lang, kurz: bis.kurz, breit: true, info: html`${S.satz} ${startLink(p)}` });
   else L.push({ k: 'zust', ic: ZUST_IC[b.z] || '•', ton: b.z === 'heizt' ? 'warm' : b.z === 'frost' ? 'blau' : b.z === 'offline' ? 'rot' : '',
     lang: erst, kurz: ZUST_KURZ[b.z] || erst, info: text });
   if (b.tuer && b.tuer.offen) L.push({ k: 'tuer', ic: '🚪', ton: 'amber', lang: `Tür offen seit ${b.tuer.offen} min`, kurz: `${b.tuer.offen} min`,
@@ -84,7 +96,8 @@ function kopfChips(p, b) {
       info: `${s.name || p.name(s.entity_id)}: Batterie ${de(s.batterie, 0)} % – bald tauschen` });
   if (lern) {
     const w = lern.warm;
-    if (w && w.gelernt && w.plan) L.push({ k: 'warm', ic: '⏱', ton: '', lang: `warm um ${uhr(w.plan.ziel)} · ab ${uhr(w.plan.start)}`, kurz: uhr(w.plan.ziel), info: p.warmText(b) });
+    if (S) L.push(planChip(p, S));
+    else if (w && w.gelernt && w.plan) L.push({ k: 'warm', ic: '⏱', ton: '', lang: `warm um ${uhr(w.plan.ziel)} · ab ${uhr(w.plan.start)}`, kurz: uhr(w.plan.ziel), info: p.warmText(b) });
     else if (w) L.push({ k: 'warm', ic: '⏱', ton: '', lang: 'Aufheizen lernt noch', kurz: 'lernt', info: p.warmText(b) });
     // „🧠 lernt mit“ entfällt (eingestellt.html C): „Lernende Regelung“ steht nur noch unter Eingestellt, mit dem Satz von dort
     if (lern.offen) L.push({ k: 'lern', ic: '🧠', ton: 'amber', lang: 'lernt gerade nicht', kurz: 'lernt nicht', info: p.offenText(b) || p.cRegelText(b) });

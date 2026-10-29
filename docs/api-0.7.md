@@ -251,11 +251,46 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   `strom`, `strom:vorrang`, `notprogramm`, `urlaub`.
 - „Warm ab“ (AN-0004, Optimum Start): Einstellungen `heizung.warm_vor_min` (Soll erreicht … min vor Arbeitsbeginn, 0–240),
   `heizung.warm_nach_min` (warm halten … min nach Arbeitsende, 0–240), `heizung.warm_max_min` (frühestens … min vor
-  Arbeitsbeginn, 15–480); je Container `bereiche.<id>.warm_vor` / `warm_nach` (Zahl oder `null` = wie die Baustelle).
+  dem Ziel „warm um“ = Arbeitsbeginn − `warm_vor`, 15–480; bis 0.8.156 vor Arbeitsbeginn – FE-0031/32); je Container
+  `bereiche.<id>.warm_vor` / `warm_nach` (Zahl oder `null` = wie die Baustelle).
   `laufzeit.container.<id>.lernen` zusätzlich `aufheizen: {kalt|mild: {rate (°C/h), n}}`, `auf_n` (nötige Messungen) und
   `warm` (nur lernend im Modus Thermostat, sonst `null`): `{gelernt, band, rate, n, n_noetig, vor, nach, max, vor_eigen,
-  nach_eigen, aufheiz_min, innen, soll, fest, plan: {start, ziel, a, b, ende, begrenzt} | null}` (Minuten seit Mitternacht).
+  nach_eigen, aufheiz_min, innen, soll, fest, plan: {tag, start, ziel, a, b, ende, begrenzt} | null}` (Minuten seit
+  Mitternacht). Seit FE-0031/32 ist `plan` der Plan des Tages mit dem nächsten Start (`plan.tag`, ISO; bis 0.8.156
+  immer heute), `band`/`anzahl`/`aufheiz_min` kommen aus der Start-Logik (nach dem Start festgehalten).
   Plangrund `gelernt` in `plan_woche` und `abschnitte` der lernenden Container.
+- Start-Logik (FE-0031/FE-0032, Mockup `start.html` Variante B, Herbert 29.10.2026; `logik/start.py`): eine Rechnung für
+  Regelung (Plan über „Warm ab“: Aufheizzeit = Ziel − Start), Zustandstext („aus bis morgen 03:30“), Plan-Chip und Dialog.
+  Tag: der nächste Tag, dessen Ziel „warm um“ noch kommt; ist heute schon gestartet (festgehalten), heute bis zum Ende
+  von „warm halten“ (eigene Zeitfenster zählen nicht als Start). Gerechnet wird in echter Zeit (Zeitumstellung). Auskühlen bis zum Start je 5 min
+  mit dT/dt = −(innen − außen) ÷ τ und der stündlichen Vorhersage (`laufzeit.wetter_stunden`), dann Aufheizen mit der
+  gelernten Rate (Band außen zum Start, Anzahl Heizkörper, „Zusatz nur bei Bedarf“); Start = spätester 5-min-Zeitpunkt,
+  mit dem es bis zum Ziel warm ist, nie vor der Grenze. `laufzeit.container.<id>.start` (nur lernend im Modus
+  Thermostat mit Fühler und Innenwert, sonst `null`): `{tag: "heute"|"morgen"|ISO, tag_t ("heute"|"morgen"|"Mo"…),
+  tag_grund, jetzt ("HH:MM", Stand der Rechnung), laeuft (Start vorbei, heizt auf – rechnet ab der Messung von jetzt),
+  beginn, warm, ziel, arbeitsbeginn, grenze ("HH:MM"), vor_min, soll, innen_jetzt, innen_start (Prognose bzw. gemessen
+  beim Start), tau_h, tau_n, tau_geschaetzt, aussen_von, aussen_bis, band, rate, rate_n, rate_geschaetzt, anzahl,
+  rate_einer (°C/h eines Heizkörpers, wenn er allein zu langsam ist), aufheiz_min (Dauer der Prognose), grenze_h,
+  begrenzt, beginn_ohne ("HH:MM" ohne Grenze | null), spaet (warm erst nach dem Ziel), geschaetzt, schaetz_grund,
+  frueher_min, auf_beginn ("HH:MM" ohne „früher“; `beginn` = Plan-Beginn = „aus bis …“, auch wenn „Kleidung trocknen
+  nach Regen“ oder „Noch früher“ den Plan vorziehen – die Verschiebung kommt aus dem Plan selbst, `Plan.frueher` =
+  [(Grund, min)] mit `frueher_nach_regen`/`noch_frueher`; dann Kachel `k: "frueher"` mit Grund und Minuten), satz
+  (ein Satz für die Chips), kurz („03:30 → 06:35“, Handy), aus_bis ({lang: "aus bis morgen 03:30", kurz: "morgen 03:30"}
+  nur, wenn der Zustandstext gerade „aus bis …“ sagt, sonst null – Jetzt-Chip), achse_ab ("HH:MM", Anfang der Zeitachse), min: {jetzt, beginn, warm, ziel, arbeitsbeginn, grenze}
+  (echte Minuten ab heute 0:00, morgen ≈ +1440, gestern negativ – nur zum Zeichnen), kurve: [[min, °C, "gemessen"|"prognose"]],
+  aussen_vorhersage: [[min, °C, "gemessen"|"vorhersage"]], schritte: [{k: "kuehl"|"ziel"|"auf"|"grenze"|"warm", t, wert,
+  rechnung, marke: "gelernt"|"geschaetzt"|"gemessen"|"einstellung"|null, marke_t, ton: ""|"amber"|"ergebnis"}]}`
+  (`k` auch `"frueher"`).
+  Ohne Lernstand: τ = 12 h, Rate aus der Größe (`geschaetzt`). Rechnet bei jedem neuen Messwert und jeder neuen
+  Vorhersage nach (höchstens einmal je Minute). `text` nennt den Tag: „aus bis 06:15“ (heute), „aus bis morgen 06:15“,
+  „aus bis Mo 06:15“ (alle Container, bis 0.8.156 ohne „morgen“).
+- Auskühlzeit τ (FE-0031/32, `logik/lernen.py`): `lernen.tau = {h (τ in Stunden | null), n (Messungen), start (12),
+  n_noetig (2), misst (bool)}`. Gemessen ohne Heizen (Heizkörper aus, Nachlauf vorbei, Tür zu, nicht von Hand, nicht
+  8–16 Uhr), 2–10 h je Messung (echte Zeit, eine Lücke über 10 min beendet sie): τ = Σ(innen − außen)·Δt ÷ Abkühlung; plausibel ab 0,5 °C Abkühlung, 4 °C Abstand und τ
+  2–100 h; gleitend gemittelt. Store: `laufzeit.lernen.<id>.tau = [τ, n]`, laufende Messung `ab`.
+- Intern (Store): `laufzeit.warm_start.<id>` ist seit FE-0031/32 `{tag, beginn, aufheiz_min, innen_start, prognose,
+  warm, band, anzahl, rate, rate_n, zusatz, geschaetzt, begrenzt, tau_h, auf_beginn (Beginn des Vorheizens laut Plan), frueher: [[Grund-Code, min], …]}` (bis 0.8.156 `[tag, aufheiz_min, zusatz,
+  geschätzt]`, wird weiter gelesen); `laufzeit.start_verlauf.<id>` = `[[Zeit, innen, außen], …]` alle 15 min, 12 h.
 - Zusatz-Heizkörper nur bei Bedarf (AN-0006, `logik/stufen.py`): je Container `bereiche.<id>.stufen` (bool) und
   `bereiche.<id>.primaer` (Geräte-ID des Primärheizkörpers, `null` = automatisch; AN-0015 – genau einer primär, die
   anderen Zusatz), je Gerät `geraete.<id>.zusatz` (bool, nur noch Rückfall ohne Wahl; die Seite setzt es nicht mehr), Schwellen `heizung.stufen_abstand` (°C unter Soll),

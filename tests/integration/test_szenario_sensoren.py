@@ -135,7 +135,7 @@ MATRIX = [
     pytest.param(True, "thermo", "17.0", "vorheizen", True, "heizt", "vorheizen", "heizt auf 20,0 °C · Vorheizen", id="thermo-kalt-vorheizen"),
     pytest.param(True, "thermo", "21.0", "vorheizen", False, "aus", "vorheizen", "Soll erreicht · hält 20,0 °C", id="thermo-warm-vorheizen"),
     pytest.param(True, "thermo", "17.0", "nachheizen", True, "heizt", "nachheizen", "heizt auf 20,0 °C · Nachheizen", id="thermo-kalt-nachheizen"),
-    pytest.param(True, "thermo", "17.0", "nach_arbeitsende", False, "aus", "ausserhalb", "aus bis 06:15", id="thermo-kalt-nach-arbeitsende"),
+    pytest.param(True, "thermo", "17.0", "nach_arbeitsende", False, "aus", "ausserhalb", "aus bis morgen 06:15", id="thermo-kalt-nach-arbeitsende"),
     pytest.param(True, "thermo", "17.0", "nachts", False, "aus", "ausserhalb", "aus bis 06:15", id="thermo-kalt-nachts"),
     pytest.param(True, "thermo", "4.0", "nachts", True, "frost", "frost", "Frostschutz", id="thermo-frost-nachts"),
     # Zeitplan mit Fühler: in der Heizzeit an (der Heizkörperthermostat regelt), auch über Soll

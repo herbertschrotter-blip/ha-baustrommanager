@@ -196,7 +196,7 @@ async def test_tuer_nur_im_eigenen_container(hass: HomeAssistant, baustelle, fre
 # ====================================================================== außerhalb der Heizzeit / Automatik aus
 async def test_tuer_offen_ueber_nacht(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
     """Szenarien, Herbert 01.10.2026: Tür um 21:00 offen (außerhalb der Heizzeit, kein Frost). Es wird ohnehin nicht
-    geheizt – nichts pausiert: Grund bleibt „ausserhalb“, die Kachel zeigt „aus bis 06:15 · 🚪 Tür offen“, Protokoll
+    geheizt – nichts pausiert: Grund bleibt „ausserhalb“, die Kachel zeigt „aus bis morgen 06:15 · 🚪 Tür offen“, Protokoll
     „Tür offen“ (Warnung), nach 10 min „Es wird gerade nicht geheizt – bitte prüfen …“ nur mit „1 h stumm“.
     Bleibt sie bis zum Morgen offen, pausiert sie ab Arbeitsbeginn (dann würde geheizt)."""
     st = baustelle.runtime_data
@@ -206,7 +206,7 @@ async def test_tuer_offen_ueber_nacht(hass: HomeAssistant, baustelle, freezer, s
     await _zu(hass, freezer, "21:11:00", st)
     assert "switch.hk1" not in shellys.ein()
     c = _c(hass, baustelle)
-    assert (c["zustand"], c["grund"], c["text"]) == ("aus", "ausserhalb", "aus bis 06:15 · 🚪 Tür offen")
+    assert (c["zustand"], c["grund"], c["text"]) == ("aus", "ausserhalb", "aus bis morgen 06:15 · 🚪 Tür offen")
     (w,) = _tuer_warnungen(st)
     assert w.werte["pausiert"] is False
     assert "Tür offen" in _texte(st, "warnung") and not any("pausiert" in t for t in _texte(st))
@@ -225,7 +225,7 @@ async def test_tuer_offen_ueber_nacht(hass: HomeAssistant, baustelle, freezer, s
 
 async def test_tuer_offen_nachts_wieder_zu(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
     """Szenarien, Herbert 01.10.2026: Tür nachts offen und wieder zu – Protokoll „Tür offen“ / „Tür wieder zu“,
-    nichts wird geschaltet, die Kachel ist wieder „aus bis 06:15“."""
+    nichts wird geschaltet, die Kachel ist wieder „aus bis morgen 06:15“."""
     st = baustelle.runtime_data
     await _start(hass, freezer, st, "21:00:00")
     await _tuer(hass, TUER1, "on")
@@ -234,7 +234,7 @@ async def test_tuer_offen_nachts_wieder_zu(hass: HomeAssistant, baustelle, freez
     await _tuer(hass, TUER1, "off")
     await _zu(hass, freezer, "21:07:00", st)
     assert "Tür wieder zu" in _texte(st, "ok") and "Tür zu – Heizung läuft weiter" not in _texte(st)
-    assert _tuer_warnungen(st) == [] and _c(hass, baustelle)["text"] == "aus bis 06:15"
+    assert _tuer_warnungen(st) == [] and _c(hass, baustelle)["text"] == "aus bis morgen 06:15"
     assert [a for a in shellys.aufrufe if a[0] == "switch.hk1"] == []
 
 

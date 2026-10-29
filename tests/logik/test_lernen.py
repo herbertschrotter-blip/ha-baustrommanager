@@ -323,3 +323,82 @@ def test_takt_unterbrochen_kein_falsches_bis():
     assert dauernd_gehalten["phase"] == "pause" and dauernd_gehalten["bis"] is None
     noch_an = takt_anzeige(0.46, 6, True, _um(17, 36))        # will aus (Minute 6 > 4,6), läuft noch
     assert not tpi_ein(0.46, 6, True) and noch_an["phase"] == "an" and noch_an["bis"] is None
+
+
+# ---------------------------------------------------------------- Auskühlzeit τ (FE-0031/FE-0032, Start-Logik)
+def _auskuehlen(stand, ab, stunden, tau=15.0, innen=18.0, aussen=5.0, **takt_dazu):
+    """Ohne Heizen Minute für Minute nach dT/dt = −(innen − außen) ÷ τ, Fühler auf 0,1 °C gerundet."""
+    import math
+    s, t = stand, ab
+    for m in range(int(stunden * 60) + 1):
+        wert = aussen + (innen - aussen) * math.exp(-m / 60 / tau)
+        s = takt(s, jetzt=t, heizt=False, innen=round(wert, 1), soll=20.0, aussen=aussen, art="oel", regelt=True, **takt_dazu)
+        t += timedelta(minutes=1)
+    return s, t
+
+
+def _heizen_an(s, t):
+    return takt(s, jetzt=t, heizt=True, innen=15.0, soll=20.0, aussen=5.0, art="oel", regelt=True)
+
+
+def test_tau_lernt_aus_der_nacht():
+    """Container mit τ = 15 h kühlt 4 h ohne Heizen von 18 °C bei 5 °C außen: gemessen τ ≈ 15 h; erst ab TAU_N Messungen
+    gelernt (anzeige), gleitend gemittelt."""
+    from logik.lernen import TAU_N
+    abend = datetime(2026, 10, 28, 19, 0, tzinfo=timezone(timedelta(hours=1)))
+    s, t = _auskuehlen(neuer_stand(), abend, 4)
+    assert s["ab"] is not None and s["tau"] is None and anzeige(s)["tau"]["misst"] is True
+    s = _heizen_an(s, t)                                            # Heizen beendet die Messung
+    assert s["ab"] is None and s["tau"][1] == 1 and s["tau"][0] == pytest.approx(15.0, rel=0.08)
+    a = anzeige(s)["tau"]
+    assert a["n"] == 1 and a["n_noetig"] == TAU_N and a["h"] == s["tau"][0]
+    s2, t2 = _auskuehlen(s, abend + timedelta(days=1), 3, tau=20.0)
+    s2 = _heizen_an(s2, t2)
+    assert s2["tau"][1] == 2 and s["tau"][0] < s2["tau"][0] < 20.5     # Mittel aus beiden
+
+
+def test_tau_nicht_tagsueber_nicht_bei_offener_tuer_nicht_zu_kurz():
+    from logik.lernen import TAU_MAX_H, tau_messung
+    mittag = datetime(2026, 10, 28, 9, 0, tzinfo=timezone(timedelta(hours=1)))
+    s, t = _auskuehlen(neuer_stand(), mittag, 4)                 # 9–13 Uhr: Sonne, keine Messung
+    assert s["ab"] is None and s["tau"] is None
+    abend = datetime(2026, 10, 28, 19, 0, tzinfo=timezone(timedelta(hours=1)))
+    s, t = _auskuehlen(neuer_stand(), abend, 1)                  # nur 1 h, dann geheizt: verworfen
+    assert _heizen_an(s, t)["tau"] is None
+    s, t = _auskuehlen(neuer_stand(), abend, 3, tuer_offen=True)  # Tür offen: keine Messung
+    assert s["ab"] is None and _heizen_an(s, t)["tau"] is None
+    s, t = _auskuehlen(neuer_stand(), abend, TAU_MAX_H + 0.5)    # nach TAU_MAX_H abgeschlossen, die nächste läuft
+    assert s["tau"] is not None and s["tau"][1] == 1 and s["ab"] is not None
+    # Plausibilität: kaum abgekühlt oder kaum Abstand nach außen → keine Messung
+    assert tau_messung({"innen": 18.0, "ende": 17.8, "summe": 13 * 240, "min": 240}) is None
+    assert tau_messung({"innen": 18.0, "ende": 17.0, "summe": 2 * 240, "min": 240}) is None
+    assert tau_messung({"innen": 18.0, "ende": 17.0, "summe": 12 * 240, "min": 240}) == pytest.approx(48.0)
+    assert tau_messung({"innen": 18.0, "ende": 6.0, "summe": 5 * 240, "min": 240}) is None   # τ < 2 h: unplausibel
+
+
+def test_tau_mit_echter_zeit_und_luecke():
+    """Code-Review FE-0031: integriert wird über die echte Zeit, nicht über die Zahl der Werte – Werte nur alle 5 min
+    ergeben dasselbe τ; eine Lücke über TAU_LUECKE_MIN (Neustart) beendet die Messung an der Lücke."""
+    import math
+    from logik.lernen import TAU_LUECKE_MIN
+    abend = datetime(2026, 10, 28, 19, 0, tzinfo=timezone(timedelta(hours=1)))
+
+    def kuehlen(schritt_min, stunden, luecke_nach_h=None, luecke_min=0):
+        s, m = neuer_stand(), 0
+        while m <= stunden * 60:
+            wert = 5.0 + 13.0 * math.exp(-m / 60 / 15.0)
+            s = takt(s, jetzt=abend + timedelta(minutes=m), heizt=False, innen=round(wert, 2), soll=20.0, aussen=5.0, art="oel", regelt=True)
+            m += schritt_min
+            if luecke_nach_h is not None and m == luecke_nach_h * 60:
+                m += luecke_min
+        return s
+
+    fein = kuehlen(1, 4)["ab"]
+    grob = kuehlen(5, 4)["ab"]
+    from logik.lernen import tau_messung
+    assert tau_messung(fein) == pytest.approx(15.0, rel=0.03) and tau_messung(grob) == pytest.approx(15.0, rel=0.03)
+    assert grob["min"] == pytest.approx(240)
+    # Lücke von 60 min nach 3 h: die Messung endet dort (τ aus 3 h), die nächste beginnt neu
+    s = kuehlen(1, 5, luecke_nach_h=3, luecke_min=60)
+    assert s["tau"] is not None and s["tau"][1] == 1 and s["tau"][0] == pytest.approx(15.0, rel=0.05)
+    assert s["ab"]["min"] < 60 + 1 and TAU_LUECKE_MIN < 60

@@ -81,7 +81,7 @@ export function bauen(r, hass, ersatzZone) {
       bedarfBisIso: c.bedarf_bis || null, bedarfBis: c.bedarf_bis ? lokalZ(c.bedarf_bis, zone).slice(11, 16) : null,
       boost: !!c.boost_bis, boostBis: c.boost_bis || null,
       modus: pumpe ? null : MODI.some(m => m[0] === c.modus) ? c.modus : eb.bedarf ? 'bedarf' : eb.auto === false ? 'hand' : b.fuehler ? 'thermo' : 'plan',
-      lern: c.lernen || null, takt: c.takt || null, eingestellt: Array.isArray(c.eingestellt) ? c.eingestellt : [], groesse: c.groesse || null, symbol: c.symbol || null, warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null, warmNach: zahl(eb.warm_nach) ? Number(eb.warm_nach) : null };   // lernende Regelung (0.8): Lernstand von der Integration
+      lern: c.lernen || null, start: c.start || null, takt: c.takt || null, eingestellt: Array.isArray(c.eingestellt) ? c.eingestellt : [], groesse: c.groesse || null, symbol: c.symbol || null, warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null, warmNach: zahl(eb.warm_nach) ? Number(eb.warm_nach) : null };   // lernende Regelung (0.8): Lernstand von der Integration
   });
   const plan = {}, frei = {};
   const freiName = {};

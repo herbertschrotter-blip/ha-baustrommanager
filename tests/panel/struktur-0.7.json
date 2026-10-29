@@ -806,6 +806,408 @@
        }
       }
      },
+     "start": {
+      "tag": "heute",
+      "tag_t": "heute",
+      "tag_grund": "Arbeitstag, Start ist vorbei – heizt gerade auf",
+      "jetzt": "16:20",
+      "laeuft": true,
+      "beginn": "05:20",
+      "warm": "06:45",
+      "ziel": "06:45",
+      "arbeitsbeginn": "07:00",
+      "vor_min": 15,
+      "soll": 21.0,
+      "innen_jetzt": 19.4,
+      "innen_start": 19.3,
+      "tau_h": 14.0,
+      "tau_n": 6,
+      "tau_geschaetzt": false,
+      "aussen_von": 4.2,
+      "aussen_bis": 4.2,
+      "band": "mild",
+      "rate": 1.2,
+      "rate_n": 5,
+      "anzahl": 1,
+      "rate_einer": null,
+      "rate_geschaetzt": false,
+      "aufheiz_min": 0,
+      "grenze": "04:45",
+      "grenze_h": 2.0,
+      "begrenzt": false,
+      "beginn_ohne": null,
+      "spaet": false,
+      "geschaetzt": false,
+      "schaetz_grund": null,
+      "satz": "Heute um 05:20 gestartet (da hatte es gemessen 19,3 °C, vorhergesagt waren 19,2 °C), gerechnet warm um 06:45 – jetzt 19,4 °C, Soll 21 °C.",
+      "kurz": "05:20 → 06:45",
+      "min": {
+       "jetzt": 980,
+       "beginn": 320,
+       "warm": 405,
+       "ziel": 405,
+       "arbeitsbeginn": 420,
+       "grenze": 285
+      },
+      "kurve": [
+       [
+        260,
+        19.6,
+        "gemessen"
+       ],
+       [
+        275,
+        19.5,
+        "gemessen"
+       ],
+       [
+        290,
+        19.5,
+        "gemessen"
+       ],
+       [
+        305,
+        19.4,
+        "gemessen"
+       ],
+       [
+        320,
+        19.3,
+        "gemessen"
+       ],
+       [
+        335,
+        19.6,
+        "gemessen"
+       ],
+       [
+        350,
+        19.9,
+        "gemessen"
+       ],
+       [
+        365,
+        20.2,
+        "gemessen"
+       ],
+       [
+        380,
+        20.5,
+        "gemessen"
+       ],
+       [
+        395,
+        20.8,
+        "gemessen"
+       ],
+       [
+        410,
+        21.1,
+        "gemessen"
+       ],
+       [
+        425,
+        20.9,
+        "gemessen"
+       ],
+       [
+        440,
+        21.1,
+        "gemessen"
+       ],
+       [
+        455,
+        20.9,
+        "gemessen"
+       ],
+       [
+        470,
+        21.1,
+        "gemessen"
+       ],
+       [
+        485,
+        20.9,
+        "gemessen"
+       ],
+       [
+        500,
+        21.1,
+        "gemessen"
+       ],
+       [
+        515,
+        20.9,
+        "gemessen"
+       ],
+       [
+        530,
+        21.1,
+        "gemessen"
+       ],
+       [
+        545,
+        20.9,
+        "gemessen"
+       ],
+       [
+        560,
+        21.1,
+        "gemessen"
+       ],
+       [
+        575,
+        20.9,
+        "gemessen"
+       ],
+       [
+        590,
+        21.1,
+        "gemessen"
+       ],
+       [
+        605,
+        20.9,
+        "gemessen"
+       ],
+       [
+        620,
+        21.1,
+        "gemessen"
+       ],
+       [
+        635,
+        20.9,
+        "gemessen"
+       ],
+       [
+        650,
+        21.1,
+        "gemessen"
+       ],
+       [
+        665,
+        20.9,
+        "gemessen"
+       ],
+       [
+        680,
+        21.1,
+        "gemessen"
+       ],
+       [
+        695,
+        20.9,
+        "gemessen"
+       ],
+       [
+        710,
+        21.1,
+        "gemessen"
+       ],
+       [
+        725,
+        20.9,
+        "gemessen"
+       ],
+       [
+        740,
+        21.1,
+        "gemessen"
+       ],
+       [
+        755,
+        20.9,
+        "gemessen"
+       ],
+       [
+        770,
+        21.1,
+        "gemessen"
+       ],
+       [
+        785,
+        20.9,
+        "gemessen"
+       ],
+       [
+        800,
+        21.1,
+        "gemessen"
+       ],
+       [
+        815,
+        20.9,
+        "gemessen"
+       ],
+       [
+        830,
+        21.1,
+        "gemessen"
+       ],
+       [
+        845,
+        20.9,
+        "gemessen"
+       ],
+       [
+        860,
+        21.1,
+        "gemessen"
+       ],
+       [
+        875,
+        20.9,
+        "gemessen"
+       ],
+       [
+        890,
+        21.1,
+        "gemessen"
+       ],
+       [
+        905,
+        20.9,
+        "gemessen"
+       ],
+       [
+        920,
+        21.1,
+        "gemessen"
+       ],
+       [
+        935,
+        20.8,
+        "gemessen"
+       ],
+       [
+        950,
+        20.4,
+        "gemessen"
+       ],
+       [
+        965,
+        19.9,
+        "gemessen"
+       ],
+       [
+        980,
+        19.4,
+        "gemessen"
+       ]
+      ],
+      "aussen_vorhersage": [
+       [
+        260,
+        1.0,
+        "gemessen"
+       ],
+       [
+        320,
+        1.8,
+        "gemessen"
+       ],
+       [
+        380,
+        2.6,
+        "gemessen"
+       ],
+       [
+        440,
+        3.4,
+        "gemessen"
+       ],
+       [
+        500,
+        4.2,
+        "gemessen"
+       ],
+       [
+        560,
+        5.0,
+        "gemessen"
+       ],
+       [
+        620,
+        5.8,
+        "gemessen"
+       ],
+       [
+        680,
+        6.6,
+        "gemessen"
+       ],
+       [
+        740,
+        7.4,
+        "gemessen"
+       ],
+       [
+        800,
+        8.2,
+        "gemessen"
+       ],
+       [
+        860,
+        9.0,
+        "gemessen"
+       ],
+       [
+        920,
+        6.6,
+        "gemessen"
+       ],
+       [
+        980,
+        4.2,
+        "gemessen"
+       ],
+       [
+        1020,
+        3.8,
+        "vorhersage"
+       ]
+      ],
+      "schritte": [
+       {
+        "k": "kuehl",
+        "t": "Ausgekühlt bis zum Start",
+        "wert": "19,3 °C um 05:20",
+        "rechnung": "gemessen · Prognose war 19,2 °C",
+        "marke": "gemessen",
+        "marke_t": "gemessen"
+       },
+       {
+        "k": "ziel",
+        "t": "Ziel",
+        "wert": "warm um 06:45",
+        "rechnung": "Arbeitsbeginn 07:00 − 15 min „Soll erreicht vorher“",
+        "marke": "einstellung",
+        "marke_t": "Warm ab"
+       },
+       {
+        "k": "auf",
+        "t": "Aufheizen",
+        "wert": "≈ 1 h 25 min",
+        "rechnung": "19,3 → 21 °C mit 1,2 °C/h · 1 Heizkörper",
+        "marke": "gelernt",
+        "marke_t": "gelernt aus 5 Mal"
+       },
+       {
+        "k": "warm",
+        "t": "Warm",
+        "wert": "≈ 06:45",
+        "rechnung": "gerechnet beim Start",
+        "marke": null,
+        "marke_t": null,
+        "ton": "ergebnis"
+       }
+      ],
+      "aus_bis": null,
+      "frueher_min": 0,
+      "auf_beginn": "05:20",
+      "achse_ab": "04:20"
+     },
      "takt": {
       "art": "runde",
       "anteil": 63,

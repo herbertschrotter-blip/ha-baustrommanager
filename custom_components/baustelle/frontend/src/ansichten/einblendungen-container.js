@@ -8,6 +8,7 @@ import { datum, de, wtag, zahl } from '../hilfen.js';
 import { WIEDER } from '../tabellen.js';
 import { schalterVorlage } from './allgemein.js';
 import { zeitraumVorlage } from './zeitraum.js';
+import { startAbschnitt } from './start.js';
 
 const GRIFF = html`<div class="griff"></div>`;
 const LAEDT = html`<div class="leer">Lädt …</div>`;
@@ -89,6 +90,7 @@ export function lernenEinblendung(p, s) {
   const tr = l.treffer || [], mittel = tr.length ? tr.reduce((x, y) => x + Math.abs(y), 0) / tr.length : null, offen = p.offenText(b);
   return html`${GRIFF}<div class="block-kopf"><h3>Lernstand · ${b.name}</h3><span class="leise">${l.zyklen} Heizzyklen gemessen</span></div>
         ${offen ? html`<div class="wa-heute">${offen}. Laufende Messungen sind verworfen; gelernt wird wieder 10 min, nachdem es vorbei ist.</div>` : nothing}
+        ${startAbschnitt(p, b)}
         <div class="gruppe-t">Regelung (TPI, ${l.zyklus_min}-min-Zyklen)</div>
         ${balkenK('K innen – Trägheit des Raums', l.kint)}${balkenK('K außen – Wärmeverlust nach außen', l.kext)}
         <div class="leise">Einschaltanteil = K innen × (Soll − innen − Nachlauf) + K außen × (Soll − außen)</div>

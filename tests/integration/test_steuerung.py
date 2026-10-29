@@ -900,7 +900,8 @@ async def test_warm_ab_gelernter_beginn(hass: HomeAssistant, baustelle, freezer,
     st.einstellungen.bereich(C1)["soll"] = 20.0
     st.einstellungen.bereich(C1)["modus"] = "thermo"
     st.einstellung_setzen(("bereiche", C1, "lernen"), True)
-    st.lz["lernen"][C1] = {"aufheizen": {"mild|1": [3.0, 3], "kalt|1": [3.0, 3]}}   # 3 °C je Stunde gelernt (ein Heizkörper)
+    st.lz["lernen"][C1] = {"aufheizen": {"mild|1": [3.0, 3], "kalt|1": [3.0, 3]},   # 3 °C je Stunde gelernt (ein Heizkörper)
+                           "tau": [1e9, 9]}   # kühlt nicht merklich aus (FE-0031/32: Auskühlen prüft test_szenario_lernen D2)
     hass.states.async_set("sensor.temp_c1", "16.0")
     await _zu(hass, freezer, "2026-09-30 05:00:00+02:00", st)                  # Mittwoch, Arbeit ab 07:00
     st.einstellung_setzen(("automatik",), True)
@@ -910,7 +911,8 @@ async def test_warm_ab_gelernter_beginn(hass: HomeAssistant, baustelle, freezer,
     assert warm["gelernt"] is True and warm["aufheiz_min"] == 80 and warm["plan"]["start"] == 5 * 60 + 25 and warm["plan"]["ziel"] == 6 * 60 + 45
     assert hass.states.get("switch.hk1").state == "off"
     await _zu(hass, freezer, "2026-09-30 05:30:00+02:00", st)
-    assert hass.states.get("switch.hk1").state == "on" and st.lz["warm_start"][C1] == ["2026-09-30", 80, False, False]
+    f = st.lz["warm_start"][C1]
+    assert hass.states.get("switch.hk1").state == "on" and (f["tag"], f["aufheiz_min"], f["zusatz"], f["geschaetzt"]) == ("2026-09-30", 80, False, False)
     hass.states.async_set("sensor.temp_c1", "18.5")                             # wärmer: Beginn bleibt fest
     await _zu(hass, freezer, "2026-09-30 06:00:00+02:00", st)
     assert hass.states.get("switch.hk1").state == "on"

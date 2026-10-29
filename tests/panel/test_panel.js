@@ -989,6 +989,83 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await lage(null);
       erwarte('Takt: ohne Takt (z. B. außerhalb der Regelung) Zustandschip wie bisher, kein ◔', lang('zust') === 'heizt auf 22,4 °C' && !litEl('.ck-d .ck-chip[data-k="takt"]'));
       Object.assign(x, alt); panel.s.ck = null; await panel.neuZeichnen(); }
+    /* Start-Logik (Mockup start.html, Variante B, Herbert 29.10.2026; FE-0031/FE-0032): Jetzt „⏸ aus bis morgen 03:30“ und Plan
+       „morgen ab 03:30 · warm 06:35“ aus derselben Rechnung (laufzeit.container.<id>.start, text); Antippen: Satz + „So rechnet
+       der Start ›“ → Lernstand mit Zeitstrahl und Kacheln statt „Heute ab …“. Die Seite rechnet nichts, sie zeichnet nur. */
+    { const x = pol(), alt = { modus: x.modus, z: x.z, text: x.text, lern: x.lern, takt: x.takt, t: x.t, start: x.start };
+      const lang = k => ((litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-l`) || {}).textContent || '').replace(/\s+/g, ' ').trim();
+      const kurz = k => (litEl(`.ck-d .ck-chip[data-k="${k}"] .ck-k`) || {}).textContent, satz = () => ((litEl('.ck-d .ck-info.tk-info span') || {}).textContent || '').replace(/\s+/g, ' ');
+      const g = (L, q) => L.map(([m, c]) => [m, c, q]);
+      const SCHRITTE = [{ k: 'kuehl', t: 'Kühlt bis zum Start ab', wert: '≈ 13,9 °C um 03:30', rechnung: 'Auskühlzeit τ ≈ 15 h · außen laut Vorhersage 8 → 4 °C · je Stunde (innen − außen) ÷ τ', marke: 'gelernt', marke_t: 'τ gelernt aus 9 Messungen' },
+        { k: 'ziel', t: 'Ziel', wert: 'warm um 06:40', rechnung: 'Arbeitsbeginn 07:10 − 30 min „Soll erreicht vorher“', marke: 'einstellung', marke_t: 'Warm ab' },
+        { k: 'auf', t: 'Aufheizen', wert: '≈ 3 h 05 min', rechnung: '8 °C ÷ 2,6 °C/h · 1 Heizkörper', marke: 'gelernt', marke_t: 'gelernt aus 14 Mal' },
+        { k: 'grenze', t: 'Grenze', wert: 'frühestens 01:40', rechnung: '06:40 − 5 h · nicht erreicht', marke: 'einstellung', marke_t: 'Frühestens', ton: '' }];
+      const ABENDS = { tag: 'morgen', tag_t: 'morgen', tag_grund: 'heute ist die Arbeit vorbei (bis 16:30)', jetzt: '20:47', laeuft: false, beginn: '03:30', warm: '06:35', ziel: '06:40',
+        arbeitsbeginn: '07:10', vor_min: 30, soll: 21.9, innen_jetzt: 18.3, innen_start: 13.9, tau_h: 15, tau_n: 9, tau_geschaetzt: false, aussen_von: 8, aussen_bis: 4.5, band: 'kalt',
+        rate: 2.6, rate_n: 14, anzahl: 1, rate_einer: null, rate_geschaetzt: false, aufheiz_min: 185, grenze: '01:40', grenze_h: 5, begrenzt: false, beginn_ohne: null, spaet: false,
+        geschaetzt: false, schaetz_grund: null, kurz: '03:30 → 06:35', aus_bis: { lang: 'aus bis morgen 03:30', kurz: 'morgen 03:30' },
+        satz: 'Startet morgen um 03:30: Bis dahin kühlt es auf etwa 13,9 °C ab (außen laut Vorhersage 8 → 4 °C), aufheizen dauert mit einem Heizkörper rund 3 h 05 min – warm um 06:35, vor dem Ziel 06:40.',
+        min: { jetzt: 1247, beginn: 1650, warm: 1835, ziel: 1840, arbeitsbeginn: 1870, grenze: 1540 },
+        kurve: [...g([[1080, 20.0], [1200, 18.8], [1247, 18.3]], 'gemessen'), ...g([[1260, 18.2], [1440, 16.2], [1620, 14.2], [1650, 13.9], [1835, 21.9], [1870, 21.9]], 'prognose')],
+        aussen_vorhersage: [...g([[1080, 10], [1247, 8]], 'gemessen'), ...g([[1260, 8], [1440, 6.4], [1620, 4.7], [1860, 4.2]], 'vorhersage')], schritte: SCHRITTE };
+      const lage = async (S, text, z = 'aus') => { x.start = S; x.text = text; x.z = z; panel.s.ck = null; panel.s.sheet = null; await panel.neuZeichnen(); };
+      x.modus = 'thermo'; x.t = 18.3; x.takt = null; x.lern = { ...(x.lern || {}), an: true, offen: null };
+      await lage(ABENDS, 'aus bis morgen 03:30'); pruefe('Start abends');
+      const uhrJ = (lang('zust').match(/\d\d:\d\d/) || [])[0], uhrP = (lang('warm').match(/\d\d:\d\d/) || [])[0];
+      erwarte('Start: Jetzt „⏸ aus bis morgen 03:30“, Plan „morgen ab 03:30 · warm 06:35“ – gleicher Tag, gleiche Uhrzeit',
+        lang('zust') === 'aus bis morgen 03:30' && (litEl('.ck-d .ck-chip[data-k="zust"] .ck-ic') || {}).textContent === '⏸'
+        && lang('warm') === 'morgen ab 03:30 · warm 06:35' && uhrJ === uhrP && uhrJ === '03:30'
+        && !!litEl('.ck-d .ckd-g[data-g="Plan"] .ck-chip[data-k="warm"]') && !ui.innerHTML.includes('warm um 06:40 · ab'));
+      erwarte('Start: Handy-Kurztexte „morgen 03:30“ und „03:30 → 06:35“', kurz('zust') === 'morgen 03:30' && kurz('warm') === '03:30 → 06:35');
+      await klick('.ck-d .ck-chip[data-k="warm"]', 10); pruefe('Start Plan-Satz');
+      erwarte('Start: Antippen Plan – Satz der Integration, „Rechnet laufend nach · Stand 20:47“, Link', satz().startsWith(ABENDS.satz) && satz().includes('Rechnet laufend nach · Stand 20:47.')
+        && !!litEl('.ck-d .ckd-g[data-g="Plan"] > .ck-info.tk-info .st-link'));
+      await klick('.ck-d .ck-chip[data-k="zust"]', 10);
+      erwarte('Start: Antippen Jetzt – derselbe Satz mit „So rechnet der Start ›“', satz().startsWith(ABENDS.satz) && /So rechnet der Start ›/.test(satz()));
+      await klick('.ck-d .st-link', 10); pruefe('Start Lernstand');
+      const ab = () => litEl('.sheet .st-ab');
+      erwarte('Start: Link öffnet den Lernstand mit „So rechnet der Start“ (statt „Heute ab …“)', panel.s.sheet && panel.s.sheet.art === 'lernen' && !!ab()
+        && /Start morgen 03:30 · warm um 06:35/.test(ab().querySelector('.st-ergebnis').textContent.replace(/\s+/g, ' ')) && !litEl('.sheet .wa-heute')
+        && ui.innerHTML.includes('Wann der Container startet, steht oben unter „So rechnet der Start“.'));
+      const svg = () => ab().querySelector('svg.st-svg');
+      erwarte('Start: Zeitstrahl – Innen gemessen durchgezogen, Prognose gestrichelt, außen je Stunde, Soll, Grenze, Jetzt, Start, warm', !!svg()
+        && svg().querySelectorAll('line.st-i.prog').length === 6 && svg().querySelectorAll('line.st-i:not(.prog)').length === 2
+        && svg().querySelectorAll('line.st-i.kalt').length >= 5 && svg().querySelectorAll('line.st-i.warm').length >= 1
+        && svg().querySelectorAll('circle.st-apkt').length === 6 && svg().querySelectorAll('circle.st-apkt.prog').length === 4
+        && !!svg().querySelector('.st-gr') && /frühestens 01:40/.test(svg().textContent) && /jetzt 20:47/.test(svg().textContent)
+        && /03:30 Start/.test(svg().textContent) && /warm 06:35/.test(svg().textContent) && /07:10/.test(svg().textContent));
+      erwarte('Start: Kacheln Kühlt ab / Ziel / Aufheizen / Grenze mit gelernt/Einstellung markiert, Hinweis „rechnet laufend nach“',
+        [...ab().querySelectorAll('.st-z')].map(z => z.dataset.k).join() === 'kuehl,ziel,auf,grenze' && ab().querySelector('.st-z[data-k="kuehl"]').classList.contains('breit')
+        && ab().querySelectorAll('.st-m-gel').length === 2 && ab().querySelectorAll('.st-m-ein').length === 2 && /τ gelernt aus 9 Messungen/.test(ab().textContent)
+        && /Rechnet bei jedem neuen Messwert und jeder neuen Vorhersage nach/.test(ab().textContent));
+      await klick({ act: 'zu' }, 5);
+      // nachts nach dem Start: heute, heizt schon (Kurve gemessen bis jetzt), Kachel „Warm“
+      // „⏸ aus bis …“ nur, wenn die Integration es liefert (start.aus_bis) – nicht am Wortlaut von `text` erkannt
+      await lage({ ...ABENDS, aus_bis: null }, 'aus bis morgen 03:30');
+      erwarte('Start: ohne start.aus_bis kein ⏸-Chip (Zustandschip wie bisher)', (litEl('.ck-d .ck-chip[data-k="zust"] .ck-ic') || {}).textContent !== '⏸' && kurz('zust') === 'aus');
+      await lage({ ...ABENDS, aus_bis: { lang: 'aus bis morgen 03:30', kurz: 'morgen 03:30' } }, 'Text egal');
+      erwarte('Start: ⏸-Chip aus start.aus_bis (lang/kurz), unabhängig vom Text', lang('zust') === 'aus bis morgen 03:30' && kurz('zust') === 'morgen 03:30');
+      const NACHTS = { ...ABENDS, tag: 'heute', aus_bis: null, tag_t: 'heute', jetzt: '04:50', laeuft: true, warm: '06:40', kurz: '03:30 → 06:40', innen_start: 14.0,
+        satz: 'Heizt seit 03:30 (da hatte es gemessen 14 °C, vorhergesagt waren 13,9 °C) und ist jetzt bei 17,3 °C: noch 4,6 °C, mit 2,6 °C/h etwa 1 h 50 min – warm um 06:40, vor dem Ziel 06:40.',
+        min: { jetzt: 290, beginn: 210, warm: 400, ziel: 400, arbeitsbeginn: 430, grenze: 100 },
+        kurve: [...g([[0, 16.1], [120, 14.8], [210, 14.0], [290, 17.3]], 'gemessen'), ...g([[400, 21.9], [430, 21.9]], 'prognose')],
+        aussen_vorhersage: [...g([[0, 6.5], [240, 4.6], [290, 4.6]], 'gemessen'), ...g([[300, 4.3], [420, 4.4]], 'vorhersage')],
+        schritte: [{ ...SCHRITTE[0], t: 'Ausgekühlt bis zum Start', marke: 'gemessen', marke_t: 'gemessen' }, SCHRITTE[1], { ...SCHRITTE[2], t: 'Noch aufheizen' },
+          { k: 'warm', t: 'Warm', wert: '≈ 06:40', rechnung: '04:50 + 1 h 50 min · rechtzeitig vor 06:40', marke: null, marke_t: null, ton: 'ergebnis' }] };
+      await lage(NACHTS, 'heizt auf 21,9 °C · Vorheizen', 'heizt');
+      erwarte('Start: nachts – Plan „heute ab 03:30 · warm 06:40“, Jetzt bleibt der Zustand', lang('warm') === 'heute ab 03:30 · warm 06:40' && lang('zust') === 'heizt auf 21,9 °C');
+      await klick({ act: 'sheet', s: 'lernen' }, 10); pruefe('Start Lernstand nachts');
+      erwarte('Start: nachts – „Heizt seit 03:30“, Kachel „Warm“, gemessen bis jetzt', /Heizt seit 03:30 · warm um ≈ 06:40/.test(ab().querySelector('.st-ergebnis').textContent.replace(/\s+/g, ' '))
+        && !!ab().querySelector('.st-z.ergebnis[data-k="warm"]') && svg().querySelectorAll('line.st-i:not(.prog)').length === 3);
+      await klick({ act: 'zu' }, 5);
+      // Grenze erreicht und geschätzt: amber, „warm ≈“, Etikett „geschätzt“
+      await lage({ ...ABENDS, beginn: '01:40', warm: '07:00', kurz: '01:40 → 07:00', begrenzt: true, beginn_ohne: '01:20', geschaetzt: true, schaetz_grund: 'aus der Größe (13,5 m²) und dem Wärmeverlust',
+        min: { ...ABENDS.min, beginn: 1540, warm: 1860 }, aus_bis: { lang: 'aus bis morgen 01:40', kurz: 'morgen 01:40' }, schritte: [SCHRITTE[0], SCHRITTE[1], SCHRITTE[2], { ...SCHRITTE[3], ton: 'amber', rechnung: '06:40 − 5 h · erreicht: bräuchte 01:20' }] }, 'aus bis morgen 01:40');
+      erwarte('Start: Grenze erreicht – Plan amber „morgen ab 01:40 · warm ≈ 07:00“ mit „geschätzt“', lang('warm') === 'morgen ab 01:40 · warm ≈ 07:00 geschätzt'
+        && litEl('.ck-d .ck-chip[data-k="warm"]').classList.contains('amber') && !!litEl('.ck-d .ck-chip[data-k="warm"] .st-mini') && lang('zust') === 'aus bis morgen 01:40');
+      await klick('.ck-d .ck-chip[data-k="warm"]', 10);
+      erwarte('Start: Grenze – Satz mit „Grenze erreicht.“', /Grenze erreicht\./.test(satz()));
+      Object.assign(x, alt); panel.s.ck = null; panel.s.sheet = null; await panel.neuZeichnen(); }
     /* Eingestellt im Kopf (Mockup eingestellt.html, Variante C, Herbert 28.10.2026): zugeklappt „⚙ 11 eingestellt ▾“, auf je
        Herkunft eine Zeile, Antippen = Satz + „ändern ›“; Liste, Texte, wirkt/grund und ziel von der Integration
        (laufzeit.container.<id>.eingestellt, logik/eingestellt.py) – die Seite zählt nur und bildet ziel auf ihre Navigation ab */
@@ -1502,7 +1579,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   /* AN-0004: „Warm ab“ – Werte von der Integration (lernen.warm), Einstellungen je Baustelle und Container */
   { const b0 = panel.d.bereiche.find(x => x.fuehler && !x.pumpe), welt = struktur.find(x => x.baustelle.entry_id === panel.d.entry);
     const c = welt.laufzeit.container[b0.id], alt = JSON.parse(JSON.stringify(c));
-    c.modus = 'thermo';
+    c.modus = 'thermo'; c.start = null;   // ohne Start-Logik (FE-0031/32 prüft „Start-Logik“ oben): Anzeige wie AN-0004
     c.lernen = { an: true, zyklen: 4, zyklus_min: 10, anteil: 100, erwartet: 0, aus_bei: 20, kint: { wert: .6, start: .6, fort: 0 }, kext: { wert: .01, start: .01, fort: 0 }, nachlauf: {}, treffer: [],
       aufheizen: { 'kalt|1': { rate: 3.2, n: 4 } }, auf_n: 3,
       warm: { gelernt: true, band: 'kalt', rate: 3.2, n: 4, n_noetig: 3, vor: 15, nach: 0, max: 120, vor_eigen: false, nach_eigen: false, aufheiz_min: 70, innen: 16.4, soll: 20, fest: false,

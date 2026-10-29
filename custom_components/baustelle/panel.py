@@ -777,6 +777,8 @@ async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnect
             return
         lz.setdefault("lernen", {}).pop(bid, None)
         lz.setdefault("warm_start", {}).pop(bid, None)   # auch der festgehaltene Beginn von heute (Szenario-Befund)
+        lz.setdefault("start_verlauf", {}).pop(bid, None)   # FE-0031/32: gemessener Verlauf der Start-Logik
+        Heizung.von(st).start_neu()
         st.protokoll("einstellung", bid, f"{st.bereiche[bid].name}: Lernstand zurückgesetzt")
     elif aktion in ("gefuehl", "soll_versch", "soll_versch_weg"):   # Soll gleitend (Herbert 01.10.2026)
         bid = msg.get("bereich")
@@ -814,7 +816,7 @@ async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnect
         # auf null; Einstellungen, Protokoll und die Langzeitstatistik von HA bleiben. Neu laden leert auch den Speicher.
         st.zaehler.clear()
         for key, leer in (("lernen", {}), ("warm_start", {}), ("aussen_tage", {}), ("gefuehl", []), ("soll_versch", {}),
-                          ("fuehler_zuletzt", {})):
+                          ("fuehler_zuletzt", {}), ("start_verlauf", {})):
             lz[key] = leer
         st.protokoll("einstellung", None, "Alle Zähler und alles Gelernte zurückgesetzt")
         _aktion_merken(hass, connection, st, msg)

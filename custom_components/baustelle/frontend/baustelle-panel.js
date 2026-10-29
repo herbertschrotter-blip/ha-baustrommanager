@@ -1014,6 +1014,7 @@ function bauen(r5, hass, ersatzZone) {
       boostBis: c4.boost_bis || null,
       modus: pumpe ? null : MODI.some((m3) => m3[0] === c4.modus) ? c4.modus : eb.bedarf ? "bedarf" : eb.auto === false ? "hand" : b3.fuehler ? "thermo" : "plan",
       lern: c4.lernen || null,
+      start: c4.start || null,
       takt: c4.takt || null,
       eingestellt: Array.isArray(c4.eingestellt) ? c4.eingestellt : [],
       groesse: c4.groesse || null,
@@ -2739,10 +2740,27 @@ function taktRunde(T2) {
     info: b2`In jeder ${Z2}-Minuten-Runde läuft die Heizung gerade etwa ${minT(T2.an_min)} min (${T2.anteil} %). Das rechnet die Automatik laufend neu – je näher am Soll, desto kürzer.${rundeBalken(T2)}`
   };
 }
+var startLink = (p4) => b2`<button class="st-link" @click=${() => {
+  ckSetzen(p4, { info: null });
+  p4.einblenden("lernen");
+}}>So rechnet der Start ›</button>`;
+function planChip(p4, S3) {
+  return {
+    k: "warm",
+    ic: "⏱",
+    ton: S3.begrenzt ? "amber" : "",
+    breit: true,
+    kurz: S3.kurz,
+    lang: b2`${S3.tag_t} ab ${S3.beginn} · warm ${S3.begrenzt ? "≈ " : ""}${S3.warm}${S3.geschaetzt ? b2` <span class="st-mini">geschätzt</span>` : A}`,
+    info: b2`${S3.satz}${S3.begrenzt ? b2` <b>Grenze erreicht.</b>` : A} <span class="st-stand">Rechnet laufend nach · Stand ${S3.jetzt}.</span> ${startLink(p4)}`
+  };
+}
 function kopfChips(p4, b3) {
   const d3 = p4.d, L2 = [], text2 = TEXT(b3), lern = b3.lern && b3.lern.an && ["thermo", "bedarf"].includes(b3.modus) ? b3.lern : null, T2 = b3.takt;
   const erst = text2.split(" · ")[0].replace(/^⚡\s*/, "") || b3.z;
+  const S3 = lern && b3.start, bis = S3 && !T2 && S3.aus_bis;
   if (T2) L2.push(taktJetzt(p4, b3, T2));
+  else if (bis) L2.push({ k: "zust", ic: "⏸", ton: "", lang: bis.lang, kurz: bis.kurz, breit: true, info: b2`${S3.satz} ${startLink(p4)}` });
   else L2.push({
     k: "zust",
     ic: ZUST_IC[b3.z] || "•",
@@ -2773,7 +2791,8 @@ function kopfChips(p4, b3) {
     });
   if (lern) {
     const w2 = lern.warm;
-    if (w2 && w2.gelernt && w2.plan) L2.push({ k: "warm", ic: "⏱", ton: "", lang: `warm um ${uhr(w2.plan.ziel)} · ab ${uhr(w2.plan.start)}`, kurz: uhr(w2.plan.ziel), info: p4.warmText(b3) });
+    if (S3) L2.push(planChip(p4, S3));
+    else if (w2 && w2.gelernt && w2.plan) L2.push({ k: "warm", ic: "⏱", ton: "", lang: `warm um ${uhr(w2.plan.ziel)} · ab ${uhr(w2.plan.start)}`, kurz: uhr(w2.plan.ziel), info: p4.warmText(b3) });
     else if (w2) L2.push({ k: "warm", ic: "⏱", ton: "", lang: "Aufheizen lernt noch", kurz: "lernt", info: p4.warmText(b3) });
     if (lern.offen) L2.push({ k: "lern", ic: "🧠", ton: "amber", lang: "lernt gerade nicht", kurz: "lernt nicht", info: p4.offenText(b3) || p4.cRegelText(b3) });
     if (zahl(lern.erwartet)) L2.push({
@@ -2958,6 +2977,123 @@ function containerVorlage(p4) {
       </div>`;
 }
 
+// src/ansichten/start.js
+var MARKE2 = { gelernt: "st-m-gel", geschaetzt: "st-m-ges", gemessen: "st-m-mes", einstellung: "st-m-ein" };
+var marke = (s4) => s4.marke ? b2`<span class="st-m ${MARKE2[s4.marke] || ""}">${s4.marke === "geschaetzt" ? "≈ " : s4.marke === "gelernt" ? "🧠 " : ""}${s4.marke_t}</span>` : A;
+var grad = (x2, n4 = 1) => de(x2, n4).replace("-", "−");
+var uhrMin = (m3) => {
+  m3 = (Math.round(m3) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(m3 / 60)).padStart(2, "0")}:${String(m3 % 60).padStart(2, "0")}`;
+};
+function startKurveSvg(S3, schmal) {
+  const W = schmal ? 320 : 440, H2 = schmal ? 226 : 236, l4 = 30, r5 = W - 12, o6 = 46, u3 = H2 - 34, fs = schmal ? 10 : 11;
+  const K = S3.kurve || [], A2 = S3.aussen_vorhersage || [], M2 = S3.min || {}, alle = [...K, ...A2];
+  if (!K.length) return "";
+  const bg = M2.beginn, wm = M2.warm, ab = M2.arbeitsbeginn, gr = M2.grenze, jt = M2.jetzt;
+  const t0 = Math.min(...alle.map((k2) => k2[0]), bg, jt), t1 = Math.max(ab, wm, ...alle.map((k2) => k2[0])) + 10;
+  const cMin = Math.floor(Math.min(...alle.map((k2) => k2[1])) - 1), cMax = Math.ceil(Math.max(S3.soll, ...alle.map((k2) => k2[1])) + 1);
+  const x2 = (m3) => +(l4 + (m3 - t0) / (t1 - t0) * (r5 - l4)).toFixed(1), y3 = (c4) => +(u3 - (c4 - cMin) / (cMax - cMin) * (u3 - o6)).toFixed(1);
+  const T2 = [];
+  if (wm > bg) T2.push(`<rect class="st-band" x="${x2(bg)}" y="${o6 - 4}" width="${(x2(wm) - x2(bg)).toFixed(1)}" height="${u3 - o6 + 4}"></rect>`);
+  T2.push(`<line class="st-soll" x1="${l4}" x2="${r5}" y1="${y3(S3.soll)}" y2="${y3(S3.soll)}"></line><text class="st-ax" x="${l4 - 4}" y="${y3(S3.soll) + 4}" text-anchor="end" font-size="${fs}">${grad(S3.soll, 0)}°</text>`);
+  if (cMin < 0) T2.push(`<line class="st-null" x1="${l4}" x2="${r5}" y1="${y3(0)}" y2="${y3(0)}"></line><text class="st-ax" x="${l4 - 4}" y="${y3(0) + 4}" text-anchor="end" font-size="${fs}">0°</text>`);
+  T2.push(`<text class="st-ax" x="${l4 - 4}" y="${y3(cMin) + 4}" text-anchor="end" font-size="${fs}">${grad(cMin, 0)}°</text>`);
+  if (gr >= t0) {
+    const links = gr < jt && x2(gr) - l4 > 80;
+    T2.push(`<line class="st-gr" x1="${x2(gr)}" x2="${x2(gr)}" y1="${o6 - 30}" y2="${u3}"></line><text class="st-ax st-gr-t" x="${x2(gr) + (links ? -3 : 3)}" y="${o6 - 26}" text-anchor="${links ? "end" : "start"}" font-size="${fs - 1}">frühestens ${S3.grenze}</text>`);
+  }
+  for (let i7 = 1; i7 < A2.length; i7++) T2.push(`<line class="st-aussen ${A2[i7][2] === "vorhersage" ? "prog" : ""}" x1="${x2(A2[i7 - 1][0])}" y1="${y3(A2[i7 - 1][1])}" x2="${x2(A2[i7][0])}" y2="${y3(A2[i7][1])}"></line>`);
+  for (const a3 of A2) T2.push(`<circle class="st-apkt ${a3[2] === "vorhersage" ? "prog" : ""}" cx="${x2(a3[0])}" cy="${y3(a3[1])}" r="${a3[2] === "vorhersage" ? 2.2 : 1.6}"></circle>`);
+  if (A2.length) {
+    const aL = A2[A2.length - 1];
+    T2.push(`<text class="st-ax st-a-t" x="${x2(aL[0])}" y="${y3(aL[1]) - 6}" text-anchor="end" font-size="${fs - 1}">außen ${grad(aL[1], 0)}°</text>`);
+  }
+  for (let i7 = 1; i7 < K.length; i7++) {
+    const [m0, c0] = K[i7 - 1], [m1, c1, q] = K[i7];
+    T2.push(`<line class="st-i ${m1 <= bg ? "kalt" : "warm"} ${q === "prognose" ? "prog" : ""}" x1="${x2(m0)}" y1="${y3(c0)}" x2="${x2(m1)}" y2="${y3(c1)}"></line>`);
+  }
+  T2.push(`<line class="st-jetzt" x1="${x2(jt)}" x2="${x2(jt)}" y1="${o6 - 36}" y2="${u3}"></line><text class="st-ax st-fett" x="${x2(jt) - 3}" y="${o6 - 8}" text-anchor="end" font-size="${fs}">jetzt ${S3.jetzt}</text>`);
+  T2.push(`<text class="st-ax st-klein" x="${x2(jt) - 3}" y="${o6 - 26}" text-anchor="end" font-size="${fs - 1}">◂ gemessen</text>`);
+  if (t1 - jt > 30) T2.push(`<text class="st-ax st-klein" x="${x2(jt) + 3}" y="${o6 - 26}" font-size="${fs - 1}">Prognose ▸</text>`);
+  const kj = K.find((k2) => k2[0] === jt) || K[K.length - 1];
+  T2.push(`<circle class="st-pkt" cx="${x2(kj[0])}" cy="${y3(kj[1])}" r="3.5"></circle><text class="st-wert" x="${x2(kj[0]) + (S3.laeuft ? -6 : 5)}" y="${y3(kj[1]) - 7}" text-anchor="${S3.laeuft ? "end" : "start"}" font-size="${fs}">${grad(kj[1])}°</text>`);
+  T2.push(`<circle class="st-pkt kalt" cx="${x2(bg)}" cy="${y3(S3.innen_start)}" r="3.5"></circle><text class="st-wert" x="${x2(bg) + 5}" y="${y3(S3.innen_start) + 4}" font-size="${fs}">${S3.laeuft ? "" : "≈ "}${grad(S3.innen_start)}°</text>`);
+  T2.push(`<circle class="st-pkt warm" cx="${x2(wm)}" cy="${y3(S3.soll)}" r="3.5"></circle><text class="st-ax st-fett" x="${x2(wm)}" y="${o6 - 8}" text-anchor="middle" font-size="${fs}">warm ${S3.warm}</text>`);
+  T2.push(`<line class="st-achse" x1="${l4}" x2="${r5}" y1="${u3}" y2="${u3}"></line>`);
+  const gesetzt = [];
+  for (const [m3, t5, an, kl] of [[bg, `${S3.beginn} Start`, "middle", "st-fett"], [ab, S3.arbeitsbeginn, "end", ""], [t0, S3.achse_ab || uhrMin(t0), "start", ""]]) {
+    if (gesetzt.some((g2) => Math.abs(x2(g2) - x2(m3)) < 70)) continue;
+    gesetzt.push(m3);
+    T2.push(`<line class="st-tick" x1="${x2(m3)}" x2="${x2(m3)}" y1="${u3}" y2="${u3 + 4}"></line><text class="st-ax ${kl}" x="${x2(m3)}" y="${u3 + 16}" text-anchor="${an}" font-size="${fs}">${t5}</text>`);
+  }
+  return `<svg class="st-svg" viewBox="0 0 ${W} ${H2}" width="100%" role="img" aria-label="Innen- und Außentemperatur bis zum Arbeitsbeginn">${T2.join("")}</svg>`;
+}
+function startAbschnitt(p4, b3) {
+  const S3 = b3 && b3.start;
+  if (!S3) return A;
+  const kopf5 = b2`<div class="gruppe-t st-gt">So rechnet der Start</div>
+    <div class="st-ergebnis ${S3.begrenzt ? "amber" : ""}"><span>${S3.laeuft ? b2`Heizt seit <b>${S3.beginn}</b> · warm um <b>≈ ${S3.warm}</b>` : b2`Start <b>${S3.tag_t} ${S3.beginn}</b> · warm um <b>${S3.begrenzt ? "≈ " : ""}${S3.warm}</b>`}</span>
+      ${S3.geschaetzt ? b2`<span class="st-m st-m-ges">≈ noch geschätzt</span>` : A}${S3.begrenzt ? b2`<span class="st-m st-m-amb">Grenze erreicht</span>` : A}</div>`;
+  const legende2 = b2`<div class="st-leg"><span><i class="st-l-gem"></i>gemessen</span><span><i class="st-l-prog"></i>Prognose</span><span><i class="st-l-kalt"></i>kühlt ab</span><span><i class="st-l-warm"></i>heizt</span><span><i class="st-l-aus"></i>außen je Stunde (Vorhersage)</span></div>`;
+  const kacheln2 = b2`<div class="st-zahlen">${(S3.schritte || []).map((z2) => b2`<div class="st-z ${z2.ton || ""} ${z2.k === "kuehl" ? "breit" : ""}" data-k=${z2.k}><span class="st-t">${z2.t}</span><b>${z2.wert}</b><span class="st-r">${z2.rechnung}</span>${marke(z2)}</div>`)}</div>`;
+  return b2`<div class="st-ab" data-start=${S3.tag}>${kopf5}<div class="st-kurve">${o5(startKurveSvg(S3, !!p4.narrow))}</div>${legende2}${kacheln2}
+    ${S3.geschaetzt ? b2`<div class="leise st-fuss">Noch nicht gelernt: geschätzt ${S3.schaetz_grund}, mit Reserve. Nach ein paar Nächten lernt er τ, nach 3 gemessenen Aufheizungen die Rate.</div>` : A}
+    <div class="leise st-fuss">↻ Rechnet bei jedem neuen Messwert und jeder neuen Vorhersage nach; weicht das Auskühlen ab, lernt er τ nach · Stand ${S3.jetzt} · Regelung, „Jetzt“ und „Plan“ zeigen dieselbe Rechnung</div></div>`;
+}
+var START_STIL = `
+@container (min-width: 641px) { .ck-d .ckd-gruppen .ckd-g[data-g="Plan"] { grid-column: span 2; } }   /* Plan-Chip mit Tag und zwei Uhrzeiten: zwei Spalten breit */
+.st-link { border: 0; background: none; padding: 0; font: inherit; color: var(--blau); cursor: pointer; white-space: nowrap; }
+.st-stand { opacity: .8; }
+.st-mini { font-size: 10.5px; padding: 0 5px; border-radius: 5px; border: 1px dashed var(--amber); color: var(--amber); margin-left: 2px; }
+.st-ab { margin: 4px 0 14px; padding: 12px 14px; border-radius: 14px; background: rgba(120,120,128,.12); display: flex; flex-direction: column; gap: 8px; }
+.st-gt { margin: 0 0 -4px; }
+.st-ergebnis { font-size: 17px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.st-ergebnis b { font-weight: 650; color: var(--ink); }
+.st-m { font-size: 11px; padding: 1px 7px; border-radius: 8px; white-space: nowrap; border: 1px solid rgba(120,120,128,.35); color: var(--ink2); }
+.st-m-gel { border-color: color-mix(in srgb, var(--blau) 55%, transparent); color: var(--blau); }
+.st-m-ges, .st-m-amb { border: 1px dashed var(--amber); color: var(--amber); }
+.st-m-mes { opacity: .8; }
+.st-fuss { font-size: 12px; }
+.st-kurve { width: 100%; }
+.st-svg { display: block; overflow: visible; }
+.st-svg .st-achse, .st-svg .st-tick { stroke: var(--ink2); stroke-width: 1; opacity: .5; }
+.st-svg .st-soll { stroke: var(--ink2); stroke-dasharray: 3 4; opacity: .6; }
+.st-svg .st-null { stroke: var(--ink2); stroke-width: .8; opacity: .3; }
+.st-svg .st-gr { stroke: var(--amber); stroke-dasharray: 2 3; stroke-width: 1.2; }
+.st-svg .st-gr-t { fill: var(--amber); }
+.st-svg .st-band { fill: var(--amber); opacity: .12; }
+.st-svg .st-i { stroke-width: 2.6; stroke-linecap: round; }
+.st-svg .st-i.kalt { stroke: var(--blau); } .st-svg .st-i.warm { stroke: var(--amber); }
+.st-svg .st-i.prog { stroke-dasharray: 5 4; stroke-linecap: butt; }
+.st-svg .st-aussen { stroke: var(--ink2); stroke-width: 1.2; opacity: .55; } .st-svg .st-aussen.prog { stroke-dasharray: 3 3; }
+.st-svg .st-apkt { fill: var(--ink2); opacity: .7; }
+.st-svg .st-a-t { opacity: .85; }
+.st-svg .st-pkt { fill: var(--ink); } .st-svg .st-pkt.warm { fill: var(--amber); } .st-svg .st-pkt.kalt { fill: var(--blau); }
+.st-svg .st-jetzt { stroke: var(--ink); stroke-width: 1.2; opacity: .75; }
+.st-svg text { fill: var(--ink2); font-family: inherit; }
+.st-svg .st-fett, .st-svg .st-wert { fill: var(--ink); font-weight: 600; }
+.st-svg .st-klein { opacity: .8; }
+.st-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--ink2); }
+.st-leg span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.st-leg i { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid var(--ink2); }
+.st-leg .st-l-prog { border-top-style: dashed; }
+.st-leg .st-l-kalt { border-top-color: var(--blau); } .st-leg .st-l-warm { border-top-color: var(--amber); }
+.st-leg .st-l-aus { border-top-width: 1.2px; border-top-style: dashed; opacity: .7; }
+.st-zahlen { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.st-z { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: rgba(120,120,128,.12); min-width: 0; }
+.st-z.breit { grid-column: 1 / -1; }
+.st-z.breit ~ .st-z:last-child:nth-child(even) { grid-column: 1 / -1; }   /* übrig bleibende Kachel über die ganze Breite */
+.st-z .st-t { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--ink2); }
+.st-z b { color: var(--ink); font-weight: 650; }
+.st-z .st-r { font-size: 12px; color: var(--ink2); }
+.st-z .st-m { align-self: flex-start; margin-top: 2px; white-space: normal; }
+.st-z.amber b { color: var(--amber); }
+.st-z.ergebnis { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+@container (max-width: 640px) {
+  .st-ab { padding: 10px 10px; }
+  .st-ergebnis { font-size: 15.5px; }
+}`;
+
 // src/ansichten/einblendungen-container.js
 var GRIFF3 = b2`<div class="griff"></div>`;
 var LAEDT3 = b2`<div class="leer">Lädt …</div>`;
@@ -3059,6 +3195,7 @@ function lernenEinblendung(p4, s4) {
   const tr = l4.treffer || [], mittel = tr.length ? tr.reduce((x2, y3) => x2 + Math.abs(y3), 0) / tr.length : null, offen = p4.offenText(b3);
   return b2`${GRIFF3}<div class="block-kopf"><h3>Lernstand · ${b3.name}</h3><span class="leise">${l4.zyklen} Heizzyklen gemessen</span></div>
         ${offen ? b2`<div class="wa-heute">${offen}. Laufende Messungen sind verworfen; gelernt wird wieder 10 min, nachdem es vorbei ist.</div>` : A}
+        ${startAbschnitt(p4, b3)}
         <div class="gruppe-t">Regelung (TPI, ${l4.zyklus_min}-min-Zyklen)</div>
         ${balkenK("K innen – Trägheit des Raums", l4.kint)}${balkenK("K außen – Wärmeverlust nach außen", l4.kext)}
         <div class="leise">Einschaltanteil = K innen × (Soll − innen − Nachlauf) + K außen × (Soll − außen)</div>
@@ -3079,7 +3216,7 @@ var CONTAINER_EINBLENDUNGEN = { leistung: leistungEinblendung, "heizzeit-c": hei
 // src/ansichten/heizung.js
 var LAEDT4 = b2`<div class="leer">Lädt …</div>`;
 var ACHSE = b2`<div class="tl-achse">${["04", "08", "12", "16", "20"].map((h3) => b2`<span>${h3}</span>`)}</div>`;
-var grad = (v2) => `${de(v2, 1)} °C`;
+var grad2 = (v2) => `${de(v2, 1)} °C`;
 var min = (v2) => `${v2} min`;
 var minus = (v2) => `${de(v2, 0).replace("-", "−")} °C`;
 var mm = (v2) => `${de(v2, 1)} mm`;
@@ -3231,12 +3368,12 @@ function soll(p4, z2, st) {
     "für Container mit Fühler; ohne Fühler regelt der Heizkörperthermostat",
     b2`<div class="seg klein">${[["fest", "fest"], ["gleitend", "gleitend"]].map(([kk, t5]) => b2`<button data-v=${kk} class=${e6.soll_art === kk ? "on" : ""} @click=${() => p4.einstellungWert("soll_art", kk)}>${t5}</button>`)}</div>`
   );
-  if (!gl) return b2`${k2}${z2("Soll", "", st("soll", 0.5, grad), true)}`;
-  const heute2 = !G ? b2`<div class="leise">Noch keine Außentemperatur – bis dahin gilt das feste Soll.</div>` : b2`<div class="sg-heute"><span>Grundwert („mindestens“)${e6.gleit_min >= 21 ? " – Aufenthaltsräume (§ 36 BauV)" : ""}</span><b>${grad(e6.gleit_min)}</b>
+  if (!gl) return b2`${k2}${z2("Soll", "", st("soll", 0.5, grad2), true)}`;
+  const heute2 = !G ? b2`<div class="leise">Noch keine Außentemperatur – bis dahin gilt das feste Soll.</div>` : b2`<div class="sg-heute"><span>Grundwert („mindestens“)${e6.gleit_min >= 21 ? " – Aufenthaltsräume (§ 36 BauV)" : ""}</span><b>${grad2(e6.gleit_min)}</b>
         <span>kalte Tage: Außenmittel der letzten ${G.tage} Tage ${de(G.aussen_mittel, 1)} °C</span><b>${f3(G.start - e6.gleit_min)}</b>
         <span>dein Gefühl: ${G.n} ${G.n === 1 ? "Rückmeldung" : "Rückmeldungen"} bei ähnlichem Wetter (je ${de(G.schritt, 2)} °C)</span><b>${f3(G.gefuehl)}</b>
-        <span class="summe">Soll heute</span><b class="summe">${grad(G.soll)}</b></div>${o5(p4.sollKurve(G))}`;
-  return b2`${k2}${heute2}${z2("mindestens", e6.gleit_min < 21 ? b2`<span class="amber-t">unter 21 °C – § 36 BauV verlangt für Aufenthaltsräume 21 °C</span>` : "nie darunter (§ 36 BauV: Aufenthaltsräume 21 °C)", st("gleit_min", 0.5, grad), true)}${z2("höchstens", "", st("gleit_max", 0.5, grad), true)}${z2("wärmer je Grad kälter draußen", `unter ${de(e6.gleit_bezug, 0)} °C Außenmittel`, st("gleit_je", 0.05, (v2) => `+${de(v2, 2)} °C`), true)}${z2("ab Außenmittel unter", "", st("gleit_bezug", 1, (v2) => `${de(v2, 0)} °C`), true)}${z2("Außenmittel über", "wie EN 16798-1: jüngere Tage zählen mehr", st("gleit_tage", 1, (v2) => `${v2} ${v2 === 1 ? "Tag" : "Tage"}`), true)}${z2("dein Gefühl", "„zu kalt / passt / zu warm“ und + / − im Container verschieben das Soll bei ähnlichem Wetter, höchstens ±1,5 °C", b2`<button class="rv-link" @click=${() => p4.gefuehlVergessen()}>vergessen</button>`, true)}<div class="leise">Ein eigenes Soll im Container gilt als Verschiebung gegenüber dem der Baustelle (Je Container).</div>`;
+        <span class="summe">Soll heute</span><b class="summe">${grad2(G.soll)}</b></div>${o5(p4.sollKurve(G))}`;
+  return b2`${k2}${heute2}${z2("mindestens", e6.gleit_min < 21 ? b2`<span class="amber-t">unter 21 °C – § 36 BauV verlangt für Aufenthaltsräume 21 °C</span>` : "nie darunter (§ 36 BauV: Aufenthaltsräume 21 °C)", st("gleit_min", 0.5, grad2), true)}${z2("höchstens", "", st("gleit_max", 0.5, grad2), true)}${z2("wärmer je Grad kälter draußen", `unter ${de(e6.gleit_bezug, 0)} °C Außenmittel`, st("gleit_je", 0.05, (v2) => `+${de(v2, 2)} °C`), true)}${z2("ab Außenmittel unter", "", st("gleit_bezug", 1, (v2) => `${de(v2, 0)} °C`), true)}${z2("Außenmittel über", "wie EN 16798-1: jüngere Tage zählen mehr", st("gleit_tage", 1, (v2) => `${v2} ${v2 === 1 ? "Tag" : "Tage"}`), true)}${z2("dein Gefühl", "„zu kalt / passt / zu warm“ und + / − im Container verschieben das Soll bei ähnlichem Wetter, höchstens ±1,5 °C", b2`<button class="rv-link" @click=${() => p4.gefuehlVergessen()}>vergessen</button>`, true)}<div class="leise">Ein eigenes Soll im Container gilt als Verschiebung gegenüber dem der Baustelle (Je Container).</div>`;
 }
 function regelnInhalt(p4) {
   const e6 = p4.d.e, C2 = p4.d.bereiche.filter((b3) => !b3.pumpe), lernend = C2.filter((b3) => b3.lern && b3.lern.warm), st = (k2, s4, fmt) => stepperVorlage(p4, k2, s4, fmt);
@@ -3251,19 +3388,19 @@ function regelnInhalt(p4) {
     warm_max: z2("Frühestens", "vor Arbeitsbeginn – Grenze, falls der Raum sehr kalt ist", st("warm_max", 15, (v2) => `${v2} min vorher`), true),
     soll: soll(p4, z2, st),
     toleranz: z2("Schaltabstand ± um das Soll", "Thermostat: ein unter Soll − Abstand, aus über Soll + Abstand", st("toleranz", 0.1, (v2) => `± ${de(v2, 1)} °C`), true),
-    grenze: z2("Heizgrenze", "nicht heizen, wenn es wärmer ist", st("grenze", 0.5, grad)),
+    grenze: z2("Heizgrenze", "nicht heizen, wenn es wärmer ist", st("grenze", 0.5, grad2)),
     basis: z2("Grundlage", "", b2`<div class="seg klein">${["jetzt", "Tageshöchstwert"].map((v2) => b2`<button data-v=${v2} class=${e6.basis === v2 ? "on" : ""} @click=${() => p4.heizgrenzeBasis(v2)}>${v2}</button>`)}</div>`, true),
     boost: z2("⚡ Schnell aufheizen", "alle Heizkörper eines Containers zugleich, Vorrang in der Staffelung – bis zum Soll, ohne Fühler für", st("boost_min", 5, min)),
     zusatz: !C2.some((b3) => b3.geraete.filter((g2) => g2.heizer).length >= 2) ? A : b2`${z2("🔥 Zusatz-Heizkörper", `in Containern mit „Zusatz nur bei Bedarf“: zuerst heizt einer, der Zusatz kommt dazu, wenn …${(() => {
       const n4 = C2.filter((b3) => b3.stufenAn);
       return n4.length ? ` Jetzt: ${n4.map((b3) => b3.name).join(", ")}.` : " Einschalten im Container unter Bearbeiten.";
-    })()}`, "")}${z2("… der Raum weiter unter dem Soll ist als", "", st("stufen_abstand", 0.5, grad), true)}${z2("… einer schon so lange läuft", "", st("stufen_min", 5, min), true)}${z2("… und es dabei weniger wärmer wurde als", "", st("stufen_anstieg", 0.1, (v2) => `${de(v2)} °C`), true)}${z2("… es draußen kälter ist als (beide von Anfang an)", "", st("stufen_kalt", 1, minus), true)}`,
+    })()}`, "")}${z2("… der Raum weiter unter dem Soll ist als", "", st("stufen_abstand", 0.5, grad2), true)}${z2("… einer schon so lange läuft", "", st("stufen_min", 5, min), true)}${z2("… und es dabei weniger wärmer wurde als", "", st("stufen_anstieg", 0.1, (v2) => `${de(v2)} °C`), true)}${z2("… es draußen kälter ist als (beide von Anfang an)", "", st("stufen_kalt", 1, minus), true)}`,
     tuer: b2`${z2("🚪 Tür offen", "Heizung pausieren nach", st("tuer_pause", 1, min), false, "tuer")}${z2("Nachricht nach", "", st("tuer_melden", 5, min), true)}`,
     nachheizen: z2("Nachheizen", b2`nach Arbeitsende, jeden Tag${nichtLern}`, st("nachheizen", 5, min), false, "nachheizen"),
     warm_nach: z2("Warm halten (lernende)", "nach Arbeitsende; Kleidung trocknen kommt dazu", st("warm_nach", 5, (v2) => v2 ? `${v2} min länger` : "bis Ende"), true),
     trocknen: z2("👕 Kleidung trocknen", `ab ${de(e6.tr_mm, 1)} mm Regen: +${e6.tr_laenger} min nach dem Nachheizen, am Morgen ${e6.tr_frueher} min früher`, link(() => p4.hzAuf("trocknen"))),
     hand: z2("✋ Handbetrieb übernehmen nach", "Läuft ein Heizkörper zu lange von Hand, kommt eine Nachricht – ohne „So lassen“ übernimmt die Automatik so viel später", st("hand_nachfrist", 5, min)),
-    frost: b2`${z2("❄ Frostschutz", "hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit", bool("frost"), false, "frost")}${e6.frost ? b2`${z2("ein unter", "", st("frost_temp", 0.5, grad), true)}${z2("aus über", "", st("frost_aus", 0.5, grad), true)}${z2("ohne Fühler: ein, wenn draußen unter", "aus erst 2 °C darüber; der Heizkörperthermostat regelt dann selbst", e6.frost_aussen === null ? b2`<span class="leise">aus</span>` : st("frost_aussen", 1, minus), true)}${z2("auch bei Automatik aus", "schaltet dann nur den Frostschutz, sonst nichts", bool("frost_immer"), true)}` : A}`,
+    frost: b2`${z2("❄ Frostschutz", "hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit", bool("frost"), false, "frost")}${e6.frost ? b2`${z2("ein unter", "", st("frost_temp", 0.5, grad2), true)}${z2("aus über", "", st("frost_aus", 0.5, grad2), true)}${z2("ohne Fühler: ein, wenn draußen unter", "aus erst 2 °C darüber; der Heizkörperthermostat regelt dann selbst", e6.frost_aussen === null ? b2`<span class="leise">aus</span>` : st("frost_aussen", 1, minus), true)}${z2("auch bei Automatik aus", "schaltet dann nur den Frostschutz, sonst nichts", bool("frost_immer"), true)}` : A}`,
     urlaub: z2("🏖 Urlaub & freie Feiertage", { frost: "nur Frostschutz", absenk: `absenken auf ${de(e6.absenk)} °C`, aus: "alles aus" }[e6.urlaub], link(() => p4.hzAuf("urlaub"))),
     zieht: z2("Heizt tatsächlich ab", "Leistung, ab der ein Heizkörper als „heizt“ zählt – Heizzeit geheizt, Heiztage, Warm ab, Lernen, Wann heizt was", st("zieht_w", 5, (v2) => `${v2} W`)),
     fuehler: z2("🌡 Fühler ohne Wert", "meldet ein Fühler nichts, gilt sein letzter Wert noch so lange – danach regelt der Container wie ohne Fühler", st("fuehler_halten", 5, min)),
@@ -3309,7 +3446,7 @@ function urlaub(p4, cls) {
         <div class="zeile"><div><b>An Feiertagen frei</b><div class="leise">${feiertagsKal ? `Feiertage aus dem Kalender „${p4.name(feiertagsKal)}“` : "noch kein Feiertagskalender gewählt"}</div></div>${schalterVorlage(e6.feiertag_frei, () => p4.einstellungUmschalten("feiertag_frei"))}</div>
         <div class="zeile modus-z"><div><b>Im Urlaub und an freien Feiertagen</b><div class="leise">${{ frost: "nur Frostschutz", absenk: `mit Fühler auf ${de(e6.absenk)} °C halten, ohne Fühler nur Frostschutz`, aus: "alles aus – auch kein Frostschutz. Nur, wenn nichts einfrieren kann." }[e6.urlaub]}</div></div>
           <div class="seg klein">${[["frost", "nur Frostschutz"], ["absenk", "absenken"], ["aus", "alles aus"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${e6.urlaub === k2 ? "on" : ""} @click=${() => p4.einstellungWert("urlaub", k2)}>${t5}</button>`)}</div></div>
-        ${e6.urlaub === "absenk" ? b2`<div class="zeile unter"><span>absenken auf</span>${stepperVorlage(p4, "absenk", 0.5, grad)}</div>` : A}
+        ${e6.urlaub === "absenk" ? b2`<div class="zeile unter"><span>absenken auf</span>${stepperVorlage(p4, "absenk", 0.5, grad2)}</div>` : A}
         ${ft === null ? b2`<div class="leise">Lädt …</div>` : ft.slice(0, 4).map((f3) => {
     const t5 = wtag(f3.von), we = t5 === "Sa" || t5 === "So";
     return b2`<div class="zeile unter"><span><b class="ft-d">${t5} ${kurzDatum(f3.von)}</b> ${f3.name}</span><span class="leise">${we ? "Wochenende" : "frei"}</span></div>`;
@@ -3711,12 +3848,12 @@ var text = (ziel2, k2, ph, nach, extra = {}) => b2`<input type=${extra.typ || A}
   ziel2[k2] = e6.target.value;
   if (nach) nach();
 }}>`;
-var auswahl2 = (ziel2, k2, inhalt, nach, marke, i7) => {
+var auswahl2 = (ziel2, k2, inhalt, nach, marke2, i7) => {
   const setze = (e6) => {
     ziel2[k2] = e6.target.value;
     if (nach) nach();
   };
-  return b2`<select data-f=${marke || k2} data-i=${i7 ?? A} @input=${setze} @change=${setze}>${inhalt}</select>`;
+  return b2`<select data-f=${marke2 || k2} data-i=${i7 ?? A} @input=${setze} @change=${setze}>${inhalt}</select>`;
 };
 function firma(p4, s4) {
   const d3 = p4.d, f3 = s4.form, neu = !f3.id, eigen = !neu && p4.firma(f3.id).eigen, z2 = () => p4.neuZeichnen();
@@ -3888,7 +4025,7 @@ function aussehen(p4, s4) {
   const kontakte = p4.entitaeten((x2) => x2.entity_id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(x2.attributes.device_class));
   const lichter = p4.entitaeten((x2) => /^(light|switch)\./.test(x2.entity_id) || x2.entity_id.startsWith("binary_sensor.") && x2.attributes.device_class === "light" || x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "illuminance");
   const seg = (fn, wert2, opts) => b2`<div class="seg klein">${opts.map(([v2, t5]) => b2`<button data-v=${v2} class=${String(wert2) === String(v2) ? "on" : ""} @click=${() => fn(v2)}>${t5}</button>`)}</div>`;
-  const wahl2 = (wert2, fn, marke) => b2`<select data-f=${marke || A} @change=${(e6) => fn(e6.target.value)}>${wert2}</select>`;
+  const wahl2 = (wert2, fn, marke2) => b2`<select data-f=${marke2 || A} @change=${(e6) => fn(e6.target.value)}>${wert2}</select>`;
   const element = (art, x2, i7, n4) => b2`<div class="zeile"><b>${art === "tueren" ? "🚪 Tür" : "🪟 Fenster"} ${i7 + 1}</b>${n4 > 1 ? b2`<button class="knopf klein" aria-label="entfernen" @click=${() => aendern((k2) => {
     if (k2[art].length > 1) k2[art].splice(i7, 1);
   })}>✕</button>` : A}</div>
@@ -5976,10 +6113,10 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.156";
+var SEITE_VERSION = "0.8.157";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
-  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS)];
+  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(WISCHEN_CSS), r(START_STIL)];
   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
@@ -6715,13 +6852,15 @@ var BaustellePanel = class extends i4 {
     const z2 = (x2) => x2 ? `<div><b>${de(x2.rate)} °C/h</b><span class="leise">${x2.n}× gemessen${x2.n < n0 ? " · noch zu wenig" : ""}</span></div>` : '<div><span class="leise">noch nicht gelernt</span></div>';
     const anz = [.../* @__PURE__ */ new Set([1, ...Object.keys(a3).map((k2) => +k2.split("|")[1] || 1)])].sort((x2, y3) => x2 - y3);
     return `<div class="gruppe-t">Aufheizen</div><div class="wa-tab"><b></b><b>kalt &lt; 5 °C</b><b>mild</b>${anz.map((n4) => `<span>${n4 === 1 ? "ein Heizkörper" : `${n4} Heizkörper`}</span>${z2(a3[`kalt|${n4}`])}${z2(a3[`mild|${n4}`])}`).join("")}</div>
-      ${w2 && w2.gelernt && w2.plan ? `<div class="wa-heute">⏰<div>Heute ab <b>${uhr(w2.plan.start)}</b> – ${w2.aufheiz_min} min für ${zahl(w2.innen) ? de(w2.innen) : "–"} → ${de(w2.soll)} °C, warm um <b>${uhr(w2.plan.ziel)}</b> (${w2.vor ? `${w2.vor} min vor Arbeitsbeginn` : "bei Arbeitsbeginn"})${w2.plan.begrenzt ? " · begrenzt durch „Frühestens“" : ""}</div></div>` : w2 ? `<div class="leise">Ab ${n0} Aufheizungen je Wetter rechnet der Container den Beginn selbst; bis dahin gelten Vorheizen und Kälte-Frühstart.</div>` : '<div class="leise">Der gelernte Beginn wirkt im Modus Thermostat.</div>'}
+      ${b3.start ? '<div class="leise">Wann der Container startet, steht oben unter „So rechnet der Start“.</div>' : w2 && w2.gelernt && w2.plan ? `<div class="wa-heute">⏰<div>Heute ab <b>${uhr(w2.plan.start)}</b> – ${w2.aufheiz_min} min für ${zahl(w2.innen) ? de(w2.innen) : "–"} → ${de(w2.soll)} °C, warm um <b>${uhr(w2.plan.ziel)}</b> (${w2.vor ? `${w2.vor} min vor Arbeitsbeginn` : "bei Arbeitsbeginn"})${w2.plan.begrenzt ? " · begrenzt durch „Frühestens“" : ""}</div></div>` : w2 ? `<div class="leise">Ab ${n0} Aufheizungen je Wetter rechnet der Container den Beginn selbst; bis dahin gelten Vorheizen und Kälte-Frühstart.</div>` : '<div class="leise">Der gelernte Beginn wirkt im Modus Thermostat.</div>'}
       <div class="leise">Gemessen wird jedes Aufheizen von mindestens 1 °C unter dem Soll, solange der Heizkörper durchgehend läuft. Kälte draußen steckt in der Rate – darum braucht es keinen eigenen Kälte-Frühstart.</div>`;
   }
   /* AN-0004: „Warm ab“ eines lernenden Containers – alle Zahlen von der Integration (laufzeit.container.<id>.lernen.warm) */
   warmText(b3, kurz = false) {
     const w2 = b3.lern && b3.lern.warm;
     if (!w2) return "";
+    const S3 = b3.start;
+    if (S3) return kurz ? `${S3.tag_t} ab ${S3.beginn} → warm ${S3.warm}` : S3.satz;
     if (!w2.gelernt) return kurz ? "Aufheizen lernt noch" : `lernt noch (${w2.n}/${w2.n_noetig} Aufheizungen bei ${w2.band === "kalt" ? "Kälte" : "mildem Wetter"}) – bis dahin Vorheizen und Kälte-Frühstart`;
     const pl = w2.plan;
     if (!pl) return kurz ? "" : "heute frei";

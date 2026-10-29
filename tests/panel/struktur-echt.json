@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.156",
+   "version": "0.8.157",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -615,12 +615,20 @@
       "offen": null,
       "ruhe_bis": null,
       "auf_n": 3,
+      "tau": {
+       "h": null,
+       "n": 0,
+       "start": 12.0,
+       "n_noetig": 2,
+       "misst": false
+      },
       "anteil": null,
       "erwartet": 0.0,
       "aus_bei": 20.0,
       "zyklus_min": 10,
       "warm": null
      },
+     "start": null,
      "takt": null,
      "eingestellt": [
       {
@@ -795,6 +803,7 @@
      "tuer": null,
      "modus": "bedarf",
      "lernen": null,
+     "start": null,
      "takt": null,
      "eingestellt": [
       {
@@ -946,12 +955,20 @@
       "offen": null,
       "ruhe_bis": null,
       "auf_n": 3,
+      "tau": {
+       "h": null,
+       "n": 0,
+       "start": 12.0,
+       "n_noetig": 2,
+       "misst": false
+      },
       "anteil": null,
       "erwartet": 0.0,
       "aus_bei": 20.0,
       "zyklus_min": 10,
       "warm": null
      },
+     "start": null,
      "takt": null,
      "eingestellt": [
       {
@@ -1123,6 +1140,7 @@
      "tuer": null,
      "modus": null,
      "lernen": null,
+     "start": null,
      "takt": null,
      "eingestellt": null,
      "stufen": null,
@@ -2359,7 +2377,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.156",
+   "version": "0.8.157",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2593,6 +2611,7 @@
      "tuer": null,
      "modus": "plan",
      "lernen": null,
+     "start": null,
      "takt": null,
      "eingestellt": [
       {

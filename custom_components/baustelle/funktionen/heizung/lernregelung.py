@@ -14,6 +14,7 @@ from ...logik.arbeitszeit import Plan, WarmAb
 from ...logik.regelung import Soll, SollGrund
 from ...logik.zaehlen import rate
 from ..basis import zeit
+from . import start as h_start
 from .typen import LERN_GRUENDE
 
 if TYPE_CHECKING:
@@ -150,6 +151,7 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
             hz.st.protokoll("ok", info.id, "Raum wird wieder wärmer – die lernende Regelung lernt weiter")
         if neu != alt:
             hz.lern_staende[info.id] = neu
+            hz.start_neu()   # Lernstand geändert (Rate, τ): Start neu rechnen
             hz.st.einstellungen.speichern()
 
 
@@ -170,25 +172,29 @@ def lern_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
 
 
 def warm_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
-    """„Warm ab“ von heute für die Seite (AN-0004); None, wenn der Container nicht lernend im Thermostat regelt."""
+    """„Warm ab“ für die Seite (AN-0004); None, wenn der Container nicht lernend im Thermostat regelt. Seit FE-0031/32
+    der Plan des Tages mit dem nächsten Start (`plan.tag`); Band, Anzahl, Rate und Aufheizdauer aus der Start-Logik
+    (`start`, logik/start.py) – ohne Rechnung (kein Innenwert) bleiben sie leer."""
     jetzt = dt_util.now()
-    warm = hz.warm_ab(bid, jetzt.date(), jetzt)
+    s = h_start.start(hz, bid, jetzt)
+    tag = s.tag if s is not None else jetzt.date()
+    warm = hz.warm_ab(bid, tag, jetzt)
     if warm is None:
         return None
     e = hz.st.einstellungen.bereich(bid)
-    plan = hz.plan(jetzt.date(), bool(e["trocknen"]), warm)
+    plan = hz.plan(tag, bool(e["trocknen"]), warm)
     info = hz.st.bereiche[bid]
-    stand = hz.lern_staende.get(bid) or {}
-    bd = lernen.band(hz.st.daten.wetter.aussen)
-    anzahl = 1 if hz.stufen_an(bid) and not hz._zusatz_gelernt.get(bid) else (len(hz.heizer_von(bid)) or 1)
-    rate = (stand.get("aufheizen") or {}).get(lernen.auf_schluessel(bd, anzahl))
+    geschaetzt = s is not None and s.rate_geschaetzt
     return {
-        "gelernt": warm.aufheiz_min is not None and not hz._geschaetzt.get(bid), "band": bd,
-        "geschaetzt": groesse.rate_geschaetzt(e.get("groesse_m2")) if hz._geschaetzt.get(bid) else None, "rate": rate[0] if rate else None, "n": int(rate[1]) if rate else 0,
+        "gelernt": s is not None and not s.rate_geschaetzt, "band": s.band if s is not None else lernen.band(hz.st.daten.wetter.aussen),
+        "geschaetzt": groesse.rate_geschaetzt(e.get("groesse_m2")) if geschaetzt else None,
+        "rate": s.rate if s is not None and not s.rate_geschaetzt else None, "n": s.rate_n if s is not None else 0,
         "n_noetig": lernen.AUF_N, "vor": warm.vor_min, "nach": warm.nach_min, "max": warm.max_min,
         "vor_eigen": e.get("warm_vor") is not None, "nach_eigen": e.get("warm_nach") is not None,
-        "aufheiz_min": warm.aufheiz_min, "innen": hz.st.temperatur(info.fuehler), "soll": hz.soll_temperatur(bid),
-        "fest": bool(hz.st.lz.get("warm_start", {}).get(bid)), "anzahl": anzahl,
-        "plan": None if plan is None else {"start": plan.vor, "ziel": plan.a - warm.vor_min, "a": plan.a, "b": plan.b,
-                                           "ende": plan.nach, "begrenzt": warm.aufheiz_min is not None and warm.vor_min + warm.aufheiz_min > max(warm.max_min, warm.vor_min)},
+        # Aufheizdauer der Prognose; nach dem Start die festgehaltene Zeit Ziel − Beginn des Plans
+        "aufheiz_min": s.aufheiz_min if s is not None and not s.laeuft else warm.aufheiz_min,
+        "innen": hz.st.temperatur(info.fuehler), "soll": hz.soll_temperatur(bid),
+        "fest": bool(hz.st.lz.get("warm_start", {}).get(bid)), "anzahl": s.anzahl if s is not None else 1,
+        "plan": None if plan is None else {"tag": tag.isoformat(), "start": plan.vor, "ziel": plan.a - warm.vor_min, "a": plan.a,
+                                           "b": plan.b, "ende": plan.nach, "begrenzt": s.begrenzt if s is not None else False},
     }

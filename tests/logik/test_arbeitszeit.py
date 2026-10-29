@@ -318,7 +318,7 @@ def test_warm_ab_ersetzt_vorheizen_fruehstart_und_nachheizen():
 
 def test_warm_ab_obergrenze_und_rueckfall():
     p = tagesplan(MI, LISTE, [], REGELN, WetterTag(), trocknen=False, warm=WarmAb(vor_min=15, max_min=120, aufheiz_min=300))
-    assert p.vor == t(7) - 120                       # nie früher als „frühestens“
+    assert p.vor == t(7) - 15 - 120                  # nie früher als „frühestens“ – vom Ziel 06:45 (FE-0031/32)
     p = tagesplan(MI, LISTE, [], REGELN, WetterTag(), trocknen=False, warm=WarmAb(vor_min=30, max_min=20, aufheiz_min=0))
     assert p.vor == t(7) - 30                        # Grenze kleiner als „Soll erreicht vor“: dieses gilt
     # noch nicht gelernt: alte Regeln (Vorheizen 45, Kälte-Frühstart, Nachheizen)

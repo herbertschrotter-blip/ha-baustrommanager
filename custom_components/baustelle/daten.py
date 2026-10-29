@@ -181,6 +181,7 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
             "tuer": tuer,
             "modus": heizung.modus(bid) if info.art == ART_CONTAINER else None,
             "lernen": heizung.lern_anzeige(bid) if info.art == ART_CONTAINER else None,   # lernende Regelung (0.8)
+            "start": heizung.start_anzeige(bid) if info.art == ART_CONTAINER else None,   # Start-Logik (start.html B)
             "takt": heizung.takt_anzeige(bid) if info.art == ART_CONTAINER else None,   # Takt der lernenden Regelung (takt.html)
             "eingestellt": heizung.eingestellt_anzeige(bid) if info.art == ART_CONTAINER and heizung.aktiv() else None,   # eingestellt.html C
             "stufen": heizung.stufen_anzeige(bid) if info.art == ART_CONTAINER else None,   # Zusatz-Heizkörper (AN-0006)

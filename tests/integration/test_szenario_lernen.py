@@ -125,11 +125,13 @@ async def ws(hass: HomeAssistant, hass_ws_client):
 
 
 def _gelernt(rate: float, *, kalt: float | None = None, n2: float | None = None, n: int = 3) -> dict:
-    """Lernstand mit gelernter Aufheizrate (°C/h) – ein Heizkörper, optional kalt und zwei Heizkörper."""
+    """Lernstand mit gelernter Aufheizrate (°C/h) – ein Heizkörper, optional kalt und zwei Heizkörper. Auskühlzeit τ sehr
+    groß (FE-0031/32): der Container kühlt bis zum Start nicht merklich aus – die Szenarien prüfen die Mechanik von
+    „Warm ab“ mit glatten Zahlen; das Auskühlen prüfen die Szenarien unter D2."""
     auf = {"mild|1": [rate, n], "kalt|1": [kalt if kalt is not None else rate, n]}
     if n2 is not None:
         auf.update({"mild|2": [n2, n], "kalt|2": [n2, n]})
-    return {"aufheizen": auf}
+    return {"aufheizen": auf, "tau": [1e9, 9]}
 
 
 # ====================================================================== A. Modus und lernende Regelung
@@ -310,7 +312,7 @@ async def test_lern_reset_vergisst_auch_warm_ab(hass: HomeAssistant, freezer, sh
     hass.states.async_set("sensor.temp_c1", "16.0")
     st.einstellung_setzen(("automatik",), True)
     await _zu(hass, freezer, "2026-09-30 05:45:00+02:00", st)      # 80 min vor 07:00 = 05:40 → läuft, fest
-    assert st.lz["warm_start"][C1][1] == 80
+    assert st.lz["warm_start"][C1]["aufheiz_min"] == 80
     await ws(entry, "baustelle/aktion", aktion="lern_reset", bereich=C1)
     warm = _c(hass, entry)["lernen"]["warm"]
     assert warm["gelernt"] is False and warm["geschaetzt"] == 2.5 and warm["plan"]["start"] == 7 * 60 - 100   # AN-0014
@@ -327,7 +329,7 @@ async def test_warm_ab_ungelernt_alte_regeln_mit_fruehstart(hass: HomeAssistant,
     warm = _c(hass, entry)["lernen"]["warm"]
     assert warm["gelernt"] is False and warm["aufheiz_min"] is None and warm["n"] == 0 and warm["n_noetig"] == 3
     assert warm["geschaetzt"] is None
-    assert warm["plan"] == {"start": 375, "ziel": 420, "a": 420, "b": 990, "ende": 1005, "begrenzt": False}
+    assert warm["plan"] == {"tag": "2026-09-30", "start": 375, "ziel": 420, "a": 420, "b": 990, "ende": 1005, "begrenzt": False}
     ab = struktur(hass, entry)["laufzeit"]["abschnitte"][C1]["2026-09-30"]
     assert ab == [[345, 375, "fruehstart"], [375, 420, "vorheizen"], [420, 990, "arbeitszeit"], [990, 1005, "nachheizen"]]
 
@@ -337,6 +339,7 @@ async def test_warm_ab_ungelernt_geschaetzt_aus_der_groesse(hass: HomeAssistant,
     Doppel 28 m² ≈ 1,2 °C/h = 200 min), wie gelernt ohne Kälte-Frühstart; die Größe ist je Container einstellbar."""
     entry, st = await _einrichten(hass, freezer, shellys, "2026-09-30 04:00:00+02:00")
     st.lz["wetter_tage"] = {"2026-09-30": {"frueh": -4.0}}
+    st.lz["lernen"][C1] = {"tau": [1e9, 9]}   # nur das Aufheizen geschätzt; Auskühlen prüft D2
     st.einstellung_setzen(("heizung", "warm_max_min"), 240)
     hass.states.async_set("sensor.temp_c1", "16.0")
     st.einstellung_setzen(("automatik",), True)
@@ -352,7 +355,9 @@ async def test_warm_ab_ungelernt_geschaetzt_aus_der_groesse(hass: HomeAssistant,
     antwort = await ws(entry, "baustelle/setzen", pfad=["bereiche", C1, "groesse_m2"], wert=2)
     assert antwort["success"] is False
     await _zu(hass, freezer, "2026-09-30 04:01:00+02:00", st)
-    assert st.lz["warm_start"][C1] == ["2026-09-30", 200, False, True]   # fest, mit Merker „geschätzt“
+    f = st.lz["warm_start"][C1]   # fest, mit Merker „geschätzt“ und den Werten beim Start (FE-0031/32)
+    # Beginn 03:40 lag schon zurück, als die Größe auf 28 m² ging: festgehalten wird 04:00 (da begann das Heizen)
+    assert (f["tag"], f["aufheiz_min"], f["zusatz"], f["geschaetzt"], f["beginn"], f["innen_start"]) == ("2026-09-30", 200, False, True, 240, 16.0)
 
 
 async def test_warm_ab_gelernt_kein_fruehstart(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
@@ -387,7 +392,8 @@ async def test_warm_ab_beginn_fest_ueber_sprung_und_neustart(hass: HomeAssistant
     hass.states.async_set("sensor.temp_c1", "16.0")
     st.einstellung_setzen(("automatik",), True)
     await _zu(hass, freezer, "2026-09-30 05:41:00+02:00", st)
-    assert _an(hass, "switch.hk1") and st.lz["warm_start"][C1] == ["2026-09-30", 80, False, False]
+    f = st.lz["warm_start"][C1]
+    assert _an(hass, "switch.hk1") and (f["tag"], f["aufheiz_min"], f["zusatz"], f["geschaetzt"], f["beginn"]) == ("2026-09-30", 80, False, False, 340)
     hass.states.async_set("sensor.temp_c1", "18.5")            # ohne Festhalten: 30 min → Beginn erst 06:30
     await _zu(hass, freezer, "2026-09-30 05:50:00+02:00", st)
     assert _an(hass, "switch.hk1") and _c(hass, entry)["lernen"]["warm"]["plan"]["start"] == 340
@@ -469,11 +475,13 @@ async def test_warm_ab_wechsel_mild_kalt_am_morgen(hass: HomeAssistant, freezer,
     assert warm["band"] == "kalt" and warm["rate"] == 2.0 and warm["aufheiz_min"] == 120 and warm["plan"]["start"] == 300
     assert not _an(hass, "switch.hk1")
     await _zu(hass, freezer, "2026-09-30 05:01:00+02:00", st)
-    assert _an(hass, "switch.hk1") and st.lz["warm_start"][C1] == ["2026-09-30", 120, False, False]
+    f = st.lz["warm_start"][C1]
+    assert _an(hass, "switch.hk1") and (f["tag"], f["aufheiz_min"], f["zusatz"], f["band"]) == ("2026-09-30", 120, False, "kalt")
     hass.states.async_set("sensor.aussen", "8.0")
     await _zu(hass, freezer, "2026-09-30 05:10:00+02:00", st)
     warm = _c(hass, entry)["lernen"]["warm"]
-    assert warm["band"] == "mild" and warm["aufheiz_min"] == 120 and warm["plan"]["start"] == 300
+    # FE-0031/32: Band und Rate vom Start bleiben festgehalten (der Dialog zeigt, womit gerechnet wurde)
+    assert warm["band"] == "kalt" and warm["aufheiz_min"] == 120 and warm["plan"]["start"] == 300
     assert _an(hass, "switch.hk1")
 
 
@@ -535,7 +543,8 @@ async def test_warm_ab_zusatz_einer_reicht(hass: HomeAssistant, freezer, shellys
     await _zu(hass, freezer, "2026-09-30 05:41:00+02:00", st)
     assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")
     s = _c(hass, entry)["stufen"]
-    assert s["zusatz_an"] is False and st.lz["warm_start"][C1] == ["2026-09-30", 80, False, False]
+    f = st.lz["warm_start"][C1]
+    assert s["zusatz_an"] is False and (f["aufheiz_min"], f["zusatz"], f["anzahl"]) == (80, False, 1)
 
 
 async def test_warm_ab_zusatz_reicht_nicht(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
@@ -549,7 +558,8 @@ async def test_warm_ab_zusatz_reicht_nicht(hass: HomeAssistant, freezer, shellys
     await _zu(hass, freezer, "2026-09-30 06:01:00+02:00", st)
     assert _an(hass, "switch.hk1") and _an(hass, "switch.hk2")
     s = _c(hass, entry)["stufen"]
-    assert s["zusatz_an"] is True and s["grund"] == "gelernt" and st.lz["warm_start"][C1] == ["2026-09-30", 60, True, False]
+    f = st.lz["warm_start"][C1]
+    assert s["zusatz_an"] is True and s["grund"] == "gelernt" and (f["aufheiz_min"], f["zusatz"], f["anzahl"]) == (60, True, 2)
     assert any("Zusatz-Heizkörper dazu" in t for t in _texte(st, "schalten"))
     # Arbeitszeit, fast warm: Zusatz wieder aus, der Haupt regelt allein
     hass.states.async_set("sensor.temp_c1", "19.7")
@@ -559,6 +569,250 @@ async def test_warm_ab_zusatz_reicht_nicht(hass: HomeAssistant, freezer, shellys
     hass.states.async_set("sensor.temp_c1", "18.0")
     await _zu(hass, freezer, "2026-09-30 07:06:00+02:00", st)
     assert _an(hass, "switch.hk2") and _c(hass, entry)["stufen"]["grund"] == "weit_unter"
+
+
+# ====================================================================== D2. Start-Logik (FE-0031/FE-0032, start.html B)
+MILD = [8, 7.5, 7, 6.4, 5.8, 5.2, 4.7, 4.3, 4.1, 4.0, 4.2]    # außen je Stunde ab 21:00 (Mockup)
+KALT = [-4, -5, -6, -7, -8, -8.7, -9.3, -9.8, -10, -10, -9.6]
+
+
+def _stunden(werte: list[float], ab: str = "2026-09-29 21:00:00+02:00") -> dict[str, float]:
+    t0 = dt_util.as_local(dt_util.parse_datetime(ab))
+    return {(t0 + timedelta(hours=i)).isoformat(): float(v) for i, v in enumerate(werte)}
+
+
+async def _start_abends(hass, freezer, shellys, *, innen: str = "18.3", aussen: str = "8.0", stunden=None, rate: float = 2.6,
+                        tau: float = 15.0):
+    """Wie FE-0031: Dienstag 20:47, lernend, Soll 21,9 °C, warm 30 min vor 07:00, frühestens 5 h vor dem Ziel."""
+    entry, st = await _einrichten(hass, freezer, shellys, "2026-09-29 20:47:00+02:00")
+    st.e["heizung"].update(fruehstart=False, warm_vor_min=30, warm_max_min=300)
+    st.einstellungen.bereich(C1)["soll"] = 21.9
+    st.lz["lernen"][C1] = {"aufheizen": {"mild|1": [rate, 14], "kalt|1": [rate, 14]}, "tau": [tau, 9]}
+    st.lz["wetter_stunden"] = _stunden(MILD) if stunden is None else stunden
+    hass.states.async_set("sensor.temp_c1", innen)
+    hass.states.async_set("sensor.aussen", aussen)
+    st.einstellung_setzen(("automatik",), True)
+    await _zu(hass, freezer, "2026-09-29 20:47:00+02:00", st)
+    return entry, st
+
+
+async def test_start_abends_text_chip_und_dialog_gleich(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """FE-0031/32: abends nach Planende zeigen Jetzt-Text, Start (Plan-Chip, Dialog) und der Plan der Regelung denselben
+    Tag und dieselbe Uhrzeit – morgen 03:25, mit Auskühlen über Nacht (18,3 → 14,0 °C, außen 8 → 4 °C; 7,9 °C ÷
+    2,6 °C/h = 185 min → warm 06:30 = Ziel 07:00 − 30 min)."""
+    entry, st = await _start_abends(hass, freezer, shellys)
+    c = _c(hass, entry)
+    s = c["start"]
+    assert (s["tag"], s["beginn"], s["warm"], s["ziel"], s["innen_start"], s["aufheiz_min"]) == ("morgen", "03:25", "06:30", "06:30", 14.0, 185)
+    assert c["text"] == f"aus bis morgen {s['beginn']}"
+    assert s["aus_bis"] == {"lang": c["text"], "kurz": f"morgen {s['beginn']}"}   # Jetzt-Chip ohne Wortlaut-Kopplung
+    beginn = int(s["beginn"][:2]) * 60 + int(s["beginn"][3:])
+    plan = st.funktion("heizung").plan_bereich(datetime(2026, 9, 30).date(), C1)
+    assert plan.vor == plan.start == beginn == s["min"]["beginn"] - 1440
+    warm = c["lernen"]["warm"]
+    assert warm["plan"]["tag"] == "2026-09-30" and warm["plan"]["start"] == beginn          # nicht der Plan von heute
+    assert s["satz"].startswith(f"Startet morgen um {s['beginn']}: Bis dahin kühlt es auf etwa ")
+    assert [x["k"] for x in s["schritte"]] == ["kuehl", "ziel", "auf", "grenze"] and s["kurve"][0][2] == "gemessen"
+
+
+async def test_start_frueher_regen_und_noch_frueher_gleich_in_text_chip_und_plan(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Nachbesserung FE-0031: „Kleidung trocknen nach Regen“ (+15 min) und „Noch früher“ (+20 min) verschieben den Plan
+    – Start-Logik, „aus bis …“ und Plan-Chip zeigen dieselbe frühere Uhrzeit; die Regelung schaltet dann ein."""
+    entry, st = await _start_abends(hass, freezer, shellys, tau=1e9)   # ohne Auskühlen: der Start bleibt über Nacht stehen
+    ohne = _c(hass, entry)["start"]["min"]["beginn"]
+    st.einstellungen.bereich(C1)["trocknen"] = True
+    hass.states.async_set("sensor.regen", "6.0")                # heute 6 mm → morgen 15 min früher
+    st.lz["frueher"] = {"2026-09-30": 20}                       # Nachricht „Noch früher“
+    st.funktion("heizung").plan_neu()
+    await _zu(hass, freezer, "2026-09-29 20:48:00+02:00", st)
+    c = _c(hass, entry)
+    s = c["start"]
+    plan = st.funktion("heizung").plan_bereich(datetime(2026, 9, 30).date(), C1)
+    assert s["frueher_min"] == 35 and s["min"]["beginn"] == ohne - 35 == 1440 + plan.start and plan.vor == plan.start + 35
+    assert c["text"] == f"aus bis morgen {s['beginn']}" and c["lernen"]["warm"]["plan"]["start"] == plan.vor
+    assert s["schritte"][-1]["k"] == "frueher" and "Noch früher +20 min" in s["schritte"][-1]["rechnung"]
+    assert f"darum schon um {s['beginn']}" in s["satz"]
+    um = lambda m: f"2026-09-30 {m // 60:02d}:{m % 60:02d}:00+02:00"   # noqa: E731
+    await _zu(hass, freezer, um(plan.start - 10), st)
+    c = _c(hass, entry)
+    beginn = c["start"]["min"]["beginn"]
+    assert c["text"] == f"aus bis {c['start']['beginn']}" and beginn == st.funktion("heizung").plan_bereich(datetime(2026, 9, 30).date(), C1).start
+    await _zu(hass, freezer, um(beginn - 1), st)
+    assert not _an(hass, "switch.hk1")
+    await _zu(hass, freezer, um(beginn), st)
+    assert _an(hass, "switch.hk1") and st.lz["warm_start"][C1]["beginn"] == beginn
+
+
+async def test_start_rechnet_je_minute_einmal(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Code-Review FE-0031: Plan, Text, Woche und Anzeige fragen den Start vielfach – in derselben Minute ohne neue Werte
+    wird nicht neu gerechnet (auch nicht bei einer neuen Auswertung); ein neuer Fühlerwert rechnet neu."""
+    entry, st = await _start_abends(hass, freezer, shellys)
+    hz = st.funktion("heizung")
+    vorher = hz.start_gerechnet
+    for _ in range(3):
+        _c(hass, entry)
+        hz.plan_bereich(datetime(2026, 9, 30).date(), C1)
+    st.auswerten()
+    await hass.async_block_till_done()
+    assert hz.start_gerechnet == vorher
+    # 2. Review, Befund 7: viele Auswertungen in derselben Minute mit wechselnder Leistung – die Eingabe wird nicht neu
+    # gebaut (schneller Schlüssel trifft), gerechnet wird nicht
+    eingaben = hz.start_eingaben
+    for w in ("10", "1500", "1800", "0"):
+        hass.states.async_set("sensor.hk1_power", w)
+        await hass.async_block_till_done()
+        st.auswerten()
+        await hass.async_block_till_done()
+        _c(hass, entry)
+    assert hz.start_eingaben == eingaben and hz.start_gerechnet == vorher
+    hass.states.async_set("sensor.temp_c1", "18.2")
+    await hass.async_block_till_done()
+    _c(hass, entry)
+    assert hz.start_gerechnet == vorher + 1
+
+
+async def test_start_nach_reset_tagsueber_morgen_nicht_spaet(hass: HomeAssistant, freezer, shellys, nachrichten, ws) -> None:
+    """2. Review, Befund 1: „Lernstand zurücksetzen“ um 10:00 (der festgehaltene Start ist weg, das Ziel vorbei) – kein
+    „Startet jetzt (fällig …), 210 min nach dem Ziel“, sondern der nächste Start morgen."""
+    entry, st = await _einrichten(hass, freezer, shellys, "2026-09-30 05:00:00+02:00")
+    st.e["heizung"]["fruehstart"] = False
+    st.lz["lernen"][C1] = _gelernt(3.0)
+    hass.states.async_set("sensor.temp_c1", "16.0")
+    st.einstellung_setzen(("automatik",), True)
+    await _zu(hass, freezer, "2026-09-30 05:45:00+02:00", st)
+    assert st.lz["warm_start"][C1]["tag"] == "2026-09-30"
+    hass.states.async_set("sensor.temp_c1", "20.5")
+    await _zu(hass, freezer, "2026-09-30 10:00:00+02:00", st)
+    assert _c(hass, entry)["start"]["tag"] == "heute"                     # heute gestartet: der Start von heute
+    await ws(entry, "baustelle/aktion", aktion="lern_reset", bereich=C1)
+    await _zu(hass, freezer, "2026-09-30 10:01:00+02:00", st)
+    s = _c(hass, entry)["start"]
+    assert s["tag"] == "morgen" and s["spaet"] is False and not s["satz"].startswith("Startet jetzt")
+    assert C1 not in st.lz.get("start_verlauf", {}) or len(st.lz["start_verlauf"][C1]) <= 1   # lern_reset leert den Verlauf
+
+
+async def test_start_verlauf_nur_fuer_lernende_container(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """2. Review, Befund 8: der gemessene Verlauf bleibt nicht im Store, wenn der Container nicht mehr lernt oder entfernt
+    ist."""
+    entry, st = await _start_abends(hass, freezer, shellys)
+    assert st.lz["start_verlauf"][C1]
+    st.lz["start_verlauf"]["gibt_es_nicht"] = [["2026-09-29T20:00+02:00", 18.0, 8.0]]
+    st.einstellung_setzen(("bereiche", C1, "lernen"), False)
+    await _zu(hass, freezer, "2026-09-29 20:50:00+02:00", st)
+    assert st.lz["start_verlauf"] == {}
+
+
+async def test_start_festhalten_mit_der_zeit_der_auswertung(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """2. Review, Befund 4: Festhalten rechnet mit `jetzt` der Auswertung, nicht mit der Uhr beim Aufruf."""
+    entry, st = await _einrichten(hass, freezer, shellys, "2026-09-30 05:00:00+02:00")
+    st.e["heizung"]["fruehstart"] = False
+    st.lz["lernen"][C1] = _gelernt(3.0)
+    hass.states.async_set("sensor.temp_c1", "16.0")
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    hz = st.funktion("heizung")
+    jetzt = dt_util.parse_datetime("2026-09-30 05:41:00+02:00")
+    warm = hz.warm_ab(C1, jetzt.date(), jetzt)
+    plan = hz.plan(jetzt.date(), False, warm)
+    freezer.move_to("2026-09-30 05:58:00+02:00")                         # die Uhr läuft weiter
+    hz._warm_festhalten(C1, warm, plan, jetzt)   # noqa: SLF001
+    f = st.lz["warm_start"][C1]
+    assert f["beginn"] == 340 and f["auf_beginn"] == 340 and hz._start_cache[C1][0][1] == jetzt   # noqa: SLF001
+
+
+async def test_start_alte_form_warm_start_wird_umgewandelt(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Code-Review FE-0031: nach dem Update steht der heutige Beginn noch in der alten Form (Liste ohne Beginn) – er wird
+    mit dem Plan-Beginn ersetzt, der Dialog zeigt „Heizt seit 05:40“ statt „Startet jetzt (fällig …)“."""
+    entry, st = await _einrichten(hass, freezer, shellys, "2026-09-30 05:50:00+02:00")
+    st.e["heizung"]["fruehstart"] = False
+    st.lz["lernen"][C1] = _gelernt(3.0)
+    st.lz["warm_start"][C1] = ["2026-09-30", 80, False, False]
+    hass.states.async_set("sensor.temp_c1", "17.0")
+    st.einstellung_setzen(("automatik",), True)
+    await _zu(hass, freezer, "2026-09-30 05:51:00+02:00", st)
+    f = st.lz["warm_start"][C1]
+    s = _c(hass, entry)["start"]
+    assert isinstance(f, dict) and f["beginn"] == 340 and f["aufheiz_min"] == 80
+    assert s["laeuft"] is True and s["beginn"] == "05:40" and s["satz"].startswith("Heizt seit 05:40")
+    assert _an(hass, "switch.hk1")
+
+
+async def test_start_merker_von_heute_nicht_vom_naechsten_start(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Code-Review FE-0031: abends liegt der nächste Start morgen (dort zwei Heizkörper, Zusatz gelernt) – die Merker der
+    Regelung von heute bleiben aus, egal in welcher Reihenfolge Plan von heute und morgen gefragt werden."""
+    entry, st = await _einrichten(hass, freezer, shellys, "2026-09-29 20:00:00+02:00", hk2_bereich=C1)
+    st.e["heizung"]["fruehstart"] = False
+    st.einstellung_setzen(("bereiche", C1, "stufen"), True)
+    st.lz["lernen"][C1] = _gelernt(1.5, n2=4.0)   # einer zu langsam: morgen beide
+    hass.states.async_set("sensor.temp_c1", "12.0")
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    hz = st.funktion("heizung")
+    assert _c(hass, entry)["start"]["anzahl"] == 2
+    morgen, heute = datetime(2026, 9, 30).date(), datetime(2026, 9, 29).date()
+    jetzt = dt_util.now()
+    hz.warm_ab(C1, morgen, jetzt)
+    hz.warm_ab(C1, heute, jetzt)
+    assert hz._zusatz_gelernt[C1] is False   # noqa: SLF001
+    hz.warm_ab(C1, heute, jetzt)
+    hz.warm_ab(C1, morgen, jetzt)
+    assert hz._zusatz_gelernt[C1] is False   # noqa: SLF001
+
+
+async def test_start_kaeltere_vorhersage_frueher(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    entry, st = await _start_abends(hass, freezer, shellys)
+    mild = _c(hass, entry)["start"]["min"]["beginn"]
+    st.lz["wetter_stunden"] = _stunden(KALT)                     # neue Vorhersage: kälter
+    await _zu(hass, freezer, "2026-09-29 20:48:00+02:00", st)
+    c = _c(hass, entry)
+    assert c["start"]["min"]["beginn"] < mild and c["text"] == f"aus bis morgen {c['start']['beginn']}"
+
+
+async def test_start_grenze_zaehlt_vom_ziel(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Sehr kalt und langsam: frühestens 06:30 − 5 h = 01:30 (bis 0.8.156: 07:00 − 5 h = 02:00); der Plan beginnt dort."""
+    entry, st = await _start_abends(hass, freezer, shellys, innen="12.0", aussen="-3.0", stunden=_stunden(KALT), rate=1.5)
+    s = _c(hass, entry)["start"]
+    assert s["begrenzt"] is True and s["grenze"] == "01:30" and s["beginn"] == "01:30" and s["beginn_ohne"] is not None
+    assert st.funktion("heizung").plan_bereich(datetime(2026, 9, 30).date(), C1).vor == 90
+    assert _c(hass, entry)["text"] == "aus bis morgen 01:30"
+
+
+async def test_start_regelung_startet_zur_gerechneten_zeit(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Uhr läuft über Nacht, der Fühler kühlt wie vorhergesagt: die Regelung schaltet genau zu der Minute ein, die
+    „aus bis …“ und `start.beginn` eine Minute vorher nannten; danach rechnet der Start ab der Messung weiter (läuft)."""
+    entry, st = await _start_abends(hass, freezer, shellys)
+    vorher = _c(hass, entry)["start"]
+    prognose = [(m, c) for m, c, _ in vorher["kurve"] if m <= vorher["min"]["beginn"]]
+    uhr = Uhr(hass, freezer, st, "2026-09-29 20:47:00+02:00")
+
+    def innen_bei(m: int) -> float:
+        for (m0, c0), (m1, c1) in zip(prognose, prognose[1:]):
+            if m0 <= m <= m1:
+                return round(c0 + (c1 - c0) * (m - m0) / (m1 - m0), 1)
+        return prognose[-1][1]
+
+    def minute() -> int:
+        return (uhr.t.date() - datetime(2026, 9, 29).date()).days * 1440 + uhr.t.hour * 60 + uhr.t.minute
+
+    while minute() < vorher["min"]["beginn"] - 30:      # halbstündlich bis kurz vor dem Start
+        await uhr.minute(innen_bei(minute() + 30), 30)
+        hass.states.async_set("sensor.aussen", str(MILD[max(0, min(len(MILD) - 1, (minute() - 1260) // 60))]))
+    an_um = text_davor = start_davor = None
+    for _ in range(90):
+        c = _c(hass, entry)
+        if _an(hass, "switch.hk1"):
+            an_um = minute()
+            break
+        text_davor, start_davor = c["text"], c["start"]
+        await uhr.minute(innen_bei(minute() + 1))
+    assert an_um is not None and start_davor is not None
+    assert an_um - 1440 == start_davor["min"]["beginn"] == int(start_davor["beginn"][:2]) * 60 + int(start_davor["beginn"][3:])
+    assert text_davor == f"aus bis {start_davor['beginn']}" and start_davor["tag"] == "heute"
+    assert abs(an_um - vorher["min"]["beginn"]) <= 15                      # die Prognose vom Abend hält
+    c = _c(hass, entry)
+    f = st.lz["warm_start"][C1]
+    assert c["start"]["laeuft"] is True and f["beginn"] == an_um - 1440 and f["innen_start"] is not None
+    assert c["start"]["schritte"][0]["marke"] == "gemessen" and c["start"]["satz"].startswith(f"Heizt seit {start_davor['beginn']}")
 
 
 # ====================================================================== D. Aufheizen lernen, Tür offen
@@ -794,8 +1048,8 @@ async def test_plan_ueber_mitternacht_endet_um_24_uhr(hass: HomeAssistant, freez
     hass.states.async_set("sensor.temp_c1", "18.0")
     st.einstellung_setzen(("automatik",), True)
     await hass.async_block_till_done()
-    warm = _c(hass, entry)["lernen"]["warm"]
-    assert warm["plan"]["b"] == 1430 and warm["plan"]["ende"] == 1440
+    # „warm“ zeigt den Plan des nächsten Starts (morgen, heute nicht gestartet); der Plan von heute steht in abschnitte
+    assert _c(hass, entry)["lernen"]["warm"]["plan"]["tag"] == "2026-10-01"
     ab = struktur(hass, entry)["laufzeit"]["abschnitte"][C1]["2026-09-30"]
     assert ab[-1] == [1430, 1440, "nachheizen"]
     await _zu(hass, freezer, "2026-09-30 23:55:00+02:00", st)
@@ -817,7 +1071,7 @@ async def test_plan_wochenwechsel(hass: HomeAssistant, freezer, shellys, nachric
     lz = struktur(hass, entry)["laufzeit"]
     assert [t["datum"] for t in lz["plan_woche"]][0] == "2026-09-28" and lz["plan_woche"][-1]["datum"] == "2026-10-04"
     assert lz["plan_woche"][-1]["plan"] is None                           # Sonntag frei
-    assert st.daten.text[C1] == "aus bis 05:40"
+    assert st.daten.text[C1] == "aus bis morgen 05:40"                   # FE-0031/32: mit „morgen“
     await _zu(hass, freezer, "2026-10-05 00:01:00+02:00", st)
     lz = struktur(hass, entry)["laufzeit"]
     assert [t["datum"] for t in lz["plan_woche"]] == [f"2026-10-{d:02d}" for d in range(5, 12)]
@@ -825,7 +1079,8 @@ async def test_plan_wochenwechsel(hass: HomeAssistant, freezer, shellys, nachric
     assert lz["abschnitte"][C1]["2026-10-05"][0] == [340, 420, "vorheizen"]
     assert lz["container"][C1]["lernen"]["warm"]["aufheiz_min"] == 80     # nicht 200 vom Freitag
     await _zu(hass, freezer, "2026-10-05 05:41:00+02:00", st)
-    assert _an(hass, "switch.hk1") and st.lz["warm_start"][C1] == ["2026-10-05", 80, False, False]
+    f = st.lz["warm_start"][C1]
+    assert _an(hass, "switch.hk1") and (f["tag"], f["aufheiz_min"], f["beginn"]) == ("2026-10-05", 80, 340)
 
 
 async def test_ausnahme_heute_laenger_mit_warm_nach(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
@@ -840,7 +1095,7 @@ async def test_ausnahme_heute_laenger_mit_warm_nach(hass: HomeAssistant, freezer
     await hass.async_block_till_done()
     lz = struktur(hass, entry)["laufzeit"]
     warm = lz["container"][C1]["lernen"]["warm"]
-    assert warm["plan"]["b"] == 1140 and warm["plan"]["ende"] == 1170 and warm["nach"] == 30
+    assert warm["plan"]["tag"] == "2026-10-01" and warm["nach"] == 30   # 12:00 nach dem Ziel, heute nicht gestartet: morgen
     mittwoch = next(t for t in lz["plan_woche"] if t["datum"] == "2026-09-30")
     assert mittwoch["plan"]["b"] == 1140 and mittwoch["plan"]["nach"] == 1155 and mittwoch["plan"]["ausnahme"]["art"] == "zeiten"
     assert lz["abschnitte"][C1]["2026-09-30"][-1] == [1140, 1170, "nachheizen"]
@@ -849,7 +1104,9 @@ async def test_ausnahme_heute_laenger_mit_warm_nach(hass: HomeAssistant, freezer
     st.einstellung_setzen(("bereiche", C1, "warm_nach"), 10)
     await hass.async_block_till_done()
     warm = _c(hass, entry)["lernen"]["warm"]
-    assert warm["nach"] == 10 and warm["nach_eigen"] is True and warm["plan"]["ende"] == 1150
+    # heute endet der Plan um 19:10 (vorbei) – „warm“ zeigt seit FE-0031/32 den Plan des nächsten Starts (morgen)
+    assert warm["nach"] == 10 and warm["nach_eigen"] is True and warm["plan"]["tag"] == "2026-10-01" and warm["plan"]["ende"] == 1000
+    assert struktur(hass, entry)["laufzeit"]["abschnitte"][C1]["2026-09-30"][-1] == [1140, 1150, "nachheizen"]
     assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "ausserhalb"
 
 

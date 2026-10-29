@@ -21,8 +21,8 @@ Entscheidungen, wo der Bauplan offen ist (im Sinne des Mockups):
 - Der Abschnitt vor dem Vorheizen heißt immer „fruehstart“, auch wenn er (teils) vom Regen am Vortag kommt – das Mockup
   zeichnet beides als einen Abschnitt „Frühstart“.
 - Lernende Container mit gelernter Aufheizzeit (`WarmAb`, AN-0004): Vorheizen = „Soll erreicht vor Beginn“ + Aufheizzeit,
-  höchstens `max_min`; kein Kälte-Frühstart; Nachheizen = „warm halten“. Früher nach Regen und Kleidung trocknen
-  kommen wie bisher dazu (Herbert 01.10.2026).
+  die Aufheizzeit höchstens `max_min` (Grenze vom Ziel, FE-0031/FE-0032); kein Kälte-Frühstart; Nachheizen = „warm
+  halten“. Früher nach Regen und Kleidung trocknen kommen wie bisher dazu (Herbert 01.10.2026).
 """
 
 from __future__ import annotations
@@ -135,14 +135,19 @@ class WarmAb:
     """„Warm ab“ eines lernenden Containers (AN-0004, Optimum Start).
 
     Soll erreicht `vor_min` vor Arbeitsbeginn, warm halten bis `nach_min` nach Arbeitsende, nie früher als `max_min`
-    vor Arbeitsbeginn beginnen. `aufheiz_min`: gelernte Minuten bis zum Soll (`lernen.aufheiz_min`); None = noch nicht
-    gelernt – dann gelten Vorheizen, Kälte-Frühstart und Nachheizen wie bisher.
+    vor dem Ziel „warm um“ (Arbeitsbeginn − `vor_min`) beginnen – Herbert 29.10.2026 (FE-0031/FE-0032, Mockup start.html;
+    bis 0.8.156 vor Arbeitsbeginn). `aufheiz_min`: Minuten vom Beginn bis zum Ziel (die Start-Logik `logik/start.py`
+    liefert Ziel − Start); None = noch nicht gelernt – dann gelten Vorheizen, Kälte-Frühstart und Nachheizen wie bisher.
     """
 
     vor_min: int = 0
     nach_min: int = 0
     max_min: int = 120
     aufheiz_min: int | None = None
+
+    def fruehestens(self, a: int) -> int:
+        """Grenze „Frühestens“: `max_min` vor dem Ziel (Arbeitsbeginn `a` − `vor_min`) – die Regel steht nur hier."""
+        return a - self.vor_min - self.max_min
 
 
 @dataclass(frozen=True)
@@ -169,6 +174,8 @@ class Plan:
     # FE-0012: weitere Zeitfenster des Tages, die nicht an die Arbeitszeit grenzen – heizen genau `(von, bis)`
     eigene: tuple[tuple[int, int], ...] = ()
     ausnahmen: tuple[Ausnahme, ...] = ()
+    # FE-0031/32: warum `start` vor `vor` liegt – (Grund, Minuten): „fruehstart“, „frueher_nach_regen“, „noch_frueher“
+    frueher: tuple[tuple[str, int], ...] = ()
 
     def abschnitte(self) -> list[tuple[int, int, Abschnitt]]:
         """Nicht leere Abschnitte `(von, bis, art)` in zeitlicher Folge (Mockup `heizzeiten`)."""
@@ -366,17 +373,18 @@ def tagesplan(
     aufheiz = warm.aufheiz_min if warm is not None else None
     gelernt = aufheiz is not None
     if warm is not None and aufheiz is not None:
-        vor = a - min(warm.vor_min + aufheiz, max(warm.max_min, warm.vor_min))
+        vor = max(a - warm.vor_min - aufheiz, warm.fruehestens(a))
         gruende.append(PlanGrund.GELERNT)
     else:
         vor = a - regeln.vorheizen_min
-    extra = 0
+    frueher: list[tuple[str, int]] = []
     if not gelernt and regeln.fruehstart and wetter.frueh_min_temp is not None and wetter.frueh_min_temp < regeln.fruehstart_unter:
-        extra += regeln.fruehstart_min
+        frueher.append((PlanGrund.FRUEHSTART.value, regeln.fruehstart_min))
         gruende.append(PlanGrund.FRUEHSTART)
     if trocknen and wetter.regen_vortag_mm is not None and wetter.regen_vortag_mm >= regeln.trocknen_ab_mm:
-        extra += regeln.trocknen_frueher_min
+        frueher.append((PlanGrund.FRUEHER_NACH_REGEN.value, regeln.trocknen_frueher_min))
         gruende.append(PlanGrund.FRUEHER_NACH_REGEN)
+    extra = sum(m for _, m in frueher)
     laenger = 0
     if trocknen and wetter.regen_heute_mm is not None and wetter.regen_heute_mm >= regeln.trocknen_ab_mm:
         laenger = regeln.trocknen_laenger_min
@@ -393,6 +401,7 @@ def tagesplan(
         ausnahme=ausnahme,
         eigene=tuple(eigene),
         ausnahmen=alle,
+        frueher=tuple(frueher),
     )
 
 

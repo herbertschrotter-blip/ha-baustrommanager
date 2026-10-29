@@ -19,6 +19,16 @@ Dazu lernt jeder Container selbst:
   braucht – der Heizplan beginnt dann selbst so früh, dass das Soll rechtzeitig erreicht ist (`arbeitszeit.WarmAb`).
   Die Kälte steckt in der Rate, darum braucht ein lernender Container keinen Kälte-Frühstart.
 
+- **Auskühlzeit τ** (FE-0031/FE-0032, Start-Logik `logik/start.py`): wie schnell der Container ohne Heizen der
+  Außentemperatur entgegen auskühlt (dT/dt = −(innen − außen) ÷ τ). Gemessen in Zeiten ohne Heizen (alle Heizkörper aus,
+  Nachlauf vorbei, Tür zu, nicht von Hand, außerhalb `TAU_TAG` – keine Sonne), mindestens `TAU_MIN_H` Stunden, höchstens
+  `TAU_MAX_H` (dann beginnt gleich die nächste Messung), über die echte Zeit (eine Lücke über `TAU_LUECKE_MIN` beendet
+  die Messung): τ = Σ(innen − außen)·Δt ÷ (innen am Anfang − innen am Ende),
+  also (innen − außen) ÷ Abkühlung je Stunde über die ganze Messung. Plausibel nur mit mindestens `TAU_MIN_ABFALL` °C
+  Abkühlung, `TAU_AB_DIFF` °C Abstand zu außen und τ in `TAU_GRENZEN`; gleitend gemittelt wie das Aufheizen (`tau` =
+  [τ in h, Anzahl]). Bis `TAU_N` Messungen gilt der Startwert `TAU_START_H`. Weicht die Prognose ab, lernt er so von
+  selbst nach.
+
 **Tür offen** (WU-0009): Ein offener Türkontakt oder ein Raum, der beim Heizen in `OFFEN_FENSTER_MIN` Minuten um
 mindestens `OFFEN_ABFALL` °C (oder in `OFFEN_LANG_MIN` Minuten um `OFFEN_LANG_ABFALL` °C) kälter wird, obwohl es draußen
 kaum kälter wird („Tür vermutlich offen“, wie die Fenster-offen-Erkennung von Versatile Thermostat), verwirft die
@@ -75,6 +85,15 @@ OFFEN_LANG_ABFALL = 0.6        # … so viel °C kälter (langsamer Abfall bei t
 OFFEN_LANG_AUSSEN = 0.4        # … draußen höchstens so viel kälter
 OFFEN_RUHE_MIN = 10            # danach so lange nichts lernen
 VERMUTET_PAUSE_MIN = 10        # FE-0025: so lange pausiert die Heizung bei „Tür vermutlich offen“, dann neuer Versuch
+TAU_START_H = 12.0             # FE-0031/32: Auskühlzeit τ (h), solange nichts gemessen ist (vorsichtig: kühlt eher zu schnell)
+TAU_N = 2                      # ab so vielen Messungen gilt τ als gelernt
+TAU_GRENZEN = (2.0, 100.0)     # plausibles τ in Stunden – sonst wird die Messung verworfen
+TAU_MIN_H = 2.0                # eine Messung dauert mindestens so lange …
+TAU_MAX_H = 10.0               # … und höchstens so lange (dann gleich die nächste)
+TAU_MIN_ABFALL = 0.5           # … und der Raum kühlt mindestens so viel ab (Fühler in 0,1-°C-Schritten)
+TAU_AB_DIFF = 4.0              # … bei mindestens so viel Abstand innen − außen im Mittel
+TAU_TAG = (8, 16)              # von 8 bis 16 Uhr wird nicht gemessen (Sonne wärmt den Container)
+TAU_LUECKE_MIN = 10            # fehlen länger Werte (Neustart, Fühler weg), endet die Messung an der Lücke
 
 
 # ---------------------------------------------------------------------------------------------------------- Regeln
@@ -211,7 +230,7 @@ def neuer_stand() -> dict[str, Any]:
     """Lernstand eines Containers (JSON-fähig, im Store unter laufzeit.lernen.<container>)."""
     return {"kint": KINT_START, "kext": KEXT_START, "n_kint": 0, "n_kext": 0, "nachlauf": {}, "treffer": [], "zyklen": 0,
             "ein": [], "beob": None, "zyklus": None, "letzte": None, "aufheizen": {}, "auf": None,
-            "verlauf": [], "ruhe_bis": None, "offen": None}
+            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None}
 
 
 @overload
@@ -299,6 +318,10 @@ def takt(
         seit = (jetzt - _zeit(b["aus"])).total_seconds() / 60
         if innen <= b["spitze"] - SPITZE_VORBEI or seit >= BEOBACHTEN_MAX_MIN:
             s = _beob_ende(s, jetzt, abbruch=False)
+    # Auskühlzeit τ (FE-0031/32): ohne Heizen, Nachlauf vorbei, Tür zu, nachts
+    ruhig = (not heizt and not an and not ruhe and s["beob"] is None and innen is not None
+             and aussen is not None and not TAU_TAG[0] <= jetzt.hour < TAU_TAG[1])
+    s = _tau_takt(s, jetzt, innen, aussen, ruhig)
     # K außen: ruhiger Zyklus nahe am Soll (je ZYKLUS_MIN Minuten ein Mittelwert)
     z = s["zyklus"]
     if not regelt or ruhe or innen is None or abs(soll - innen) >= 1.0:
@@ -363,6 +386,51 @@ def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None) -> dict[str
     return s
 
 
+def _tau_takt(s: dict[str, Any], jetzt: datetime, innen: float | None, aussen: float | None, ruhig: bool) -> dict[str, Any]:
+    """Eine Minute Auskühlen messen: mit der echten Zeit seit dem letzten Wert integrieren (Σ(innen − außen)·Δt); bei
+    Störung, nach einer Lücke über `TAU_LUECKE_MIN` oder nach `TAU_MAX_H` abschließen (bis zum letzten Wert)."""
+    ab = s.get("ab")
+    if ab is not None and "letzte" not in ab:   # Messung aus einer Vorversion ohne Zeitstempel: neu beginnen
+        s, ab = {**s, "ab": None}, None
+    if ab is not None:
+        dt = (jetzt - _zeit(ab["letzte"])).total_seconds() / 60
+        stunden = (jetzt - _zeit(ab["start"])).total_seconds() / 3600
+        if not ruhig or dt > TAU_LUECKE_MIN or stunden >= TAU_MAX_H:
+            s = {**s, "ab": None, "tau": tau_mittel(s.get("tau"), tau_messung(ab))}
+            ab = None
+        else:
+            assert innen is not None and aussen is not None
+            mitte = (innen + ab["ende"]) / 2 - (aussen + ab.get("aussen", aussen)) / 2   # Trapez über Δt
+            return {**s, "ab": {**ab, "summe": round(ab["summe"] + mitte * dt, 3), "min": round(ab["min"] + dt, 2),
+                                "ende": innen, "aussen": aussen, "letzte": _iso(jetzt)}}
+    if ruhig:
+        assert innen is not None and aussen is not None
+        s = {**s, "ab": {"start": _iso(jetzt), "letzte": _iso(jetzt), "innen": innen, "aussen": aussen, "summe": 0.0, "min": 0.0,
+                         "ende": innen}}
+    return s
+
+
+def tau_messung(ab: Mapping[str, Any]) -> float | None:
+    """τ in Stunden aus einer Messung: Σ(innen − außen)·Δt (°C·min) ÷ 60 ÷ Abkühlung; None, wenn nicht plausibel
+    (kürzer als `TAU_MIN_H` gemessene Zeit, zu wenig Abkühlung oder Abstand nach außen, τ außerhalb `TAU_GRENZEN`)."""
+    minuten = float(ab.get("min") or 0)
+    abfall = float(ab["innen"]) - float(ab["ende"])
+    if minuten < TAU_MIN_H * 60 or abfall < TAU_MIN_ABFALL or float(ab["summe"]) / minuten < TAU_AB_DIFF:
+        return None
+    tau = float(ab["summe"]) / 60 / abfall
+    return tau if TAU_GRENZEN[0] <= tau <= TAU_GRENZEN[1] else None
+
+
+def tau_mittel(alt: list[float] | None, tau: float | None) -> list[float] | None:
+    """[τ, Anzahl]: erste Messungen gleich gewichtet, danach gleitend mit `GEWICHT` (wie das Aufheizen)."""
+    if tau is None:
+        return alt
+    if not alt:
+        return [round(tau, 2), 1]
+    n = int(alt[1]) + 1
+    return [round(float(alt[0]) + (tau - float(alt[0])) * max(GEWICHT, 1 / n), 2), n]
+
+
 def auf_schluessel(bd: str, anzahl: int) -> str:
     """Schlüssel der Aufheizrate: Außenband und Anzahl laufender Heizkörper („kalt|1“)."""
     return f"{bd}|{max(1, int(anzahl))}"
@@ -409,4 +477,7 @@ def anzeige(stand: Mapping[str, Any]) -> dict[str, Any]:
         "aufheizen": {k: {"rate": v[0], "n": v[1]} for k, v in s["aufheizen"].items()},
         "offen": s["offen"], "ruhe_bis": s["ruhe_bis"],
         "auf_n": AUF_N,
+        # FE-0031/32: Auskühlzeit τ (h) mit Anzahl Messungen; `gelernt` ab TAU_N, sonst gilt der Startwert
+        "tau": {"h": float(s["tau"][0]) if s["tau"] else None, "n": int(s["tau"][1]) if s["tau"] else 0,
+                "start": TAU_START_H, "n_noetig": TAU_N, "misst": s["ab"] is not None},
     }

@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.157] – 2026-10-29
+
+- FE-0031/FE-0032 – eine Start-Logik (Mockup `start.html` Variante B, abgenommen 29.10.2026): Abends widersprachen sich
+  „aus bis 5:15“ (morgen) und „heizt ab 2:10“ (der abgelaufene Plan von heute früh), und der Start für morgen war mit
+  der Innentemperatur von jetzt gerechnet, ohne dass der Container über Nacht auskühlt. Jetzt rechnet eine Stelle
+  (`logik/start.py`) den Start für Regelung, Jetzt-Text, Plan-Chip und Dialog: welcher Tag (heute bis Planende, sonst
+  der nächste), Ziel „warm um“, Auskühlen Stunde für Stunde mit der stündlichen Wettervorhersage und der gelernten
+  Auskühlzeit τ je Container, dann Aufheizen mit der gelernten Rate; „Noch früher“ und Regen sind eingerechnet. Kopf:
+  „⏸ aus bis morgen 03:30“ und „morgen ab 03:30 · warm 06:35“; im Lernstand „So rechnet der Start“ als Zeitstrahl
+  (gemessen bis jetzt, Prognose danach, Außentemperatur je Stunde). τ wird aus Zeiten ohne Heizen gelernt (bis dahin
+  12 h angenommen, „geschätzt“). Die Grenze „frühestens“ zählt jetzt vom Ziel „warm um“, nicht mehr vom Arbeitsbeginn.
+
 ## [0.8.156] – 2026-10-28
 
 - Container-Kopf „Eingestellt“ (Mockup `eingestellt.html` Variante C, abgenommen 28.10.2026): Unter dem Namen steht

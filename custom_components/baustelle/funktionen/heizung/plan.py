@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.const import STATE_ON
 
 from ...const import ROLLE_HEIZKOERPER
-from ...logik import bedarf as bedarf_logik, groesse, lernen
+from ...logik import bedarf as bedarf_logik, start as start_logik
 from ...logik.arbeitszeit import Plan, WarmAb, ausnahme_am, frei_gilt, bedarf_fenster, im_fenster, tagesplan
 from ...logik.regelung import FUEHLER_HALTEN_MIN, LageContainer, Soll, SollGrund, letzter_wert, soll_container
 from ...logik.regelung import zu_warm as regel_zu_warm
 from ..basis import ev_zeit, minuten_seit, zeit
 
-from . import baseline as h_baseline
+from . import baseline as h_baseline, start as h_start
 
 if TYPE_CHECKING:
     from . import Heizung
@@ -39,6 +39,8 @@ def aufraeumen(hz: Heizung, jetzt: datetime) -> bool:
         lz["jetzt_bis"] = None
         geaendert = True
         st.protokoll("schalten", None, "„Alle jetzt heizen“ beendet")
+    if h_start.verlauf_aufraeumen(hz):   # FE-0031/32: Verlauf nur für lernende Container
+        geaendert = True
     for gid in [g for g in lz["hand"] if g not in st.geraete]:
         del lz["hand"][gid]
         geaendert = True
@@ -96,7 +98,7 @@ def plan(hz: Heizung, tag: date, trocknen: bool, warm: WarmAb | None = None) -> 
     )
     extra = int(st.lz.get("frueher", {}).get(tag.isoformat()) or 0)
     if p is not None and extra:
-        p = replace(p, start=max(0, p.start - extra))
+        p = replace(p, start=max(0, p.start - extra), frueher=(*p.frueher, ("noch_frueher", extra)))
     hz._plan_cache[(tag, trocknen, warm)] = p
     return p
 
@@ -104,56 +106,49 @@ def plan(hz: Heizung, tag: date, trocknen: bool, warm: WarmAb | None = None) -> 
 def warm_ab(hz: Heizung, bid: str, tag: date, jetzt: datetime) -> WarmAb | None:
     """„Warm ab“ eines lernenden Containers im Modus Thermostat; None für alle anderen.
 
-    Die Aufheizzeit kommt aus dem Lernstand und der Temperatur von jetzt. Hat der Container heute schon nach dem
-    gelernten Beginn zu heizen begonnen, bleibt sie für den Tag fest – sonst rutschte der Beginn mit dem Aufheizen
-    wieder nach hinten.
+    Die Aufheizzeit kommt aus der Start-Logik (FE-0031/FE-0032, `logik/start.py`: Auskühlen bis zum Start mit der
+    Vorhersage, dann Aufheizen mit der gelernten Rate) als Ziel − Start – so beginnt der Plan genau zum gerechneten
+    Start, und „aus bis …“, Plan-Chip und Dialog zeigen dieselbe Uhrzeit. Hat der Container heute schon zu heizen
+    begonnen, bleibt sie für den Tag fest (Store `warm_start`) – sonst rutschte der Beginn mit dem Aufheizen wieder nach
+    hinten. Andere Tage der Woche (`plan_woche`) bekommen dieselbe Aufheizzeit wie der nächste Start.
     """
-    st = hz.st
-    e = st.einstellungen.bereich(bid)
-    info = st.bereiche.get(bid)
-    if info is None or not info.fuehler or not e.get("lernen") or hz.modus(bid) != "thermo":
+    if not h_start.lernend_thermo(hz, bid):
         return None
-    h = st.e["heizung"]
-    fest = st.lz.setdefault("warm_start", {}).get(bid)
-    vor = int(e["warm_vor"] if e.get("warm_vor") is not None else h.get("warm_vor_min", 0))
-    grenze = max(int(h.get("warm_max_min", 120)), vor)
-    if fest and fest[0] == tag.isoformat():
-        auf: int | None = int(fest[1])
-        hz._zusatz_gelernt[bid] = bool(fest[2]) if len(fest) > 2 else False
-        hz._geschaetzt[bid] = bool(fest[3]) if len(fest) > 3 else False
-    else:
-        stand = hz.lern_staende.get(bid) or {}
-        ein: dict[str, Any] = dict(innen=st.temperatur(info.fuehler), soll=hz.soll_temperatur(bid), aussen=st.daten.wetter.aussen)
-        alle = len(hz.heizer_von(bid)) or 1
-        if hz.stufen_an(bid):   # AN-0006: reicht der Hauptheizkörper allein bis „Soll erreicht“? Sonst beide
-            auf1, aufa = lernen.aufheiz_min(stand, **ein, anzahl=1), lernen.aufheiz_min(stand, **ein, anzahl=alle)
-            if auf1 is not None and vor + auf1 <= grenze:
-                auf, hz._zusatz_gelernt[bid] = auf1, False
-            else:
-                auf, hz._zusatz_gelernt[bid] = (aufa if aufa is not None else auf1), auf1 is not None or aufa is not None
+    heute = jetzt.date()
+    f = h_start.fest(hz, bid)
+    s = h_start.start(hz, bid, jetzt)
+    auf: int | None = None
+    if f is not None and f.get("tag") == tag.isoformat() and f.get("aufheiz_min") is not None:
+        auf = int(f["aufheiz_min"])
+    elif s is not None:
+        auf = s.plan_aufheiz_min
+    if tag == heute:   # Merker der Regelung von heute (Zusatz gelernt, geschätzt) – nie aus dem Start eines anderen Tages
+        if f is not None and f.get("tag") == heute.isoformat():
+            hz._zusatz_gelernt[bid], hz._geschaetzt[bid] = bool(f.get("zusatz")), bool(f.get("geschaetzt"))
+        elif s is not None and s.tag == heute:
+            hz._zusatz_gelernt[bid], hz._geschaetzt[bid] = s.zusatz, s.rate_geschaetzt
         else:
-            auf, hz._zusatz_gelernt[bid] = lernen.aufheiz_min(stand, **ein, anzahl=alle), False
-        hz._geschaetzt[bid] = False
-        if auf is None:   # AN-0014: noch nichts gelernt → Startwert aus der Größe (Einzel ≈ 2,5 °C/h)
-            auf = groesse.aufheiz_min(e.get("groesse_m2"), innen=ein["innen"], soll=ein["soll"])
-            hz._geschaetzt[bid] = auf is not None
-    return WarmAb(
-        vor_min=int(e["warm_vor"] if e.get("warm_vor") is not None else h.get("warm_vor_min", 0)),
-        nach_min=int(e["warm_nach"] if e.get("warm_nach") is not None else h.get("warm_nach_min", 0)),
-        max_min=int(h.get("warm_max_min", 120)), aufheiz_min=auf,
-    )
+            hz._zusatz_gelernt[bid], hz._geschaetzt[bid] = False, False
+    return h_start.warm_einst(hz, bid, auf)
 
 
-def _warm_festhalten(hz: Heizung, bid: str, warm: WarmAb | None, plan: Plan | None, heute: date, minute: int) -> None:
-    """Ab dem gelernten Beginn bis Arbeitsbeginn die Aufheizzeit des Tages festhalten (im Store, übersteht Neustarts)."""
+def _warm_festhalten(hz: Heizung, bid: str, warm: WarmAb | None, plan: Plan | None, jetzt: datetime) -> None:
+    """Ab dem Start bis Arbeitsbeginn die Aufheizzeit des Tages festhalten (im Store, übersteht Neustarts); `jetzt` =
+    Zeit der Auswertung."""
+    heute, minute = jetzt.date(), jetzt.hour * 60 + jetzt.minute
     fest = hz.st.lz.setdefault("warm_start", {})
-    if fest.get(bid) and fest[bid][0] != heute.isoformat():
+    alt = h_start.fest(hz, bid)
+    if alt is not None and alt.get("tag") != heute.isoformat():
         del fest[bid]
+    elif alt is not None and alt.get("beginn") is None and plan is not None:
+        # bis 0.8.156 ohne Beginn gespeichert: der Plan von heute beginnt mit der festgehaltenen Aufheizzeit dort
+        fest[bid] = {**alt, "beginn": plan.start}
+        hz._start_runde += 1
+        hz.st.einstellungen.speichern()
     if warm is None or warm.aufheiz_min is None or plan is None or bid in fest:
         return
-    if plan.vor <= minute < plan.a:
-        fest[bid] = [heute.isoformat(), warm.aufheiz_min, bool(hz._zusatz_gelernt.get(bid)), bool(hz._geschaetzt.get(bid))]
-        hz.st.einstellungen.speichern()
+    if plan.start <= minute < plan.a:   # Beginn laut Plan (mit „früher“), Regel in logik/start.fest_beginn
+        h_start.festhalten(hz, bid, warm, plan, start_logik.fest_beginn(plan.start, minute), jetzt)
 
 
 def zu_warm(hz: Heizung, wetter: WetterWerte) -> bool:
@@ -179,7 +174,7 @@ def soll(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> SollJeBereich:
         e = st.einstellungen.bereich(bid)
         warm_ab = hz.warm_ab(bid, heute, jetzt)   # nicht `warm` – das ist unten „zu warm“ (Heizgrenze)
         plan = hz.plan(heute, bool(e["trocknen"]), warm_ab)
-        hz._warm_festhalten(bid, warm_ab, plan, heute, minute)
+        hz._warm_festhalten(bid, warm_ab, plan, jetzt)
         hz.plaene[bid] = plan
         hz._warm_vor[bid] = warm_ab.vor_min if warm_ab is not None else 0
         frei, warm = frei_heute, zu_warm
@@ -191,6 +186,8 @@ def soll(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> SollJeBereich:
                             ende=max(minute + 1, ende))
             frei, warm = False, False
         temp = hz.temperatur_gehalten(bid, info.fuehler, jetzt)   # Fühler kurz weg: letzter Wert (Szenarien)
+        if warm_ab is not None:   # FE-0031/32: gemessener Verlauf für die Kurve „So rechnet der Start“
+            h_start.verlauf_merken(hz, bid, jetzt, temp, wetter.aussen)
         soll_t = hz.soll_temperatur(bid)
         tuer_min = None
         if (offen_seit := st.kontakt_offen_seit(bid)) is not None:   # BSM-034.03: jede Tür und jedes Fenster

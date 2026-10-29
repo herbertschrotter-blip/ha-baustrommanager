@@ -71,6 +71,7 @@ def anzeige(hz: Heizung, bid: str, info: BereichInfo, jetzt: datetime, soll: Sol
     regelt = hz.modus(bid) in ("thermo", "bedarf") and st.daten.temperatur[bid] is not None
     takt = _takt(hz, bid, s_c, jetzt) if not offline else None
     takt_gilt = False   # nur in den Zweigen, in denen die lernende Regelung gerade im Takt schaltet
+    aus_bis: str | None = None   # FE-0031/32: Zeit aus „aus bis …“ für den Jetzt-Chip (start.aus_bis)
     abschnitt = ABSCHNITT_TEXT.get(str(grund))
     dazu = f" · {abschnitt}" if abschnitt else ""
     if offline:
@@ -114,10 +115,12 @@ def anzeige(hz: Heizung, bid: str, info: BereichInfo, jetzt: datetime, soll: Sol
         zustand = "aus"
         naechster = hz._naechster_start(jetzt, bid)
         text = f"aus bis {naechster}" if naechster else "aus"
+        aus_bis = naechster
         # FE-0014: in der Heizzeit aus, weil die Regelung gerade nicht heizen will – das sagen, statt „aus bis …“
         if grund in HEIZ_GRUENDE and grund not in (SollGrund.FROST, SollGrund.ABSENKEN):
             innen = st.daten.temperatur[bid]
             takt_gilt = takt is not None
+            aus_bis = None
             if takt is not None and takt["art"] != "erreicht":
                 # Takt-Pause verständlich (Mockup takt.html): bis wann; ohne „bis“ ist die Runde unterbrochen
                 text = f"Pause bis {takt['bis']}" if takt["bis"] else "Pause · wartet"
@@ -126,8 +129,13 @@ def anzeige(hz: Heizung, bid: str, info: BereichInfo, jetzt: datetime, soll: Sol
     if an and not heizer_an and zustand == "aus":
         text = "aus · Steckdose an"
         takt_gilt = False
+        aus_bis = None
     if zustand in ("aus", "bereit") and grund != SollGrund.TUER_OFFEN and hz._tuer_offen(bid):
         text = f"{text} · 🚪 Tür offen"
+    if aus_bis:
+        hz._aus_bis[bid] = aus_bis
+    else:
+        hz._aus_bis.pop(bid, None)
     if takt is not None and takt_gilt:
         hz.takt[bid] = takt
     else:
@@ -182,8 +190,10 @@ def _naechster_start(hz: Heizung, jetzt: datetime, bid: str) -> str | None:
     s = plan_status(jetzt.date(), jetzt.hour * 60 + jetzt.minute, lambda t: hz.plan_bereich(t, bid, jetzt))
     if s.minute is None or s.tag is None or s.art == StatusArt.HEIZT:
         return None
-    if s.tag in (jetzt.date(), jetzt.date() + timedelta(days=1)):
+    if s.tag == jetzt.date():
         return uhrzeit(s.minute)  # Mockup „aus bis 06:15“
+    if s.tag == jetzt.date() + timedelta(days=1):
+        return f"morgen {uhrzeit(s.minute)}"   # FE-0031/32: „aus bis morgen 03:30“ (wie der Plan-Chip)
     return f"{wochentag(s.tag)} {uhrzeit(s.minute)}"
 
 
