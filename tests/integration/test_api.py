@@ -127,7 +127,7 @@ async def test_ohne_automatik_je_container(hass: HomeAssistant, baustelle, freez
     r = (await ws.receive_json())["result"]
     assert r["kw"] == 2.0 and r["reihe"][:10] == [2.0] * 10 and r["reihe"][10] == 1.0 and sum(r["reihe"][11:]) == 0
     assert r["ohne_kwh"] == 21.0 and r["geraete"] == [{"id": HK1, "typ": "oelradiator", "kw": 2.0}]
-    assert r["ergebnis"] is not None and r["ergebnis"]["ohne_eur"] == 21.0 * r["preis"]
+    assert r["ergebnis"] is not None and r["ergebnis"]["ohne_eur"] == pytest.approx(21.0 * r["preis"])
     await ws.send_json({"id": 2, "type": "baustelle/ohne", "entry_id": baustelle.entry_id, "bereich": C1, "zeitraum": "Tag", "basis": "typ"})
     r = (await ws.receive_json())["result"]
     assert r["basis"] == "typ" and r["kw"] == 2.0     # einziger Ölradiator: Ø des Typs = eigener Wert

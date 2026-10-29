@@ -262,6 +262,27 @@ def soll_container(lage: LageContainer, tuer_pause_min: int) -> Soll:
     return s
 
 
+PLAN_GRUENDE = frozenset({SollGrund.FRUEHSTART, SollGrund.VORHEIZEN, SollGrund.ARBEITSZEIT, SollGrund.NACHHEIZEN,
+                          SollGrund.TROCKNEN, SollGrund.BEDARF, SollGrund.BOOST, SollGrund.TASTE})
+
+
+def im_plan(lage: LageContainer, soll: Soll) -> bool:
+    """AN-0017: Ist der Container laut Plan gerade dran (Automatik an, Heizzeit oder Termin läuft)? Auch wenn er satt ist
+    (Thermostat) oder die Tür offen ist – nicht bei frei, Heizgrenze, außerhalb der Heizzeit oder Hand."""
+    if not lage.automatik:
+        return False
+    if soll.grund == SollGrund.TUER_OFFEN:
+        return _ohne_tuer(lage).grund in PLAN_GRUENDE
+    return soll.grund in PLAN_GRUENDE
+
+
+def ruhe_grund(lage: LageContainer, soll: Soll) -> str:
+    """AN-0017: Warum ein Container im Plan gerade nicht heizen will: „tuer_offen“ oder „satt“ (Thermostat); sonst ""."""
+    if soll.ein or not im_plan(lage, soll):
+        return ""
+    return "tuer_offen" if soll.grund == SollGrund.TUER_OFFEN else "satt"
+
+
 def _ohne_tuer(lage: LageContainer) -> Soll:
     """Die Reihenfolge ab „Hand“ (ohne Automatik aus, Frost und Tür)."""
     if not lage.auto:

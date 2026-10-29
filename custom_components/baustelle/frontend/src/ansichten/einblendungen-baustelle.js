@@ -43,14 +43,21 @@ function zeitraum(p, s) {
       ${knopf('Speichern', p.nurAdmin(() => p.zeitraumBsSpeichern()), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
 }
 
+/* AN-0022: Urlaub trägt die Seite in den Kalender ein – nur Kalender, die Termine anlegen können (HA: supported_features mit
+   CalendarEntityFeature.CREATE_EVENT = 1, z. B. „Lokaler Kalender“; Feiertags-Kalender können es nicht) */
+const CREATE_EVENT = 1;
+export const beschreibbar = x => x.entity_id.startsWith('calendar.') && (Number(x.attributes.supported_features) & CREATE_EVENT) !== 0;
+export const KEIN_URLAUBSKALENDER = 'Kein beschreibbarer Kalender – lege unter Einstellungen › Geräte & Dienste › „Lokaler Kalender“ einen an, z. B. „Baustelle Urlaub“.';
 function wetterquelle(p, s) {
-  const f = s.form, kal = p.entitaeten(x => x.entity_id.startsWith('calendar.'));
+  const f = s.form, kal = p.entitaeten(x => x.entity_id.startsWith('calendar.')), urlaubKal = p.entitaeten(beschreibbar);
+  const alt = f.urlaub_kalender && !urlaubKal.some(([v]) => v === f.urlaub_kalender) ? [[f.urlaub_kalender, `${p.name(f.urlaub_kalender) || f.urlaub_kalender} (nicht beschreibbar)`]] : [];
   return html`${GRIFF}<h3>Wetter</h3>
         <label class="feld">Wetter${auswahl(f, 'wetter', p.entitaeten(x => x.entity_id.startsWith('weather.')), '– keins –')}</label>
         <label class="feld">Außentemperatur${auswahl(f, 'temp_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'temperature'), 'aus der Vorhersage')}</label>
         <label class="feld">Regenmenge${auswahl(f, 'regen_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'precipitation'), 'aus der Vorhersage')}</label>
         <div class="gruppe-t">Kalender</div>
-        <label class="feld">Urlaub${auswahl(f, 'urlaub_kalender', kal, '– keiner –')}</label>
+        <label class="feld">Urlaub${auswahl(f, 'urlaub_kalender', [...urlaubKal, ...alt], '– keiner –')}</label>
+        ${!urlaubKal.length ? html`<div class="leise kal-hinweis" data-k="kein-urlaubskalender">${KEIN_URLAUBSKALENDER}</div>` : alt.length ? html`<div class="leise kal-hinweis amber-t">Der gewählte Kalender kann keine Termine anlegen – Urlaub eintragen geht damit nicht.</div>` : nothing}
         <label class="feld">Feiertage${auswahl(f, 'feiertag_kalender', kal, '– keiner –')}</label>
         <label class="feld">Termine (Container nur bei Bedarf)${auswahl(f, 'termine_kalender', kal, '– keiner –')}</label>
         ${knopf('Speichern', p.nurAdmin(() => p.wetterquelleSpeichern()), 'amber nur-admin')}`;
@@ -66,8 +73,11 @@ function loeschen(p, s) {
 }
 
 function urlaub(p, s) {
-  const d = p.d;
-  if (!d.optionen.urlaub_kalender) return html`${GRIFF}<h3>Urlaub eintragen</h3><div class="leise">Zuerst einen Kalender für den Urlaub wählen.</div>${knopf('Kalender wählen', p.nurAdmin(() => p.einblenden('wetterquelle')), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
+  const d = p.d, kz = d.optionen.urlaub_kalender && p.zustand(d.optionen.urlaub_kalender);
+  if (!d.optionen.urlaub_kalender || (kz && !beschreibbar(kz))) {
+    const keiner = !p.entitaeten(beschreibbar).length;
+    return html`${GRIFF}<h3>Urlaub eintragen</h3><div class="leise">${keiner ? KEIN_URLAUBSKALENDER : d.optionen.urlaub_kalender ? 'Der gewählte Kalender kann keine Termine anlegen – bitte einen beschreibbaren wählen.' : 'Zuerst einen Kalender für den Urlaub wählen.'}</div>${keiner ? nothing : knopf('Kalender wählen', p.nurAdmin(() => p.einblenden('wetterquelle')), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
+  }
   return html`${GRIFF}<h3>Urlaub eintragen</h3><label class="feld">Name${feld(s.form, 'name', null, 'z. B. Semesterferien')}</label>
       <div class="raster-2"><label class="feld">Von${feld(s.form, 'von', 'date')}</label><label class="feld">Bis${feld(s.form, 'bis', 'date')}</label></div>
       <div class="leise">Wird in den Kalender „${p.name(d.optionen.urlaub_kalender)}“ eingetragen; in der Zeit läuft nur der Frostschutz.</div>${knopf('Eintragen', p.nurAdmin(() => p.urlaubSpeichern()), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;

@@ -136,7 +136,7 @@ export const GERAETE_CSS = `
 .zeile.ger.g-zeile { width: 100%; text-align: left; }
 .g-w { font-size: 12px; margin-top: 2px; } .g-w.stoerung { color: var(--rot); } .g-w.hinweis { color: var(--amber); }
 .g-z2 { display: flex; gap: 6px; align-items: center; justify-content: flex-end; font-size: 11px; }
-.ger-z { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.ger-z { font-size: 12.5px; text-align: right; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
 .g-st { font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 8px; background: rgba(120,120,128,.2); } .g-st.defekt { color: var(--rot); } .g-st.verliehen { color: var(--blau); }
 .ger-punkt-i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; } .ger-punkt-i.da { background: #30d158; } .ger-punkt-i.weg { background: var(--rot); }
 .g-wert { display: inline-flex; gap: 6px; align-items: center; } .g-wz { align-items: flex-start; gap: 8px; } .g-wz .chip { font-size: 11px; white-space: nowrap; }

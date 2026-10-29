@@ -92,3 +92,15 @@ def test_luecke_nach_ausfall():
     assert energie_zuwachs(100.0, 55.0, stunden=72.0) == pytest.approx(55.0)
     # Rauschen bleibt Rauschen
     assert energie_zuwachs(32.688155, 32.687104, stunden=72.0) == 0.0
+
+
+def test_ersparnis_fortlaufend_zum_preis_des_tages():
+    """FE-0035: Sensor „Ersparnis“ bucht jede Änderung zum Preis, der gerade gilt (wie „Kosten“); der Start übernimmt den
+    bisherigen Wert (Summe × Preis von heute) – kein Sprung in der Statistik."""
+    from logik.zaehlen import ersparnis_buchen
+    kwh, eur = ersparnis_buchen(None, None, 100.0, 0.28)   # Umstellung: bisher 100 kWh × 0,28 € angezeigt
+    assert (kwh, eur) == (100.0, pytest.approx(28.0))
+    kwh, eur = ersparnis_buchen(kwh, eur, 150.0, 0.20)    # neuer Preis gilt nur für die neuen 50 kWh
+    assert eur == pytest.approx(28.0 + 10.0)
+    kwh, eur = ersparnis_buchen(kwh, eur, 140.0, 0.20)    # geheizt ohne „ohne“-Zuwachs: Ersparnis sinkt
+    assert kwh == 140.0 and eur == pytest.approx(36.0)

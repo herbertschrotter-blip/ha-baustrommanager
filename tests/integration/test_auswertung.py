@@ -299,6 +299,46 @@ async def test_strompreis_mit_gilt_ab(hass: HomeAssistant, baustelle, ws, statis
     assert st.e["preis"] == 0.3
 
 
+async def test_gespart_verlauf_gleich_auswertung(hass: HomeAssistant, baustelle, ws, statistik) -> None:
+    """FE-0035: „gespart“ im Verlauf (seit Beginn 01.09.) und in der Auswertung (September, Jahr) ist dieselbe Zahl –
+    je Tag zum Preis des Tages (0,30 € bis 14.09., ab 15.09. 0,20 €), nicht Σ × Mischpreis oder Σ × Preis von heute."""
+    st = baustelle.runtime_data
+    st.einstellung_setzen(("preis",), 0.3)
+    for ab, p in (("2026-09-01", 0.3), ("2026-09-15", 0.2)):
+        assert (await ws("baustelle/liste", liste="preise", aktion="speichern", eintrag={"ab": ab, "preis": p}))["success"]
+    st.zaehler.update(ohne=999.0, energie_heizen=1.0)   # der Sensor „Ersparnis“ zählt nicht mehr für den Verlauf
+    v = (await ws("baustelle/auswertung", teil="verlauf"))["result"]
+    m = (await ws("baustelle/auswertung", zeitraum="Monat"))["result"]
+    j = (await ws("baustelle/auswertung", zeitraum="Jahr"))["result"]
+    g = m["gespart_reihen"]
+    tage = sum(x * (0.3 if i < 14 else 0.2) for i, x in enumerate(g["gespart_kwh"]) if x is not None)
+    assert v["gespart"] == pytest.approx(tage) == pytest.approx(g["summe"]["gespart_eur"])
+    assert m["summen"]["ohne_automatik"]["gespart_eur"] == pytest.approx(tage)
+    assert j["gespart_reihen"]["gespart_eur"][8] == pytest.approx(tage)   # Jahr: September aus den Tagen (Modell hat auch Werte vor Beginn)
+    assert abs(g["summe"]["gespart_kwh"] * m["preis"] - tage) > 0.5 and abs(g["summe"]["gespart_kwh"] * 0.2 - tage) > 0.5   # alte Wege
+    assert v["gespart_text"] == "gespart seit 01.09."
+    sim = (await ws("baustelle/auswertung", zeitraum="Monat", preis=0.5))["result"]
+    assert sim["summen"]["ohne_automatik"]["gespart_eur"] == pytest.approx(g["summe"]["gespart_kwh"] * 0.5)   # Simulieren: ein Preis
+
+
+async def test_ersparnis_sensor_fortlaufend(hass: HomeAssistant, baustelle) -> None:
+    """FE-0035: Sensor „Ersparnis“ bucht fortlaufend zum Preis des Tages (wie „Kosten“); beim Umstellen kein Sprung."""
+    from custom_components.baustelle.funktionen.heizung import Heizung
+    st = baustelle.runtime_data
+    hz = Heizung.von(st)
+    st.e["preise"] = [{"ab": "2026-09-01", "preis": 0.3}]
+    st.preis_abgleichen()
+    st.zaehler.update(ohne=100.0, energie_heizen=40.0)
+    vorher = hz.ersparnis_eur()
+    assert vorher == pytest.approx(60 * 0.3)            # noch nichts gebucht: wie bisher Summe × Preis von heute
+    hz.ersparnis_buchen()
+    assert hz.ersparnis_eur() == pytest.approx(vorher)  # Umstellung ohne Sprung
+    st.e["preise"] = [{"ab": "2026-09-01", "preis": 0.3}, {"ab": "2026-09-29", "preis": 0.1}]
+    st.preis_abgleichen()
+    st.zaehler_plus("ohne", 10.0); hz.ersparnis_buchen()
+    assert hz.ersparnis_eur() == pytest.approx(18.0 + 10 * 0.1)   # alte 60 kWh bleiben zu 0,30 €
+
+
 async def test_kosten_zum_preis_von_heute(hass: HomeAssistant, baustelle, freezer) -> None:
     """Kosten-Zähler: jede kWh mit dem Preis, der an dem Tag gilt (Preisliste)."""
     st = baustelle.runtime_data

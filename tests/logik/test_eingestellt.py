@@ -57,7 +57,9 @@ def test_texte_wie_im_mockup():
     assert von(VIELE, "frost")["satz"] == "Hält den Container auch nachts, am Wochenende und im Urlaub über 5 °C (aus erst über 7 °C)."
     assert von(VIELE, "tuer")["text"] == "Tür-Pause 3 min" and von(VIELE, "tuer")["kurz"] == "Tür 3′"
     assert von(VIELE, "tuer")["satz"] == "Kontakt „Tür 1“: Ist die Tür offen, pausiert die Heizung nach 3 min; nach 10 min kommt eine Nachricht."
-    assert von(VIELE, "trocknen")["satz"] == "Nach Regen ab 2 mm heizt dieser Container 45 min länger nach der Arbeit und am nächsten Morgen 15 min früher."
+    # AN-0021: unveränderte alte Werte (2 mm/45/15) → Vorgabe-Stufen nach dem Regen in der Arbeitszeit
+    assert von(VIELE, "trocknen")["satz"] == ("Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten "
+                                              "Morgen früher: ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher.")
     assert "Primärheizkörper (Radiator 1); Radiator 2 kommt dazu, wenn es draußen unter −5 °C hat, der Raum mehr als 1,5 °C" in von(VIELE, "stufen")["satz"]
     assert von(VIELE, "prio")["text"] == "Vorrang hoch" and "vor den anderen dran" in von(VIELE, "prio")["satz"]
     assert "67 % je Anschluss nutzbar, höchstens 5 zugleich" in von(VIELE, "staffel")["satz"]

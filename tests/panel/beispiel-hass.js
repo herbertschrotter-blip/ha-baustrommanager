@@ -113,7 +113,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     setze('binary_sensor.tuer_magazin', 'on', { device_class: 'door', friendly_name: 'Tür Magazin' });
     setze('binary_sensor.tuer_mannschaft', 'off', { device_class: 'door', friendly_name: 'Tür Mannschaft (neu)' });
     setze('switch.heizung_03', 'off', { friendly_name: 'Heizung 03' }); setze('switch.heizung_04', 'off', { friendly_name: 'Heizung 04' });
-    setze('calendar.besprechungen', 'off', { friendly_name: 'Besprechungen' }); setze('calendar.baustelle_urlaub', 'off', { friendly_name: 'Baustelle Urlaub' });
+    setze('calendar.besprechungen', 'off', { friendly_name: 'Besprechungen', supported_features: 7 }); setze('calendar.baustelle_urlaub', 'off', { friendly_name: 'Baustelle Urlaub', supported_features: 7 });   // AN-0022: Lokaler Kalender (CREATE_EVENT)
     setze('calendar.feiertage_oesterreich', 'off', { friendly_name: 'Feiertage' }); setze('notify.mobile_app_handy_herbert', 'unknown', { friendly_name: 'Handy Herbert' });
     setze('sensor.regen_dobl', '6', { device_class: 'precipitation' });
   // AN-0009: Signalstärke der Shellys (dBm) für die Geräteübersicht
@@ -170,7 +170,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       const roh = mo ? mo.erwartet.reihen.map((r, i) => ({ bereich: (b.bereiche[i] || {}).id || null, ...r })) : b.bereiche.map(c => ({ bereich: c.id, name: c.name, v: [50] }));
       const ges = roh.reduce((a, r) => a + r.v.reduce((x, y) => x + y, 0), 0);   // kWh, € und Anteil je Container wie logik/auswertung.monate_summen
       const reihen = roh.map(r => { const s = r.v.reduce((x, y) => x + y, 0); return { ...r, kwh: s, eur: s * preis, anteil: ges ? s / ges * 100 : 0 }; });
-      return { kwh, eur: k ? k.erwartet.eur : zl.kosten ?? 0, gespart: k ? k.erwartet.gespart : null, container: b.bereiche.length, heiztage, monate: k ? k.erwartet.monate : 1,
+      return { kwh, eur: k ? k.erwartet.eur : zl.kosten ?? 0, gespart: k ? k.erwartet.gespart : null, gespart_text: (b.baustelle.optionen || {}).beginn ? `gespart seit ${b.baustelle.optionen.beginn.slice(8, 10)}.${b.baustelle.optionen.beginn.slice(5, 7)}.` : 'gespart', container: b.bereiche.length, heiztage, monate: k ? k.erwartet.monate : 1,
         vergleich: k ? k.erwartet.vergleich : { tag: heiztage ? kwh / heiztage : 0, monat: 0, ges: kwh }, je_monat: v ? v.erwartet.je_monat : { '2026-09': 100 },
         monate_je_container: { labels: mo ? mo.erwartet.labels : ['Sep'], reihen },
         csv: csvText(mo ? mo.erwartet.csv : ['Monat;Baustelle;Container;kWh;Kosten €', ...reihen.map(r => ['Sep', b.baustelle.titel, r.name, zz(r.v[0], 2), zz(r.v[0] * preis, 2)].join(';'))]) };

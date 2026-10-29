@@ -307,3 +307,20 @@ def test_letzter_wert_ueberbrueckt():
     assert letzter_wert(None, (t0, 18.0), t0 + timedelta(minutes=FUEHLER_HALTEN_MIN), 15) == 18.0
     assert letzter_wert(None, (t0, 18.0), t0 + timedelta(minutes=16), 15) is None
     assert letzter_wert(None, None, t0, 15) is None
+
+
+def test_im_plan_auch_satt_und_tuer_offen():
+    """AN-0017: Rangliste der Staffelung – im Plan ist, wer laut Plan gerade dran ist, auch satt oder mit offener Tür."""
+    from logik.regelung import im_plan, ruhe_grund
+    lage = lambda **kw: replace(GRUND, **kw)
+    satt = lage(temperatur=21.0)            # Thermostat: Soll erreicht, Arbeitszeit läuft
+    assert soll(temperatur=21.0) == Soll(False, SollGrund.ARBEITSZEIT)
+    assert im_plan(satt, soll(temperatur=21.0)) and ruhe_grund(satt, soll(temperatur=21.0)) == "satt"
+    tuer = lage(tuer_offen_min=6, heizt_gerade=True)
+    assert soll(tuer_offen_min=6, heizt_gerade=True).grund is SollGrund.TUER_OFFEN
+    assert im_plan(tuer, soll(tuer_offen_min=6, heizt_gerade=True)) and ruhe_grund(tuer, soll(tuer_offen_min=6, heizt_gerade=True)) == "tuer_offen"
+    heizt = lage(temperatur=18.0)
+    assert im_plan(heizt, soll(temperatur=18.0)) and ruhe_grund(heizt, soll(temperatur=18.0)) == ""
+    for kw in ({"minute": t(22)}, {"frei": True}, {"zu_warm": True}, {"automatik": False}, {"auto": False}):
+        assert not im_plan(lage(**kw), soll(**kw)), kw   # außerhalb, frei, Heizgrenze, Automatik aus, Hand
+    assert not im_plan(lage(minute=t(22), tuer_offen_min=6), soll(minute=t(22), tuer_offen_min=6))

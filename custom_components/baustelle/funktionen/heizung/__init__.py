@@ -22,7 +22,7 @@ from homeassistant.util import dt as dt_util
 
 from ...const import ART_CONTAINER, CONF_HEIZUNG, HEIZROLLEN, ROLLE_HEIZKOERPER, ZIEHT_STROM_W
 from ...logik import bedarf as bedarf_logik, lernen, soll as soll_logik, stufen
-from ...logik import prognose_merkmale, sensoren as sensor_logik, warnungen as warn_logik
+from ...logik import prognose_merkmale, regen as regen_logik, sensoren as sensor_logik, warnungen as warn_logik
 from ...logik.arbeitszeit import HeizRegeln, Plan, WarmAb
 from ...logik import regelung
 from ...logik.regelung import LageContainer, Soll, SollGrund
@@ -211,9 +211,19 @@ class Heizung(Funktion):
         return HeizRegeln(
             vorheizen_min=int(h["vorheizen_min"]), nachheizen_min=int(h["nachheizen_min"]),
             fruehstart=bool(h["fruehstart"]), fruehstart_unter=float(h["fruehstart_unter"]),
-            fruehstart_min=int(h["fruehstart_min"]), trocknen_ab_mm=float(h["trocknen_ab_mm"]),
-            trocknen_laenger_min=int(h["trocknen_laenger_min"]), trocknen_frueher_min=int(h["trocknen_frueher_min"]),
+            fruehstart_min=int(h["fruehstart_min"]), trocknen_stufen=self.trocknen_stufen(),
         )
+
+    def trocknen_stufen(self) -> tuple[regen_logik.TrocknenStufe, ...]:
+        """AN-0021: Stufen „Kleidung trocknen“ – Einstellung `trocknen_stufen`, sonst aus den alten Einzelwerten."""
+        h = self.st.e["heizung"]
+        return regen_logik.stufen_aus(h.get("trocknen_stufen"), float(h["trocknen_ab_mm"]), int(h["trocknen_laenger_min"]),
+                                      int(h["trocknen_frueher_min"]))
+
+    def trocknen_anzeige(self, heute: date) -> dict[str, Any]:
+        """AN-0021: Regen in der Arbeitszeit heute/gestern, was daraus folgt, und der Text (Seite, Protokoll)."""
+        wt = self.st.wetter_tag_plan(heute)
+        return regen_logik.trocknen_anzeige(wt.regen_az_heute_mm, wt.regen_az_vortag_mm, self.trocknen_stufen())
 
     def ist_frei(self, tag: date, art: str | None = None) -> bool:
         """Urlaub immer, Feiertag nur mit „Feiertage frei“; `art` statt der Kalender der laufenden Wochen (Hochrechnung)."""
@@ -359,6 +369,8 @@ class Heizung(Funktion):
             "frost": schaltet and s.grund == SollGrund.FROST,
             "boost": schaltet and s.grund == SollGrund.BOOST,
             "defizit": b.summe if b is not None else None,
+            "im_plan": schaltet and regelung.im_plan(lage, s),   # AN-0017: Rangliste zeigt auch satte Heizkörper
+            "ruht": regelung.ruhe_grund(lage, s) if schaltet else "",
         }
 
     def bedarf(self, bid: str, lage: LageContainer, jetzt: datetime | None = None) -> bedarf_logik.Bedarf | None:
@@ -480,6 +492,17 @@ class Heizung(Funktion):
         """Was 24-h-Dauerbetrieb mehr verbraucht hätte als tatsächlich geheizt wurde."""
         z = self.st.zaehler
         return max(0.0, float(z.get("ohne", 0.0)) - float(z.get("energie_heizen", 0.0)))
+
+    def ersparnis_buchen(self) -> None:
+        """Ersparnis in € zum Preis von heute nachbuchen (nach jeder Änderung von „ohne“ oder „energie_heizen“, FE-0035)."""
+        h_zaehlen.ersparnis_buchen(self)
+
+    def ersparnis_eur(self) -> float:
+        """Sensor „Ersparnis“: gebuchte € (je Änderung zum Preis des Tages); vor der ersten Buchung kWh × Preis von heute."""
+        z = self.st.zaehler
+        if "ersparnis_eur" in z:
+            return float(z["ersparnis_eur"])
+        return self.ersparnis_kwh() * float(self.st.e["preis"])
 
     def mittel_typ(self, typ: str) -> float | None:
         return h_zaehlen.mittel_typ(self, typ)

@@ -396,10 +396,14 @@ def kennzahlen(
     container: int,
     heiztage: float,
     monate: int,
+    gespart: float | None = None,
+    seit: date | None = None,
 ) -> dict[str, Any]:
     """Kennzahlen einer Baustelle (Verlauf): kWh, €, gespart, dazu die Werte für den Vergleich der Baustellen.
 
-    `zustaende`: aktuelle Werte der Sensoren `energie`, `kosten`, `ersparnis` (None ohne Wert) – nur, wenn der Zähler fehlt.
+    `zustaende`: aktuelle Werte der Sensoren `energie`, `kosten` (None ohne Wert) – nur, wenn der Zähler fehlt.
+    `gespart`: € seit `seit` (Beginn der Baustelle) aus `gespart_reihen` über die Tage – dieselbe Rechnung wie die
+    Auswertung (FE-0035), nicht der Sensor „Ersparnis“; dazu der Text der Karte („gespart seit 29.09.“).
     """
     energie, kosten = zustaende.get("energie"), zustaende.get("kosten")
     kwh = float(zaehler["energie"]) if ist_zahl(zaehler.get("energie")) else (energie if energie is not None else 0.0)
@@ -407,11 +411,9 @@ def kennzahlen(
         eur = float(zaehler["kosten"])
     else:
         eur = kosten if kosten is not None else kwh * preis
-    gespart = zustaende.get("ersparnis")
-    if gespart is None and ist_zahl(zaehler.get("ohne")) and ist_zahl(zaehler.get("energie_heizen")):
-        gespart = max(0.0, float(zaehler["ohne"]) - float(zaehler["energie_heizen"])) * preis
     return {
-        "kwh": kwh, "eur": eur, "gespart": gespart, "container": container, "heiztage": heiztage, "monate": monate,
+        "kwh": kwh, "eur": eur, "gespart": gespart, "gespart_text": f"gespart seit {seit:%d.%m.}" if seit else "gespart",
+        "container": container, "heiztage": heiztage, "monate": monate,
         "vergleich": {
             "tag": kwh / heiztage if heiztage else 0.0,   # kWh je Heiztag
             "monat": eur / monate if monate else 0.0,   # € je Monat mit Heizung
@@ -507,12 +509,16 @@ def hochrechnung_herkunft(methode: str | None, container: Sequence[Mapping[str, 
     return True, " · ".join(teile) + ", bis die Signatur steht (10 ganze Heiztage, 4 K Spanne)."
 
 
-def ohne_automatik(kwh: float, ohne: float, preis: float) -> dict[str, Any] | None:
-    """„Ohne Automatik“: Kosten im Dauerbetrieb (`ohne` kWh), gespart in € und % dagegen, dazu der Hinweis (der Zähler
-    rechnet immer Dauerbetrieb); ohne Wert (0) None."""
-    if ohne <= 0:
+def ohne_automatik(gespart: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """„Ohne Automatik“ aus der Kachel „Gespart“ (`gespart_reihen`, je Periode zum Preis der Periode): Kosten im
+    Dauerbetrieb, gespart in € und % dagegen, dazu der Hinweis (der Zähler rechnet immer Dauerbetrieb). Ohne Wert
+    (Σohne ≤ 0) None. € = Σ der Perioden (FE-0035): ein Preiswechsel mitten im Zeitraum zählt je Tag mit seinem Preis,
+    nicht mit einem Mischpreis über den Verbrauch."""
+    if not gespart:
         return None
-    return {"ohne_eur": ohne * preis, "gespart_eur": gespart_kwh(kwh, ohne) * preis, "prozent": max(0.0, 1 - kwh / ohne) * 100,
+    s = gespart["summe"]
+    return {"ohne_eur": s["ohne_eur"], "gespart_eur": s["gespart_eur"],
+            "prozent": max(0.0, 1 - s["mit_kwh"] / s["ohne_kwh"]) * 100 if s["ohne_kwh"] > 0 else 0.0,
             "hinweis": ohne_hinweis(None)}
 
 
@@ -527,13 +533,59 @@ def reihe_offen(reihen: Sequence[Sequence[float | None]], n: int) -> list[float 
     return aus
 
 
-def gespart_reihen(mit: Sequence[float | None], ohne: Sequence[float | None], preis: float) -> dict[str, Any] | None:
+def geld_je(kwh: Sequence[float | None], preise: float | Sequence[float]) -> list[float | None]:
+    """€ je Periode: kWh der Periode × Preis der Periode (Tagespreis, `logik/preise.preis_am`); eine Zahl = derselbe Preis
+    für alle Perioden. Ohne Wert kein Betrag. Die eine Regel für € aus kWh je Tag (FE-0035): € = Σ kWh(Tag) × Preis(Tag)."""
+    p = [float(preise)] * len(kwh) if isinstance(preise, (int, float)) else list(preise)
+    return [geld(v, p[i]) for i, v in enumerate(kwh)]
+
+
+def tage_preise(tage: Iterable[date], preis_am: Callable[[date], float]) -> list[float]:
+    """Preis je Tag (`preis_am`, z. B. `logik/preise.preis_am` mit der Preisliste der Baustelle)."""
+    return [preis_am(t) for t in tage]
+
+
+def perioden_preise(zr: Zeitraum, preis_am: Callable[[date], float], ab: date | None = None, bis: date | None = None) -> list[float]:
+    """Preis je Periode des Zeitraums: Stunden eines Tages mit dem Preis des Tages, Tage mit ihrem Preis; ein Monat mit
+    dem Mittel der Tagespreise der Tage in [`ab`, `bis`) (gleich gewichtet – passt genau zu „ohne Automatik“, das jeden Tag
+    gleich lang läuft); ohne solchen Tag der Preis am Monatsersten."""
+    if zr.periode == "hour":
+        return [preis_am(zr.von)] * zr.n
+    if zr.periode == "day":
+        return tage_preise((zr.von + timedelta(days=i) for i in range(zr.n)), preis_am)
+    aus = []
+    for i in range(zr.n):
+        erster = date(zr.jahr or zr.von.year, i + 1, 1)
+        tage = [erster + timedelta(days=k) for k in range(monthrange(erster.year, erster.month)[1])]
+        drin = [t for t in tage if (ab is None or t >= ab) and (bis is None or t < bis)]
+        aus.append(sum(tage_preise(drin, preis_am)) / len(drin) if drin else preis_am(erster))
+    return aus
+
+
+def je_tag(statistik: Statistik, ids: Sequence[str | None], von: date, n: int, zone: tzinfo) -> list[float | None]:
+    """Änderung je Tag (`von` + i, i < n) summiert über `ids`; ein Tag ganz ohne Wert bleibt None (wie `reihe_offen`)."""
+    aus: list[float | None] = [None] * n
+    for sid in ids:
+        for p in (statistik.get(sid) or []) if sid else []:
+            i = (lokal(p["start"], zone).date() - von).days
+            if 0 <= i < n and ist_zahl(p.get("change")):
+                aus[i] = (aus[i] or 0.0) + float(p["change"])
+    return aus
+
+
+def gespart_reihen(
+    mit: Sequence[float | None], ohne: Sequence[float | None], preise: float | Sequence[float]
+) -> dict[str, Any] | None:
     """Kachel „Gespart“: je Periode des Zeitraums „mit Automatik“, „ohne (24/7)“ und „gespart“ in kWh und €, dazu die
-    Summen. Die Summe von „gespart“ ist die von `ohne_automatik` (Σohne − Σmit, nie unter 0); je Periode ist „gespart“
+    Summen. Die Summe von „gespart“ ist Σohne − Σmit (nie unter 0); je Periode ist „gespart“
     nie unter 0 – die Perioden, in denen „ohne“ über „mit“ liegt, teilen sich die Summe im Verhältnis ihres Abstands
     (liegt „ohne“ nie unter „mit“, ist es genau der Abstand). „ohne“ je Periode = „mit“ + „gespart“ (die Linie der
     Kachel; ihre Summe ist die von „ohne“, solange Σohne ≥ Σmit). Perioden ohne jeden Wert bleiben None (kommende
-    Stunden/Tage); ohne „ohne Automatik“ (Σohne ≤ 0) None wie `ohne_automatik`."""
+    Stunden/Tage); ohne „ohne Automatik“ (Σohne ≤ 0) None.
+
+    € je Periode mit dem Preis der Periode (`preise`: je Periode, z. B. der Tagespreis; eine Zahl = überall derselbe),
+    die €-Summen sind die Summe der Perioden (`geld_je`, FE-0035) – „gespart“ seit Beginn (Verlauf), im Monat und im Jahr
+    (`gespart_zusammen`) rechnen so gleich."""
     n = max(len(mit), len(ohne))
     mit_, ohne_ = [*mit, *[None] * (n - len(mit))], [*ohne, *[None] * (n - len(ohne))]
     da = [ist_zahl(m) or ist_zahl(o) for m, o in zip(mit_, ohne_, strict=True)]
@@ -548,8 +600,29 @@ def gespart_reihen(mit: Sequence[float | None], ohne: Sequence[float | None], pr
     aus: dict[str, Any] = {}
     for k, r in reihen.items():
         aus[f"{k}_kwh"] = [v if da[i] else None for i, v in enumerate(r)]
-        aus[f"{k}_eur"] = [geld(v, preis) for v in aus[f"{k}_kwh"]]
-    aus["summe"] = {f"{k}_{e}": summe(r) * (preis if e == "eur" else 1.0) for k, r in reihen.items() for e in ("kwh", "eur")}
+        aus[f"{k}_eur"] = geld_je(aus[f"{k}_kwh"], preise)
+    aus["summe"] = {f"{k}_{e}": summe(aus[f"{k}_{e}"]) for k in reihen for e in ("kwh", "eur")}
+    return aus
+
+
+def gespart_zusammen(teile: Iterable[Mapping[str, Any] | None], n: int, stelle: Sequence[int] | None = None) -> dict[str, Any] | None:
+    """Kachel „Gespart“ zusammenfassen: mehrerer Baustellen (je mit ihren Preisen gerechnet) und/oder Tage zu Monaten
+    (`stelle[i]` = Periode des i-ten Werts, z. B. Monat des Tages). kWh und € werden addiert, eine Periode ganz ohne
+    Wert bleibt None; ohne einen Teil None."""
+    da = [t for t in teile if t]
+    if not da:
+        return None
+    aus: dict[str, Any] = {}
+    for k in ("mit", "ohne", "gespart"):
+        for e in ("kwh", "eur"):
+            r: list[float | None] = [None] * n
+            for t in da:
+                for i, v in enumerate(t[f"{k}_{e}"]):
+                    j = stelle[i] if stelle is not None else i
+                    if v is not None and 0 <= j < n:
+                        r[j] = (r[j] or 0.0) + float(v)
+            aus[f"{k}_{e}"] = r
+    aus["summe"] = {key: sum(t["summe"][key] for t in da) for key in da[0]["summe"]}
     return aus
 
 

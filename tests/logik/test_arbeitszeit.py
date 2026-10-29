@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 import pytest
 
+from logik.regen import TrocknenStufe
 from logik.arbeitszeit import (
     Abschnitt,
     Arbeitszeit,
@@ -45,7 +46,8 @@ LISTE = [
 DI = date(2026, 9, 29)  # HEUTE im Mockup
 MI = date(2026, 9, 30)
 SA = date(2026, 10, 3)
-REGELN = HeizRegeln()  # Vorheizen 45, Nachheizen 15, Trocknen 45/15 ab 2 mm, Frühstart 30 min unter 0 °C
+REGELN = HeizRegeln()  # Vorheizen 45, Nachheizen 15, Trocknen ab 2 mm 60/15, ab 5 mm 100/30 (AN-0021), Frühstart 30 min unter 0 °C
+ALT = HeizRegeln(trocknen_stufen=(TrocknenStufe(2.0, 45, 15),))   # eine Stufe wie bis 0.8.160 (Mockup-Zahlen)
 OHNE = WetterTag()
 
 
@@ -100,8 +102,8 @@ def test_vor_und_nachheizen():
 
 
 def test_mockup_beispiel_0615_bis_1730():
-    # Dienstag 6 mm Regen: Kleidung trocknen 45 min nach dem Nachheizen → 06:15–17:30
-    p = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_heute_mm=6), trocknen=True)
+    # Dienstag 6 mm Regen in der Arbeitszeit: Kleidung trocknen 45 min nach dem Nachheizen → 06:15–17:30
+    p = tagesplan(DI, LISTE, [], ALT, WetterTag(regen_az_heute_mm=6), trocknen=True)
     assert (p.start, p.ende) == (t(6, 15), t(17, 30))
     assert p.gruende == (PlanGrund.TROCKNEN,)
     assert p.abschnitte() == [
@@ -113,12 +115,17 @@ def test_mockup_beispiel_0615_bis_1730():
 
 
 def test_trocknen_nur_mit_schalter():
-    p = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_heute_mm=6), trocknen=False)
+    p = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_az_heute_mm=6), trocknen=False)
     assert p.ende == t(16, 45) and p.gruende == ()
-    wenig = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_heute_mm=1.9), trocknen=True)
+    wenig = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_az_heute_mm=1.9), trocknen=True)
     assert wenig.ende == t(16, 45)
-    genau = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_heute_mm=2.0), trocknen=True)
-    assert genau.ende == t(17, 30)
+    genau = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_az_heute_mm=2.0), trocknen=True)
+    assert genau.ende == t(16, 45) + 60                                     # Stufe 1: 60 min länger
+    viel = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_az_heute_mm=5.0), trocknen=True)
+    assert viel.ende == t(16, 45) + 100                                     # Stufe 2 ab 5 mm: 100 min länger
+    # AN-0021: nur der Regen in der Arbeitszeit zählt – 20 mm in der Nacht, 0 in der Arbeitszeit: kein Trocknen
+    nachts = tagesplan(DI, LISTE, [], REGELN, WetterTag(regen_heute_mm=20, regen_vortag_mm=20, regen_az_heute_mm=0, regen_az_vortag_mm=0), trocknen=True)
+    assert nachts.ende == t(16, 45) and nachts.frueher == ()
 
 
 def test_fruehstart_bei_kaelte():
@@ -135,9 +142,10 @@ def test_fruehstart_bei_kaelte():
 
 def test_frueher_nach_regen_am_vortag():
     # Mockup Mittwoch: −1,2 °C und 6 mm am Vortag → 30 + 15 min vor dem Vorheizen
-    wetter = WetterTag(frueh_min_temp=-1.2, regen_vortag_mm=6)
+    wetter = WetterTag(frueh_min_temp=-1.2, regen_az_vortag_mm=3)
     p = tagesplan(MI, LISTE, [], REGELN, wetter, trocknen=True)
     assert p.start == t(6, 15) - 45
+    assert tagesplan(MI, LISTE, [], REGELN, WetterTag(frueh_min_temp=-1.2, regen_az_vortag_mm=6), trocknen=True).start == t(6, 15) - 60   # Stufe 2: 30 min
     assert p.gruende == (PlanGrund.FRUEHSTART, PlanGrund.FRUEHER_NACH_REGEN)
     ohne = tagesplan(MI, LISTE, [], REGELN, wetter, trocknen=False)
     assert ohne.start == t(5, 45) and PlanGrund.FRUEHER_NACH_REGEN not in ohne.gruende
@@ -160,7 +168,7 @@ def test_ausnahme_mit_wetter():
 
 def test_grenzen_des_tages():
     frueh = [Ausnahme(DI, "zeiten", t(0, 30), t(23, 50))]
-    p = tagesplan(DI, LISTE, frueh, REGELN, WetterTag(regen_heute_mm=5), trocknen=True)
+    p = tagesplan(DI, LISTE, frueh, REGELN, WetterTag(regen_az_heute_mm=5), trocknen=True)
     assert (p.start, p.ende) == (0, 24 * 60)
 
 
@@ -306,14 +314,15 @@ def test_bereinigen_beim_laden():
 
 # ---------------------------------------------------------------- AN-0004: „Warm ab“ für lernende Container
 def test_warm_ab_ersetzt_vorheizen_fruehstart_und_nachheizen():
-    kalt_regen = WetterTag(frueh_min_temp=-3, regen_vortag_mm=6, regen_heute_mm=6)
+    kalt_regen = WetterTag(frueh_min_temp=-3, regen_az_vortag_mm=6, regen_az_heute_mm=6)
+    stufe2 = REGELN.trocknen_stufen[-1]
     warm = WarmAb(vor_min=15, nach_min=10, max_min=120, aufheiz_min=50)
     p = tagesplan(MI, LISTE, [], REGELN, kalt_regen, trocknen=True, warm=warm)
     # Soll 15 min vor 07:00 erreicht, 50 min Aufheizen → Vorheizen ab 05:55; kein Kälte-Frühstart, früher nach Regen bleibt
-    assert p.vor == t(5, 55) and p.start == t(5, 55) - REGELN.trocknen_frueher_min
+    assert p.vor == t(5, 55) and p.start == t(5, 55) - stufe2.frueher_min
     assert PlanGrund.GELERNT in p.gruende and PlanGrund.FRUEHSTART not in p.gruende and PlanGrund.FRUEHER_NACH_REGEN in p.gruende
     # warm halten 10 min statt Nachheizen, danach Kleidung trocknen
-    assert p.nach == p.b + 10 and p.ende == p.nach + REGELN.trocknen_laenger_min
+    assert p.nach == p.b + 10 and p.ende == p.nach + stufe2.laenger_min
 
 
 def test_warm_ab_obergrenze_und_rueckfall():

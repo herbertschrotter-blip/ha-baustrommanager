@@ -113,3 +113,13 @@ def gradstunden(innen: float | None, aussen: float | None, stunden: float) -> fl
     if innen is None or aussen is None or stunden <= 0:
         return 0.0
     return max(0.0, innen - aussen) * stunden
+
+
+def ersparnis_buchen(gebucht_kwh: float | None, eur: float | None, kwh: float, preis: float) -> tuple[float, float]:
+    """Sensor „Ersparnis“ (€) fortlaufend buchen wie „Kosten“ (FE-0035): jede Änderung der gesparten kWh (ohne − geheizt,
+    nie unter 0) zählt zum Preis, der gerade gilt – ein neuer Strompreis bewertet die Vergangenheit nicht um. Ergebnis:
+    (gebuchte kWh, €). Erster Aufruf (bisher rechnete der Sensor Summe × Preis von heute): Startwert = genau dieser
+    Wert, damit die Statistik von HA beim Umstellen nicht springt."""
+    if gebucht_kwh is None or eur is None:
+        return kwh, kwh * preis
+    return kwh, eur + (kwh - gebucht_kwh) * preis

@@ -48,6 +48,10 @@ async def _neu(hass, freezer, shellys, zeit: str = DI_10, hk2_bereich: str = C2,
     return entry, st
 
 
+# AN-0021: eine Stufe wie bis 0.8.160 (ab 2 mm 45 min länger, 15 min früher) – die Szenarien rechnen mit diesen Zahlen
+EINE_STUFE = [{"ab_mm": 2.0, "laenger_min": 45, "frueher_min": 15}]
+
+
 async def _zu(hass, freezer, zeit: str, st) -> None:
     freezer.move_to(zeit)
     st.auswerten()
@@ -421,8 +425,10 @@ async def test_fruehstart_schwelle_dauer_und_schalter(hass: HomeAssistant, freez
 
 
 async def test_regen_gestern_frueher_nur_mit_trocknen(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
-    """Regen am Dienstag 6 mm: am Mittwoch beginnt Container 1 (Kleidung trocknen) 15 min früher, Container 2 nicht."""
+    """Regen am Dienstag 6 mm (in der Arbeitszeit, Regensensor: 0 bei Arbeitsbeginn, AN-0021): am Mittwoch beginnt
+    Container 1 (Kleidung trocknen) 15 min früher, Container 2 nicht."""
     entry, st = await _neu(hass, freezer, shellys)
+    st.e["heizung"]["trocknen_stufen"] = EINE_STUFE
     st.einstellungen.bereich(C1)["trocknen"] = True
     hass.states.async_set("sensor.regen", "6")                 # gemessen: wird für morgen gemerkt
     await _automatik(hass, st)
@@ -433,13 +439,14 @@ async def test_regen_gestern_frueher_nur_mit_trocknen(hass: HomeAssistant, freez
     hass.states.async_set("sensor.regen", "0")
     await _zu(hass, freezer, "2026-09-30 06:01:00+02:00", st)
     assert _an(hass, "switch.hk1") and st.daten.grund[C1] == "fruehstart"
-    assert any("seit gestern – heute Kleidung trocknen" in t for t in _texte(st, "wetter"))
+    assert any("mm gestern in der Arbeitszeit – heute 15 min früher" in t for t in _texte(st, "wetter"))
 
 
 @pytest.mark.parametrize(("regen", "ende"), [("2.0", 1050), ("1.9", 1005)])
 async def test_regen_heute_kleidung_trocknen_laenger(hass: HomeAssistant, freezer, shellys, nachrichten, regen, ende) -> None:
     """Regen heute ab 2 mm: Container mit Kleidung trocknen heizt 45 min länger (bis 17:30), Abschnitt „trocknen“."""
     entry, st = await _neu(hass, freezer, shellys)
+    st.e["heizung"]["trocknen_stufen"] = EINE_STUFE
     st.einstellungen.bereich(C1)["trocknen"] = True
     hass.states.async_set("sensor.regen", regen)
     await _automatik(hass, st)
@@ -453,6 +460,33 @@ async def test_regen_heute_kleidung_trocknen_laenger(hass: HomeAssistant, freeze
         assert _an(hass, "switch.hk1") and st.daten.zustand[C1] == "trocknen" and st.daten.text[C1] == "Kleidung trocknen"
         await _zu(hass, freezer, "2026-09-29 17:31:00+02:00", st)
     assert not _an(hass, "switch.hk1")
+
+
+async def test_nur_regen_in_der_arbeitszeit_zaehlt(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """AN-0021: 8 mm um 3 Uhr früh und nach Feierabend machen keine Kleidung nass – kein Trocknen; 3 mm zwischen 10 und
+    12 Uhr schon (Vorgabe: ab 2 mm 60 min länger, morgen 15 min früher). Text und Plan kommen von der Integration."""
+    entry, st = await _neu(hass, freezer, shellys)
+    st.einstellungen.bereich(C1)["trocknen"] = True
+    hass.states.async_remove("sensor.regen")                     # ohne Regensensor: die Stunden der Vorhersage
+    st.lz["wetter_tage"].get("2026-09-29", {}).pop("regen_mess", None)
+    st.lz["wetter_tage"].get("2026-09-29", {}).pop("regen_mess_a", None)
+    heute = dt_util.parse_datetime("2026-09-29T12:00:00+02:00").date()
+    h = lambda uhr: f"2026-09-29T{uhr}:00+02:00"   # noqa: E731
+    jetzt = dt_util.parse_datetime("2026-09-29T02:00:00+02:00")
+    st._wetter_tage_merken({heute: {"regen": 14.0, "regen_h": {h("03:00"): 8.0, h("18:00"): 6.0}}}, jetzt)
+    st.funktion("heizung").plan_neu()
+    assert st.wetter_tag_plan(heute).regen_az_heute_mm == 0.0 and st.wetter_tag_plan(heute).regen_heute_mm == 14.0
+    assert "trocknen" not in st.funktion("heizung").plan_bereich(heute, C1).gruende
+    st._wetter_tage_merken({heute: {"regen": 3.0, "regen_h": {h("10:00"): 1.0, h("11:00"): 2.0}}}, jetzt)
+    st.funktion("heizung").plan_neu()
+    await _automatik(hass, st)
+    plan = st.funktion("heizung").plan_bereich(heute, C1)
+    assert "trocknen" in plan.gruende and plan.ende == 1005 + 60
+    tr = _lz(hass, entry)["trocknen"]
+    assert tr["text"] == "3 mm Regen in der Arbeitszeit heute → 60 min länger, morgen 15 min früher" and tr["laenger_min"] == 60
+    assert st.lz["wetter_tage"]["2026-09-29"]["regen_az"] == 3.0                     # je Tag abgelegt
+    morgen = st.funktion("heizung").plan_bereich(dt_util.parse_datetime(f"{MI}T12:00:00+02:00").date(), C1)
+    assert ("frueher_nach_regen", 15) in morgen.frueher                              # gestrige Arbeitszeit → heute früher
 
 
 async def test_regen_vorhersage_wird_kleiner(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
@@ -487,8 +521,10 @@ async def test_regen_vorhersage_wird_kleiner(hass: HomeAssistant, freezer, shell
 async def test_summe_der_verlaengerungen(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
     """AN-0003: Kälte (30) + Regen gestern (15) + „Noch früher“ (30) zählen zusammen → ab 05:00; Regen heute +45 min."""
     entry, st = await _neu(hass, freezer, shellys)
+    st.e["heizung"]["trocknen_stufen"] = EINE_STUFE
     st.einstellungen.bereich(C1)["trocknen"] = True
-    st.lz["wetter_tage"] = {"2026-09-29": {"regen_mess": 6.0}, MI: {"frueh": -4.0, "regen": 6.0}}   # gestern gemessen
+    st.lz["wetter_tage"] = {"2026-09-29": {"regen_mess": 6.0, "regen_mess_a": 0.0, "regen_mess_b": 6.0},   # gestern gemessen, in der Arbeitszeit
+                            MI: {"frueh": -4.0, "regen": 6.0}}
     st.lz.setdefault("frueher", {})[MI] = 30
     await _automatik(hass, st)
     ab = _lz(hass, entry)["abschnitte"]
@@ -521,6 +557,7 @@ async def test_status_text_ohne_trocknende_container(hass: HomeAssistant, freeze
 async def test_plan_woche_mit_trocknen_ohne_trocknende_container(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
     """FRAGE: `plan_woche` rechnet immer mit Kleidung trocknen (Baustellen-Plan), auch wenn kein Container trocknet."""
     entry, st = await _neu(hass, freezer, shellys)
+    st.e["heizung"]["trocknen_stufen"] = EINE_STUFE
     hass.states.async_set("sensor.regen", "6")
     await _automatik(hass, st)
     heute = _lz(hass, entry)["plan_woche"][1]["plan"]

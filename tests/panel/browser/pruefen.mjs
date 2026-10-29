@@ -478,7 +478,7 @@ await fall('3d Container', browser, async (page, erwarte) => {
   await einer('.sheet .jc[data-id="polier"] .stepper button[data-d="0.5"]', 'baustelle/setzen', 'Heizung: Soll je Container +');
   await klick(page, `${D} >>> .sheet > .knopf`);
   await klick(page, `${D} >>> .hz-raster .hz-kachel[data-k="trocknen"]`);
-  await einer('.sheet .stepper button[data-k="tr_mm"][data-d="0.5"]', 'baustelle/setzen', 'Heizung: Kleidung trocknen ab Regen +');
+  await einer('.sheet .stepper button[data-tr="0-ab_mm+"]', 'baustelle/setzen', 'Heizung: Kleidung trocknen Stufe 1 ab Regen + (AN-0021)');
   await klick(page, `${D} >>> .sheet > .knopf`);
   await klick(page, `${D} >>> nav button[data-v="uebersicht"]`); await klick(page, `${D} >>> .glas-k[data-id="polier"]`);
   await panel(page, D, async () => { for (const b of BB.welt) b.rechte = { aendern: false, aktionen: ['gefuehl', 'warnung_stumm', 'jetzt_heizen', 'boost', 'bedarf', 'bedarf_aus'] }; await p._laden(); await new Promise(r => setTimeout(r, 150)); });
@@ -645,6 +645,25 @@ await fall('B10 Baseline am Handy', browser, async (page, erwarte) => {
       drin: ch.getBoundingClientRect().right <= sc.getBoundingClientRect().right + 1 }; });
   erwarte('Container-Kopf im Lauf: kurzer Chip „bis So 24:00“ am Handy', c && c.kurz && c.text === 'bis So 24:00' && c.drin, JSON.stringify(c));
   await bild(page, 'b10-kopf');
+});
+
+/* B11 Wochenplan „Diese Woche“ (FE-0034): alle Spuren gleich breit und > 0, auch an einem Tag ohne Gründe (heute). Die
+   Heizperiode definierte früher .hp-zeile/.hp-zeit seitenweit als Flex-Zeile – die Spur schrumpfte dann auf den Text */
+await fall('B11 Wochenplan Spuren', browser, async (page, erwarte) => {
+  const messen = sel => panel(page, sel, () => [...sr.querySelectorAll('.sheet .hp .hp-zeile:not(.achse)')].map(z => {
+    const s = z.querySelector('.tl-spur'); return { tag: z.querySelector('.hp-tag b').textContent, w: s ? Math.round(s.getBoundingClientRect().width) : -1,
+      grid: getComputedStyle(z).display === 'grid' }; }));
+  for (const [sel, name] of [[D, 'Desktop'], [T, 'Telefon']]) {
+    await panel(page, sel, () => { p.gehe('heizung'); return p.hzAuf('plan'); }); await warte(600);
+    const r = await messen(sel), w = r.map(z => z.w);
+    erwarte(`${name}: ${r.length} Tage, alle Spuren gleich breit und > 0, Zeile als Raster`, r.length === 7 && w.every(x => x > 40 && x === w[0]) && r.every(z => z.grid), JSON.stringify(r));
+    // Tag ohne Gründe (z. B. heute ohne Wetter-Anpassung): die Spur bleibt so breit wie die anderen
+    await panel(page, sel, () => { const iso = p.z.WOCHE_ISO[p.z.WOCHE.findIndex(([t]) => t === p.z.HEUTE_TAG)], q = p.d.plan[iso];
+      if (q) q.gruende = []; p.s.sheet = null; p.neuZeichnen(); return p.hzAuf('plan'); }); await warte(600);
+    const o = await messen(sel), h = o.find(z => z.tag === 'heute');
+    erwarte(`${name}: heute ohne Gründe – Spur so breit wie die anderen`, h && h.w > 40 && o.every(z => z.w === h.w), JSON.stringify(o));
+  }
+  await bild(page, 'b11-wochenplan');
 });
 
 server.close();

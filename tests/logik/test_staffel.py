@@ -13,6 +13,8 @@ from logik.staffel import (
     frei_je_anschluss,
     gesperrt,
     grenze_kw,
+    rang_anzeige,
+    rangliste,
     staffeln,
 )
 
@@ -367,3 +369,28 @@ def test_einer_je_container_zuerst():
 def test_gesperrt_nur_echtes_veto(will, erreichbar, laeuft, grund, erwartet):
     """BSM-033.06: Staffelungs-Veto für die Prognose (nur beobachtet)."""
     assert gesperrt(will, erreichbar, laeuft, grund and str(grund)) is erwartet
+
+
+def test_rangliste_mit_satten_heizkoerpern_im_plan():
+    """AN-0017: Die Rangliste zeigt alle Heizkörper, die laut Plan gerade dran sind – auch satte (Thermostat), mit offener
+    Tür oder zurückgehaltene Zusätze; getauscht wird nur, wer heizen will. Ein satter löst keinen Tausch aus."""
+    lasten = [hz("polier", an=True, im_plan=True), hz("mann", will=False, im_plan=True, ruht="satt", defizit=-0.4),
+              hz("lager", will=False, im_plan=True, ruht="tuer_offen"), hz("zusatz", will=False, im_plan=True, ruht="zurueckgehalten"),
+              hz("weg", will=False)]                                                    # nicht im Plan: nicht dabei
+    assert set(rangliste(lasten)) == {"polier", "mann", "lager", "zusatz"} and rangliste(lasten)[0] == "polier"
+    r = staffeln([klein(2.5)], lasten, REGELN)   # Platz für genau einen: der satte will nicht – kein Tausch
+    assert r.an == {"polier"} and r.wartet == {}
+    a = rang_anzeige(lasten, r.wartet, REGELN.max_gleichzeitig)
+    assert {z["id"]: z["text"] for z in a["zeilen"]} == {"polier": "heizt", "mann": "satt (Thermostat)", "lager": "Tür offen",
+                                                         "zusatz": "Zusatz zurückgehalten"}
+    assert a["kopf"] == "Anschluss hat Platz für alle – kein Tausch nötig"
+    # will der satte wieder heizen und passt nicht dazu: wartet, Kopf „wird getauscht“
+    voll = [lasten[0], hz("mann", im_plan=True, wartet_seit_min=20)]
+    r2 = staffeln([klein(2.5)], voll, REGELN)
+    a2 = rang_anzeige(voll, r2.wartet, REGELN.max_gleichzeitig)
+    zust = {z["id"]: z["zustand"] for z in a2["zeilen"]}
+    assert r2.wartet == {"polier": Warten.RUNDLAUF} and zust == {"polier": "heizt", "mann": "heizt"}   # Tausch: polier gibt ab, mann kommt
+    assert a2["kopf"] == "Anschluss voll – wird getauscht"
+    z3 = rang_anzeige([lasten[0], hz("mann", im_plan=True)], {"mann": Warten.ANSCHLUSS_VOLL}, 5)["zeilen"]
+    assert {z["id"]: z["zustand"] for z in z3} == {"polier": "heizt", "mann": "wartet"}
+    assert rang_anzeige(voll, {}, 5, an=False)["kopf"].startswith("Staffelung aus")

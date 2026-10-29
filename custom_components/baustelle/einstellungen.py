@@ -83,6 +83,9 @@ STANDARD: dict[str, Any] = {
         "trocknen_ab_mm": 2.0,
         "trocknen_laenger_min": 45,
         "trocknen_frueher_min": 15,
+        # AN-0021: Stufen nach dem Regen in der Arbeitszeit [{ab_mm, laenger_min, frueher_min}]; None = aus den drei
+        # Werten oben (unverändert → Vorgabe 2 mm 60/15, 5 mm 100/30; logik/regen.stufen_aus)
+        "trocknen_stufen": None,
         "tuer_pause_min": 3,
         "tuer_melden_min": 10,
         "boost_min": 30,

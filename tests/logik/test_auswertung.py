@@ -147,9 +147,11 @@ def test_veraenderung_und_ohne_automatik():
     assert a.veraenderung(5, 0) is None and a.veraenderung(None, 5) is None
     assert a.veraenderung(528, 4.6, vorher_ganz=False) is None   # Vormonat nur teilweise in der Baustelle
     grob = a.OHNE_HINWEIS
-    assert a.ohne_automatik(40, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 15.0, "prozent": 60.0, "hinweis": grob}
-    assert a.ohne_automatik(120, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 0.0, "prozent": 0.0, "hinweis": grob}
-    assert a.ohne_automatik(5, 0, 0.25) is None
+    oa = lambda mit, ohne, preis: a.ohne_automatik(a.gespart_reihen([mit], [ohne], preis))
+    assert oa(40, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 15.0, "prozent": 60.0, "hinweis": grob}
+    # mehr verbraucht als „ohne“: nichts gespart, „ohne“ = „mit“ wie die Linie der Kachel „Gespart“ (FE-0035)
+    assert oa(120, 100, 0.25) == {"ohne_eur": 30.0, "gespart_eur": 0.0, "prozent": 0.0, "hinweis": grob}
+    assert oa(5, 0, 0.25) is None and a.ohne_automatik(None) is None
 
 
 def test_reihe_offen_stellen_ohne_wert_bleiben_leer():
@@ -162,7 +164,7 @@ def test_gespart_reihen_summe_wie_ohne_automatik():
     von „gespart €“ ist `ohne_automatik.gespart_eur`, kommende Perioden bleiben leer."""
     mit, ohne = [1.0, 2.0, 0.5, None], [4.0, 3.0, 4.0, None]
     r = a.gespart_reihen(mit, ohne, 0.25)
-    oa = a.ohne_automatik(a.summe(mit), a.summe(ohne), 0.25)
+    oa = a.ohne_automatik(r)
     assert r["gespart_kwh"] == [3.0, 1.0, 3.5, None] and r["mit_kwh"] == [1.0, 2.0, 0.5, None]
     assert r["ohne_kwh"] == [4.0, 3.0, 4.0, None]   # ohne nie unter mit: genau die gemessene Reihe
     assert r["gespart_eur"] == [0.75, 0.25, 0.875, None] and r["ohne_eur"][0] == 1.0
@@ -174,12 +176,64 @@ def test_gespart_reihen_nie_unter_null():
     # Stunde 2 mit mehr als ohne: dort 0 gespart, die übrigen teilen sich Σohne − Σmit = 5 − 3 = 2 (roh 2 + 1 = 3)
     r = a.gespart_reihen([0.0, 1.0, 2.0], [2.0, 2.0, 1.0], 1.0)
     assert r["gespart_kwh"] == pytest.approx([4 / 3, 2 / 3, 0.0])
-    assert a.summe(r["gespart_kwh"]) == pytest.approx(a.ohne_automatik(3.0, 5.0, 1.0)["gespart_eur"])
+    assert a.summe(r["gespart_kwh"]) == pytest.approx(a.ohne_automatik(r)["gespart_eur"]) == pytest.approx(2.0)
     assert r["ohne_kwh"] == pytest.approx([4 / 3, 5 / 3, 2.0]) and r["summe"]["ohne_kwh"] == pytest.approx(5.0)
     # insgesamt mehr als ohne: nichts gespart (wie ohne_automatik), „ohne“ = „mit“
     r = a.gespart_reihen([3.0, 3.0], [2.0, 1.0], 1.0)
-    assert r["gespart_kwh"] == [0.0, 0.0] and r["ohne_kwh"] == [3.0, 3.0] and a.ohne_automatik(6.0, 3.0, 1.0)["gespart_eur"] == 0.0
+    assert r["gespart_kwh"] == [0.0, 0.0] and r["ohne_kwh"] == [3.0, 3.0] and a.ohne_automatik(r)["gespart_eur"] == 0.0
     assert a.gespart_reihen([1.0, None], [0.0, None], 1.0) is None and a.gespart_reihen([], [], 1.0) is None   # ohne Wert wie ohne_automatik
+
+
+def test_gespart_preiswechsel_mitten_im_monat():
+    """FE-0035: Preis 0,28 € bis 03.10., ab 04.10. 0,20 € – „gespart €“ im Oktober ist die Summe der Tage zu ihrem Preis,
+    nicht Σ kWh × Mischpreis (nach dem Verbrauch „mit“ gewichtet) und nicht Σ kWh × Preis von heute."""
+    from logik import preise as pl
+    preise = pl.liste([{"ab": "2026-09-01", "preis": 0.28}, {"ab": "2026-10-04", "preis": 0.20}], 0.28)
+    zr = a.zeitraum("Monat", date(2026, 10, 20))
+    p = a.perioden_preise(zr, lambda t: pl.preis_am(preise, t))
+    assert p[:3] == [0.28] * 3 and p[3:] == [0.20] * 28
+    mit = [2.0] * 3 + [10.0] * 16 + [None] * 12        # Anfang wenig geheizt, ab 20.10. noch keine Werte
+    ohne = [30.0] * 3 + [30.0] * 16 + [None] * 12
+    r = a.gespart_reihen(mit, ohne, p)
+    tage = sum((o - m) * p[i] for i, (m, o) in enumerate(zip(mit, ohne)) if m is not None)
+    assert r["summe"]["gespart_eur"] == pytest.approx(tage) == pytest.approx(3 * 28 * 0.28 + 16 * 20 * 0.20)
+    assert a.summe(r["gespart_eur"]) == pytest.approx(tage) and a.ohne_automatik(r)["gespart_eur"] == pytest.approx(tage)
+    misch = pl.preis_mittel(preise, [(date(2026, 10, i + 1), m) for i, m in enumerate(mit)], date(2026, 10, 31))
+    assert abs(r["summe"]["gespart_kwh"] * misch - tage) > 1 and abs(r["summe"]["gespart_kwh"] * 0.20 - tage) > 1   # die alten Wege
+    # Verlauf seit Beginn (eine Reihe über die Tage) und dieselben Tage als Monat: dasselbe gespart
+    tage_r = a.gespart_reihen(mit[:19], ohne[:19], a.tage_preise((date(2026, 10, i + 1) for i in range(19)), lambda t: pl.preis_am(preise, t)))
+    assert tage_r["summe"]["gespart_eur"] == pytest.approx(r["summe"]["gespart_eur"])
+
+
+def test_gespart_jahr_aus_tagen_und_baustellen_zusammen():
+    """FE-0035: Jahr = Tage zu Monaten zusammengefasst (Preiswechsel mitten im Monat je Tag); mehrere Baustellen je mit
+    ihren Preisen, dann addiert."""
+    t = a.gespart_reihen([1.0, 1.0, 2.0, None], [3.0, 3.0, 3.0, None], [0.3, 0.2, 0.2, 0.2])   # 30.09., 01.–03.10.
+    j = a.gespart_zusammen([t], 12, [8, 9, 9, 9])
+    assert j["gespart_kwh"][8] == pytest.approx(2.0) and j["gespart_kwh"][9] == pytest.approx(3.0) and j["gespart_kwh"][0] is None
+    assert j["gespart_eur"][8] == pytest.approx(0.6) and j["gespart_eur"][9] == pytest.approx(0.6)
+    assert j["summe"]["gespart_eur"] == pytest.approx(1.2) == pytest.approx(a.summe(j["gespart_eur"]))
+    zwei = a.gespart_zusammen([t, a.gespart_reihen([1.0], [2.0], 0.5), None], 4)
+    assert zwei["gespart_eur"][0] == pytest.approx(0.6 + 0.5) and zwei["summe"]["gespart_eur"] == pytest.approx(1.7)
+    assert a.gespart_zusammen([None], 3) is None
+
+
+def test_perioden_preise_tag_und_jahr():
+    from logik import preise as pl
+    preise = pl.liste([{"ab": "2026-01-01", "preis": 0.30}, {"ab": "2026-10-16", "preis": 0.20}], 0.3)
+    am = lambda t: pl.preis_am(preise, t)
+    assert a.perioden_preise(a.zeitraum("Tag", date(2026, 10, 16)), am) == [0.20] * 24
+    j = a.perioden_preise(a.zeitraum("Jahr", date(2026, 10, 20)), am)
+    assert j[8] == 0.30 and j[9] == pytest.approx((15 * 0.30 + 16 * 0.20) / 31)
+    # „ohne Automatik“ eines Containers erst ab Beginn: nur die Tage ab dem 10.10. zählen im Mittel
+    assert a.perioden_preise(a.zeitraum("Jahr", date(2026, 10, 20)), am, date(2026, 10, 10), date(2026, 10, 21))[9] == pytest.approx((6 * 0.30 + 5 * 0.20) / 11)
+
+
+def test_je_tag_summiert_ids():
+    zone = ZoneInfo("Europe/Vienna")
+    p = lambda t, h: {"start": f"{t}T00:00:00+02:00", "change": h}
+    st = {"a": [p("2026-10-01", 1.0), p("2026-10-03", 2.0)], "b": [p("2026-10-01", 0.5)]}
+    assert a.je_tag(st, ["a", "b", None], date(2026, 10, 1), 4, zone) == [1.5, None, 2.0, None]
 
 
 # ------------------------------------------------------------------ Heizperiode
@@ -238,7 +292,10 @@ def test_heiztage_tatsaechlich_geheizt():
 @pytest.mark.parametrize("fall", faelle("kennzahlen"))
 def test_kennzahlen(fall):
     e = fall["eingabe"]
-    nahe(a.kennzahlen(e["zaehler"], e["zustaende"], e["preis"], e["container"], e["heiztage"], e["monate"]), fall["erwartet"])
+    # FE-0035: „gespart“ kommt nicht mehr aus dem Sensor/Zähler, sondern aus gespart_reihen über die Tage seit Beginn
+    erwartet = {**fall["erwartet"], "gespart": 12.5, "gespart_text": "gespart seit 29.09."}
+    nahe(a.kennzahlen(e["zaehler"], e["zustaende"], e["preis"], e["container"], e["heiztage"], e["monate"], 12.5, date(2026, 9, 29)), erwartet)
+    assert a.kennzahlen(e["zaehler"], e["zustaende"], e["preis"], e["container"], e["heiztage"], e["monate"])["gespart"] is None
 
 
 @pytest.mark.parametrize("fall", faelle("monate"))

@@ -41,7 +41,8 @@ const verbrauch = (p, s) => html`${GRIFF}${verbrauchVorlage(p, s, 'sheet', true)
 /* Wetter: jetzt, stündlich, Tagesverlauf (heute/morgen) oder 3 Tage; Folgen für die Heizung von der Integration (Plan) */
 function wetter(p, s) {
   const d = p.d, a = s.wa || 'std', e = d.e, ws = p.zustand(d.wetterEid), w = d.wetter || {};
-  const folge = (t, mm) => html`${zahl(t) && t < e.frueh_temp ? html`<span class="w-folge blau">Frühstart</span>` : nothing}${zahl(mm) && mm >= e.tr_mm ? html`<span class="w-folge amber">Kleidung trocknen</span>` : nothing}${zahl(t) && t > e.grenze ? html`<span class="w-folge">über Heizgrenze</span>` : nothing}`;
+  // AN-0021: „Kleidung trocknen“ nur, wenn der Plan der Integration es für den Tag vorsieht (Regen in der Arbeitszeit)
+  const folge = (t, iso) => html`${zahl(t) && t < e.frueh_temp ? html`<span class="w-folge blau">Frühstart</span>` : nothing}${((d.plan[iso] || {}).gruende || []).includes('trocknen') ? html`<span class="w-folge amber">Kleidung trocknen</span>` : nothing}${zahl(t) && t > e.grenze ? html`<span class="w-folge">über Heizgrenze</span>` : nothing}`;
   const H = p.vorhersage.hourly, D = p.vorhersage.daily, jetzt = d.z.jetztMs;
   const regen = x => html`<span class="w-regen">${x && zahl(x.precipitation) && x.precipitation > 0 ? de(x.precipitation) + ' mm' : '–'}</span>`;
   let inhalt;
@@ -62,13 +63,13 @@ function wetter(p, s) {
           <div class="w-3t"><b>${wtag(t)}</b><span class="leise">${kurzDatum(t)}</span></div>${svg(wetterIcon(x.condition, 40))}
           <div class="w-3w"><b>${de(x.temperature, 0)}°</b><span class="leise">${de(x.templow, 0)}°</span></div>
           <div class="w-3r">${regen(x)}<span class="leise">${zahl(x.precipitation_probability) ? x.precipitation_probability : 0} %</span></div>
-          <div class="w-3f">${folge(x.templow, x.precipitation)}</div></div>`; })}</div>`;
+          <div class="w-3f">${folge(x.templow, t)}</div></div>`; })}</div>`;
   }
   const [wz, wt, wtemp] = p.wetterJetzt(), gef = ws && ws.attributes.apparent_temperature;
   const morgen = plusTage(d.z.HEUTE, 1), pm = d.plan[morgen], wm = p.wetterTag(morgen), g = (pm && pm.gruende) || [];
-  const fuer = [g.includes('frueher_nach_regen') ? `Kleidung trocknen morgen früh aktiv (Regen über ${de(e.tr_mm)} mm)` : '',
+  const fuer = [g.includes('frueher_nach_regen') ? `Kleidung trocknen morgen früh aktiv${d.trocknen && zahl(d.trocknen.heute_mm) ? ` (${de(d.trocknen.heute_mm, 1)} mm Regen in der Arbeitszeit heute, ${d.trocknen.frueher_morgen_min} min früher)` : ''}` : '',
     g.includes('fruehstart') ? `Kälte-Frühstart morgen ${e.frueh_min} min früher${zahl(wm.kalt) ? ` (${de(wm.kalt, 0).replace('-', '−')} °C)` : ''}` : ''].filter(Boolean);
-  return html`${GRIFF}<h3>Wetter · ${p.name(d.wetterEid) || d.titel}</h3><div class="w-jetzt">${svg(wetterIcon(wz, 72))}<div><b>${zahl(wtemp) ? de(wtemp) + ' °C' : '–'}</b><div class="leise">${[ws ? WETTER_TEXT[p.nachtWetter(ws.state)] || ws.state : wt, zahl(w.regen_heute) && w.regen_heute > 0 ? `${de(w.regen_heute, w.regen_heute % 1 ? 1 : 0)} mm seit gestern` : '', zahl(gef) ? `gefühlt ${de(gef, 0)} °C` : ''].filter(Boolean).join(' · ')}</div></div></div>
+  return html`${GRIFF}<h3>Wetter · ${p.name(d.wetterEid) || d.titel}</h3><div class="w-jetzt">${svg(wetterIcon(wz, 72))}<div><b>${zahl(wtemp) ? de(wtemp) + ' °C' : '–'}</b><div class="leise">${[ws ? WETTER_TEXT[p.nachtWetter(ws.state)] || ws.state : wt, zahl(w.regen_heute) && w.regen_heute > 0 ? `${de(w.regen_heute, w.regen_heute % 1 ? 1 : 0)} mm Regen heute` : '', zahl(gef) ? `gefühlt ${de(gef, 0)} °C` : ''].filter(Boolean).join(' · ')}</div></div></div>
         <div class="seg">${[['std', 'Stündlich'], ['tag', 'Tagesverlauf'], ['3', '3 Tage']].map(([k, t]) => html`<button data-v=${k} class=${a === k ? 'on' : ''} @click=${() => p.wetterAnsicht(k)}>${t}</button>`)}</div>
         <div class="w-inhalt">${inhalt}</div>
         <div class="leise">Für die Heizung: ${fuer.length ? fuer.join(', ') + '.' : 'morgen nichts Besonderes.'}</div>${knopf('Schließen', () => p.schliessen())}`;
@@ -105,17 +106,23 @@ const stromZustand = x => x.b.offline || !x.g.erreichbar ? ['offline', 'rot-t'] 
 
 /** Rangliste der Staffelung (Herbert 01.10.2026, Mockup staffel-rang.html): Reihenfolge und Bedarf in °C rechnet die
  *  Integration (laufzeit.staffel.rang, laufzeit.container.<id>.bedarf) – hier nur die Anzeige */
+/* AN-0017: Zustand je Zeile und Kopfzeile kommen von der Integration (laufzeit.staffel.rangliste) – Klasse nur zur Farbe */
+const RANG_KLASSE = { heizt: 'amber-t', wartet: 'blau', satt: 'leise', tuer_offen: 'lila', zurueckgehalten: 'leise', aus: 'leise' };
+const rangZustand = (z, x, zustand) => !z ? zustand(x) : x.b.offline || !x.g.erreichbar ? ['offline', 'rot-t']
+  : [`${z.text}${z.zustand === 'wartet' && x.g.warte && zahl(x.g.warte.dran_in_min) ? ` – dran in ${x.g.warte.dran_in_min} min` : ''}`, RANG_KLASSE[z.zustand] || 'leise'];
 export function stromRang(p, L, zustand = stromZustand) {
-  const d = p.d, rang = (d.staffel && d.staffel.rang) || [], offen = p.s.srOffen || [];
+  const d = p.d, rl = (d.staffel && d.staffel.rangliste) || null, rang = rl ? rl.zeilen.map(z => z.id) : (d.staffel && d.staffel.rang) || [], offen = p.s.srOffen || [];
+  const zNach = Object.fromEntries(((rl && rl.zeilen) || []).map(z => [z.id, z]));
   const nachId = Object.fromEntries(L.hk.map(x => [x.g.id, x])), zeilen = rang.map(id => nachId[id]).filter(Boolean);
   if (!zeilen.length) return nothing;
   const f = (v, k = 2) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${de(Math.abs(v), k)}`, gesehen = new Set();
   const letzterAn = [...zeilen].reverse().find(x => x.g.an);
   return html`<div class="sr-kopf"><b>Rangliste</b><span class="leise">oben = zuerst an, unten = gibt zuerst ab</span></div>
+      ${rl && rl.kopf ? html`<div class="sr-lage">${rl.kopf}</div>` : nothing}
       <div class="sr-liste">${zeilen.map((x, i) => {
         const { b, g } = x, B = b.bedarfGrad, erster = !gesehen.has(b.id); gesehen.add(b.id);
         const stufen = html`${b.z === 'frost' ? html`<span class="sr-stufe frost">❄ Frostschutz</span>` : nothing}${b.boost ? html`<span class="sr-stufe boost">⚡ Schnell</span>` : nothing}${erster ? html`<span class="sr-stufe erster">erster im Container</span>` : html`<span class="sr-stufe">Zweitgerät</span>`}${b.prio && b.prio !== 'normal' ? html`<span class="sr-stufe">Priorität ${b.prio}</span>` : nothing}`;
-        const [zt, zk] = zustand(x), auf = offen.includes(g.id);
+        const [zt, zk] = rangZustand(zNach[g.id], x, zustand), auf = offen.includes(g.id);
         const mitFuehler = B && zahl(B.jetzt);
         const wert = B ? html`<div class="sr-bedarf">${f(B.summe)} °C<small>${mitFuehler ? `Bedarf in ${B.horizont_min} min` : 'ohne Fühler'}</small></div>` : html`<div class="sr-bedarf">–<small>noch nicht gerechnet</small></div>`;
         const teile = !B ? [] : mitFuehler ? [

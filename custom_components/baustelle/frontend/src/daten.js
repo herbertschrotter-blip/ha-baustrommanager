@@ -85,9 +85,9 @@ export function bauen(r, hass, ersatzZone) {
       lern: c.lernen || null, start: c.start || null, takt: c.takt || null, baseline: c.baseline || null, eingestellt: Array.isArray(c.eingestellt) ? c.eingestellt : [], groesse: c.groesse || null, symbol: c.symbol || null, warmVor: zahl(eb.warm_vor) ? Number(eb.warm_vor) : null, warmNach: zahl(eb.warm_nach) ? Number(eb.warm_nach) : null };   // lernende Regelung (0.8): Lernstand von der Integration
   });
   const plan = {}, frei = {};
-  const freiName = {};
+  const freiName = {}, regenAz = {};
   for (const [iso, q] of Object.entries(lz.plan_ausnahmen || {})) plan[iso] = q || null;   // FE-0012: Tage mit Ausnahmen (auch später)
-  for (const p of lz.plan_woche || []) { plan[p.datum] = p.plan || null; frei[p.datum] = p.frei || null; if (p.name) freiName[p.datum] = p.name; }
+  for (const p of lz.plan_woche || []) { plan[p.datum] = p.plan || null; frei[p.datum] = p.frei || null; if (p.name) freiName[p.datum] = p.name; if (p.regen_az !== undefined) regenAz[p.datum] = p.regen_az; }
   const warnungen = (lz.warnungen || []).map(w => ({ id: w.key, key: w.key, art: w.art, stufe: w.stufe === 'stoerung' ? 'stoerung' : 'hinweis', b: w.bereich || null, g: w.geraet || null,
     titel: w.titel || w.art || '', hilfe: w.hilfe || '', seitIso: w.seit, stumm: !!(w.stumm_bis && Date.parse(w.stumm_bis) > jetztMs) }));
   const termine = (lz.termine || []).map(t => { const l = lokalZ(t.von, zone), lb = lokalZ(t.bis, zone);
@@ -101,7 +101,7 @@ export function bauen(r, hass, ersatzZone) {
   return { r, entry: bs.entry_id, titel: bs.titel || 'Baustelle', aktiv, geladen: bs.geladen !== false, version: bs.version, optionen: opt, ent: r.entitaeten || {}, z, e,
     funktionen: r.funktionen || ['heizung', 'pumpen'],
     bereiche, anschluesse, firmen, zuordnung, arbeitszeiten, ausnahmen: (e0.ausnahmen || []).map(a => ({ datum: a.datum, art: a.art in AUSNAHME ? a.art : 'zeiten', von: a.von || '07:00', bis: a.bis || '16:30', notiz: a.notiz || '' })),
-    warnungen, termine, plan, frei, freiName, abschnitte: lz.abschnitte || {}, staffel: lz.staffel || null, sollG: lz.soll_gleitend || null, wetter: lz.wetter || {}, heizgrenze: lz.heizgrenze || {},
+    warnungen, termine, plan, frei, freiName, abschnitte: lz.abschnitte || {}, staffel: lz.staffel || null, trocknen: lz.trocknen || null, regenAz, sollG: lz.soll_gleitend || null, wetter: lz.wetter || {}, heizgrenze: lz.heizgrenze || {},
     status: lz.status || (aktiv ? 'bereit' : 'abgeschlossen'), statusText: lz.status_text || '', jetztBis: lz.jetzt_bis ? lokalZ(lz.jetzt_bis, zone).slice(11, 16) : null,
     np: lz.notprogramm || null, baseline: lz.baseline || null, protokoll: (lz.protokoll || []).map(p => protokollZeile(p, z, ersatzZone)), zaehler: zl, termineKal: e0.termine_kalender || null, wetterEid,
     beginn: bs.beginn || opt.beginn || null, beginnAuto: bs.beginn_auto === true, ende: opt.ende || null,   // Beginn leer = Tag der Anlage (AN-0002)

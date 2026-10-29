@@ -24,6 +24,7 @@ from __future__ import annotations
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 import math
 from zoneinfo import ZoneInfo
@@ -190,7 +191,7 @@ def planen(
         if wt.frueh_min_temp is None:
             frueh = [w.aussen_c for w in ws if w.zeit.von.astimezone(zone).hour in FRUEH_STUNDEN]
             if frueh:
-                wt = WetterTag(min(frueh), wt.regen_vortag_mm, wt.regen_heute_mm)
+                wt = replace(wt, frueh_min_temp=min(frueh))
                 gruende_tag.append("fruehstart_aus_szenario")
         plan = tagesplan(tag.datum, tag.arbeitszeiten, tag.ausnahmen, tag.heizregeln, wt, tag.trocknen, frei=tag.frei,
                          warm=tag.warm_ab)

@@ -15,6 +15,7 @@ from ...logik.zaehlen import (
     hochrechnung,
     mittel,
     mittel_im_betrieb,
+    ersparnis_buchen as ersparnis_logik,
     rate,
     tage_heizperiode,
 )
@@ -64,6 +65,18 @@ def energie_buchen(hz: Heizung, g: GeraetInfo, kwh: float) -> None:
         hz.st.zaehler_plus(f"energie_typ:{g.typ}", kwh)
         if hz.vergleichbar(g.bereich):
             hz.st.zaehler_plus(f"vgl_kwh:{g.bereich}", kwh)
+    hz.ersparnis_buchen()
+
+
+def ersparnis_buchen(hz: Heizung) -> None:
+    """Sensor „Ersparnis“: Änderung der gesparten kWh zum Preis von heute (`logik/zaehlen.ersparnis_buchen`, FE-0035)."""
+    st, neu = hz.st, hz.ersparnis_kwh()
+    alt = st.zaehler.get("ersparnis_kwh")
+    if alt is not None and abs(neu - float(alt)) < 1e-12:
+        return
+    st.zaehler["ersparnis_kwh"], st.zaehler["ersparnis_eur"] = ersparnis_logik(
+        alt, st.zaehler.get("ersparnis_eur"), neu, st.preis_am(dt_util.now().date()))
+    st.einstellungen.speichern(ZAEHLER_SPEICHERN_S)
 
 
 def energie_ausbuchen(hz: Heizung, g: GeraetInfo, kwh: float) -> None:
@@ -72,12 +85,14 @@ def energie_ausbuchen(hz: Heizung, g: GeraetInfo, kwh: float) -> None:
     if g.rolle == ROLLE_HEIZKOERPER:
         hz.st.zaehler_minus(f"energie_typ:{g.typ}", kwh)
         hz.st.zaehler_minus(f"vgl_kwh:{g.bereich}", kwh)
+    hz.ersparnis_buchen()
 
 
 def zaehlen_ende(hz: Heizung, jetzt: datetime, stunden: float) -> None:
     """„Ohne Automatik“ (24-h-Dauerbetrieb) und Heiztage."""
     st = hz.st
     st.zaehler_plus("ohne", hz._ohne_w * stunden / 1000)
+    hz.ersparnis_buchen()
     if hz._heiztag and st.zaehler.get("heiztag_letzter") != jetzt.date().isoformat():
         st.zaehler["heiztag_letzter"] = jetzt.date().isoformat()
         st.zaehler_plus("heiztage", 1)

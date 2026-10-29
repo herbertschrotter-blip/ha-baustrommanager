@@ -225,7 +225,7 @@ def test_frueher_regen_und_noch_frueher_verschieben_den_start_wie_den_plan():
     s = S.rechnen(_eingabe(frueher=(("frueher_nach_regen", 15), ("noch_frueher", 5))))
     assert (s.beginn_m, s.auf_beginn_m, s.frueher_min, s.plan_aufheiz_min) == (1630, 1650, 20, 190)
     assert s.warm_m < 1835 and s.innen_start > 13.9                      # heizt früher, also früher warm
-    plan = tagesplan(MORGEN, LISTE_710, [], HeizRegeln(trocknen_frueher_min=15), W(regen_vortag_mm=6), trocknen=True,
+    plan = tagesplan(MORGEN, LISTE_710, [], HeizRegeln(), W(regen_az_vortag_mm=3), trocknen=True,
                      warm=WarmAb(vor_min=30, max_min=300, aufheiz_min=s.plan_aufheiz_min))
     assert plan.vor == 210 and plan.start == 195                      # Regen allein: 15 min (Noch früher: plan.py)
     assert plan.start - 5 == s.beginn_m - 1440                            # mit Noch früher 5 min = Start
@@ -261,7 +261,7 @@ def test_fest_beginn_plan_beginn_oder_jetzt():
 
 def test_plan_kennt_seine_verschiebung():
     """Die Verschiebung „früher“ steht im Plan selbst (eine Regel): Regen am Vortag mit Kleidung trocknen."""
-    p = tagesplan(MORGEN, LISTE_710, [], HeizRegeln(trocknen_frueher_min=15), WetterTag(regen_vortag_mm=6), trocknen=True,
+    p = tagesplan(MORGEN, LISTE_710, [], HeizRegeln(), WetterTag(regen_az_vortag_mm=3), trocknen=True,
                   warm=WarmAb(vor_min=30, aufheiz_min=60))
     assert p.frueher == (("frueher_nach_regen", 15),) and p.vor - p.start == 15
 

@@ -263,7 +263,7 @@ async def test_feiertag_aus_dem_kalender(hass: HomeAssistant, freezer, shellys, 
     assert st.daten.status == "feiertag" and st.daten.grund[C2] == "frei"
     woche = struktur(hass, entry)["laufzeit"]["plan_woche"]
     assert [t["datum"] for t in woche][:2] == ["2026-09-28", "2026-09-29"]
-    assert woche[1] == {"datum": "2026-09-29", "plan": None, "frei": "feiertag", "name": "Testfeiertag"}
+    assert woche[1] == {"datum": "2026-09-29", "plan": None, "frei": "feiertag", "name": "Testfeiertag", "regen_az": 0.0}
     assert woche[2]["plan"]["a"] == 420 and woche[2]["plan"]["ende"] == 1005
 
 

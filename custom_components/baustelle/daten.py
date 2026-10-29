@@ -64,7 +64,8 @@ def _plan_woche(st: Steuerung, heute: date) -> list[dict[str, Any]]:
     tage = []
     for tag in _woche(heute):
         frei = "ausnahme" if any(a.datum == tag and str(a.art) == "frei" for a in st.ausnahmen()) else st.frei_art(tag)
-        eintrag: dict[str, Any] = {"datum": tag.isoformat(), "plan": plan_dict(Heizung.von(st).plan(tag, True)), "frei": frei}
+        eintrag: dict[str, Any] = {"datum": tag.isoformat(), "plan": plan_dict(Heizung.von(st).plan(tag, True)), "frei": frei,
+                                   "regen_az": st.wetter_tag_plan(tag).regen_az_heute_mm}   # AN-0021: Regen in der Arbeitszeit
         if frei == "feiertag" and tag in st.kalender_namen:
             eintrag["name"] = st.kalender_namen[tag]
         tage.append(eintrag)
@@ -240,6 +241,7 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
         "warnungen": warnungen,
         "wetter": {"aussen": w.aussen, "aussen_max": w.aussen_max, "frueh_min": w.frueh, "regen_vortag": w.regen_vortag,
                    "regen_heute": w.regen_heute, "zustand": w.zustand},
+        "trocknen": heizung.trocknen_anzeige(heute) if heizung.aktiv() else None,   # AN-0021: Regen in der Arbeitszeit, gestuft
         "heizgrenze": {"bezug": heizgrenze_bezug(str(h["heizgrenze_basis"]), w.aussen_max, w.aussen),
                        "zu_warm": heizung.zu_warm(w)},
         "termine": list(heizung.termine),

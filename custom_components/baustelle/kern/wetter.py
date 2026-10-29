@@ -14,8 +14,8 @@ from homeassistant.util import dt as dt_util
 from ..const import CONF_REGEN_SENSOR, CONF_TEMP_SENSOR, CONF_WETTER
 from ..funktionen.basis import ZAEHLER_SPEICHERN_S, zahl as _zahl
 from ..logik import regelung as regel_logik
-from ..logik.regen import regen_des_tages, regen_vorhersage, stunden_merken
-from ..logik.arbeitszeit import WetterTag
+from ..logik.regen import regen_arbeitszeit, regen_des_tages, regen_vorhersage, stunden_merken
+from ..logik.arbeitszeit import WetterTag, arbeit_am
 from .typen import WetterWerte
 
 if TYPE_CHECKING:
@@ -112,6 +112,13 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
         gemerkt = st.lz.setdefault("wetter_tage", {}).setdefault(heute.isoformat(), {})
         if gemerkt.get("regen_mess") is None or regen > gemerkt["regen_mess"]:
             gemerkt["regen_mess"] = regen
+        # AN-0021: Stand des Tageszählers bei Arbeitsbeginn und -ende – die Differenz ist der Regen in der Arbeitszeit
+        if (az := arbeit_am(st.arbeitszeiten(), st.ausnahmen(), heute)) is not None:
+            minute = jetzt.hour * 60 + jetzt.minute
+            if minute >= az[0] and gemerkt.get("regen_mess_a") is None:
+                gemerkt["regen_mess_a"] = regen if minute < az[1] else None
+            if minute >= az[1] and gemerkt.get("regen_mess_b") is None and gemerkt.get("regen_mess_a") is not None:
+                gemerkt["regen_mess_b"] = regen
     else:
         regen = regen_des_tages(tag)
     aussen_max = tag.get("max")
@@ -131,13 +138,32 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     )
 
 
+def regen_az(st: Steuerung, tag: date) -> float | None:
+    """AN-0021: Regen in der Arbeitszeit eines Tages (`logik/regen.regen_arbeitszeit`) – gemessen (Tageszähler bei
+    Arbeitsbeginn/-ende), sonst die Stunden der Vorhersage in der Arbeitszeit, sonst die Tagessumme; ohne Arbeitszeit 0.
+    Für vergangene Tage und heute steht der Wert je Tag in `wetter_tage` (`regen_az`)."""
+    werte = st._wetter_tag(tag)
+    az = arbeit_am(st.arbeitszeiten(), st.ausnahmen(), tag)
+    if az is None:
+        return 0.0 if werte else None
+    ende = werte.get("regen_mess_b")
+    if ende is None:   # heute während der Arbeit: der Stand jetzt; ein vergangener Tag ohne Stand bei Arbeitsende (HA aus): Tageshöchstwert
+        ende = werte.get("regen_mess")
+    mm = regen_arbeitszeit(werte.get("regen_h"), az[0], az[1], werte.get("regen"), werte.get("regen_mess_a"), ende)
+    if werte and tag <= dt_util.now().date():
+        werte["regen_az"] = mm   # je Tag ablegen (Nachschlagen/Diagnose; gerechnet wird immer neu aus den gemerkten Werten)
+    return mm
+
+
 def wetter_tag_plan(st: Steuerung, tag: date) -> WetterTag:
-    """Wetter eines Tages (Morgen-Tiefstwert, Regen am Vortag und heute) für die Pläne der Funktionen."""
+    """Wetter eines Tages (Morgen-Tiefstwert, Regen am Vortag und heute, dazu in der Arbeitszeit) für die Pläne."""
     heute = st._wetter_tag(tag)
     return WetterTag(
         frueh_min_temp=heute.get("frueh"),
         regen_vortag_mm=regen_des_tages(st._wetter_tag(tag - timedelta(days=1))),   # FE-0026: gemessen vor Vorhersage
         regen_heute_mm=regen_des_tages(heute),
+        regen_az_vortag_mm=regen_az(st, tag - timedelta(days=1)),
+        regen_az_heute_mm=regen_az(st, tag),
     )
 
 

@@ -207,7 +207,7 @@ function signatur(p, h) {
   return html`<label class="feld hp-wahl">Container<select @change=${e => { p.s.hpC = +e.target.value; p.neuZeichnen(); }}>${C.map((x, j) => html`<option value=${j} ?selected=${j === i}>${name(x)}</option>`)}</select></label>
     ${leer}${(c.punkte || []).length ? streu(c) : nothing}
     ${c.stand === 'lernt' ? html`<div class="leise">${name(c)} lernt noch: ${c.tage} von 10 ganzen Tagen. Danach zeigt sich, ab welcher Außentemperatur geheizt wird.</div>` : nothing}
-    <div class="hp-zeilen">${C.map(x => html`<div class="hp-zeile"><b>${name(x)}</b>
+    <div class="hpz-zeilen">${C.map(x => html`<div class="hpz-zeile"><b>${name(x)}</b>
       <span>${zahl(x.grenze) ? html`ab <b>${de(x.grenze, 1)} °C</b>` : zahl(x.kwh_je_grad) ? 'Heizgrenze noch offen' : '–'}</span>
       <span>${zahl(x.kwh_je_grad) ? `+${de(x.kwh_je_grad, 1)} kWh je Grad · Grundlast ${de(x.grundlast, 1)} kWh/Tag` : ''}</span>
       <span>${stand(x)}${zahl(x.cv_rmse) ? html`<span class="leise"> · ${de(x.cv_rmse * 100, 0)} %</span>` : nothing}</span></div>`)}</div>
@@ -231,7 +231,7 @@ const REITER = [['hoch', 'Hochrechnung', 'Prognose'], ['sig', 'Signatur'], ['kli
 export function heizperiodeVorlage(p, A, start = 'hoch') {
   const d = p.d, h = A && A.hochrechnung, r = p.s.hpReiter || start, [von, bis] = d.hp;
   return html`<div class="glas-panel block hp-karte"><div class="block-kopf"><b>Heizperiode</b>
-      <button class="chip glas-panel hp-zeit nur-admin" @click=${p.nurAdmin(() => p.einblenden('zeitraum-bs'))}>${MONATE[von - 1]}–${MONATE[bis - 1]}${h && h.ende ? ` · bis ${tagText(h.ende)}` : ''} ✎</button></div>
+      <button class="chip glas-panel hp-zeit-chip nur-admin" @click=${p.nurAdmin(() => p.einblenden('zeitraum-bs'))}>${MONATE[von - 1]}–${MONATE[bis - 1]}${h && h.ende ? ` · bis ${tagText(h.ende)}` : ''} ✎</button></div>
     <div class="seg glas-panel hp-reiter">${REITER.map(([k, t, kurz]) => html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s.hpReiter = k; p.neuZeichnen(); }}>${p.narrow && kurz ? kurz : t}</button>`)}</div>
     ${r === 'bl' ? baselineReiter(p) : !A ? LAEDT : !h || !zahl(h.mit_kwh) ? html`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>`
       : r === 'sig' ? signatur(p, h) : r === 'klima' ? klima(p, h)
@@ -274,7 +274,7 @@ export const HEIZPERIODE_CSS = `
 .q-ol, .q-tl { background: none !important; height: 0 !important; width: 14px !important; } .q-ol { border-top: 2px dotted var(--s2); } .q-tl { border-top: 2px solid var(--ink); }
 .hp-det-z .sum { border-top: 1px solid rgba(127,127,127,.2); } .hp-det-z .gesp b { color: #30d158; }
 .hp-grob { display: block; font-size: 12px; color: var(--amber); }   /* BSM-033.05: ohne/gespart nur grobe Obergrenze */
-.hp-zeit { font-size: 12px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.hp-zeit-chip { font-size: 12px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
 .hp-reiter { margin: 4px 0 8px; } .hp-zahl { font-size: 26px; font-weight: 600; margin: 4px 0 2px; } .hp-zahl .leise { font-size: 14px; font-weight: 400; }
 .hp-dia { width: 100%; max-width: 540px; height: auto; display: block; margin: 6px auto; }
 .hp-dia text, .hp-streu text { font-size: 9px; fill: var(--ink2); } .hp-dia .hp-yt { text-anchor: end; }
@@ -288,12 +288,12 @@ export const HEIZPERIODE_CSS = `
 .hp-leg i { display: inline-block; width: 18px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 3px solid; }
 .hp-leg .l-ist { border-color: var(--s3); } .hp-leg .l-prog { border-color: var(--s1); border-top-style: dashed; } .hp-leg .l-ohne { border-color: var(--s2); border-top-style: dotted; }
 .hp-her { margin-top: 6px; } .hp-link { cursor: pointer; color: var(--blau); white-space: nowrap; }
-.hp-st { font-size: 12px; white-space: nowrap; } .gruen-t { color: #30d158; }
+.hp-st { font-size: 12px; white-space: nowrap; }
 .hp-wahl select { width: 100%; }
 .hp-streu { width: 100%; max-width: 520px; height: auto; display: block; margin: 4px auto; }
 .hp-streu circle { fill: var(--ink2); opacity: .7; } .hp-streu path { fill: none; stroke: var(--s1); stroke-width: 2.5; }
-.hp-zeilen { display: flex; flex-direction: column; margin: 6px 0; }
-.hp-zeile { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,.15); } .hp-zeile > b { flex: 1 1 100%; }
+.hpz-zeilen { display: flex; flex-direction: column; margin: 6px 0; }
+.hpz-zeile { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,.15); } .hpz-zeile > b { flex: 1 1 100%; }
 .hp-monate { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; height: 120px; align-items: end; margin: 6px 0; }
 .hp-m { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; font-size: 10px; min-width: 0; }
 .hp-m i { width: 70%; border-radius: 3px 3px 0 0; background: rgba(127,127,127,.3); } .hp-m.hp i { background: var(--s2); }

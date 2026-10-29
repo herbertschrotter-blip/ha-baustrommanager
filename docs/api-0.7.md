@@ -48,7 +48,15 @@ Zeiten: ISO 8601 mit Zeitzone; Uhrzeiten `"HH:MM"`; Minuten seit Mitternacht als
     "staffel": {"an": true, "laufen": 4, "warten": 1, "max": 5,
                 "anschluesse": [{"id": "", "name": "", "voll_kw": 22.1, "grenze_kw": 14.8, "reserve_kw": 4,
                                  "heiz_kw": 7.99, "pumpe_kw": 0, "sonst_kw": 1.79, "frei_kw": 1.01}],
-                "rang": ["<gid>", "…"]},   // oben zuerst an, unten gibt zuerst ab (Bedarf in °C, logik/bedarf)
+                "rang": ["<gid>", "…"],   // oben zuerst an, unten gibt zuerst ab (Bedarf in °C, logik/bedarf)
+                // AN-0017: auch Heizkörper, die laut Plan dran sind, aber nicht heizen wollen (satt, Tür offen, Zusatz)
+                "rangliste": {"zeilen": [{"id": "<gid>", "zustand": "heizt|wartet|satt|tuer_offen|zurueckgehalten|aus",
+                                          "text": "satt (Thermostat)"}],
+                              "kopf": "Anschluss hat Platz für alle – kein Tausch nötig|Anschluss voll – wird getauscht|…"}},
+    // AN-0021: Kleidung trocknen nur nach Regen in der Arbeitszeit, gestuft (logik/regen); plan_woche[].regen_az = mm je Tag
+    "trocknen": {"heute_mm": 3.5, "gestern_mm": 0.0, "laenger_min": 60, "frueher_morgen_min": 15, "frueher_heute_min": 0,
+                 "aktiv": true, "text": "3,5 mm Regen in der Arbeitszeit heute → 60 min länger, morgen 15 min früher",
+                 "stufen": [{"ab_mm": 2.0, "laenger_min": 60, "frueher_min": 15}], "stufen_text": "ab 2 mm: +60 min, …"},
     // je Container zusätzlich laufzeit.container.<id>.bedarf (Staffelung): {"summe", "jetzt", "abkuehlen", "abkuehl_h",
     //   "gemessen", "trend_h", "nachlauf", "aufheiz_h", "ziel", "gerecht", "heiz_min", "horizont_min"} – °C bzw. °C/h, min
     // Soll gleitend (logik/soll): laufzeit.soll_gleitend = {"aussen_mittel", "tage", "start", "gefuehl", "soll", "n", "schritt",
@@ -461,7 +469,7 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
 `baustelle/auswertung`, `teil: verlauf` (Reiter Verlauf, Detailseite; `zeitraum`/`scope` ohne Bedeutung):
 
 ```json
-{"kwh": 412, "eur": 115.36, "gespart": 515.2, "container": 7, "heiztage": 16, "monate": 1, "je_tag": {"2026-09-30": 25.4},
+{"kwh": 412, "eur": 115.36, "gespart": 515.2, "gespart_text": "gespart seit 08.09.", "container": 7, "heiztage": 16, "monate": 1, "je_tag": {"2026-09-30": 25.4},
  "vergleich": {"tag": 25.75, "monat": 115.36, "ges": 412},
  "je_monat": {"2026-09": 340.9},
  "monate_je_container": {"labels": ["Sep"], "reihen": [{"bereich": "<bid>", "name": "Polier", "v": [330.9],
@@ -640,3 +648,22 @@ offen; Ereignis `tuer` mit `sensor`) und im Inventar (Bestand, Vorschau; Zuordne
 ins Aussehen ein). Batterie-Stufe `logik/sensoren.batterie_stufe` (Grenzen `BATTERIE_SCHWACH` 25 %, `BATTERIE_KRITISCH`
 10 %, je genau einmal): `sensoren[].batterie_stufe` für die Anzeige; bei „kritisch“ Warnung `fuehler_fehlt` je Sensor
 („Tür 1: Batterie schwach, 5 %“, Schlüssel `fuehler_fehlt:<bereich>:<entity_id>`), „schwach“ zeigt nur die Seite.
+
+## 12. Gespart, Rangliste, Trocknen, Urlaubskalender (29.10.2026, FE-0035, AN-0017, AN-0021, AN-0022)
+
+- **€ aus kWh je Tag (FE-0035):** „gespart“ und „ohne (24/7)“ rechnen je Periode mit dem Preis der Periode
+  (`logik/auswertung.geld_je`, `perioden_preise`; Jahr: aus den Tagen zu Monaten, `gespart_zusammen`), die Summen sind die
+  Summe der Perioden. `summen.ohne_automatik` kommt aus `gespart_reihen` (`ohne_eur` = Σ Linie „ohne“, bei Σohne < Σmit
+  also = „mit“). „alle laufenden“: je Baustelle mit ihren Preisen, dann addiert. Verlauf: `gespart` = dieselbe Rechnung
+  über die Tage seit Beginn bis heute (nicht mehr der Sensor `ersparnis`), `gespart_text` „gespart seit TT.MM.“.
+  `baustelle/ohne` rechnet `ergebnis` ebenso (Jahr: Mittel der Tagespreise ab Beginn). Sensor `ersparnis` bucht jede
+  Änderung der gesparten kWh zum Preis des Tages (Zähler `ersparnis_kwh`/`ersparnis_eur`, `logik/zaehlen.ersparnis_buchen`);
+  beim Umstellen Startwert = bisheriger Wert (kein Sprung in der Statistik).
+- **Rangliste (AN-0017):** `laufzeit.staffel.rangliste` (oben). Getauscht wird weiter nur, wer heizen will.
+- **Kleidung trocknen (AN-0021):** Einstellung `heizung.trocknen_stufen` = `[{ab_mm, laenger_min, frueher_min}]` (1–5,
+  `null` = aus `trocknen_ab_mm`/`_laenger_min`/`_frueher_min`: unverändert 2/45/15 → Vorgabe 2 mm 60/15 und 5 mm 100/30,
+  sonst eigene Werte als Stufe 1). Regen in der Arbeitszeit: Regensensor (Stand bei Arbeitsbeginn/-ende,
+  `wetter_tage[].regen_mess_a/_b`), sonst die Stunden der Vorhersage in der Arbeitszeit, sonst die Tagessumme; je Tag
+  `wetter_tage[].regen_az`.
+- **Urlaubskalender (AN-0022):** Die Seite bietet für Urlaub nur Kalender mit `supported_features` & 1 (CREATE_EVENT) an;
+  ohne einen zeigt sie den Hinweis auf „Lokaler Kalender“.

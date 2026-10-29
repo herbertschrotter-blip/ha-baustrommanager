@@ -97,6 +97,9 @@ SETZEN: dict[tuple[str, ...], Any] = {
     ("heizung", "trocknen_ab_mm"): vol.All(ZAHL, vol.Range(0, 100)),
     ("heizung", "trocknen_laenger_min"): vol.All(GANZ, vol.Range(0, 480)),
     ("heizung", "trocknen_frueher_min"): vol.All(GANZ, vol.Range(0, 240)),
+    ("heizung", "trocknen_stufen"): vol.Any(None, vol.All([{   # AN-0021: Kleidung trocknen gestuft
+        vol.Required("ab_mm"): vol.All(ZAHL, vol.Range(0, 100)), vol.Required("laenger_min"): vol.All(GANZ, vol.Range(0, 480)),
+        vol.Required("frueher_min"): vol.All(GANZ, vol.Range(0, 240))}], vol.Length(min=1, max=5))),
     ("heizung", "tuer_pause_min"): vol.All(GANZ, vol.Range(0, 120)),
     ("heizung", "tuer_melden_min"): vol.All(GANZ, vol.Range(0, 240)),
     ("heizung", "boost_min"): vol.All(GANZ, vol.Range(5, 480)),
@@ -1036,6 +1039,8 @@ async def ws_zaehler_korrigieren(hass: HomeAssistant, connection: websocket_api.
     zeit, vorher = dt_util.utcnow(), stand()   # Zeit vor dem Sprung: er liegt in diesem Abschnitt oder danach
     key, kwh = msg["key"], float(msg["plus_kwh"])
     st.zaehler_plus(key, kwh)
+    if heizung:
+        Heizung.von(st).ersparnis_buchen()   # FE-0035: Ersparnis folgt dem Nachtrag sofort (Sprung wird mit gemerkt)
     eintrag = ruecksprung.korrektur(zeit, key, kwh, msg["grund"], vorher, stand(), _benutzer(connection))
     st.e.setdefault("korrekturen", []).append(eintrag)
     zahl = f"{kwh:.1f}".replace(".", ",")

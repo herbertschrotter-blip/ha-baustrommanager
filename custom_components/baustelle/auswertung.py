@@ -363,6 +363,37 @@ async def _summen(hass: HomeAssistant, q: Quelle, zr: a.Zeitraum) -> dict[str, A
     }
 
 
+async def _gespart_tage(hass: HomeAssistant, q: Quelle, von: date, bis: date, preis_sim: float | None = None,
+                        roh: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    """Kachel „Gespart“ einer Baustelle je Tag in [von, bis): Verbrauch aller Bereiche und „ohne Automatik“ aus der
+    Tagesstatistik, € je Tag zum Preis des Tages (`logik/auswertung.gespart_reihen`) – Verlauf (seit Beginn) und Jahr."""
+    zone, n = _zone(), max(0, (bis - von).days)
+    if not n:
+        return None
+    mit_ids = [i for b in q.bereiche for i in q.energie_ids(b["id"])]
+    ohne_id = q.eid(q.entry.entry_id, "energie_ohne_automatik")
+    if roh is None:   # sonst schon geholt (Verlauf: dieselbe Tagesstatistik, ein Aufruf)
+        roh = await async_statistik(hass, [*mit_ids, ohne_id], a.mitternacht(von, zone), a.mitternacht(bis, zone), "day", {"change"})
+    tage = [von + timedelta(days=i) for i in range(n)]
+    preise = preis_sim if preis_sim is not None else a.tage_preise(tage, lambda t: preise_logik.preis_am(q.preise, t))
+    return a.gespart_reihen(a.je_tag(roh, mit_ids, von, n, zone), a.je_tag(roh, [ohne_id], von, n, zone), preise)
+
+
+async def _gespart(hass: HomeAssistant, quellen: list[Quelle], jetzt: list[dict[str, Any]], zr: a.Zeitraum,
+                   preis_sim: float | None) -> dict[str, Any] | None:
+    """Kachel „Gespart“ des Zeitraums: je Baustelle mit ihren Tagespreisen (FE-0035), dann zusammen. Jahr: aus den Tagen
+    zu Monaten (ein Preiswechsel mitten im Monat zählt je Tag)."""
+    teile = []
+    for x, s in zip(quellen, jetzt, strict=True):
+        if zr.periode == "month":
+            g = await _gespart_tage(hass, x, zr.von, zr.bis, preis_sim)
+            teile.append(a.gespart_zusammen([g], zr.n, [(zr.von + timedelta(days=i)).month - 1 for i in range(len(g["mit_kwh"]))]) if g else None)
+        else:
+            preise = preis_sim if preis_sim is not None else a.perioden_preise(zr, lambda t, x=x: preise_logik.preis_am(x.preise, t))
+            teile.append(a.gespart_reihen(s["mit_je"], s["ohne_je"], preise))
+    return a.gespart_zusammen(teile, zr.n)
+
+
 async def async_verlauf(hass: HomeAssistant, q: Quelle) -> dict[str, Any]:
     """Verlauf einer Baustelle: Kennzahlen (kWh, €, gespart, Heiztage, Monate, Vergleich), kWh je Monat, Verbrauch je
     Monat und Container mit CSV (Seite „Verlauf“ und Detailseite)."""
@@ -372,12 +403,16 @@ async def async_verlauf(hass: HomeAssistant, q: Quelle) -> dict[str, Any]:
     energie = q.eid(eid, "energie")
     heizzeit = {b["id"]: i for b in q.bereiche if b["art"] == ART_CONTAINER and (i := q.eid(b["id"], "heizzeit"))}
     strom = {b["id"]: i for b in q.bereiche if b["art"] == ART_CONTAINER and (i := q.eid(b["id"], "heizzeit_strom"))}
-    roh = await async_statistik(hass, [energie, *heizzeit.values(), *strom.values()], a.mitternacht(von, zone),
+    gespart_ids = [*(i for b in q.bereiche for i in q.energie_ids(b["id"])), q.eid(eid, "energie_ohne_automatik")]
+    roh = await async_statistik(hass, [energie, *heizzeit.values(), *strom.values(), *gespart_ids], a.mitternacht(von, zone),
                                 a.mitternacht(bis, zone), "day", {"change"})
     vw = a.verlauf_werte(roh.get(energie) if energie else None, {b: roh.get(i, []) for b, i in heizzeit.items()}, zone,
                          beginn, q.zaehler.get("heiztage"), {b: roh.get(i, []) for b, i in strom.items()})
-    zustaende = {k: _zustand(hass, q.eid(eid, k)) for k in ("energie", "kosten", "ersparnis")}
-    kennzahlen = a.kennzahlen(q.zaehler, zustaende, q.preis, len(q.bereiche), vw["heiztage"], vw["monate"])
+    zustaende = {k: _zustand(hass, q.eid(eid, k)) for k in ("energie", "kosten")}
+    # „gespart“ seit Beginn (bis heute bzw. Ende) wie die Auswertung: je Tag zum Preis des Tages (FE-0035)
+    g = await _gespart_tage(hass, q, beginn, min(bis, heute + timedelta(days=1)), roh=roh if von <= beginn else None)
+    kennzahlen = a.kennzahlen(q.zaehler, zustaende, q.preis, len(q.bereiche), vw["heiztage"], vw["monate"],
+                              g["summe"]["gespart_eur"] if g else None, beginn)
     # Verbrauch je Monat und Container
     m_von, m_bis, monate = a.monate_zeitraum(heute, beginn, ende)
     bereiche = [{"id": b["id"], "name": b["name"], "energie": q.eid(b["id"], "energie")} for b in q.bereiche]
@@ -417,8 +452,10 @@ async def async_ohne(
     w = a.reihen(zr, {i: roh.get(i, []) for i in ids}, zone)
     kwh = a.summe(a.verbrauch(w, ids, zr.n))
     ohne = a.summe(reihe)
+    preise = a.perioden_preise(zr, lambda t: preise_logik.preis_am(q.preise, t), beginn, jetzt.date() + timedelta(days=1))
+    mit = a.verbrauch(w, ids, zr.n) if ids else [0.0] * zr.n
     return {"zeitraum": _zeitraum_dict(zr), "basis": basis, "preis": q.preis, "kw": round(kw_summe, 3), "reihe": reihe,
-            "ohne_kwh": ohne, "kwh": kwh, "ergebnis": a.ohne_automatik(kwh, ohne, q.preis),
+            "ohne_kwh": ohne, "kwh": kwh, "ergebnis": a.ohne_automatik(a.gespart_reihen(mit, reihe, preise)),
             "geraete": [{"id": g["id"], "typ": g["typ"], "kw": kw.get(g["id"])} for g in eigene]}
 
 
@@ -468,8 +505,8 @@ async def async_auswertung(
     hr_werte, hr_erg = _hochrechnung(q)
     wetter = a.wetter_aus_signatur((hr_erg or {}).get("signatur"), preis)   # BSM-033: Energiesignatur der Baustelle
     gerade = wetter["gerade"]
-    oa = a.ohne_automatik(summen["kwh"], summen["ohne"], preis)
-    gespart = a.gespart_reihen(a.reihe_offen([x["mit_je"] for x in jetzt], zr.n), a.reihe_offen([x["ohne_je"] for x in jetzt], zr.n), preis)
+    gespart = await _gespart(hass, quellen, jetzt, zr, preis_sim)   # € je Periode zum Preis der Periode (FE-0035)
+    oa = a.ohne_automatik(gespart)
     hp_von = min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_VON) or 10)))
     hp_bis = min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_BIS) or 4)))
     return {

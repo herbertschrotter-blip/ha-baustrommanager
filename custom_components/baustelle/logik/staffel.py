@@ -65,6 +65,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from collections.abc import Collection
 from typing import Any
 
 SPANNUNG_V = 230
@@ -123,6 +124,8 @@ class Last:
     aus_seit_min: float = 1e9
     wartet_seit_min: float = 0.0
     gruppe: str = ""
+    im_plan: bool = False   # AN-0017: laut Plan gerade dran (Automatik an, Heizzeit läuft) – auch wer satt ist
+    ruht: str = ""          # warum ein Heizer im Plan gerade nicht heizen will (Ruhe: satt, tuer_offen, zurueckgehalten)
 
 
 @dataclass(frozen=True)
@@ -222,16 +225,58 @@ def _abschalt_reihenfolge(lasten: list[Last], laufend: dict[str, int] | None = N
                                          -l.kw, l.an_seit_min, l.id))
 
 
+class Ruhe(StrEnum):
+    """Warum ein Heizer im Plan gerade nicht heizen will (AN-0017) – die Funktion bzw. der Kern setzt `Last.ruht`."""
+
+    SATT = "satt"                        # Thermostat: Soll erreicht
+    TUER_OFFEN = "tuer_offen"
+    ZURUECKGEHALTEN = "zurueckgehalten"  # Bereich heizt, dieses Gerät (Zusatz) bleibt aus, solange eines reicht
+
+
+RANG_TEXT = {"heizt": "heizt", "wartet": "wartet", Ruhe.SATT: "satt (Thermostat)", Ruhe.TUER_OFFEN: "Tür offen",
+             Ruhe.ZURUECKGEHALTEN: "Zusatz zurückgehalten", "aus": "aus"}
+TAUSCH = (Warten.ANSCHLUSS_VOLL, Warten.RUNDLAUF)
+
+
 def rangliste(lasten: list[Last]) -> list[str]:
-    """Heizer (laufend oder wollend) von oben (zuerst an) nach unten (gibt zuerst ab) – für die Seite."""
-    heizer = [l for l in lasten if l.heizer and (l.an or l.will)]
+    """Heizer (laufend, wollend oder laut Plan gerade dran – AN-0017, auch satte) von oben (zuerst an) nach unten
+    (gibt zuerst ab) – für die Seite. Getauscht und rotiert wird weiter nur, wer heizen will (`staffeln`)."""
+    heizer = [l for l in lasten if l.heizer and (l.an or l.will or l.im_plan)]
     laufend = [l for l in heizer if l.an]
     erste: dict[str, str] = {}
-    for l in sorted(laufend, key=lambda l: (-l.prio, -_bedarf(l), l.id)) + sorted(heizer, key=lambda l: (-l.prio, -_bedarf(l), l.id)):
+    for l in sorted(laufend, key=lambda l: (-l.prio, -_bedarf(l), l.id)) + sorted(heizer, key=lambda l: (not l.will, -l.prio, -_bedarf(l), l.id)):
         if l.gruppe:
             erste.setdefault(l.gruppe, l.id)
     return [l.id for l in sorted(sorted(heizer, key=lambda l: (-l.kw, l.id)),
-                                 key=lambda l: (l.frost, l.boost, not l.gruppe or erste.get(l.gruppe) == l.id, l.prio, _bedarf(l)), reverse=True)]
+                                 key=lambda l: (l.frost, l.boost, l.an or l.will, not l.gruppe or erste.get(l.gruppe) == l.id, l.prio,
+                                                _bedarf(l)), reverse=True)]   # wer nur im Plan ist (satt …), steht unter allen, die heizen wollen
+
+
+def rang_zustand(last: Last, wartet: Collection[str] = ()) -> str:
+    """Zustand einer Zeile der Rangliste (AN-0017): heizt (läuft oder wird jetzt eingeschaltet), wartet (will, darf
+    noch nicht – steht in `wartet`), sonst warum er ruht (satt, Tür offen, zurückgehalten)."""
+    if last.an or (last.will and last.id not in wartet):
+        return "heizt"
+    if last.will:
+        return "wartet"
+    return last.ruht or "aus"
+
+
+def rang_anzeige(lasten: list[Last], wartet: dict[str, str], max_gleichzeitig: int, an: bool = True) -> dict[str, Any]:
+    """Rangliste für die Seite (AN-0017): Reihenfolge (`rangliste`), je Zeile Zustand und Text, dazu die Kopfzeile – ob
+    der Anschluss Platz für alle hat oder getauscht wird. `wartet`: Wartegrund je Heizer aus `staffeln`."""
+    nach_id = {l.id: l for l in lasten}
+    zeilen = [{"id": i, "zustand": (z := rang_zustand(nach_id[i], wartet)), "text": RANG_TEXT.get(z, z)} for i in rangliste(lasten)]
+    gruende = set(wartet.values())
+    if not an:
+        kopf = "Staffelung aus – es heizt, wer heizen will"
+    elif gruende & set(TAUSCH):
+        kopf = "Anschluss voll – wird getauscht"
+    elif Warten.MAX_GLEICHZEITIG in gruende:
+        kopf = f"Höchstens {max_gleichzeitig} gleichzeitig – wird getauscht"
+    else:
+        kopf = "Anschluss hat Platz für alle – kein Tausch nötig"
+    return {"zeilen": zeilen, "kopf": kopf}
 
 
 def staffeln(

@@ -87,6 +87,8 @@ def _staffeln(st: Steuerung, jetzt: datetime, soll: SollJeBereich) -> tuple[set[
         else:
             st._wartet_seit.pop(g.id, None)
         vorrang = st.funktion_von(g).staffel_vorrang(s_c, schaltet, g.bereich) if s_c is not None else {}
+        if schaltet and s_c is not None and s_c[0].ein and not ein and vorrang.get("im_plan"):
+            vorrang = {**vorrang, "ruht": staffel_logik.Ruhe.ZURUECKGEHALTEN}   # Bereich heizt, das Gerät bleibt aus
         lasten.append(
             staffel_logik.Last(
                 id=g.id, anschluss=e.get("anschluss") or "", kw=kw, heizer=schaltet, an=an, gruppe=g.bereich,
@@ -198,4 +200,7 @@ def _staffel_anzeige(st: Steuerung, anschluesse: list[staffel_logik.Anschluss], 
         "max": int(s["max_gleichzeitig"]),
         "anschluesse": liste,
         "rang": staffel_logik.rangliste(lasten),   # oben zuerst an, unten gibt zuerst ab (Bedarf in °C)
+        # AN-0017: je Zeile Zustand und Text, Kopfzeile (Platz für alle / wird getauscht)
+        "rangliste": staffel_logik.rang_anzeige(lasten, {g: w["grund"] for g, w in st.daten.warte.items()},
+                                                int(s["max_gleichzeitig"]), bool(s["an"])),
     }

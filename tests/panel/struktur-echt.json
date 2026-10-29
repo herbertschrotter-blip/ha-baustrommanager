@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.160",
+   "version": "0.8.161",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -365,6 +365,7 @@
     "trocknen_ab_mm": 2.0,
     "trocknen_laenger_min": 45,
     "trocknen_frueher_min": 15,
+    "trocknen_stufen": null,
     "tuer_pause_min": 3,
     "tuer_melden_min": 10,
     "boost_min": 30,
@@ -552,6 +553,8 @@
    "energie:schacht": 1.393333333333333,
    "kosten": 9.398900000000028,
    "kosten:schacht": 0.3901333333333326,
+   "ersparnis_kwh": 39.35150000000011,
+   "ersparnis_eur": 11.018420000000042,
    "zyklen:schacht_p1": 21.0,
    "mittel:polier_k1": 2010.0,
    "heizzeit_typ:konvektor": 5.883333333333318,
@@ -585,8 +588,8 @@
   },
   "laufzeit": {
    "status": "heizt",
-   "status_text": "♨ heizt bis 17:30",
-   "naechste": "2026-09-29T17:30:00+02:00",
+   "status_text": "♨ heizt bis 18:25",
+   "naechste": "2026-09-29T18:25:00+02:00",
    "jetzt_bis": null,
    "container": {
     "polier": {
@@ -982,7 +985,7 @@
        "ic": "👕",
        "text": "Kleidung trocknen",
        "kurz": "trocknen",
-       "satz": "Nach Regen ab 2 mm heizt dieser Container 45 min länger nach der Arbeit und am nächsten Morgen 15 min früher.",
+       "satz": "Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten Morgen früher: ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher.",
        "von": "container",
        "wirkt": true,
        "grund": null,
@@ -1357,7 +1360,8 @@
       "eigene": [],
       "ausnahmen": []
      },
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-09-29",
@@ -1367,7 +1371,7 @@
       "a": 420,
       "b": 990,
       "nach": 1005,
-      "ende": 1050,
+      "ende": 1105,
       "gruende": [
        "trocknen"
       ],
@@ -1375,12 +1379,13 @@
       "eigene": [],
       "ausnahmen": []
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 6.2
     },
     {
      "datum": "2026-09-30",
      "plan": {
-      "start": 330,
+      "start": 315,
       "vor": 375,
       "a": 420,
       "b": 1080,
@@ -1409,7 +1414,8 @@
        }
       ]
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-10-01",
@@ -1425,17 +1431,19 @@
       "eigene": [],
       "ausnahmen": []
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-10-02",
      "plan": null,
-     "frei": "urlaub"
+     "frei": "urlaub",
+     "regen_az": 5.5
     },
     {
      "datum": "2026-10-03",
      "plan": {
-      "start": 360,
+      "start": 345,
       "vor": 375,
       "a": 420,
       "b": 720,
@@ -1463,17 +1471,19 @@
        }
       ]
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-10-04",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     }
    ],
    "plan_ausnahmen": {
     "2026-09-30": {
-     "start": 330,
+     "start": 315,
      "vor": 375,
      "a": 420,
      "b": 1080,
@@ -1503,7 +1513,7 @@
      ]
     },
     "2026-10-03": {
-     "start": 360,
+     "start": 345,
      "vor": 375,
      "a": 420,
      "b": 720,
@@ -1694,13 +1704,13 @@
       ],
       [
        1005,
-       1050,
+       1105,
        "trocknen"
       ]
      ],
      "2026-09-30": [
       [
-       330,
+       315,
        375,
        "fruehstart"
       ],
@@ -1740,7 +1750,7 @@
      "2026-10-02": [],
      "2026-10-03": [
       [
-       360,
+       345,
        375,
        "fruehstart"
       ],
@@ -1793,8 +1803,24 @@
      }
     ],
     "rang": [
-     "polier_r1"
-    ]
+     "polier_r1",
+     "magazin_r1"
+    ],
+    "rangliste": {
+     "zeilen": [
+      {
+       "id": "polier_r1",
+       "zustand": "heizt",
+       "text": "heizt"
+      },
+      {
+       "id": "magazin_r1",
+       "zustand": "tuer_offen",
+       "text": "Tür offen"
+      }
+     ],
+     "kopf": "Anschluss hat Platz für alle – kein Tausch nötig"
+    }
    },
    "soll_gleitend": {
     "aussen_mittel": 4.8,
@@ -2044,6 +2070,28 @@
     "regen_vortag": null,
     "regen_heute": 6.2,
     "zustand": "rainy"
+   },
+   "trocknen": {
+    "heute_mm": 6.2,
+    "gestern_mm": null,
+    "laenger_min": 100,
+    "frueher_morgen_min": 30,
+    "frueher_heute_min": 0,
+    "aktiv": true,
+    "text": "6,2 mm Regen in der Arbeitszeit heute → 100 min länger, morgen 30 min früher",
+    "stufen": [
+     {
+      "ab_mm": 2.0,
+      "laenger_min": 60,
+      "frueher_min": 15
+     },
+     {
+      "ab_mm": 5.0,
+      "laenger_min": 100,
+      "frueher_min": 30
+     }
+    ],
+    "stufen_text": "ab 2 mm: +60 min, morgen 15 min früher · ab 5 mm: +100 min, morgen 30 min früher"
    },
    "heizgrenze": {
     "bezug": 7.1,
@@ -2434,7 +2482,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.160",
+   "version": "0.8.161",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00"
@@ -2540,6 +2588,7 @@
     "trocknen_ab_mm": 2.0,
     "trocknen_laenger_min": 45,
     "trocknen_frueher_min": 15,
+    "trocknen_stufen": null,
     "tuer_pause_min": 3,
     "tuer_melden_min": 10,
     "boost_min": 30,
@@ -2847,37 +2896,44 @@
     {
      "datum": "2026-09-28",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-09-29",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-09-30",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-10-01",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-10-02",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-10-03",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     },
     {
      "datum": "2026-10-04",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": null
     }
    ],
    "plan_ausnahmen": {},
@@ -2910,7 +2966,11 @@
       "frei_kw": 11.794
      }
     ],
-    "rang": []
+    "rang": [],
+    "rangliste": {
+     "zeilen": [],
+     "kopf": "Anschluss hat Platz für alle – kein Tausch nötig"
+    }
    },
    "soll_gleitend": null,
    "baseline": {
@@ -2949,6 +3009,28 @@
     "regen_vortag": null,
     "regen_heute": null,
     "zustand": null
+   },
+   "trocknen": {
+    "heute_mm": null,
+    "gestern_mm": null,
+    "laenger_min": 0,
+    "frueher_morgen_min": 0,
+    "frueher_heute_min": 0,
+    "aktiv": false,
+    "text": "kein Regenwert für die Arbeitszeit",
+    "stufen": [
+     {
+      "ab_mm": 2.0,
+      "laenger_min": 60,
+      "frueher_min": 15
+     },
+     {
+      "ab_mm": 5.0,
+      "laenger_min": 100,
+      "frueher_min": 30
+     }
+    ],
+    "stufen_text": "ab 2 mm: +60 min, morgen 15 min früher · ab 5 mm: +100 min, morgen 30 min früher"
    },
    "heizgrenze": {
     "bezug": null,

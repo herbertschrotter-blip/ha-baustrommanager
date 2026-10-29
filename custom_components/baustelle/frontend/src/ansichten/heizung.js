@@ -9,6 +9,7 @@ import { TAGE, datum, dauer, de, erkl, kurzDatum, minu, plusTage, uhr, wtag, zah
 import { AUSNAHME, MODI } from '../tabellen.js';
 import { kopfVorlage, schalterVorlage, stepperVorlage } from './allgemein.js';
 import { baselineRegeln } from './baseline.js';
+import { KEIN_URLAUBSKALENDER, beschreibbar } from './einblendungen-baustelle.js';
 
 const LAEDT = html`<div class="leer">Lädt …</div>`;
 const ACHSE = html`<div class="tl-achse">${['04', '08', '12', '16', '20'].map(h => html`<span>${h}</span>`)}</div>`;
@@ -24,7 +25,7 @@ function held(p) {
     !e.auto ? '⏸ Automatik aus' : '',
     pl ? `🕖 ${uhr(pl.a)}–${uhr(pl.b)}` : html`🕖 ${unsafeHTML(p.freiText(H))}`,
     hg.zu_warm ? '🌡 zu warm – kein Heizen' : '',
-    pl && pl.codes.includes('trocknen') ? `🌧 trocknen +${e.tr_laenger} min` : '',
+    pl && pl.codes.includes('trocknen') ? `🌧 trocknen +${d.trocknen ? d.trocknen.laenger_min : e.tr_laenger} min` : '',
     pl && pl.codes.includes('fruehstart') ? '❄ Frühstart heute' : pm && (pm.gruende || []).includes('fruehstart') ? '❄ Frühstart morgen' : '',
     e.staffel && L.warten ? `⚡ ${L.warten} wartet` : '',
     d.jetztBis ? `♨ alle heizen bis ${d.jetztBis}` : '',
@@ -57,7 +58,7 @@ export function heizungVorlage(p) {
 /* ---- Blöcke (cls: „glas-panel block“ im Reiter/in den Einstellungen, „block hz-innen“ in der Einblendung) ---- */
 
 function heute(p, cls) {
-  const d = p.d, e = d.e, pl = p.planTag(p.z.HEUTE_TAG), az = p.azJetzt, hg = d.heizgrenze || {}, w = d.wetter || {};
+  const d = p.d, e = d.e, pl = p.planTag(p.z.HEUTE_TAG), az = p.azJetzt, hg = d.heizgrenze || {}, w = d.wetter || {}, tr = d.trocknen;
   const bezug = zahl(hg.bezug) ? hg.bezug : e.basis === 'jetzt' ? w.aussen : w.aussen_max;
   const ft = p.feiertage(), naechster = ft && ft[0], morgen = plusTage(p.z.HEUTE, 1), wm = p.wetterTag(morgen), pm = d.plan[morgen];
   const regel = (ic, titel, text, an) => html`<div class="hr-zeile ${an ? 'an' : ''}"><span class="hr-ic">${ic}</span><div><b>${titel}</b><div class="leise">${text}</div></div><span class="hr-an">${an ? '●' : '○'}</span></div>`;
@@ -70,8 +71,8 @@ function heute(p, cls) {
         ${pl ? html`<div class="zeile unter hz-rechnung"><span class="leise">${p.planRechnung(pl)}</span></div>` : nothing}
         ${lernend.map(b => html`<div class="zeile unter"><span class="leise">🧠 <b>${b.name}</b>: ${p.warmText(b)}</span></div>`)}
         ${regel('🌡', `Heizgrenze ${de(e.grenze, 0)} °C`, zahl(bezug) ? `${e.basis === 'jetzt' ? 'jetzt' : 'Höchstwert heute'} ${de(bezug, 0)} °C → ${hg.zu_warm ?? bezug > e.grenze ? 'zu warm, es wird nicht geheizt' : 'es wird geheizt'}` : 'kein Wert vom Wetter', !(hg.zu_warm ?? (zahl(bezug) && bezug > e.grenze)))}
-        ${regel('🌧', 'Kleidung trocknen', zahl(w.regen_heute) ? `${de(w.regen_heute, w.regen_heute % 1 ? 1 : 0)} mm Regen seit gestern (ab ${de(e.tr_mm)} mm) → ${w.regen_heute >= e.tr_mm ? `${e.tr_laenger} min länger, bis ${pl ? uhr(pl.ende) : '–'}` : 'nicht nötig'}` : 'kein Regenwert vom Wetter', zahl(w.regen_heute) && w.regen_heute >= e.tr_mm)}
-        ${regel('❄', 'Kälte-Frühstart morgen', zahl(wm.kalt) ? `${de(wm.kalt).replace('-', '−')} °C erwartet (unter ${de(e.frueh_temp, 0).replace('-', '−')} °C) → ${wm.kalt < e.frueh_temp ? `${e.frueh_min} min früher` : 'nicht nötig'}${pm && (pm.gruende || []).includes('frueher_nach_regen') ? `, dazu ${e.tr_frueher} min nach Regen` : ''}` : 'noch keine Vorhersage für morgen', e.fruehstart && zahl(wm.kalt) && wm.kalt < e.frueh_temp)}
+        ${regel('🌧', 'Kleidung trocknen', tr ? `${tr.text}${tr.aktiv && pl ? `, bis ${uhr(pl.ende)}` : ''}` : 'kein Regenwert vom Wetter', !!(tr && (tr.aktiv || tr.frueher_heute_min)))}
+        ${regel('❄', 'Kälte-Frühstart morgen', zahl(wm.kalt) ? `${de(wm.kalt).replace('-', '−')} °C erwartet (unter ${de(e.frueh_temp, 0).replace('-', '−')} °C) → ${wm.kalt < e.frueh_temp ? `${e.frueh_min} min früher` : 'nicht nötig'}${pm && (pm.gruende || []).includes('frueher_nach_regen') ? `, dazu ${tr ? tr.frueher_morgen_min : e.tr_frueher} min nach Regen` : ''}` : 'noch keine Vorhersage für morgen', e.fruehstart && zahl(wm.kalt) && wm.kalt < e.frueh_temp)}
         ${L ? regel('⚡', `Staffelung: ${L.laufen} von ${L.hk.length} Heizkörpern`, `${L.warten ? `${L.warten} wartet, weil ein Anschluss ausgelastet ist` : 'alle haben Platz'} · höchstens ${e.max_gleich} gleichzeitig · Vorheizen startet 15 min früher, damit alle warm werden`, true) : nothing}
         ${frei ? regel('🏖', frei[0], frei[1], true) : regel('🏖', 'Kein Urlaub, kein Feiertag', naechster ? `nächster Feiertag ${wtag(naechster.von)} ${kurzDatum(naechster.von)} ${naechster.name}` : feiertagsKal ? (ft === null ? 'Feiertage laden …' : 'kein Feiertag im Kalender') : 'kein Feiertagskalender gewählt', false)}</div>`;
 }
@@ -188,7 +189,7 @@ function regelnInhalt(p) {
     tuer: html`${z('🚪 Tür offen', 'Heizung pausieren nach', st('tuer_pause', 1, min), false, 'tuer')}${z('Nachricht nach', '', st('tuer_melden', 5, min), true)}`,
     nachheizen: z('Nachheizen', html`nach Arbeitsende, jeden Tag${nichtLern}`, st('nachheizen', 5, min), false, 'nachheizen'),
     warm_nach: z('Warm halten (lernende)', 'nach Arbeitsende; Kleidung trocknen kommt dazu', st('warm_nach', 5, v => v ? `${v} min länger` : 'bis Ende'), true),
-    trocknen: z('👕 Kleidung trocknen', `ab ${de(e.tr_mm, 1)} mm Regen: +${e.tr_laenger} min nach dem Nachheizen, am Morgen ${e.tr_frueher} min früher`, link(() => p.hzAuf('trocknen'))),
+    trocknen: z('👕 Kleidung trocknen', `nach Regen in der Arbeitszeit · ${p.d.trocknen ? p.d.trocknen.stufen_text : `ab ${de(e.tr_mm, 1)} mm: +${e.tr_laenger} min, morgen ${e.tr_frueher} min früher`}`, link(() => p.hzAuf('trocknen'))),
     hand: z('✋ Handbetrieb übernehmen nach', 'Läuft ein Heizkörper zu lange von Hand, kommt eine Nachricht – ohne „So lassen“ übernimmt die Automatik so viel später', st('hand_nachfrist', 5, min)),
     frost: html`${z('❄ Frostschutz', 'hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit', bool('frost'), false, 'frost')}${e.frost ? html`${z('ein unter', '', st('frost_temp', .5, grad), true)}${z('aus über', '', st('frost_aus', .5, grad), true)}${z('ohne Fühler: ein, wenn draußen unter', 'aus erst 2 °C darüber; der Heizkörperthermostat regelt dann selbst', e.frost_aussen === null ? html`<span class="leise">aus</span>` : st('frost_aussen', 1, minus), true)}${z('auch bei Automatik aus', 'schaltet dann nur den Frostschutz, sonst nichts', bool('frost_immer'), true)}` : nothing}`,
     urlaub: z('🏖 Urlaub & freie Feiertage', { frost: 'nur Frostschutz', absenk: `absenken auf ${de(e.absenk)} °C`, aus: 'alles aus' }[e.urlaub], link(() => p.hzAuf('urlaub'))),
@@ -212,12 +213,25 @@ function regelnInhalt(p) {
 const regeln = (p, cls) => html`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">nach Tagesablauf</span></div>
         ${regelnInhalt(p)}</div>`;
 
+/* AN-0021: Stufen nach dem Regen in der Arbeitszeit – die Integration liefert sie (laufzeit.trocknen.stufen; nach dem
+   Speichern zuerst die gespeicherte Einstellung), die Seite ändert nur die Einstellung heizung.trocknen_stufen */
+const TR_GRENZEN = { ab_mm: [0, 100, .5], laenger_min: [0, 480, 5], frueher_min: [0, 240, 5] };
 function trocknen(p, cls) {
-  const st = (k, s, fmt) => stepperVorlage(p, k, s, fmt);
-  return html`<div class=${cls}><div class="block-kopf"><b>👕 Kleidung trocknen</b><span class="leise">nach Regen zusätzlich zum Nachheizen</span></div>
-        <div class="zeile"><span>ab Regen (seit gestern)</span>${st('tr_mm', .5, mm)}</div>
-        <div class="zeile"><span>zusätzlich nach dem Nachheizen</span>${st('tr_laenger', 5, min)}</div>
-        <div class="zeile"><span>am nächsten Morgen früher</span>${st('tr_frueher', 5, min)}</div></div>`;
+  const d = p.d, tr = d.trocknen, eigen = ((d.r && d.r.einstellungen && d.r.einstellungen.heizung) || {}).trocknen_stufen;
+  const S = (eigen || (tr && tr.stufen) || []).map(x => ({ ...x }));
+  const speichern = liste => p.setzen(['heizung', 'trocknen_stufen'], [...liste].sort((a, b) => a.ab_mm - b.ab_mm));
+  const schritt = (i, k, r) => { const [lo, hi, st] = TR_GRENZEN[k], n = S.map(x => ({ ...x })); n[i][k] = Math.min(hi, Math.max(lo, Math.round((n[i][k] + r * st) * 10) / 10)); speichern(n); };
+  const stepper = (i, k, fmt) => html`<span class="stepper klein"><button data-tr=${`${i}-${k}-`} @click=${() => schritt(i, k, -1)}>−</button><b>${fmt(S[i][k])}</b><button data-tr=${`${i}-${k}+`} @click=${() => schritt(i, k, 1)}>+</button></span>`;
+  const neu = () => { const l = S[S.length - 1] || { ab_mm: 0, laenger_min: 45, frueher_min: 15 }; const g = k => TR_GRENZEN[k][1];   // Eingabehilfe für die neue Stufe, in den Grenzen der Einstellung
+    speichern([...S, { ab_mm: Math.min(g('ab_mm'), l.ab_mm + 3), laenger_min: Math.min(g('laenger_min'), l.laenger_min + 30), frueher_min: Math.min(g('frueher_min'), l.frueher_min + 15) }]); };
+  return html`<div class=${cls}><div class="block-kopf"><b>👕 Kleidung trocknen</b><span class="leise">nur Regen in der Arbeitszeit zählt</span></div>
+        ${tr ? html`<div class="zeile unter"><span class="leise">${tr.text}</span></div>` : nothing}
+        ${S.map((x, i) => html`<div class="tr-stufe" data-stufe=${i}><div class="zeile"><b>Stufe ${i + 1}</b>${S.length > 1 ? html`<button class="x nur-admin" title="Stufe entfernen" data-tr-weg=${i} @click=${p.nurAdmin(() => speichern(S.filter((_, j) => j !== i)))}>✕</button>` : nothing}</div>
+          <div class="zeile unter"><span>ab Regen in der Arbeitszeit</span>${stepper(i, 'ab_mm', mm)}</div>
+          <div class="zeile unter"><span>heute länger (nach dem Nachheizen)</span>${stepper(i, 'laenger_min', min)}</div>
+          <div class="zeile unter"><span>am nächsten Morgen früher</span>${stepper(i, 'frueher_min', min)}</div></div>`)}
+        ${S.length < 5 ? html`<button class="zeile nur-admin" data-tr-neu @click=${p.nurAdmin(neu)}><span class="blau">+ Stufe</span></button>` : nothing}
+        <div class="leise">Regen nachts oder nach Feierabend zählt nicht. Es gilt die höchste erreichte Stufe.</div></div>`;
 }
 
 /* Je Container: Modus, Kleidung trocknen, eigenes Soll */
@@ -245,6 +259,7 @@ function urlaub(p, cls) {
           return html`<div class="zeile unter"><span><b class="ft-d">${t} ${kurzDatum(f.von)}</b> ${f.name}</span><span class="leise">${we ? 'Wochenende' : 'frei'}</span></div>`; })}
         <div class="gruppe-t">Urlaub · ${urlaubsKal ? `Kalender „${p.name(urlaubsKal)}“` : 'kein Kalender gewählt'}</div>
         ${ur === null ? html`<div class="leise">Lädt …</div>` : ur.length ? ur.map(u => html`<div class="zeile unter"><span><b>${u.name}</b> <span class="leise">${kurzDatum(u.von)} – ${datum(u.bis)}</span></span><button class="x nur-admin" title="Urlaub löschen" @click=${p.nurAdmin(() => p.urlaubWeg(u))}>✕</button></div>`) : html`<div class="leise">Kein Urlaub eingetragen</div>`}
+        ${!p.entitaeten(beschreibbar).length ? html`<div class="leise kal-hinweis" data-k="kein-urlaubskalender">${KEIN_URLAUBSKALENDER}</div>` : nothing}
         <button class="zeile nur-admin" @click=${p.nurAdmin(() => p.einblenden(urlaubsKal ? 'urlaub' : 'wetterquelle'))}><span class="blau">${urlaubsKal ? '+ Urlaub eintragen' : 'Kalender für Urlaub wählen'}</span></button></div>`;
 }
 

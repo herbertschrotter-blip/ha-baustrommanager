@@ -183,6 +183,7 @@ async function allgemein() {
         await klick({ act: 'vb-wer', ziel: 'aw', id: '*' }); pruefe(`${bid} auswertung alle ${z}`); } }
     await klick(AW.scope('diese'));
     await klick({ act: 'tab', v: 'verlauf' }, 30);
+    if (REFERENZ) erwarte(`${bid} FE-0035: Verlauf-Karte „gespart seit …“ (Text der Integration)`, ui.innerHTML.includes('gespart seit 08.09.'));
     for (const v of ['tag', 'monat', 'ges']) { await klick({ act: 'vgl', v }); pruefe(`${bid} verlauf ${v}`); }
     for (const f of ['alle', 'warnung', 'schalten', 'wetter', 'nachricht']) { await klick({ act: 'pfilter', v: f }, 20); pruefe(`${bid} protokoll ${f}`); }
     await klick({ act: 'pfilter', v: 'alle' }); await klick({ act: 'pmehr' }, 20); pruefe(`${bid} protokoll mehr`);
@@ -574,6 +575,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         await klick({ act: 'vb-wer', ziel: 'aw', id: '*' }); pruefe(`${bid} auswertung alle ${z}`); } }
     await klick(AW.scope('diese'));
     await klick({ act: 'tab', v: 'verlauf' }, 30);
+    if (REFERENZ) erwarte(`${bid} FE-0035: Verlauf-Karte „gespart seit …“ (Text der Integration)`, ui.innerHTML.includes('gespart seit 08.09.'));
     for (const v of ['tag', 'monat', 'ges']) { await klick({ act: 'vgl', v }); pruefe(`${bid} verlauf ${v}`); }
     for (const f of ['alle', 'warnung', 'schalten', 'wetter', 'nachricht']) { await klick({ act: 'pfilter', v: f }, 20); pruefe(`${bid} protokoll ${f}`); }
     await klick({ act: 'pfilter', v: 'alle' }); await klick({ act: 'pmehr' }, 20); pruefe(`${bid} protokoll mehr`);
@@ -747,6 +749,19 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   const opt = api.find(a => /options\/flow\/F/.test(a[1]));
   erwarte('Wetter über den Options-Dialog', opt && opt[2].wetter === 'weather.dobl' && opt[2].regen_sensor === 'sensor.regen_dobl' && opt[2].status === 'aktiv');
   erwarte('Termine-Kalender über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["termine_kalender"]' && a.wert === 'calendar.baustelle_urlaub'));
+  /* AN-0022: Kalender für Urlaub – nur beschreibbare (supported_features mit CREATE_EVENT), sonst der Hinweis auf „Lokaler Kalender“ */
+  { await klick({ act: 'sheet', s: 'wetterquelle' }); const sel = () => litEl('.sheet select[data-f="urlaub_kalender"]'), opts = () => [...sel().options].map(o => o.value);
+    erwarte('AN-0022: Urlaub nur mit beschreibbarem Kalender (kein Feiertags-Kalender)', opts().includes('calendar.baustelle_urlaub') && opts().includes('calendar.besprechungen') && !opts().includes('calendar.feiertage_oesterreich')
+      && [...litEl('.sheet select[data-f="feiertag_kalender"]').options].some(o => o.value === 'calendar.feiertage_oesterreich') && !litEl('.sheet [data-k="kein-urlaubskalender"]'));
+    await klick({ act: 'zu' });
+    const H = panel._hass.states, alt = Object.fromEntries(['calendar.baustelle_urlaub', 'calendar.besprechungen'].map(k => [k, H[k]]));
+    for (const [k, z] of Object.entries(alt)) if (z) H[k] = { ...z, attributes: { ...z.attributes, supported_features: 0 } };
+    await klick({ act: 'sheet', s: 'wetterquelle' });
+    const hinweis = litEl('.sheet [data-k="kein-urlaubskalender"]');
+    erwarte('AN-0022: ohne beschreibbaren Kalender Hinweis „Lokaler Kalender“', hinweis && hinweis.textContent.includes('Lokaler Kalender') && hinweis.textContent.includes('Baustelle Urlaub')
+      && opts().filter(v => v).every(v => /nicht beschreibbar/.test([...sel().options].find(o => o.value === v).textContent)));
+    await klick({ act: 'sheet', s: 'urlaub' }); erwarte('AN-0022: Urlaub eintragen zeigt den Hinweis statt des Formulars', ui.innerHTML.includes('Lokaler Kalender') && !litEl('.sheet input[type="date"]'));
+    await klick({ act: 'zu' }); for (const [k, z] of Object.entries(alt)) if (z) H[k] = z; await panel.neuZeichnen(); }
   neu(); await klick({ act: 'sheet', s: 'name' }); eingabe({ f: 'name' }, 'ÖWG Dobl'); await klick({ act: 'name-speichern' });
   erwarte('Name über config_entries/update', (a => a && a.entry_id === 'dobl' && a.title === 'ÖWG Dobl')(letzte('config_entries/update').at(-1)));
   neu(); await klick({ act: 'sheet', s: 'baustelle-neu' }); eingabe({ f: 'name' }, 'Wohnbau Kalsdorf'); await klick({ act: 'baustelle-anlegen' }, 30);
@@ -1181,9 +1196,9 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   const hzOffen = async k => { await klick({ act: 'hz-auf', k }, 20); return ui.innerHTML; };
   { // 3d: die Kachel „Kleidung trocknen“ zeigt ihren eigenen Block (bis 0.8.88 fand die Textsuche „So wird geheizt“)
     const h = await hzOffen('trocknen');
-    erwarte('3d: Kachel „Kleidung trocknen“ mit ihren Reglern', h.includes('ab Regen (seit gestern)') && ['tr_mm', 'tr_laenger', 'tr_frueher'].every(k => h.includes(`data-k="${k}"`)) && !h.includes('So wird geheizt'));
+    erwarte('3d: Kachel „Kleidung trocknen“ mit ihren Reglern', h.includes('ab Regen in der Arbeitszeit') && ['ab_mm', 'laenger_min', 'frueher_min'].every(k => h.includes(`data-tr="0-${k}+"`)) && !h.includes('So wird geheizt'));
     await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 20); await klick({ act: 'ev-gruppe', v: 'heizung' }, 20);
-    erwarte('3d: Einstellungen Heizung – Regeln einmal, Trocknen mit Reglern', (ui.innerHTML.match(/So wird geheizt/g) || []).length === 1 && ui.innerHTML.includes('ab Regen (seit gestern)'));
+    erwarte('3d: Einstellungen Heizung – Regeln einmal, Trocknen mit Reglern', (ui.innerHTML.match(/So wird geheizt/g) || []).length === 1 && ui.innerHTML.includes('ab Regen in der Arbeitszeit'));
     await klick({ act: 'tab', v: 'heizung' }, 20); }
   /* AN-0012: Regeln nach Tagesablauf, bisher feste Werte einstellbar, feste Regeln sichtbar */
   { const h = await hzOffen('regeln'); pruefe('Regeln nach Tagesablauf');
@@ -1442,7 +1457,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       [g.an, g.kwJetzt] = alt; await klick({ act: 'zu' }); } }
   /* Rangliste nach Bedarf in °C (Herbert 01.10.2026): Reihenfolge und Aufschlüsselung von der Integration */
   { const L = panel.last(), staffelAlt = panel.d.e.staffel; panel.d.e.staffel = true; if (L.hk.length) {
-      const alt = panel.d.staffel; panel.d.staffel = { ...(alt || {}), rang: L.hk.map(x => x.g.id) };
+      const alt = panel.d.staffel; panel.d.staffel = { ...(alt || {}), rang: L.hk.map(x => x.g.id), rangliste: null };   // ohne rangliste (ältere Integration): Zustand der Seite
       const b = L.hk[0].b, altB = b.bedarfGrad, mitT = b.t !== null && b.t !== undefined;
       b.bedarfGrad = mitT ? { summe: 1.25, jetzt: 1.0, abkuehlen: 0.5, abkuehl_h: 2.0, gemessen: true, trend_h: -2.0, nachlauf: -0.3, aufheiz_h: 3.0, ziel: 0.0, gerecht: 0.05, heiz_min: 30, horizont_min: 15 }
         : { summe: 0.2, jetzt: null, abkuehlen: null, abkuehl_h: null, gemessen: false, trend_h: null, nachlauf: 0, aufheiz_h: null, ziel: 0, gerecht: 0.2, heiz_min: 10, horizont_min: 15 };
@@ -1451,6 +1466,18 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await klick(`.sheet .sr-zeile[data-id="${L.hk[0].g.id}"]`, 5); pruefe('Rangliste aufgeklappt');
       erwarte('Rangliste: Aufschlüsselung des Bedarfs', ui.innerHTML.includes('class="summe">Bedarf') && (mitT ? ui.innerHTML.includes('kühlt ohne Heizen 2,0 °C/h ab (gemessen)') : ui.innerHTML.includes('Ohne Fühler kein Bedarf')));
       panel.d.staffel = alt; b.bedarfGrad = altB; panel.s.srOffen = []; await klick({ act: 'zu' }); }
+    /* AN-0017: Zustand je Zeile und Kopfzeile von der Integration (laufzeit.staffel.rangliste) – auch satte im Plan */
+    if (L.hk.length >= 2) {
+      const alt = panel.d.staffel, [h0, h1] = L.hk, z = [{ id: h0.g.id, zustand: 'heizt', text: 'heizt' }, { id: h1.g.id, zustand: 'satt', text: 'satt (Thermostat)' }];
+      panel.d.staffel = { ...(alt || {}), rang: [h0.g.id], rangliste: { zeilen: z, kopf: 'Anschluss hat Platz für alle – kein Tausch nötig' } };
+      await klick({ act: 'sheet', s: 'strom' }, 10); pruefe('Rangliste AN-0017');
+      const zeilen = litEls('.sheet .sr-zeile'), zust = zeilen.map(e => e.querySelector('.sr-zust span').textContent);
+      erwarte('AN-0017: Rangliste nach rangliste.zeilen (auch satte), Zustand der Integration', zeilen.length === 2 && zeilen[1].dataset.id === h1.g.id && zust[1].startsWith('satt (Thermostat)'));
+      erwarte('AN-0017: Kopfzeile der Integration', litEl('.sheet .sr-lage') && litEl('.sheet .sr-lage').textContent === 'Anschluss hat Platz für alle – kein Tausch nötig');
+      panel.d.staffel = { ...(alt || {}), rang: [h0.g.id, h1.g.id], rangliste: { zeilen: [z[0], { id: h1.g.id, zustand: 'tuer_offen', text: 'Tür offen' }], kopf: 'Anschluss voll – wird getauscht' } };
+      await panel.neuZeichnen(); await ruhe();
+      erwarte('AN-0017: Tür offen, „wird getauscht“', litEls('.sheet .sr-zeile')[1].querySelector('.sr-zust span.lila') && litEl('.sheet .sr-lage').textContent.includes('wird getauscht'));
+      panel.d.staffel = alt; await klick({ act: 'zu' }); }
     panel.d.e.staffel = staffelAlt; }
   /* WU-0014: Kachel-Katalog – Übersicht und Auswertung, Suche mit Chips, jede Kachel in S/M/L (L mit und ohne Diagramm), Antippen öffnet die Ansicht */
   { panel.s.kkUe = null; await klick({ act: 'tab', v: 'uebersicht' }, 30); pruefe('Übersicht mit Kacheln');
@@ -2016,6 +2043,16 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   // € und % kommen, wo die Integration sie liefert, von ihr (Ohne Automatik, Wetter-Einfluss, Verbrauch je Monat der Detailseite)
   const nachgerechnet = [/ohne \* preis/, /k \* preis/, /s2 \* x\.e\.preis/, /s2 \/ ges/].filter(r => r.test(quelle)).map(String);
   erwarte(`€/% der Integration nicht in der Seite nachgerechnet – noch da: ${nachgerechnet.join(', ')}`, !nachgerechnet.length);
+  // FE-0034: Jede Klasse wird nur in einem CSS-Block der Seite definiert (eine Regel `.klasse { … }` auf oberster Ebene).
+  // Sonst überschreibt ein Modul seitenweit die gleichnamige Klasse eines anderen (Wochenplan .hp-zeile ↔ Heizperiode).
+  { const bloecke = [].concat(P.styles).flat(Infinity).map(s => String(s.cssText || s).replace(/\/\*[\s\S]*?\*\//g, '')), wo = new Map();
+    bloecke.forEach((t, i) => { let tief = 0, sel = '';
+      for (const ch of t) {
+        if (ch === '{') { if (!tief) for (const x of sel.split(',')) { const m = x.trim().match(/^\.([\w-]+)$/); if (m) (wo.get(m[1]) || wo.set(m[1], new Set()).get(m[1])).add(i); } tief++; sel = ''; }
+        else if (ch === '}') { tief--; sel = ''; } else if (!tief) sel += ch;
+      } });
+    const doppelt = [...wo].filter(([, v]) => v.size > 1).map(([k, v]) => `.${k} (Blöcke ${[...v].join('/')})`);
+    erwarte(`CSS-Blöcke ${bloecke.length}: keine Klasse in zwei Modulen definiert – doppelt: ${doppelt.join(', ')}`, bloecke.length > 3 && !doppelt.length); }
   // Master-Mockup = echte Seite mit diesem Beispiel (mockups/quelle/glas.js): nach jeder Änderung der Seite neu bauen
   const mockup = path.join(__dirname, '..', '..', 'mockups', 'glas.html');
   erwarte('Master-Mockup aktuell (node mockups/quelle/glas.js)', fs.existsSync(mockup) && fs.readFileSync(mockup, 'utf8').includes(quelle.replace(/<\/script/gi, '<\\/script').trim()));

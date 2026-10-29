@@ -224,7 +224,7 @@ ZAEHLER_BAUSTELLE = [
     Zaehler("energie", lambda st: st.zaehler.get("energie", 0.0)),
     Zaehler("kosten", lambda st: st.zaehler.get("kosten", 0.0), **GELD),
     Zaehler("energie_ohne_automatik", lambda st: st.zaehler.get("ohne", 0.0), nur_heizung=True),
-    Zaehler("ersparnis", lambda st: Heizung.von(st).ersparnis_kwh() * _preis(st), **GELD_HEIZUNG),
+    Zaehler("ersparnis", lambda st: Heizung.von(st).ersparnis_eur(), **GELD_HEIZUNG),   # FE-0035: je Tag zu seinem Preis
     Zaehler("prognose_heizperiode", lambda st: Heizung.von(st).hochrechnung_heizperiode("energie_heizen"), **PROGNOSE),
     Zaehler(
         "prognose_heizperiode_kosten",

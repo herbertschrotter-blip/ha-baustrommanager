@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .regelung import FROST_SPANNE, frost_aus_wert
+from .regen import stufen_aus
 
 CONTAINER = "container"
 BAUSTELLE = "baustelle"
@@ -110,9 +111,11 @@ def _liste(lage: Lage) -> list[dict[str, Any]]:
         dazu("warm", "⏱", " · ".join(texte), " · ".join(kurz), "Eigener Wert dieses Containers: " + "; ".join(teile) + ".",
              CONTAINER, "bearbeiten:warm")
     if b.get("trocknen") and not bedarf:
+        stufen = stufen_aus(h.get("trocknen_stufen"), float(h.get("trocknen_ab_mm", 2)), int(h.get("trocknen_laenger_min", 45)),
+                            int(h.get("trocknen_frueher_min", 15)))
         dazu("trocknen", "👕", "Kleidung trocknen", "trocknen",
-             f"Nach Regen ab {zahl(h.get('trocknen_ab_mm', 2))} mm heizt dieser Container {int(h.get('trocknen_laenger_min', 45))} min "
-             f"länger nach der Arbeit und am nächsten Morgen {int(h.get('trocknen_frueher_min', 15))} min früher.",
+             "Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten Morgen früher: "
+             + "; ".join(f"ab {zahl(x.ab_mm)} mm {x.laenger_min} min länger, {x.frueher_min} min früher" for x in stufen) + ".",
              CONTAINER, "container:trocknen")
     if b.get("stufen") and lage.heizkoerper >= 2:
         erst = f"der Primärheizkörper ({lage.primaer})" if lage.primaer else "der Primärheizkörper"

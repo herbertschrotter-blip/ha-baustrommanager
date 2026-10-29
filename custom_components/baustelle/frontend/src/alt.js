@@ -776,7 +776,7 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .np-marke { margin-left: 5px; font-size: 12px; } .np-marke.rot { filter: hue-rotate(-40deg) saturate(3); }   /* BSM-019 */
 .ger-sig { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; margin-left: 4px; vertical-align: -1px; }
 .ger-sig i { width: 3px; border-radius: 1px; background: rgba(127,127,127,.35); } .ger-sig i:nth-child(1) { height: 25%; } .ger-sig i:nth-child(2) { height: 50%; }
-.ger-sig i:nth-child(3) { height: 75%; } .ger-sig i:nth-child(4) { height: 100%; } .ger-sig i.an { background: var(--ink); } .ger-sig.s1 i.an { background: var(--rot); } .ger-z { font-size: 12.5px; text-align: right; white-space: nowrap; } a.zeile.ger:hover { background: rgba(127,127,127,.1); }
+.ger-sig i:nth-child(3) { height: 75%; } .ger-sig i:nth-child(4) { height: 100%; } .ger-sig i.an { background: var(--ink); } .ger-sig.s1 i.an { background: var(--rot); } a.zeile.ger:hover { background: rgba(127,127,127,.1); }
 .aw-leiste { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; } .aw-leiste .seg { margin: 0; }
 .aw-delta { font-style: normal; font-size: 12px; margin-left: 6px; } .aw-delta.mehr { color: #ff9f0a; } .aw-delta.weniger { color: #30d158; } .gruen-t { color: #30d158; }
 .aw-raster { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 110px; gap: 12px; grid-auto-flow: dense; }
@@ -810,6 +810,8 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
   .aw-tab-kopf, .aw-tab-zeile { grid-template-columns: 1fr 44px 56px 44px; } .aw-tab-kopf span:nth-child(n+5), .aw-tab-zeile > span:nth-child(n+5) { display: none; } }
 /* Rangliste der Staffelung (Bedarf in °C) */
 .sr-kopf { display: flex; align-items: baseline; gap: 8px; margin: 14px 2px 6px; } .sr-kopf b { font-size: 16px; }
+.sr-lage { font-size: 13px; margin: -2px 2px 8px; color: var(--ink2); }   /* AN-0017: Kopfzeile der Integration */
+.tr-stufe + .tr-stufe { border-top: 1px solid var(--gridc); margin-top: 6px; padding-top: 4px; }   /* AN-0021: Stufen Kleidung trocknen */
 .sr-liste { border-radius: 16px; background: rgba(120,120,128,.10); padding: 2px 10px; }
 .sr-zeile { display: grid; grid-template-columns: 28px 1fr auto; gap: 2px 10px; padding: 9px 4px; border-top: 1px solid var(--gridc); align-items: center; cursor: pointer; }
 .sr-zeile:first-child { border-top: 0; } .sr-nr { font-size: 17px; font-weight: 600; text-align: center; color: var(--ink2); }
@@ -1484,7 +1486,7 @@ class BaustellePanel extends LitElement {
       : c === 'fruehstart' ? (zahl(w.kalt) ? `Frühstart ${de(w.kalt).replace('-', '−')} °C` : 'Frühstart')
       : c === 'frueher_nach_regen' ? 'früher nach Regen'
       : c === 'gelernt' ? '🧠 gelernter Beginn'
-      : c === 'trocknen' ? (zahl(w.regen) ? `Kleidung trocknen, ${de(w.regen, w.regen % 1 ? 1 : 0)} mm Regen` : 'Kleidung trocknen') : String(c));
+      : c === 'trocknen' ? (zahl(this.d.regenAz[iso]) ? `Kleidung trocknen, ${de(this.d.regenAz[iso], this.d.regenAz[iso] % 1 ? 1 : 0)} mm Regen in der Arbeitszeit` : 'Kleidung trocknen') : String(c));   // AN-0021
     return { vor: q.vor, extra: zahl(q.start) ? q.start : q.vor, a: q.a, b: q.b, nach: q.nach, ende: q.ende, gruende, codes: q.gruende || [], ausnahme: q.ausnahme || null,
       eigene: q.eigene || [], ausnahmen: q.ausnahmen || [] };
   }
@@ -2332,7 +2334,8 @@ class BaustellePanel extends LitElement {
       az: az ? az.name || 'Arbeitszeit' : 'keine Arbeitszeit', az2: az ? `Mo ${zeiten('Mo')} · Fr ${zeiten('Fr')}` : 'unter Arbeitszeit anlegen',
       ausn: ausn.length ? `${ausn.length} geplant` : 'keine', ausn2: ausn.length ? `nächste ${wtag(ausn[0].datum)} ${kurzDatum(ausn[0].datum)}` : 'Samstag, länger, frei …',
       regeln: `Soll ${de(e.soll, 1)} °C`, regeln2: `vor ${e.vorheizen} · nach ${e.nachheizen} min · Grenze ${de(e.grenze, 0)} °C · ${e.frost ? `Frost ${de(e.frost_temp, 1)}–${de(e.frost_aus, 1)} °C` : 'Frostschutz aus'}`,
-      trocknen: `ab ${de(e.tr_mm, 1)} mm Regen`, trocknen2: `+${e.tr_laenger} min · früher ${e.tr_frueher} min`,
+      trocknen: this.d.trocknen ? this.d.trocknen.stufen.map(x => `ab ${de(x.ab_mm, 1)} mm`).join(' / ') : `ab ${de(e.tr_mm, 1)} mm Regen`,   // AN-0021: Stufen der Integration
+      trocknen2: this.d.trocknen ? this.d.trocknen.stufen.map(x => `+${x.laenger_min}/−${x.frueher_min} min`).join(' / ') : `+${e.tr_laenger} min · früher ${e.tr_frueher} min`,
       container: `${C.length} Container`, container2: modi.map(([t, n]) => `${n} ${t}`).join(' · ') || '–',
       urlaub: ur === null ? 'Lädt …' : ur.length ? `${ur.length} Urlaub` : 'kein Urlaub', urlaub2: naechsterFt ? `Feiertag ${wtag(naechsterFt.von)} ${kurzDatum(naechsterFt.von)}` : e.feiertag_frei ? '' : 'an Feiertagen wird gearbeitet',
     };
@@ -2654,8 +2657,8 @@ class BaustellePanel extends LitElement {
   /* Kennzahlen einer Baustelle im Verlauf (kWh, €, gespart, Heiztage, Vergleich, kWh je Monat) – rechnet die Integration */
   kennz(x) {
     const v = this.verlaufDaten(x), zeit = x.aktiv ? (x.beginn ? `seit ${datum(x.beginn)}` : 'laufend') : `${x.beginn ? datum(x.beginn) : '–'} – ${x.ende ? datum(x.ende) : '–'}`;
-    if (!v) return { zeit, kwh: null, eur: null, gespart: null, heiztage: null, container: x.bereiche.length, vergleich: {}, jeMonat: {}, monate: null, laedt: true };
-    return { zeit, kwh: v.kwh ?? 0, eur: v.eur ?? 0, gespart: v.gespart ?? null, heiztage: v.heiztage ?? 0, container: v.container ?? x.bereiche.length,
+    if (!v) return { zeit, kwh: null, eur: null, gespart: null, gespartText: 'gespart', heiztage: null, container: x.bereiche.length, vergleich: {}, jeMonat: {}, monate: null, laedt: true };
+    return { zeit, kwh: v.kwh ?? 0, eur: v.eur ?? 0, gespart: v.gespart ?? null, gespartText: v.gespart_text || 'gespart', heiztage: v.heiztage ?? 0, container: v.container ?? x.bereiche.length,
       vergleich: v.vergleich || {}, jeMonat: v.je_monat || {}, monate: v.monate_je_container || { labels: [], reihen: [] }, laedt: false };
   }
   /* ============ Verlauf (WU-0006, Mockup glas.html Variante 5 abgenommen): Reiter Baustellen (Karten / Vergleich) und Protokoll ============ */

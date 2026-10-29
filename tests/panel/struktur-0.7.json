@@ -511,7 +511,19 @@
     "feiertag_frei": true,
     "notprogramm": true,
     "baseline": true,
-    "baseline_eur_monat": 60
+    "baseline_eur_monat": 60,
+    "trocknen_stufen": [
+     {
+      "ab_mm": 2.0,
+      "laenger_min": 45,
+      "frueher_min": 15
+     },
+     {
+      "ab_mm": 5.0,
+      "laenger_min": 100,
+      "frueher_min": 30
+     }
+    ]
    },
    "staffel": {
     "an": true,
@@ -1243,7 +1255,7 @@
        "ic": "👕",
        "text": "Kleidung trocknen",
        "kurz": "trocknen",
-       "satz": "Nach Regen ab 2 mm heizt dieser Container 45 min länger nach der Arbeit und am nächsten Morgen 15 min früher.",
+       "satz": "Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten Morgen früher: ab 2 mm 45 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher.",
        "von": "container",
        "wirkt": true,
        "grund": null,
@@ -1387,7 +1399,7 @@
        "ic": "👕",
        "text": "Kleidung trocknen",
        "kurz": "trocknen",
-       "satz": "Nach Regen ab 2 mm heizt dieser Container 45 min länger nach der Arbeit und am nächsten Morgen 15 min früher.",
+       "satz": "Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten Morgen früher: ab 2 mm 45 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher.",
        "von": "container",
        "wirkt": true,
        "grund": null,
@@ -2304,7 +2316,8 @@
       "gruende": [],
       "ausnahme": null
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-09-29",
@@ -2320,7 +2333,8 @@
       ],
       "ausnahme": null
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 3.5
     },
     {
      "datum": "2026-09-30",
@@ -2344,7 +2358,8 @@
        "notiz": "Kranmontage – länger"
       }
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-10-01",
@@ -2358,7 +2373,8 @@
       "gruende": [],
       "ausnahme": null
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-10-02",
@@ -2374,7 +2390,8 @@
       ],
       "ausnahme": null
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 2.5
     },
     {
      "datum": "2026-10-03",
@@ -2396,12 +2413,14 @@
        "notiz": "Samstag betonieren"
       }
      },
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     },
     {
      "datum": "2026-10-04",
      "plan": null,
-     "frei": null
+     "frei": null,
+     "regen_az": 0.0
     }
    ],
    "abschnitte": {
@@ -3026,7 +3045,50 @@
       "sonst_kw": 0,
       "frei_kw": 11.03
      }
-    ]
+    ],
+    "rang": [
+     "sanitaer_f",
+     "polier_r1",
+     "mannschaft_r1",
+     "polier_r2",
+     "mannschaft_k",
+     "lager_r"
+    ],
+    "rangliste": {
+     "zeilen": [
+      {
+       "id": "sanitaer_f",
+       "zustand": "heizt",
+       "text": "heizt"
+      },
+      {
+       "id": "polier_r1",
+       "zustand": "heizt",
+       "text": "heizt"
+      },
+      {
+       "id": "mannschaft_r1",
+       "zustand": "heizt",
+       "text": "heizt"
+      },
+      {
+       "id": "polier_r2",
+       "zustand": "heizt",
+       "text": "heizt"
+      },
+      {
+       "id": "mannschaft_k",
+       "zustand": "wartet",
+       "text": "wartet"
+      },
+      {
+       "id": "lager_r",
+       "zustand": "satt",
+       "text": "satt (Thermostat)"
+      }
+     ],
+     "kopf": "Anschluss voll – wird getauscht"
+    }
    },
    "warnungen": [
     {
@@ -3453,6 +3515,28 @@
     "hinweis": "Prognose ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.",
     "stand_t": "0 von 5 Containern gemessen · nächster Lauf voraussichtlich Sa 03.10.",
     "offen": null
+   },
+   "trocknen": {
+    "heute_mm": 3.5,
+    "gestern_mm": 0.0,
+    "laenger_min": 45,
+    "frueher_morgen_min": 15,
+    "frueher_heute_min": 0,
+    "aktiv": true,
+    "text": "3,5 mm Regen in der Arbeitszeit heute → 45 min länger, morgen 15 min früher",
+    "stufen": [
+     {
+      "ab_mm": 2.0,
+      "laenger_min": 45,
+      "frueher_min": 15
+     },
+     {
+      "ab_mm": 5.0,
+      "laenger_min": 100,
+      "frueher_min": 30
+     }
+    ],
+    "stufen_text": "ab 2 mm: +45 min, morgen 15 min früher · ab 5 mm: +100 min, morgen 30 min früher"
    }
   },
   "geraete_links": {
@@ -4316,7 +4400,7 @@
        "ic": "👕",
        "text": "Kleidung trocknen",
        "kurz": "trocknen",
-       "satz": "Nach Regen ab 2 mm heizt dieser Container 45 min länger nach der Arbeit und am nächsten Morgen 15 min früher.",
+       "satz": "Nach Regen in der Arbeitszeit heizt dieser Container länger nach der Arbeit und am nächsten Morgen früher: ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher.",
        "von": "container",
        "wirkt": true,
        "grund": null,

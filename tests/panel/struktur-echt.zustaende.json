@@ -847,7 +847,7 @@
    }
   },
   "sensor.wohnbau_kalsdorf_next_switching_time": {
-   "state": "2026-09-29T15:30:00+00:00",
+   "state": "2026-09-29T16:25:00+00:00",
    "attributes": {
     "device_class": "timestamp",
     "friendly_name": "Wohnbau Kalsdorf Next switching time"

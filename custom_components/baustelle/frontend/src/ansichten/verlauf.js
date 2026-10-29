@@ -21,7 +21,7 @@ function archiv(p) {
           <div class="leise">${k.zeit} · ${k.container} Container · ${k.laedt ? '–' : k.heiztage} Heiztage</div>
           ${unsafeHTML(p.vlFunke(MONK.map(m => k.jeMonat[m] || 0), farbe))}<div class="vl-monate"><span>${MONATE[+MONK[0].slice(5) - 1]}</span><span>${MONATE[+MONK[11].slice(5) - 1]}</span></div>
           <div class="vl-zahlen"><div><b>${k.laedt ? '–' : zahl0(k.kwh)}</b><small>kWh</small></div><div><b>${k.laedt ? '–' : `${zahl0(k.eur)} €`}</b><small>Kosten</small></div>
-            <div><b>${k.laedt ? '–' : zahl0(k.vergleich.tag, 1)}</b><small>kWh/Heiztag</small></div><div><b class="gruen-t">${zahl(k.gespart) ? `${de(k.gespart, 0)} €` : '–'}</b><small>gespart</small></div></div>
+            <div><b>${k.laedt ? '–' : zahl0(k.vergleich.tag, 1)}</b><small>kWh/Heiztag</small></div><div><b class="gruen-t">${zahl(k.gespart) ? `${de(k.gespart, 0)} €` : '–'}</b><small>${k.gespartText}</small></div></div>
           <span class="leise vl-mehr">${b.aktiv ? 'Übersicht ›' : 'ansehen ›'}</span></button>`; })}</div>` : html`<div class="glas-panel block"><div class="leer">Noch keine Baustelle</div></div>`}`;
 }
 

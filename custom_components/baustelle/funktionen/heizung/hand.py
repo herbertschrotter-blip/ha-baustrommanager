@@ -9,7 +9,7 @@ from homeassistant.const import STATE_ON
 from homeassistant.util import dt as dt_util
 
 from ...const import ROLLE_HEIZKOERPER
-from ...logik import warnungen as warn_logik
+from ...logik import regen as regen_logik, warnungen as warn_logik
 from ...logik.regelung import HAND_NACHFRIST_MIN, hand_ende, heizgrenze_bezug
 from ...texte import GRUND_TEXT
 from .typen import HAND_ENDE_TEXT, HEIZ_GRUENDE, WETTER_PROTOKOLL_AB
@@ -34,8 +34,9 @@ def nach_schalten(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
         st.lz["wetter_protokoll"] = heute
         wt = st.wetter_tag_plan(jetzt.date())
         teile = []
-        if wt.regen_vortag_mm is not None and wt.regen_vortag_mm >= float(h["trocknen_ab_mm"]):
-            teile.append(f"Regen {warn_logik._zahl(wt.regen_vortag_mm, 0)} mm seit gestern – heute Kleidung trocknen")
+        if (g := regen_logik.stufe(wt.regen_az_vortag_mm, hz.trocknen_stufen())) is not None and wt.regen_az_vortag_mm is not None:
+            teile.append(f"Regen {warn_logik._zahl(wt.regen_az_vortag_mm, 1)} mm gestern in der Arbeitszeit – heute "
+                         f"{g.frueher_min} min früher (Kleidung trocknen)")
         if wt.frueh_min_temp is not None and h["fruehstart"] and wt.frueh_min_temp < float(h["fruehstart_unter"]):
             teile.append(f"Kalter Morgen {warn_logik._zahl(wt.frueh_min_temp)} °C – Frühstart {h['fruehstart_min']} min früher")
         bezug = heizgrenze_bezug(str(h["heizgrenze_basis"]), wetter.aussen_max, wetter.aussen)

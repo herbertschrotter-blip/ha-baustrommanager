@@ -621,7 +621,9 @@ async def test_start_frueher_regen_und_noch_frueher_gleich_in_text_chip_und_plan
     entry, st = await _start_abends(hass, freezer, shellys, tau=1e9)   # ohne Auskühlen: der Start bleibt über Nacht stehen
     ohne = _c(hass, entry)["start"]["min"]["beginn"]
     st.einstellungen.bereich(C1)["trocknen"] = True
-    hass.states.async_set("sensor.regen", "6.0")                # heute 6 mm → morgen 15 min früher
+    st.e["heizung"]["trocknen_stufen"] = [{"ab_mm": 2.0, "laenger_min": 45, "frueher_min": 15}]   # eine Stufe wie bis 0.8.160
+    hass.states.async_set("sensor.regen", "6.0")                # heute 6 mm in der Arbeitszeit → morgen 15 min früher (AN-0021)
+    st.lz["wetter_tage"].setdefault("2026-09-29", {}).update(regen_mess_a=0.0, regen_mess_b=6.0)
     st.lz["frueher"] = {"2026-09-30": 20}                       # Nachricht „Noch früher“
     st.funktion("heizung").plan_neu()
     await _zu(hass, freezer, "2026-09-29 20:48:00+02:00", st)

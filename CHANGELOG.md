@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.161] – 2026-10-29
+
+- FE-0034: Im Wochenplan waren die Balken der Tage verschieden lang, heute fehlte er manchmal ganz – zwei CSS-Regeln mit
+  demselben Klassennamen überschrieben sich. Jetzt sind alle Spuren gleich breit, auch heute; der Panel-Test meldet
+  doppelt definierte Klassen.
+- FE-0035: „Gespart“ zeigte in der Auswertung und im Verlauf verschiedene Zahlen (1 007 € gegen 950 €). Jetzt eine
+  Regel in `logik/auswertung`: jeder Tag mit seinem Strompreis, Monat und Jahr sind die Summe der Tage; Verlauf,
+  Auswertung und „ohne“ rechnen gleich. Der Sensor „Ersparnis“ bucht ab jetzt fortlaufend zum Tagespreis (ohne Sprung in
+  der Statistik), die Verlauf-Karte zeigt „gespart seit …“.
+- AN-0017: Die Rangliste der Staffelung zeigt alle Heizkörper, die gerade im Plan sind, mit Zustand je Zeile (heizt,
+  wartet, satt, Tür offen, Zusatz zurückgehalten) und oben, ob getauscht wird. Getauscht wird weiter nur, wer heizen will.
+- AN-0021: Kleidung trocknen zählt nur noch Regen in der Arbeitszeit, gestuft: ab 2 mm 60 min länger und 15 min früher,
+  ab 5 mm 100 und 30 min (Stufen im Trocknen-Block einstellbar). Regen in der Nacht löst nichts mehr aus; die Texte
+  sagen „… mm Regen in der Arbeitszeit“. Bei unveränderten Einstellungen heizt der Container damit 60 statt 45 min länger.
+- AN-0022: Für den Urlaub bietet die Seite nur Kalender an, in die man eintragen kann (z. B. „Lokaler Kalender“), mit
+  Hinweis, wenn es keinen gibt.
+
 ## [0.8.160] – 2026-10-29
 
 - Aufräumen: Ab wann eine Fühler-Batterie „schwach“ (unter 25 %) oder „kritisch“ (unter 10 %) ist, entscheidet jetzt

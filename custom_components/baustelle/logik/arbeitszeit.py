@@ -33,6 +33,8 @@ from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
+from .regen import VORGABE_STUFEN, TrocknenStufe, stufe
+
 TAG_MINUTEN = 24 * 60
 
 
@@ -125,9 +127,8 @@ class HeizRegeln:
     fruehstart: bool = True
     fruehstart_unter: float = 0.0
     fruehstart_min: int = 30
-    trocknen_ab_mm: float = 2.0
-    trocknen_laenger_min: int = 45
-    trocknen_frueher_min: int = 15
+    # AN-0021: Kleidung trocknen gestuft nach dem Regen in der Arbeitszeit (logik/regen)
+    trocknen_stufen: tuple[TrocknenStufe, ...] = VORGABE_STUFEN
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,9 @@ class WetterTag:
     frueh_min_temp: float | None = None
     regen_vortag_mm: float | None = None
     regen_heute_mm: float | None = None
+    # AN-0021: Regen in der Arbeitszeit (logik/regen.regen_arbeitszeit) – nur er zählt für „Kleidung trocknen“
+    regen_az_vortag_mm: float | None = None
+    regen_az_heute_mm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -381,13 +385,14 @@ def tagesplan(
     if not gelernt and regeln.fruehstart and wetter.frueh_min_temp is not None and wetter.frueh_min_temp < regeln.fruehstart_unter:
         frueher.append((PlanGrund.FRUEHSTART.value, regeln.fruehstart_min))
         gruende.append(PlanGrund.FRUEHSTART)
-    if trocknen and wetter.regen_vortag_mm is not None and wetter.regen_vortag_mm >= regeln.trocknen_ab_mm:
-        frueher.append((PlanGrund.FRUEHER_NACH_REGEN.value, regeln.trocknen_frueher_min))
+    # AN-0021: früher nach dem Regen in der Arbeitszeit gestern, länger nach dem von heute – gestuft
+    if trocknen and (st_v := stufe(wetter.regen_az_vortag_mm, regeln.trocknen_stufen)) is not None:
+        frueher.append((PlanGrund.FRUEHER_NACH_REGEN.value, st_v.frueher_min))
         gruende.append(PlanGrund.FRUEHER_NACH_REGEN)
     extra = sum(m for _, m in frueher)
     laenger = 0
-    if trocknen and wetter.regen_heute_mm is not None and wetter.regen_heute_mm >= regeln.trocknen_ab_mm:
-        laenger = regeln.trocknen_laenger_min
+    if trocknen and (st_h := stufe(wetter.regen_az_heute_mm, regeln.trocknen_stufen)) is not None:
+        laenger = st_h.laenger_min
         gruende.append(PlanGrund.TROCKNEN)
     nach = b + (warm.nach_min if warm is not None and gelernt else regeln.nachheizen_min)
     return Plan(
