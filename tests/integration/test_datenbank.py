@@ -309,7 +309,7 @@ async def test_seite_einstellung_mit_benutzer_vor_ort_ohne(hass: HomeAssistant, 
     assert len(bedarf) == 1 and bedarf[0]["quelle"] == "seite" and bedarf[0]["bereich_id"] == C2
     assert "aktion.bedarf" not in einst                                     # vor Ort: kein Benutzer gespeichert
     assert any("heizt bis" in r["text"] for r in _zeilen(hass, "protokoll"))   # Protokoll ohne Grenze
-    zustand = {r["schluessel"]: json.loads(r["wert"]) for r in _zeilen(hass, "zustand")}
+    zustand = {r["schluessel"]: None if r["wert"] is None else json.loads(r["wert"]) for r in _zeilen(hass, "zustand")}   # None (z. B. jetzt_bis) steht als NULL
     assert C2 in zustand["bedarf_bis"]                                       # Laufzeit
 
 
@@ -365,7 +365,7 @@ async def test_uebernahme_store(hass: HomeAssistant, baustelle, freezer) -> None
     """Ohne Recorder: Einstellungen, Zähler, Protokoll aus dem Store; Merker; zweiter Lauf gleich, ohne Doppelte."""
     await hass.async_block_till_done()
     db, st = hass.data[DATA_DB], baustelle.runtime_data
-    merker = {r["schluessel"]: json.loads(r["wert"]) for r in _zeilen(hass, "zustand")}
+    merker = {r["schluessel"]: None if r["wert"] is None else json.loads(r["wert"]) for r in _zeilen(hass, "zustand")}
     assert merker["uebernahme"]["version"] == UEBERNAHME_VERSION and "zaehler" in merker["zaehler_uebernahme"]
     assert TEST_PG or Path(hass.config.path(DATEI) + ".vor-uebernahme").exists()   # PostgreSQL sichert selbst
     migration = {r["schluessel"]: r["wert"] and json.loads(r["wert"]) for r in _zeilen(hass, "einstellung") if r["quelle"] == "migration"}
