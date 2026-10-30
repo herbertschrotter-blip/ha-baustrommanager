@@ -51,6 +51,17 @@ jobs:
         id: chrome
         with:
           chrome-version: 136
+      # Schrift wie am Handy (Android: Roboto) – sonst nimmt Chrome für system-ui die breitere DejaVu Sans, und B9
+      # (alle Kachelzahlen in einer Zeile bei 390 px) bricht um, was auf den Zielgeräten nicht passiert (Audit 0.8.165)
+      - name: Schrift Roboto für den Browser-Test
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq fonts-roboto
+          mkdir -p ~/.config/fontconfig
+          printf '%s\n' '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>' \
+            '<alias><family>system-ui</family><prefer><family>Roboto</family></prefer></alias>' \
+            '<alias><family>sans-serif</family><prefer><family>Roboto</family></prefer></alias></fontconfig>' \
+            > ~/.config/fontconfig/fonts.conf
+          fc-match system-ui
       - name: Seite im Browser (B1–B7)
         env:
           CHROME_PFAD: ${{ steps.chrome.outputs.chrome-path }}
