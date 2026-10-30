@@ -79,3 +79,12 @@ def test_zu_vergisst_nicht_erreichbar_behaelt() -> None:
     assert offen_merken(merker, None, START, START) == (None, merker)   # gilt als zu, Merker bleibt
     assert offen_merken(merker, True, None, START) == (None, merker)    # Sensor fehlt
     assert offen_merken(None, False, START, START) == (None, None)
+
+
+def test_im_anlauf_gilt_der_merker_weiter() -> None:
+    """Kontakt meldet sich nach dem Start noch nicht: im Anlauf bleibt er offen (keine zweite Nachricht), danach zu."""
+    merker = (T0, T0)
+    assert offen_merken(merker, None, None, START, START + timedelta(minutes=1)) == (T0, merker)
+    assert offen_merken(merker, True, None, START, START + ANLAUF) == (T0, merker)
+    assert offen_merken(merker, None, START, START, START + ANLAUF + timedelta(minutes=1)) == (None, merker)
+    assert offen_merken(None, None, None, START, START) == (None, None)

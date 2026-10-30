@@ -424,7 +424,7 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
   Dauerbetrieb, 0.7.24).
 - `gespart_reihen` (Kachel „Gespart“, Mockup `gespart.html` Variante B, Herbert 28.10.2026) über `scope` (auch „alle
   laufenden“): je Periode des Zeitraums (`zeitraum.n`: Tag je Stunde, Woche/Monat je Tag, Jahr je Monat) „mit
-  Automatik“ (Energie der Container), „ohne (24/7)“ und „gespart“ in kWh und € (× `preis`), dazu `summe`. Regel einmal in
+  Automatik“ (Energie der Container, ohne Pumpenschächte – seit 0.8.165 auch im Code), „ohne (24/7)“ und „gespart“ in kWh und € (× `preis`), dazu `summe`. Regel einmal in
   `logik/auswertung.gespart_reihen`: Σ`gespart` = `summen.ohne_automatik.gespart_eur` (Σohne − Σmit, nie unter 0); je
   Periode nie unter 0 – die Perioden, in denen der Zähler „ohne Automatik“ über „mit“ liegt, teilen sich die Summe im
   Verhältnis ihres Abstands (liegt er nie darunter, ist es genau der Abstand); `ohne` je Periode = `mit` + `gespart` (die

@@ -23,7 +23,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Connection, delete, insert, update
+from sqlalchemy import Connection, delete, insert, select, update
 
 from homeassistant.const import STATE_ON, STATE_UNAVAILABLE, STATE_UNKNOWN
 from homeassistant.core import Event, EventStateChangedData, EventStateReportedData, HomeAssistant, State, callback
@@ -121,6 +121,31 @@ class Mitschreiber:
             self._abmelden.append(async_track_state_report_event(self.hass, fuehler, self._berichtet))
         self._abmelden.append(self.st.async_add_listener(self._nach_auswertung))
         self._abmelden.append(async_track_time_change(self.hass, self._minute, second=0))
+        zaehler = [gid for gid, g in self.st.geraete.items() if g.energie]
+        if zaehler:
+            self.hass.async_create_background_task(self._async_nachholen(zaehler), "baustelle_datenbank_nachholen")
+
+    async def _async_nachholen(self, gids: list[str]) -> None:
+        """Nach einem Neustart: Zuwachs seit der letzten geschriebenen Minute in die erste Minute (logik/minute).
+        Liegen noch ungeschriebene Minuten im Puffer, ist die letzte Minute der Datenbank nicht die letzte – dann nicht
+        (sie brächten den Zuwachs selbst mit, er zählte doppelt)."""
+        if self.db.schreiber.ausgelagert:
+            return
+        gm = s.geraet_minute
+
+        def lesen(v: Connection) -> dict[str, tuple[float, datetime]]:
+            stand: dict[str, tuple[float, datetime]] = {}
+            for gid in gids:
+                z = v.execute(select(gm.c.zeit, gm.c.dauer_s, gm.c.zaehlerstand_kwh).where(
+                    gm.c.geraet_id == gid, gm.c.zaehlerstand_kwh.is_not(None)).order_by(gm.c.zeit.desc()).limit(1)).first()
+                if z is not None:
+                    zeit = z.zeit if z.zeit.tzinfo else z.zeit.replace(tzinfo=dt_util.UTC)
+                    stand[gid] = (float(z.zaehlerstand_kwh), zeit + timedelta(seconds=z.dauer_s))
+            return stand
+
+        for gid, (kwh, ende) in ((await self.db.async_ausfuehren(lesen)) or {}).items():
+            if (g := self._geraete.get(gid)) is not None and g.nachholen(kwh, ende):
+                _LOGGER.debug("Neustart: Zähler %s ab %s nachgeholt", gid, ende)
 
     def _offen(self, bid: str) -> bool | None:
         """Irgendein Kontakt des Containers offen; None, wenn keiner etwas meldet."""

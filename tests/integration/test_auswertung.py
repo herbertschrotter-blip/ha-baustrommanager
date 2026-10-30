@@ -189,7 +189,10 @@ async def test_auswertung_befehl(hass: HomeAssistant, baustelle, ws, statistik) 
     assert s["kwh"] > 0 and s["heizzeit"] > 0 and s["pumpzeit"] > 0 and s["ohne"] > s["kwh"]
     assert set(s["vorher"]) == {"kwh", "heizzeit", "pumpzeit"} and s["vorher"]["kwh"] > s["kwh"]   # Woche erst angebrochen
     assert s["veraenderung"]["kwh"] == round((s["kwh"] - s["vorher"]["kwh"]) / s["vorher"]["kwh"] * 100)
-    assert s["ohne_automatik"]["gespart_eur"] == pytest.approx((s["ohne"] - s["kwh"]) * 0.25)
+    container_kwh = sum(c["kwh"] for c in r["rangliste"]) if isinstance(r.get("rangliste"), list) else None
+    # „gespart“ nur mit den Containern (Herbert 30.10.2026): der Schacht zählt in kWh und €, nicht in „gespart“
+    assert container_kwh is not None and container_kwh < s["kwh"]
+    assert s["ohne_automatik"]["gespart_eur"] == pytest.approx((s["ohne"] - container_kwh) * 0.25)
     assert s["ohne_automatik"]["ohne_eur"] == pytest.approx(s["ohne"] * 0.25)   # Balken „ohne (24/7)“ der Seite
     # dieselbe Heizzeit wie der Zähler-Sensor in der Statistik (Container, ohne Schacht)
     abr = (await ws("baustelle/abrechnung", zeitraum="Woche"))["result"]
@@ -224,7 +227,7 @@ async def test_auswertung_befehl(hass: HomeAssistant, baustelle, ws, statistik) 
     assert r["erkenntnisse"] and r["erkenntnisse"][0]["art"] == "gespart" and len(r["erkenntnisse"]) <= 5
     # Kachel „Gespart“ (Herbert 28.10.2026): je Tag mit, ohne (24/7), gespart; Summe = ohne_automatik.gespart_eur
     g = r["gespart_reihen"]
-    assert len(g["gespart_eur"]) == r["zeitraum"]["n"] == 7 and g["summe"]["mit_kwh"] == pytest.approx(s["kwh"])
+    assert len(g["gespart_eur"]) == r["zeitraum"]["n"] == 7 and g["summe"]["mit_kwh"] == pytest.approx(container_kwh)
     assert sum(v or 0 for v in g["gespart_eur"]) == pytest.approx(s["ohne_automatik"]["gespart_eur"])
     assert sum(v or 0 for v in g["ohne_eur"]) == pytest.approx(s["ohne_automatik"]["ohne_eur"])
     fertig = [i for i, v in enumerate(g["mit_kwh"]) if v is not None]

@@ -937,6 +937,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         fenster: [{ wand: 'front', pos: 0.7, sensor: null }] };
       await panel.neuZeichnen(); pruefe('Container Geräte-Kacheln');
       erwarte('AN-0018: Fühler-Kachel mit Temperatur und Feuchte vom selben Gerät', !!litEl('.gk-k-fu') && litEl('.gk-k-fu').textContent.includes('54 % Feuchte') && /°C/.test(litEl('.gk-k-fu').textContent));
+      // neuer Feuchtewert aus HA: die Kachel zeichnet neu, ohne dass sich die Struktur ändert
+      panel._anzeige = [...(panel._anzeige || []), 'sensor.polier_feuchte']; panel._anzeigeGezeichnet = 0; panel._beobachten(panel._hass);
+      panel._hass.states['sensor.polier_feuchte'] = { entity_id: 'sensor.polier_feuchte', state: '61', attributes: {} }; panel._beobachten(panel._hass);
+      await new Promise(r => setTimeout(r, 30)); await panel.updateComplete;
+      erwarte('AN-0018: neuer Feuchtewert ohne neue Struktur in der Kachel', litEl('.gk-k-fu').textContent.includes('61 % Feuchte'));
       const ko = litEl('.gk-k-ko').textContent;
       erwarte('AN-0018: Türen & Fenster – Tür ohne Kontakt mit Hinweis, Fenster ohne Kontakt als Zeile', ko.includes('Tür 2 · Seite') && ko.includes('kein Kontakt') && ko.includes('ohne Kontakt: Fenster 1'));
       x.symbol = alt.sym; panel.d.r.geraete_links = alt.links; delete panel._hass.states['sensor.polier_feuchte']; await panel.neuZeichnen(); }

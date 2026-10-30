@@ -1048,7 +1048,8 @@ class BaustellePanel extends LitElement {
   }
   disconnectedCallback() {
     super.disconnectedCallback();
-    clearInterval(this._timer); this._timer = null; clearTimeout(this._nachladen);
+    clearInterval(this._timer); this._timer = null; clearTimeout(this._nachladen); clearTimeout(this._anzeigeGeplant);
+    this._nachladen = null; this._anzeigeGeplant = null;   // sonst bliebe das Nachladen nach dem Wiedereinhängen gesperrt
     this._aboEnde(); this._fensterAus(); if (this.himmel) { this.himmel.stop(); this.himmel = null; }
   }
   /* Listener am Fenster nur, solange die Seite eingehängt ist (BSM-022.03): sonst hält jede alte Seite sich selbst am Leben */
@@ -1104,6 +1105,13 @@ class BaustellePanel extends LitElement {
     if (neu && this._alt && ids.length && !this._nachladen) this._nachladen = setTimeout(() => { this._nachladen = null; this._laden(); }, 3000);
     // WU-0002: Diagramme und „kWh heute“ rechnen bis zum aktuellen Zählerstand – bei neuen Werten neu zeichnen (höchstens alle 10 s)
     if (neu && this.d && Date.now() - (this._liveGezeichnet || 0) > 10000) { this._liveGezeichnet = Date.now(); this._liveNeu(); }
+    // Feuchte und „gemessen vor …“ der Kacheln: neue Sensorwerte zeichnen neu (höchstens alle 10 s), ohne Struktur zu holen
+    const zeig = this._anzeige || [], vorher = this._altAnzeige;
+    this._altAnzeige = Object.fromEntries(zeig.map(id => [id, h.states[id]]));
+    if (vorher && this.d && zeig.some(id => h.states[id] !== vorher[id]) && !this._anzeigeGeplant) {
+      const warte = Math.max(0, 10000 - (Date.now() - (this._anzeigeGezeichnet || 0)));
+      this._anzeigeGeplant = setTimeout(() => { this._anzeigeGeplant = null; this._anzeigeGezeichnet = Date.now(); this._auffrischen(); }, warte);
+    }
   }
 
   async _laden() {
@@ -1156,6 +1164,8 @@ class BaustellePanel extends LitElement {
     this.d = aktiv.find(x => x.entry === this.bid) || aktiv[0] || null;
     if (this.d && this.d.entry !== this.bid) { this.bid = this.d.entry; this._merken(); }
     this._eigene = (this.roh || []).flatMap(r => Object.values(r.entitaeten || {}));
+    // Fühler-Kachel (AN-0018): Temperatur-, Feuchte- und Kontakt-Sensoren zeigt die Seite direkt aus HA
+    this._anzeige = (this.roh || []).flatMap(r => Object.entries(r.geraete_links || {}).flatMap(([eid, l]) => [eid, l && l.feuchte].filter(Boolean)));
   }
   /* Adresse aus einer Handy-Nachricht (api §4): ?baustelle=<entry_id>&container=<bid>&ansicht=auswertung */
   _adresse() {
@@ -1824,7 +1834,7 @@ class BaustellePanel extends LitElement {
       const call = (k, w) => this._hass.callWS({ type: 'baustelle/setzen', entry_id: d.entry, pfad: pfad(k), wert: w });
       if (e.bedarf !== !!eb.bedarf) await call('bedarf', e.bedarf);
       if (x.groesse) { const m2 = e.groesseArt === 'einzel' ? null : e.groesseArt === 'doppel' ? x.groesse.typen.doppel.m2 : (zahl(e.m2) && Number(e.m2) >= 4 ? Number(e.m2) : undefined);   // AN-0014
-        if (m2 !== undefined && m2 !== (eb.groesse_m2 ?? null)) await call('groesse_m2', m2); }
+        if (m2 !== undefined && (m2 ?? x.groesse.typen.einzel.m2) !== x.groesse.m2) await call('groesse_m2', m2); }   // nur bei anderer Fläche (ohne Angabe = Einzel)
       if ((e.tuer || null) !== (eb.tuer || null)) await call('tuer', e.tuer || null);
       if (e.warmVor !== (x.warmVor ?? null)) await call('warm_vor', e.warmVor);   // BSM-034.01: alles erst bei „Speichern“
       if (e.warmNach !== (x.warmNach ?? null)) await call('warm_nach', e.warmNach);

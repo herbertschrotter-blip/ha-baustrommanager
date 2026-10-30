@@ -425,8 +425,8 @@ async def test_trotzdem_heizen_ueberlebt_neuladen(hass: HomeAssistant, baustelle
 
 async def test_tuer_offen_ueberlebt_neustart(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
     """FE-0036/37: Tür seit 10:00 offen, um 12:00 startet HA neu – der Kontakt meldet sich mit neuem Wechsel (HA setzt
-    last_changed neu). Die Pause läuft weiter, offen seit 10:00. Fehlt der Kontakt beim Start kurz, vergisst die Warnung
-    „schon gemeldet“ (wie bisher) – die erneute Nachricht nennt jetzt die richtige Dauer."""
+    last_changed neu). Die Pause läuft weiter, offen seit 10:00. Fehlt der Kontakt beim Start kurz, gilt im Anlauf der
+    gemerkte Stand weiter – die Warnung bleibt „schon gemeldet“, keine zweite Nachricht."""
     st = baustelle.runtime_data
     await _start(hass, freezer, st)
     await _tuer(hass, TUER1, "on")
@@ -443,7 +443,7 @@ async def test_tuer_offen_ueberlebt_neustart(hass: HomeAssistant, baustelle, fre
     await _zu(hass, freezer, "12:01:30", st)
     assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "tuer_offen"
     assert _c(hass, baustelle)["tuer"] == {"offen": True, "seit": dt_util.parse_datetime(_um("10:00:00")).isoformat()}
-    assert _tuer_nachr(nachrichten)[1:] == ["🚪 Container 1: Tür seit 121 min offen"]
+    assert len(_tuer_nachr(nachrichten)) == 1                       # keine zweite Nachricht nach dem Neustart
     # Tür zu: Merker weg, nächste Öffnung zählt neu
     await _tuer(hass, TUER1, "off")
     await _zu(hass, freezer, "12:20:00", st)

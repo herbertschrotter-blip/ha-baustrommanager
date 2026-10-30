@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from logik.minute import BereichSammler, GeraetSammler, Zeitanteil, Zeitmittel
+from logik.minute import NACHHOLEN_MAX, BereichSammler, GeraetSammler, Zeitanteil, Zeitmittel
 
 T0 = datetime(2026, 10, 5, 10, 0, tzinfo=timezone.utc)
 
@@ -64,6 +64,30 @@ def test_geraet_luecke_wird_spaeter_gezaehlt():
     g.zaehler(ende - timedelta(seconds=30), 160.0)
     m = g.abschliessen(ende)
     assert m.energie_wh == pytest.approx(60000.0)
+
+
+def test_neustart_kurze_luecke_zaehlt_in_die_erste_minute():
+    """HA 4 min weg: letzte Minute endete bei 100,0 kWh, beim Start 100,15 – die 150 Wh gehören in die erste Minute."""
+    g = GeraetSammler(T0, True, 2000.0, 100.15, mit_zaehler=True)
+    assert g.nachholen(100.0, T0 - timedelta(minutes=4))
+    assert g.abschliessen(s(60)).energie_wh == pytest.approx(150.0)
+    assert not g.nachholen(100.0, T0 - timedelta(minutes=4))   # nur einmal, nur in der ersten Minute
+
+
+def test_neustart_lange_luecke_zaehlt_nicht():
+    """Länger als NACHHOLEN_MAX weg: das Notprogramm kann übernommen haben – dessen Stundenbuch trägt nach."""
+    g = GeraetSammler(T0, True, 2000.0, 101.0, mit_zaehler=True)
+    assert not g.nachholen(100.0, T0 - NACHHOLEN_MAX - timedelta(seconds=1))
+    assert g.abschliessen(s(60)).energie_wh == 0.0
+    assert not GeraetSammler(T0, True, None, 1.0, mit_zaehler=False).nachholen(0.5, T0 - timedelta(minutes=1))   # ohne Zähler
+
+
+def test_neustart_zaehler_noch_ohne_wert():
+    """Zähler meldet erst nach dem Start: der Zuwachs seit der letzten Minute zählt, sobald er da ist."""
+    g = GeraetSammler(T0, True, None, None, mit_zaehler=True)
+    assert g.nachholen(100.0, T0 - timedelta(minutes=2))
+    g.zaehler(s(30), 100.1)
+    assert g.abschliessen(s(60)).energie_wh == pytest.approx(100.0)
 
 
 def test_geraet_ohne_zaehler_aus_leistung():

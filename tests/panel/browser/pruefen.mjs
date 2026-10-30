@@ -474,7 +474,8 @@ await fall('3d Container', browser, async (page, erwarte) => {
   await klick(page, `${D} >>> .sheet [data-zeile="trocknen"] .sw`); await warte(100);   // AN-0018: in Bearbeiten, gespeichert mit „Speichern“
   { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .sheet .knopf.amber`); await warte(300);
     const pf = await page.evaluate(ab => window.baustelleBeispiel.TEST.aufrufe.slice(ab).filter(m => m.type === 'baustelle/setzen').map(m => m.pfad.join('.')), ab);
-    erwarte('Kleidung trocknen (AN-0018: Bearbeiten › Speichern) setzt bereiche.<id>.trocknen', pf.some(x => /^bereiche\.[^.]+\.trocknen$/.test(x)), pf.join(', ')); }
+    erwarte('Kleidung trocknen (AN-0018: Bearbeiten › Speichern) setzt bereiche.<id>.trocknen', pf.some(x => /^bereiche\.[^.]+\.trocknen$/.test(x)), pf.join(', '));
+    erwarte('Bearbeiten › Speichern schreibt nur Geändertes (kein groesse_m2 ohne Änderung)', pf.length === 1, pf.join(', ')); }
   await panel(page, D, () => { p.s.sheet = null; return p.neuZeichnen(); });
   await klick(page, `${D} >>> .c-live .seg [data-v="woche"]`);
   erwarte('Diagramm Woche', await panel(page, D, () => p.s.cvd === 'woche' && !!sr.querySelector('.c-live .chart-wrap svg')));

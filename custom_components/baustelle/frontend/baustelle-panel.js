@@ -6501,7 +6501,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.164";
+var SEITE_VERSION = "0.8.165";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -6565,6 +6565,9 @@ var BaustellePanel = class extends i4 {
     clearInterval(this._timer);
     this._timer = null;
     clearTimeout(this._nachladen);
+    clearTimeout(this._anzeigeGeplant);
+    this._nachladen = null;
+    this._anzeigeGeplant = null;
     this._aboEnde();
     this._fensterAus();
     if (this.himmel) {
@@ -6660,6 +6663,16 @@ var BaustellePanel = class extends i4 {
       this._liveGezeichnet = Date.now();
       this._liveNeu();
     }
+    const zeig = this._anzeige || [], vorher = this._altAnzeige;
+    this._altAnzeige = Object.fromEntries(zeig.map((id) => [id, h3.states[id]]));
+    if (vorher && this.d && zeig.some((id) => h3.states[id] !== vorher[id]) && !this._anzeigeGeplant) {
+      const warte = Math.max(0, 1e4 - (Date.now() - (this._anzeigeGezeichnet || 0)));
+      this._anzeigeGeplant = setTimeout(() => {
+        this._anzeigeGeplant = null;
+        this._anzeigeGezeichnet = Date.now();
+        this._auffrischen();
+      }, warte);
+    }
   }
   async _laden() {
     if (!this._hass) return;
@@ -6733,6 +6746,7 @@ var BaustellePanel = class extends i4 {
       this._merken();
     }
     this._eigene = (this.roh || []).flatMap((r5) => Object.values(r5.entitaeten || {}));
+    this._anzeige = (this.roh || []).flatMap((r5) => Object.entries(r5.geraete_links || {}).flatMap(([eid, l4]) => [eid, l4 && l4.feuchte].filter(Boolean)));
   }
   /* Adresse aus einer Handy-Nachricht (api §4): ?baustelle=<entry_id>&container=<bid>&ansicht=auswertung */
   _adresse() {
@@ -7888,7 +7902,7 @@ var BaustellePanel = class extends i4 {
       if (e6.bedarf !== !!eb.bedarf) await call("bedarf", e6.bedarf);
       if (x2.groesse) {
         const m22 = e6.groesseArt === "einzel" ? null : e6.groesseArt === "doppel" ? x2.groesse.typen.doppel.m2 : zahl(e6.m2) && Number(e6.m2) >= 4 ? Number(e6.m2) : void 0;
-        if (m22 !== void 0 && m22 !== (eb.groesse_m2 ?? null)) await call("groesse_m2", m22);
+        if (m22 !== void 0 && (m22 ?? x2.groesse.typen.einzel.m2) !== x2.groesse.m2) await call("groesse_m2", m22);
       }
       if ((e6.tuer || null) !== (eb.tuer || null)) await call("tuer", e6.tuer || null);
       if (e6.warmVor !== (x2.warmVor ?? null)) await call("warm_vor", e6.warmVor);

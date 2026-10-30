@@ -87,10 +87,15 @@ Merker = tuple[datetime, datetime]   # (offen seit, zuletzt gesehener Wechsel de
 
 
 def offen_merken(merker: Merker | None, offen: bool | None, geaendert: datetime | None,
-                 gestartet: datetime) -> tuple[datetime | None, Merker | None]:
+                 gestartet: datetime, jetzt: datetime | None = None) -> tuple[datetime | None, Merker | None]:
     """Seit wann ein Kontakt offen ist und der neue Merker. `offen` None = nicht erreichbar, `geaendert` = letzter
-    Wechsel laut HA, `gestartet` = Start der Integration (FE-0036/37)."""
+    Wechsel laut HA, `gestartet` = Start der Integration (FE-0036/37).
+
+    Nicht erreichbar gilt als zu – nur im Anlauf nach dem Start nicht: Meldet sich der Kontakt noch nicht, gilt der
+    gemerkte Stand weiter (sonst verschwände „Tür offen“ kurz, und die Nachricht käme ein zweites Mal)."""
     if offen is None or geaendert is None:
+        if merker is not None and jetzt is not None and abs(jetzt - gestartet) <= ANLAUF:
+            return merker[0], merker
         return None, merker
     if not offen:
         return None, None

@@ -113,6 +113,11 @@ class Quelle:
         eigen = self.eid(bid, "energie")
         return [eigen] if eigen else [g["energie"] for g in self.geraete if g["bereich"] == bid and g["energie"]]
 
+    def gespart_ids(self) -> list[str]:
+        """„Gespart“ vergleicht nur die Container: „ohne Automatik“ schätzt sie 24/7 geheizt, Pumpen zählen nicht mit
+        (Herbert 30.10.2026) – wie der Sensor „Ersparnis“ (Energie fürs Heizen)."""
+        return [i for b in self.bereiche if b["art"] == ART_CONTAINER for i in self.energie_ids(b["id"])]
+
     def pumpen(self) -> list[dict[str, Any]]:
         return [g for g in self.geraete if g["rolle"] == ROLLE_PUMPE]
 
@@ -353,7 +358,7 @@ async def _summen(hass: HomeAssistant, q: Quelle, zr: a.Zeitraum) -> dict[str, A
         "pumpzeit": sum(a.summe(v) for v in pumpzeit.values()),
         "ohne": a.summe(w.get(q.eid(eid, "energie_ohne_automatik") or "", leer)),
         # je Periode (Kachel „Gespart“): Verbrauch mit Automatik und „ohne Automatik“; ohne jeden Wert None
-        "mit_je": a.reihe_offen([w.get(i, leer) for b in q.bereiche for i in q.energie_ids(b["id"])], zr.n),
+        "mit_je": a.reihe_offen([w.get(i, leer) for i in q.gespart_ids()], zr.n),
         "ohne_je": a.reihe_offen([w.get(q.eid(eid, "energie_ohne_automatik") or "", leer)], zr.n),
         "pumpzeit_je": pumpzeit,
         # je Container (Rangliste der Auswertung, WU-0005)
@@ -365,12 +370,12 @@ async def _summen(hass: HomeAssistant, q: Quelle, zr: a.Zeitraum) -> dict[str, A
 
 async def _gespart_tage(hass: HomeAssistant, q: Quelle, von: date, bis: date, preis_sim: float | None = None,
                         roh: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
-    """Kachel „Gespart“ einer Baustelle je Tag in [von, bis): Verbrauch aller Bereiche und „ohne Automatik“ aus der
+    """Kachel „Gespart“ einer Baustelle je Tag in [von, bis): Verbrauch der Container und „ohne Automatik“ aus der
     Tagesstatistik, € je Tag zum Preis des Tages (`logik/auswertung.gespart_reihen`) – Verlauf (seit Beginn) und Jahr."""
     zone, n = _zone(), max(0, (bis - von).days)
     if not n:
         return None
-    mit_ids = [i for b in q.bereiche for i in q.energie_ids(b["id"])]
+    mit_ids = q.gespart_ids()
     ohne_id = q.eid(q.entry.entry_id, "energie_ohne_automatik")
     if roh is None:   # sonst schon geholt (Verlauf: dieselbe Tagesstatistik, ein Aufruf)
         roh = await async_statistik(hass, [*mit_ids, ohne_id], a.mitternacht(von, zone), a.mitternacht(bis, zone), "day", {"change"})
@@ -403,7 +408,7 @@ async def async_verlauf(hass: HomeAssistant, q: Quelle) -> dict[str, Any]:
     energie = q.eid(eid, "energie")
     heizzeit = {b["id"]: i for b in q.bereiche if b["art"] == ART_CONTAINER and (i := q.eid(b["id"], "heizzeit"))}
     strom = {b["id"]: i for b in q.bereiche if b["art"] == ART_CONTAINER and (i := q.eid(b["id"], "heizzeit_strom"))}
-    gespart_ids = [*(i for b in q.bereiche for i in q.energie_ids(b["id"])), q.eid(eid, "energie_ohne_automatik")]
+    gespart_ids = [*q.gespart_ids(), q.eid(eid, "energie_ohne_automatik")]
     roh = await async_statistik(hass, [energie, *heizzeit.values(), *strom.values(), *gespart_ids], a.mitternacht(von, zone),
                                 a.mitternacht(bis, zone), "day", {"change"})
     vw = a.verlauf_werte(roh.get(energie) if energie else None, {b: roh.get(i, []) for b, i in heizzeit.items()}, zone,

@@ -213,7 +213,7 @@ def kontakt_offen_seit(st: Steuerung, bid: str) -> datetime | None:
         alt = gemerkt.get(eid)
         merker = (z0, z1) if alt and (z0 := _zeit(alt[0])) and (z1 := _zeit(alt[1])) else None
         seit, neu = sensor_logik.offen_merken(merker, offen, None if s is None else dt_util.as_local(s.last_changed),
-                                              st._gestartet)
+                                              st._gestartet, dt_util.now())
         if neu != merker:
             if neu is None:
                 gemerkt.pop(eid, None)

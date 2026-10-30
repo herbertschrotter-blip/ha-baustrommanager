@@ -218,3 +218,29 @@ async def test_langer_ausfall_zaehlt(hass: HomeAssistant, baustelle, freezer) ->
     hass.states.async_set("sensor.hk1_energy", "170.5")
     await hass.async_block_till_done()
     assert st.zaehler["energie"] == pytest.approx(vorher + 60.0)
+
+
+async def test_datenbank_holt_kurzen_neustart_nach(hass: HomeAssistant, baustelle, freezer) -> None:
+    """HA 3 min weg, der Zähler zählt weiter (10,0 → 10,3 kWh): die erste Minute nach dem Start trägt die 300 Wh – vorher
+    fehlten sie in der Datenbank (Auswertung kleiner als der Zähler an Neustart-Tagen)."""
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed   # noqa: PLC0415
+
+    from .conftest import zeilen_db   # noqa: PLC0415
+
+    async def minute() -> None:
+        freezer.tick(timedelta(minutes=1))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+    await minute()
+    await minute()
+    assert await hass.config_entries.async_unload(baustelle.entry_id)
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(minutes=3))
+    hass.states.async_set("sensor.hk1_energy", "10.3")
+    assert await hass.config_entries.async_setup(baustelle.entry_id)
+    await hass.async_block_till_done()
+    await minute()
+    zeilen = sorted((z for z in zeilen_db(hass, "geraet_minute") if z["geraet_id"] == "h1"), key=lambda z: str(z["zeit"]))
+    assert sum(z["energie_wh"] or 0 for z in zeilen) == pytest.approx(300.0)
+    assert zeilen[-1]["energie_wh"] == pytest.approx(300.0)

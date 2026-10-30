@@ -133,6 +133,12 @@ class GeraetMinute:
     staffel_gesperrt_s: int | None = None   # P1: davon von der Staffelung nicht freigegeben
 
 
+# Neustart von HA: Was der Zähler zwischen der letzten geschriebenen Minute und dem Start zählte, gehört in die erste
+# Minute – aber nur bei kurzer Lücke. Ab 15 min ohne Lebenszeichen (alle 5 min) kann das Notprogramm übernommen haben;
+# dessen Stundenbuch trägt die Lücke dann selbst nach (db/nachtrag) und darf nicht doppelt zählen.
+NACHHOLEN_MAX = timedelta(minutes=10)
+
+
 class GeraetSammler:
     """Schalter, Leistung und Energiezähler eines Shelly."""
 
@@ -147,6 +153,7 @@ class GeraetSammler:
         self._mit_zaehler = mit_zaehler
         self._stand = stand
         self._stand_alt, self._stand_alt_zeit = stand, (t if stand is not None else None)
+        self._erste = True
         self._anforderung = Beobachtung(t, None)   # unbekannt bis zum ersten Bericht der Staffelung
         self._gesperrt = Beobachtung(t, None)
 
@@ -166,6 +173,15 @@ class GeraetSammler:
     def zaehler(self, _t: datetime, kwh: float | None) -> None:
         if kwh is not None:
             self._stand = kwh
+
+    def nachholen(self, stand: float | None, zeit: datetime | None) -> bool:
+        """Letzter geschriebener Zählerstand vor dem Start (`zeit` = Ende seiner Minute): Liegt er höchstens
+        `NACHHOLEN_MAX` zurück und ist die erste Minute noch offen, zählt der Zuwachs seitdem in die erste Minute."""
+        if (not self._mit_zaehler or not self._erste or stand is None or zeit is None
+                or not timedelta(0) < self._start - zeit <= NACHHOLEN_MAX):   # Zähler beim Start noch ohne Wert: auch
+            return False
+        self._stand_alt, self._stand_alt_zeit = stand, zeit
+        return True
 
     def staffel(self, t: datetime, anforderung: bool | None, gesperrt: bool | None) -> None:
         """Stand nach einem Schritt der Staffelung (gilt bis zum nächsten)."""
@@ -192,7 +208,7 @@ class GeraetSammler:
         else:
             energie = wattsekunden / 3600 if mittel is not None else None
         dauer = int(round((ende - self._start).total_seconds()))
-        self._start = ende
+        self._start, self._erste = ende, False
         return GeraetMinute(dauer, int(round(ein)), None if mittel is None else round(mittel, 1),
                             hoechst, None if energie is None else round(energie, 3), self._stand, not unbekannt, int(round(strom)),
                             None if anf_unbekannt else int(round(anf)),

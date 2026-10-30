@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.165] – 2026-10-30
+
+- „Tür offen“ kommt nach einem HA-Neustart nicht mehr ein zweites Mal aufs Handy: Meldet sich der Kontakt beim Start
+  noch nicht, gilt in den ersten 10 Minuten der gemerkte Stand weiter (vorher galt er kurz als zu, und die Warnung
+  vergaß „schon gemeldet“). Folge zu FE-0036/37.
+- Eigene Datenbank: Was die Zähler während eines kurzen HA-Neustarts zählen (bis 10 Minuten Lücke), zählt jetzt in die
+  erste Minute danach. Vorher fehlten an Tagen mit Neustart je Container einige hundert Wh in Auswertung und Verlauf.
+  Längere Ausfälle trägt wie bisher das Stundenbuch des Notprogramms nach.
+- „Gespart“ vergleicht nur die Container: „mit Automatik“ zählt Pumpenschächte nicht mehr mit, weil „ohne Automatik“
+  nur die Container schätzt (wie der Sensor „Ersparnis“).
+- Container › Fühler-Kachel: Feuchte und „gemessen vor …“ zeigen neue Werte sofort (höchstens alle 10 s), nicht erst
+  beim nächsten Neuladen der Daten.
+- Bearbeiten › Speichern schreibt die Containergröße nur noch, wenn sich die Fläche wirklich ändert.
+- Seite: Nach dem Aus- und Wiedereinhängen lädt sie neue Daten wieder (ein alter Merker blockierte das Nachladen).
+
 ## [0.8.164] – 2026-10-29
 
 - AN-0019: Heizung › Heute zeigt Übersichtskarten in zwei Spalten (Arbeitszeit, Heizgrenze, Kleidung trocknen, Frühstart
@@ -199,7 +214,7 @@
 
 ## [0.8.144] – 2026-10-28
 
-- Auswertung „Ölradiator oder Konvektor“ klarer und fairer (FE-0023, AN-0016). Unter der Tabelle steht jetzt, worauf
+- Auswertung „Ölradiator oder Konvektor“ klarer und fairer (FE-0023, FE-0028, AN-0016). Unter der Tabelle steht jetzt, worauf
   sich die Zahlen beziehen: seit Zählbeginn (Datum), unabhängig vom gewählten Zeitraum; Aufheizen und Abkühlen als
   gleitendes Mittel; die Ersparnis darunter im gewählten Zeitraum. Je Seite stehen Heizkörper, kW und m² der zählenden
   Container, das Aufheizen gibt es zusätzlich je kW. Die Prozentzahl („−17 %“) und der Faktor der Ersparnis rechnen
