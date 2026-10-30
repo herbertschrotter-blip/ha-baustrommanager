@@ -5,7 +5,7 @@ import json
 
 from logik.arbeitszeit import Plan
 from logik.notprogramm import (
-    LEER, MAX_WERT, Vorgaben, frost, minuten_fenster, modus, programm, stand, tag_wert, verwaist, zusammenfassen,
+    LEER, MAX_WERT, Vorgaben, frost, minuten_fenster, modus, programm, stand, tag_wert, verwaist, zusammenfassen, haengt, LEBENSZEICHEN_FRISCH,
 )
 
 T0 = 1791158400   # Mo 05.10.2026 00:00 UTC
@@ -146,3 +146,13 @@ def test_verwaist_entfernt_umgestellt_oder_weitergegeben() -> None:
     assert abschalten == ["g2"]
     assert vergessen == ["g3", "g4"]
     assert verwaist({}, aktuell, ()) == ([], [])
+
+
+def test_haengt_nach_fuenf_minuten_ohne_schalten() -> None:
+    """Audit 0.8.165: ohne frische Auswertung kein Lebenszeichen mehr."""
+    from datetime import UTC, datetime, timedelta
+
+    jetzt = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)
+    assert haengt(None, jetzt)
+    assert not haengt(jetzt - LEBENSZEICHEN_FRISCH, jetzt)
+    assert haengt(jetzt - LEBENSZEICHEN_FRISCH - timedelta(seconds=1), jetzt)

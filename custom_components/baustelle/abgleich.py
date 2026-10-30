@@ -26,6 +26,7 @@ from .db import DATA_DB
 from .db import inventar as db_inventar
 from .kern.geraete import _kennung
 from .logik.inventar import SENSOR_TYP, abgleich
+from .notprogramm import geraet_von
 
 if TYPE_CHECKING:
     from .steuerung import Steuerung
@@ -70,8 +71,10 @@ def nicht_in_ha(hass: HomeAssistant, roh: dict[str, Any]) -> set[str]:
 
 def _verwaiste_plugs(hass: HomeAssistant, st: Steuerung, roh: dict[str, Any]) -> None:
     """Shelly-Plugs aus dem Inventar, die in keiner Baustelle Heizkörper sind → Notprogramm schaltet ihr Skript ab."""
+    reg = er.async_get(hass)
     heizer = {g.schalter for e in hass.config_entries.async_loaded_entries(DOMAIN) for g in e.runtime_data.geraete.values()
               if g.rolle == ROLLE_HEIZKOERPER}
+    heiz_geraete = {d for s in heizer if (d := geraet_von(hass, s))}   # Audit 0.8.165
     geraete = dr.async_get(hass)
     bekannt: dict[str, str] = st.lz.setdefault("np_plugs", {})
     neu = False
@@ -81,7 +84,8 @@ def _verwaiste_plugs(hass: HomeAssistant, st: Steuerung, roh: dict[str, Any]) ->
             continue
         art, _, wert = k.partition(":")
         kandidaten = [g for g in [geraete.async_get(wert)] if g] if art == "ha" else geraete.async_get_devices(connections={(art, wert)})
-        schalter = next((x.entity_id for g in kandidaten for x in er.async_entries_for_device(er.async_get(hass), g.id)
+        kandidaten = [g for g in kandidaten if g.id not in heiz_geraete]   # Heizkörper-Plug, auch mit zweitem Schalter (BLE)
+        schalter = next((x.entity_id for g in kandidaten for x in er.async_entries_for_device(reg, g.id)
                          if x.domain == "switch" and x.platform == "shelly"), None)
         if schalter and schalter not in heizer and schalter not in bekannt.values():
             bekannt[f"inventar:{a['id']}"] = schalter

@@ -151,7 +151,8 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
                     automatik=st.automatik and bool(e.get("auto", True)),
                     tuer_offen_min=(jetzt - offen).total_seconds() / 60 if offen is not None else None,
                     tuer_pause_min=float(st.e["heizung"]["tuer_pause_min"]),
-                    taste=hz.bis("taste_bis", l.bereich, jetzt) is not None, bedarf=bedarf, termin=termin)
+                    taste=hz.bis("taste_bis", l.bereich, jetzt) is not None, bedarf=bedarf, termin=termin,
+                    modus_aus=hz.modus(l.bereich) == "aus")
                 if grund:
                     liste[i] = b.abbrechen(l, heute, grund, jetzt)
                     st.protokoll("schalten", l.bereich, f"Baseline abgebrochen: {grund}")

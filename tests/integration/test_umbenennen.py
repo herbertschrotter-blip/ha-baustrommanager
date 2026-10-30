@@ -274,3 +274,23 @@ async def test_rueckgaengig_nur_admins_und_konflikt(hass: HomeAssistant, baustel
     verboten = await _senden(ws, 5, type="baustelle/inventar_rueckgaengig", container_id=cid)
     assert lesen["success"] and lesen["result"]["konflikte"] == {"switch.001_01_c_plug_man": "switch.hk1"}
     assert not verboten["success"] and verboten["error"]["code"] == "unauthorized"
+
+
+async def test_fehler_nach_dem_anhalten_laedt_trotzdem_neu(hass: HomeAssistant, baustelle_register, hass_ws_client,
+                                                          monkeypatch) -> None:
+    """Audit 0.8.165: scheitert ein Schritt, nachdem die Steuerung angehalten ist, wird trotzdem neu geladen."""
+    from custom_components.baustelle import umbenennen  # noqa: PLC0415
+
+    entry = baustelle_register
+    alt = entry.runtime_data
+    ws = await hass_ws_client(hass)
+    cid = await _container(ws, entry)
+
+    def kaputt(*_a, **_kw):
+        raise RuntimeError("kaputt")
+
+    monkeypatch.setattr(umbenennen, "_verweise", kaputt)
+    antwort = await _senden(ws, 2, type="baustelle/inventar_umbenennen", container_id=cid)
+    assert not antwort["success"]
+    await hass.async_block_till_done()
+    assert alt._gestoppt and entry.runtime_data is not alt and not entry.runtime_data._gestoppt

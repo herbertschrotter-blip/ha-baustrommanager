@@ -180,33 +180,35 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
             return {"id": None, "status": "nichts", "schritte": v["schritte"], "geaendert": []}
         nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, _ergebnisse(v["schritte"], {}, entfaellt))
         return {"id": nr, "status": stand, "schritte": schritte, "geaendert": [], "nachgeholt": True}
-    fehler: dict[tuple[str, str], str] = {}
-    geaendert: list[str] = []
-    if plan:
-        # Schalten anhalten (Verweise werden getauscht) – die Schritte in HA laufen ohne await am Stück, neu geladen
-        # wird erst ganz am Ende einmal
-        st.neu_laden_folgt = True
-        st.async_stop()
-        for schritt in plan:
-            try:
-                _in_ha(hass, schritt)
-            except (ValueError, KeyError) as err:
-                fehler[(schritt["art"], schritt["ref"])] = str(err) or type(err).__name__
-        vorlaeufig = _ergebnisse(v["schritte"], fehler, set())
-        namen = {s["ref"]: s["neu"] for s in vorlaeufig if s["ziel"] == "unter_eintrag" and s["ergebnis"] == "ok"}
-        geaendert = _verweise(hass, st, ids_getauscht(vorlaeufig), namen, benutzer)
-    await _plug_namen(hass, plugs, ziele, fehler)
-    jetzt_erledigt = _ergebnisse(v["schritte"], fehler, entfaellt)
-    ok = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "ok")   # im Protokoll nur, was diesmal geschah
-    offen = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "fehler")
-    nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, jetzt_erledigt)
-    st.protokoll("einstellung", eingabe["bereich_id"],
-                 f"{'Umbenennung nachgeholt' if nachholen else 'Umbenannt nach Schema'} "
-                 f"({eingabe['praefix']}_C_{eingabe['art']}): {ok} Schritte"
-                 + (f", {offen} offen ({', '.join(sorted(set(fehler.values())))})" if offen else ""))
-    if plan:
-        hass.config_entries.async_schedule_reload(entry.entry_id)
-    return {"id": nr, "status": stand, "schritte": schritte, "geaendert": geaendert, "nachgeholt": nachholen}
+    try:
+        fehler: dict[tuple[str, str], str] = {}
+        geaendert: list[str] = []
+        if plan:
+            # Schalten anhalten (Verweise werden getauscht) – die Schritte in HA laufen ohne await am Stück, neu geladen
+            # wird erst ganz am Ende einmal
+            st.neu_laden_folgt = True
+            st.async_stop()
+            for schritt in plan:
+                try:
+                    _in_ha(hass, schritt)
+                except (ValueError, KeyError) as err:
+                    fehler[(schritt["art"], schritt["ref"])] = str(err) or type(err).__name__
+            vorlaeufig = _ergebnisse(v["schritte"], fehler, set())
+            namen = {s["ref"]: s["neu"] for s in vorlaeufig if s["ziel"] == "unter_eintrag" and s["ergebnis"] == "ok"}
+            geaendert = _verweise(hass, st, ids_getauscht(vorlaeufig), namen, benutzer)
+        await _plug_namen(hass, plugs, ziele, fehler)
+        jetzt_erledigt = _ergebnisse(v["schritte"], fehler, entfaellt)
+        ok = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "ok")   # im Protokoll nur, was diesmal geschah
+        offen = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "fehler")
+        nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, jetzt_erledigt)
+        st.protokoll("einstellung", eingabe["bereich_id"],
+                     f"{'Umbenennung nachgeholt' if nachholen else 'Umbenannt nach Schema'} "
+                     f"({eingabe['praefix']}_C_{eingabe['art']}): {ok} Schritte"
+                     + (f", {offen} offen ({', '.join(sorted(set(fehler.values())))})" if offen else ""))
+        return {"id": nr, "status": stand, "schritte": schritte, "geaendert": geaendert, "nachgeholt": nachholen}
+    finally:
+        if plan:   # Audit 0.8.165: auch wenn ein Schritt scheitert – sonst bliebe die Steuerung angehalten
+            hass.config_entries.async_schedule_reload(entry.entry_id)
 
 
 def _plug_ziele(hass: HomeAssistant, st: Steuerung, plugs: list[dict[str, Any]]) -> dict[str, tuple[str, bool]]:

@@ -100,8 +100,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: BaustelleConfigEntry) ->
     _alte_entitaeten_entfernen(hass, entry)
     steuerung = Steuerung(hass, entry)
     entry.runtime_data = steuerung
+    entry.async_on_unload(steuerung.async_stop)   # vor dem Start: scheitert er, hält HA Takt und Listener an (Audit 0.8.165)
     await steuerung.async_start()
-    entry.async_on_unload(steuerung.async_stop)
     _geraete_anlegen(hass, entry, steuerung)
     _verwaiste_geraete_entfernen(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

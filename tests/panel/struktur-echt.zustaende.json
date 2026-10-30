@@ -180,7 +180,8 @@
      "ausserhalb",
      "aus",
      "absenken",
-     "baseline"
+     "baseline",
+     "stoerung"
     ],
     "device_class": "enum",
     "friendly_name": "Büro Heating"
@@ -437,7 +438,8 @@
      "ausserhalb",
      "aus",
      "absenken",
-     "baseline"
+     "baseline",
+     "stoerung"
     ],
     "device_class": "enum",
     "friendly_name": "Magazin Heating"
@@ -526,7 +528,8 @@
      "ausserhalb",
      "aus",
      "absenken",
-     "baseline"
+     "baseline",
+     "stoerung"
     ],
     "device_class": "enum",
     "friendly_name": "Mannschaft Heating"
@@ -634,7 +637,8 @@
      "ausserhalb",
      "aus",
      "absenken",
-     "baseline"
+     "baseline",
+     "stoerung"
     ],
     "device_class": "enum",
     "friendly_name": "Polier Heating"

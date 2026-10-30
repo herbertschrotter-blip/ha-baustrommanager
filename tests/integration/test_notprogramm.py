@@ -564,6 +564,7 @@ async def test_ausfall_probe(hass: HomeAssistant, anlage, freezer, hass_ws_clien
 
     start = dt_util.utcnow().replace(second=0, microsecond=0)
     freezer.tick(61 * 60)
+    st.auswerten()   # der Takt lief die Stunde über weiter (sonst hinge die Steuerung, Audit 0.8.165)
     seit = start + timedelta(minutes=15)                                     # der Plug übernimmt nach 15 min
     zeilen = [dict(geraet_id=hk1, zeit=seit + timedelta(minutes=i), baustelle_id=entry.entry_id, dauer_s=60, sekunden_ein=60,
                    energie_wh=30.0, erreichbar=True, quelle="ha") for i in range(46)]   # HA hat mitgemessen
@@ -583,3 +584,56 @@ async def test_ausfall_probe(hass: HomeAssistant, anlage, freezer, hass_ws_clien
 
     await client.send_json({"id": 2, "type": "baustelle/notprogramm_probe", "entry_id": entry.entry_id, "geraet": "unbekannt", "minuten": 30})
     assert not (await client.receive_json())["success"]
+
+
+# ---------------------------------------------------------------------- Audit 0.8.165
+async def test_kein_lebenszeichen_wenn_die_steuerung_haengt(hass: HomeAssistant, anlage) -> None:
+    """Liefert die Auswertung nichts Frisches mehr, bekommen die Plugs kein Lebenszeichen – ihr Notprogramm übernimmt."""
+    entry, np, plugs = anlage
+    st = entry.runtime_data
+    st.e["heizung"]["notprogramm"] = True
+    await np.async_runde()
+    p1 = plugs["plug1"]
+    assert p1.aufrufe.count("hb") >= 1
+    p1.aufrufe.clear()
+    st.geschaltet["heizung"] = dt_util.now() - timedelta(minutes=6)
+    await np.async_runde()
+    assert p1.aufrufe == []
+    assert {s.fehler for s in np.stand.values()} == {np_modul.HAENGT}
+    st.auswerten()
+    await np.async_runde()
+    assert p1.aufrufe.count("hb") == 1 and {s.fehler for s in np.stand.values()} == {None}
+
+
+async def test_fehler_in_einem_plug_haelt_die_anderen_nicht_auf(hass: HomeAssistant, anlage, monkeypatch) -> None:
+    entry, np, plugs = anlage
+    entry.runtime_data.e["heizung"]["notprogramm"] = True
+    original = np._async_plug
+
+    async def plug(g, p, stand):
+        if g.schalter == "switch.hk1":
+            raise RuntimeError("kaputt")
+        await original(g, p, stand)
+
+    monkeypatch.setattr(np, "_async_plug", plug)
+    await np.async_runde()
+    stand = {entry.runtime_data.geraete[g].schalter: s for g, s in np.stand.items()}
+    assert stand["switch.hk1"].fehler == "kaputt" and stand["switch.hk2"].fehler is None
+    assert plugs["plug2"].eigenes() is not None
+
+
+async def test_zweiter_schalter_am_plug_ist_nicht_verwaist(hass: HomeAssistant, anlage) -> None:
+    """Ein Heizkörper-Plug mit zweiter Schalter-Entität (BLE): weder Inventar-Abgleich noch Runde schalten sein Skript ab."""
+    entry, np, plugs = anlage
+    st = entry.runtime_data
+    reg = er.async_get(hass)
+    hk1 = reg.async_get("switch.hk1")
+    reg.async_get_or_create("switch", "shelly", "aa:00:00:00:00:01-ble", suggested_object_id="hk1_ble",
+                            device_id=hk1.device_id, config_entry=hass.config_entries.async_get_entry(hk1.config_entry_id))
+    st.e["heizung"]["notprogramm"] = True
+    await np.async_runde()
+    st.lz["np_plugs"]["inventar:x"] = "switch.hk1_ble"   # so hat es der Abgleich bis 0.8.165 gemerkt
+    await np.async_runde()
+    assert plugs["plug1"].eigenes()[1]["running"]
+    assert "inventar:x" not in st.lz["np_plugs"]
+    assert not any("abgeschaltet" in str(e[-1]) for e in st.e["protokoll"])

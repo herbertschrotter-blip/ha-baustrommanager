@@ -109,6 +109,7 @@ class SollGrund(StrEnum):
     AUS = "aus"
     ABSENKEN = "absenken"
     BASELINE = "baseline"   # BSM-033.04: Baseline-Lauf – alle Heizkörper ohne Automatik am Strom
+    STOERUNG = "stoerung"   # Audit 0.8.165: Berechnung des Containers gescheitert – nur Frostschutz (`notsoll`)
 
 
 @dataclass(frozen=True)
@@ -262,6 +263,19 @@ def soll_container(lage: LageContainer, tuer_pause_min: int) -> Soll:
     return s
 
 
+def notsoll(lage: LageContainer) -> Soll:
+    """Nur Frostschutz, wenn die Berechnung eines Containers scheitert (Audit 0.8.165): ein unter der Frostgrenze, sonst
+    aus. Ohne Automatik nur mit `frost_immer`, sonst wird nichts geschaltet – wie `soll_container`; im Modus Hand
+    (`auto` aus) nur Frostschutz an, aus schaltet die Hand."""
+    if not lage.automatik and not lage.frost_immer:
+        return Soll(None, SollGrund.AUTOMATIK_AUS)
+    if frostschutz(lage):
+        return Soll(True, SollGrund.FROST)
+    if not lage.auto:
+        return Soll(False if lage.frost_vorher else None, SollGrund.HAND)
+    return Soll(False if lage.automatik or lage.frost_vorher else None, SollGrund.STOERUNG)
+
+
 PLAN_GRUENDE = frozenset({SollGrund.FRUEHSTART, SollGrund.VORHEIZEN, SollGrund.ARBEITSZEIT, SollGrund.NACHHEIZEN,
                           SollGrund.TROCKNEN, SollGrund.BEDARF, SollGrund.BOOST, SollGrund.TASTE})
 
@@ -291,7 +305,7 @@ def _ohne_tuer(lage: LageContainer) -> Soll:
         return Soll(None, SollGrund.HAND)
     if lage.taste:   # BSM-018: wie das Notprogramm im Plug – vor Modus, frei, Heizgrenze und Plan; mit Fühler bis zum Soll
         return Soll(_heizen(lage), SollGrund.TASTE)
-    if lage.baseline:   # BSM-033.04: nach Hand, Frost, Tür und Taste; vor Modus, frei, Heizgrenze und Plan
+    if lage.baseline and lage.modus != "aus":   # BSM-033.04: nach Hand, Frost, Tür und Taste; vor frei, Heizgrenze und Plan
         return Soll(True, SollGrund.BASELINE)
     if lage.boost and (lage.temperatur is None or lage.temperatur < lage.soll):
         return Soll(True, SollGrund.BOOST)

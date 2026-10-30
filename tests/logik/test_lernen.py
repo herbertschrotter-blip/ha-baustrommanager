@@ -41,6 +41,13 @@ def test_tpi_anteil_mit_nachlauf_und_aussen():
     assert tpi_anteil(19.0, 20.0, Tpi(0.6, 0.01, 0.0, None, 0)) == pytest.approx(0.6)
 
 
+def test_tpi_ueber_dem_soll_immer_aus():
+    """Audit 0.8.165: kleines kint, großes kext – ab Soll + 1 °C aus, auch wenn es draußen kalt ist."""
+    t = Tpi(kint=0.05, kext=0.05, nachlauf=0.0, aussen=-10.0, minute_im_zyklus=0)
+    assert tpi_anteil(20.9, 20.0, t) > 0.9   # knapp drüber regelt noch (Nachlauf, Toleranz)
+    assert tpi_anteil(21.0, 20.0, t) == 0.0 and tpi_anteil(30.0, 20.0, t) == 0.0
+
+
 def test_tpi_ein_je_zyklus():
     assert [tpi_ein(0.4, m, heizt_gerade=True) for m in range(10)] == [True] * 4 + [False] * 6   # läuft: bis Fensterende
     assert [tpi_ein(0.4, m) for m in range(10)] == [True] * 3 + [False] * 7   # neu ein nur mit ≥ 2 min Rest

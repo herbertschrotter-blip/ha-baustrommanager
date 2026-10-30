@@ -64,6 +64,7 @@ SKRIPT = Path(__file__).parent / "shelly" / "notprogramm.js"
 SKRIPT_NAME = "baustelle"
 INTERVALL = timedelta(minutes=5)
 ERSTE_RUNDE_S = 60
+HAENGT = "Steuerung hängt – kein Lebenszeichen, das Notprogramm übernimmt"
 STUECK = 800          # Zeichen je Script.PutCode (BSM-013)
 WARTEN_S = 2.0        # nach dem Start, bis der Endpunkt `hb` antwortet
 TIMEOUT_S = 10
@@ -89,6 +90,11 @@ def skript_lesen() -> tuple[int, str]:
         raise ValueError("notprogramm.js ohne VERSION")
     code = "\n".join(z for z in text.splitlines() if z.strip() and not z.lstrip().startswith("//"))
     return int(treffer.group(1)), code + "\n"
+
+
+def geraet_von(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Gerät hinter einer Entität (ein Plug hat mehrere Schalter-Entitäten, z. B. BLE – Audit 0.8.165)."""
+    return e.device_id if (e := er.async_get(hass).async_get(entity_id)) is not None else None
 
 
 def shelly_host(hass: HomeAssistant, entity_id: str) -> str | None:
@@ -241,9 +247,12 @@ class Notprogramm:
             if self._skript is None:
                 self._skript = await self.hass.async_add_executor_job(skript_lesen)
             session = async_get_clientsession(self.hass)
+            haengt = logik.haengt(self.st.geschaltet.get("heizung"), dt_util.now())
             for g, host in self.plugs():
                 stand = self.stand.setdefault(g.id, Stand())
                 try:
+                    if self.an and haengt:
+                        raise PlugFehler(HAENGT)   # die Plugs zählen selbst bis zum Notbetrieb (`HB_MAX_MIN`)
                     if self.an:
                         self._merken(g)
                         await self._async_plug(g, Plug(session, host), stand)
@@ -254,7 +263,14 @@ class Notprogramm:
                     if stand.fehler != str(err):
                         _LOGGER.info("Notprogramm %s: %s", g.name, err)
                     stand.fehler, stand.fehler_seit = str(err), stand.fehler_seit or dt_util.now()
-            await self._async_verwaiste(session)
+                except Exception as err:  # noqa: BLE001  (Audit 0.8.165: ein Plug darf die anderen nicht aufhalten)
+                    if stand.fehler != str(err):
+                        _LOGGER.exception("Notprogramm %s", g.name)
+                    stand.fehler, stand.fehler_seit = str(err), stand.fehler_seit or dt_util.now()
+            try:
+                await self._async_verwaiste(session)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Notprogramm: verwaiste Plugs")
             self.geprueft = dt_util.now()
             self._tasten_beobachten()
             # Warnung „Notprogramm nicht bereit“ (logik/warnungen, nach 15 min) – nur, solange es eingeschaltet ist
@@ -281,8 +297,15 @@ class Notprogramm:
         """Skript in Plugs abschalten, die kein Heizkörper dieser Baustelle mehr sind (logik/notprogramm.verwaist)."""
         from .config_flow import geraete_anderer_baustellen  # noqa: PLC0415  (config_flow lädt die Integration)
 
+        # Audit 0.8.165: über das Gerät vergleichen – ein Plug hat mehrere Schalter-Entitäten (z. B. BLE), sonst gälte
+        # ein Heizkörper-Plug unter seinem zweiten Schalter als verwaist
+        def geraet(schalter: str) -> str:
+            return geraet_von(self.hass, schalter) or schalter
+
         aktuell = {g.id: g.schalter for g, _ in self.plugs()}
-        abschalten, vergessen = logik.verwaist(self._bekannt, aktuell, geraete_anderer_baustellen(self.hass, self.st.entry.entry_id))
+        abschalten, vergessen = logik.verwaist(
+            {gid: geraet(s) for gid, s in self._bekannt.items()}, {gid: geraet(s) for gid, s in aktuell.items()},
+            {geraet(s) for s in geraete_anderer_baustellen(self.hass, self.st.entry.entry_id)})
         for gid in abschalten:
             schalter = self._bekannt[gid]
             if (host := shelly_host(self.hass, schalter)) is None:

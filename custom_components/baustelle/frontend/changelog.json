@@ -1,5 +1,18 @@
 [
   {
+    "version": "0.8.166",
+    "datum": "2026-10-30",
+    "punkte": [
+      "Ein Fehler in der Berechnung hält nicht mehr die ganze Steuerung an. Scheitert ein Container, schalten die anderen weiter, und er selbst bekommt nur noch Frostschutz (Grund „Störung – nur Frostschutz“). Jeder Schritt nach dem Schalten (Warnungen, Anzeige, Zähler) ist einzeln abgesichert. Ein Fehler steht einmal mit Verlauf im HA-Protokoll, nicht jede Minute.",
+      "Notprogramm: Die Plugs bekommen das Lebenszeichen nur noch, wenn die Steuerung in den letzten 5 Minuten durchgeschaltet hat. Hängt sie, übernimmt nach der Wartezeit das Notprogramm im Plug (vorher blieb es passiv). Ein Fehler an einem Plug hält die Runde für die anderen nicht mehr auf.",
+      "Notprogramm: Nach einem Neustart wurde es auf zwei aktiven Heizkörper-Plugs abgeschaltet („kein Heizkörper der Baustelle mehr“), weil der Inventar-Abgleich den zweiten Schalter des Plugs (Bluetooth) gemerkt hatte. Verglichen wird jetzt über das Gerät; der alte Merker verschwindet bei der ersten Runde von selbst.",
+      "Lernende Regelung: Ab 1 °C über dem Soll ist der Heizkörper immer aus (vorher konnte ein großer Außenanteil auch weit über dem Soll weiterheizen).",
+      "Baseline: Ein Container im Modus „Aus“ bekommt keinen Lauf mehr, ein laufender bricht ab („Modus Aus“).",
+      "Umbenennen lädt die Baustelle auch dann neu, wenn ein Schritt scheitert (vorher blieb die Steuerung angehalten).",
+      "Scheitert der Start einer Baustelle, hält HA Takt und Listener wieder an (vorher liefen sie weiter, nach dem Neu-Laden steuerten zwei Instanzen dieselben Plugs)."
+    ]
+  },
+  {
     "version": "0.8.165",
     "datum": "2026-10-30",
     "punkte": [

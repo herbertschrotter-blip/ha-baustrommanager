@@ -1148,3 +1148,106 @@ async def test_geraet_inaktiv(hass: HomeAssistant, baustelle, freezer, shellys) 
     await hass.async_block_till_done()
     assert hass.states.get("switch.hk1").state == "on"
     assert any("inaktiv" in t for t in _texte(st, "einstellung"))
+
+
+# ---------------------------------------------------------------------- Audit 0.8.165: Fehler im Steuerlauf
+async def test_fehler_in_einem_container_nur_frostschutz(hass: HomeAssistant, baustelle, freezer, shellys, monkeypatch) -> None:
+    """Scheitert die Berechnung eines Containers, schalten die anderen weiter; er selbst bekommt nur Frostschutz."""
+    st = baustelle.runtime_data
+    st.e["staffel"]["an"] = False
+    original = Heizung.warm_ab
+
+    def warm_ab(self, bid, *a, **kw):
+        if bid == C1:
+            raise RuntimeError("kaputt")
+        return original(self, bid, *a, **kw)
+
+    monkeypatch.setattr(Heizung, "warm_ab", warm_ab)
+    freezer.move_to(ZEHN_UHR)
+    hass.states.async_set("sensor.temp_c1", "4.0")
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    assert sorted(shellys.ein()) == ["switch.hk1", "switch.hk2"]   # C1 Frostschutz, C2 Arbeitszeit
+    assert st.daten.grund[C1] == "frost" and st.daten.grund[C2] == "arbeitszeit"
+    assert st.stoerungen == {f"soll:{C1}": "RuntimeError: kaputt"} and st.geschaltet["heizung"] == dt_util.now()
+    hass.states.async_set("sensor.temp_c1", "12.0")
+    await hass.async_block_till_done()
+    assert hass.states.get("switch.hk1").state == "off" and st.daten.grund[C1] == "stoerung"
+    assert hass.states.get("switch.hk2").state == "on"
+    monkeypatch.setattr(Heizung, "warm_ab", original)
+    st.auswerten()
+    await hass.async_block_till_done()
+    assert st.stoerungen == {} and st.daten.grund[C1] == "arbeitszeit"
+
+
+async def test_fehler_beim_schalten_stoppt_das_lebenszeichen(hass: HomeAssistant, baustelle, freezer, shellys, monkeypatch) -> None:
+    """Scheitert die Staffelung, läuft die Auswertung weiter (Anzeige, Zähler), aber `geschaltet` bleibt stehen."""
+    st = baustelle.runtime_data
+    freezer.move_to(ZEHN_UHR)
+    st.auswerten()
+    vorher = dict(st.geschaltet)
+    assert vorher == {"heizung": dt_util.now(), "pumpen": dt_util.now()}
+
+    def kaputt(*_a, **_kw):
+        raise ValueError("staffel")
+
+    monkeypatch.setattr(st, "_staffeln", kaputt)
+    freezer.tick(timedelta(minutes=2))
+    st.auswerten()   # wirft nicht
+    await hass.async_block_till_done()
+    assert st.geschaltet == vorher and st.stoerungen == {"schalten": "ValueError: staffel"}
+    assert st.daten.grund[C1] == "automatik_aus"   # Anzeige läuft weiter
+
+
+async def test_fehler_der_pumpen_haelt_das_lebenszeichen_der_heizung_nicht_an(hass: HomeAssistant, baustelle, freezer, shellys,
+                                                                              monkeypatch) -> None:
+    """Review 0.8.166: sonst steuerten HA und das Notprogramm der Heizungs-Plugs gleichzeitig."""
+    st = baustelle.runtime_data
+    freezer.move_to(ZEHN_UHR)
+    pumpen = st.funktion("pumpen")
+
+    def kaputt(*_a, **_kw):
+        raise RuntimeError("pumpe")
+
+    st.auswerten()
+    monkeypatch.setattr(pumpen, "soll", kaputt)
+    freezer.tick(timedelta(minutes=1))
+    st.auswerten()
+    assert st.geschaltet["heizung"] == dt_util.now() and st.geschaltet["pumpen"] == dt_util.now() - timedelta(minutes=1)
+    assert st.stoerungen == {"soll:pumpen": "RuntimeError: pumpe"}
+
+
+async def test_gescheiterter_start_haelt_die_steuerung_an(hass: HomeAssistant, freezer, shellys, nachrichten, monkeypatch) -> None:
+    """Audit 0.8.165: scheitert der Start nach dem Anmelden von Takt und Listenern, hält HA sie wieder an."""
+    from custom_components.baustelle.steuerung import Steuerung  # noqa: PLC0415
+
+    original = Steuerung.async_start
+    gestartet: list[Steuerung] = []
+
+    async def start(self):
+        await original(self)
+        gestartet.append(self)
+        raise RuntimeError("kaputt")
+
+    monkeypatch.setattr(Steuerung, "async_start", start)
+    entry = await baustelle_anlegen(hass, freezer)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert gestartet and gestartet[0]._gestoppt and gestartet[0]._abmelden == []
+
+
+async def test_ohne_soll_kein_lebenszeichen(hass: HomeAssistant, baustelle, freezer, shellys, monkeypatch) -> None:
+    """Review 0.8.166: scheitert auch der Frostschutz-Ersatz, steht `geschaltet` der Heizung still."""
+    st = baustelle.runtime_data
+    freezer.move_to(ZEHN_UHR)
+    st.auswerten()
+    vorher = st.geschaltet["heizung"]
+
+    def kaputt(self, bid, *a, **kw):
+        raise RuntimeError("fühler")
+
+    monkeypatch.setattr(Heizung, "temperatur_gehalten", kaputt)
+    freezer.tick(timedelta(minutes=1))
+    st.auswerten()
+    assert st.geschaltet["heizung"] == vorher and st.geschaltet["pumpen"] == dt_util.now()
+    assert f"notsoll:{C1}" in st.stoerungen

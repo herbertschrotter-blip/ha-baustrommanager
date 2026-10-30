@@ -11,7 +11,7 @@ from homeassistant.const import STATE_ON
 from ...const import ROLLE_HEIZKOERPER
 from ...logik import bedarf as bedarf_logik, start as start_logik
 from ...logik.arbeitszeit import Plan, WarmAb, ausnahme_am, frei_gilt, bedarf_fenster, im_fenster, tagesplan
-from ...logik.regelung import FUEHLER_HALTEN_MIN, LageContainer, Soll, SollGrund, letzter_wert, soll_container
+from ...logik.regelung import FUEHLER_HALTEN_MIN, LageContainer, Soll, SollGrund, letzter_wert, notsoll, soll_container
 from ...logik.regelung import zu_warm as regel_zu_warm
 from ..basis import ev_zeit, minuten_seit, zeit
 
@@ -179,70 +179,102 @@ def soll(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> SollJeBereich:
     ergebnis: dict[str, tuple[Soll, LageContainer]] = {}
     for info in hz.bereiche():
         bid = info.id
-        e = st.einstellungen.bereich(bid)
-        warm_ab = hz.warm_ab(bid, heute, jetzt)   # nicht `warm` – das ist unten „zu warm“ (Heizgrenze)
-        plan = hz.plan(heute, bool(e["trocknen"]), warm_ab)
-        hz._warm_festhalten(bid, warm_ab, plan, jetzt)
-        hz.plaene[bid] = plan
-        hz._warm_vor[bid] = warm_ab.vor_min if warm_ab is not None else 0
-        frei, warm = frei_heute, zu_warm
-        if jetzt_bis is not None:
-            # „alle jetzt heizen“: wie in der Arbeitszeit, auch an freien Tagen und über der Heizgrenze (§5)
-            ende = 24 * 60 if jetzt_bis.date() > heute else jetzt_bis.hour * 60 + jetzt_bis.minute
-            if plan is None or not plan.heizt(minute):
-                plan = Plan(start=minute, vor=minute, a=minute, b=max(minute + 1, ende), nach=max(minute + 1, ende),
-                            ende=max(minute + 1, ende))
-            frei, warm = False, False
-        temp = hz.temperatur_gehalten(bid, info.fuehler, jetzt)   # Fühler kurz weg: letzter Wert (Szenarien)
-        if warm_ab is not None:   # FE-0031/32: gemessener Verlauf für die Kurve „So rechnet der Start“
-            h_start.verlauf_merken(hz, bid, jetzt, temp, wetter.aussen)
-        soll_t = hz.soll_temperatur(bid)
-        tuer_min = None
-        if (offen_seit := st.kontakt_offen_seit(bid)) is not None:   # BSM-034.03: jede Tür und jedes Fenster
-            if bid not in hz.tuer_trotzdem:
-                tuer_min = minuten_seit(offen_seit, jetzt)
-        else:
-            if bid in hz.tuer_trotzdem:
-                hz.tuer_trotzdem.discard(bid)
-                hz.trotzdem_merken()
-            if (bis := hz._vermutet_bis.get(bid)) is not None:   # FE-0025: Tür vermutlich offen – kurz pausieren
-                hand = any(g.id in st.lz["hand"] for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER)
-                if jetzt < bis and not hand:   # von Hand geschaltet: nur eine Vermutung, die Hand geht vor
-                    tuer_min = float(h["tuer_pause_min"])
-                else:
-                    del hz._vermutet_bis[bid]
-        fenster = hz.termin_fenster(bid)
-        aktive = [f for f in fenster if im_fenster(bedarf_fenster([(f[0], f[1])], int(h["vorheizen_min"])), jetzt)]
-        bedarf_aktiv = hz.bis("bedarf_bis", bid, jetzt) is not None or bool(aktive) or jetzt_bis is not None
-        boost = hz.bis("boost_bis", bid, jetzt) is not None or any(f[2] for f in aktive)
-        if boost and temp is not None and temp >= soll_t and bid in st.lz["boost_bis"]:
-            del st.lz["boost_bis"][bid]  # Soll erreicht: Boost beendet (Aufrufer, Bauplan §2.2)
-            st.einstellungen.speichern()
-            boost = False
-        heizer = [g for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER and g.id not in st.lz["hand"] and st.geraet_aktiv(g)]
-        heizt = any((s := hass.states.get(g.schalter)) is not None and s.state == STATE_ON for g in heizer)
-        lage = LageContainer(
-            minute=minute, plan=plan, automatik=st.automatik, auto=bool(e["auto"]), temperatur=temp, soll=soll_t,
-            frost=bool(h["frost"]), frost_grenze=float(h["frost_grenze"]), zu_warm=warm, frei=frei,
-            tuer_offen_min=tuer_min, bedarf=bool(e["bedarf"]), bedarf_aktiv=bedarf_aktiv, boost=boost,
-            heizt_gerade=heizt, toleranz=float(h["toleranz"]), frost_vorher=hz._frost.get(bid, False),
-            modus=hz.modus(bid), frost_aus=None if h.get("frost_aus") is None else float(h["frost_aus"]),
-            frei_modus=str(h.get("frei_modus") or "frost"), absenk=float(h.get("absenk") or 10.0),
-            frost_immer=bool(h.get("frost_immer")), tpi=hz._tpi(info, e, temp, soll_t, wetter, jetzt),
-            aussen=wetter.aussen, frost_aussen=None if h.get("frost_aussen") is None else float(h["frost_aussen"]),
-            laeuft_gerade=any((z := hass.states.get(g.schalter)) is not None and z.state == STATE_ON
-                              for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER),
-            tuer_vorher=hz._tuer_pause.get(bid, False),
-            taste=hz.bis("taste_bis", bid, jetzt) is not None,   # BSM-018: Taste am Plug
-            baseline=h_baseline.laeuft(hz, bid, jetzt),   # BSM-033.04: Baseline-Lauf
-        )
-        soll = soll_container(lage, int(h["tuer_pause_min"]))
-        hz._lern_grund[bid] = soll.grund
-        hz._frost[bid] = soll.grund == SollGrund.FROST
-        hz._tuer_pause[bid] = soll.grund == SollGrund.TUER_OFFEN
-        hz._stufen_rechnen(bid, soll, temp, soll_t, wetter, jetzt, plan, minute, warm_ab)
-        ergebnis[bid] = (soll, lage)
+        try:
+            e = st.einstellungen.bereich(bid)
+            warm_ab = hz.warm_ab(bid, heute, jetzt)   # nicht `warm` – das ist unten „zu warm“ (Heizgrenze)
+            plan = hz.plan(heute, bool(e["trocknen"]), warm_ab)
+            hz._warm_festhalten(bid, warm_ab, plan, jetzt)
+            hz.plaene[bid] = plan
+            hz._warm_vor[bid] = warm_ab.vor_min if warm_ab is not None else 0
+            frei, warm = frei_heute, zu_warm
+            if jetzt_bis is not None:
+                # „alle jetzt heizen“: wie in der Arbeitszeit, auch an freien Tagen und über der Heizgrenze (§5)
+                ende = 24 * 60 if jetzt_bis.date() > heute else jetzt_bis.hour * 60 + jetzt_bis.minute
+                if plan is None or not plan.heizt(minute):
+                    plan = Plan(start=minute, vor=minute, a=minute, b=max(minute + 1, ende), nach=max(minute + 1, ende),
+                                ende=max(minute + 1, ende))
+                frei, warm = False, False
+            temp = hz.temperatur_gehalten(bid, info.fuehler, jetzt)   # Fühler kurz weg: letzter Wert (Szenarien)
+            if warm_ab is not None:   # FE-0031/32: gemessener Verlauf für die Kurve „So rechnet der Start“
+                h_start.verlauf_merken(hz, bid, jetzt, temp, wetter.aussen)
+            soll_t = hz.soll_temperatur(bid)
+            tuer_min = None
+            if (offen_seit := st.kontakt_offen_seit(bid)) is not None:   # BSM-034.03: jede Tür und jedes Fenster
+                if bid not in hz.tuer_trotzdem:
+                    tuer_min = minuten_seit(offen_seit, jetzt)
+            else:
+                if bid in hz.tuer_trotzdem:
+                    hz.tuer_trotzdem.discard(bid)
+                    hz.trotzdem_merken()
+                if (bis := hz._vermutet_bis.get(bid)) is not None:   # FE-0025: Tür vermutlich offen – kurz pausieren
+                    hand = any(g.id in st.lz["hand"] for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER)
+                    if jetzt < bis and not hand:   # von Hand geschaltet: nur eine Vermutung, die Hand geht vor
+                        tuer_min = float(h["tuer_pause_min"])
+                    else:
+                        del hz._vermutet_bis[bid]
+            fenster = hz.termin_fenster(bid)
+            aktive = [f for f in fenster if im_fenster(bedarf_fenster([(f[0], f[1])], int(h["vorheizen_min"])), jetzt)]
+            bedarf_aktiv = hz.bis("bedarf_bis", bid, jetzt) is not None or bool(aktive) or jetzt_bis is not None
+            boost = hz.bis("boost_bis", bid, jetzt) is not None or any(f[2] for f in aktive)
+            if boost and temp is not None and temp >= soll_t and bid in st.lz["boost_bis"]:
+                del st.lz["boost_bis"][bid]  # Soll erreicht: Boost beendet (Aufrufer, Bauplan §2.2)
+                st.einstellungen.speichern()
+                boost = False
+            heizer = [g for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER and g.id not in st.lz["hand"] and st.geraet_aktiv(g)]
+            heizt = any((s := hass.states.get(g.schalter)) is not None and s.state == STATE_ON for g in heizer)
+            lage = LageContainer(
+                minute=minute, plan=plan, automatik=st.automatik, auto=bool(e["auto"]), temperatur=temp, soll=soll_t,
+                frost=bool(h["frost"]), frost_grenze=float(h["frost_grenze"]), zu_warm=warm, frei=frei,
+                tuer_offen_min=tuer_min, bedarf=bool(e["bedarf"]), bedarf_aktiv=bedarf_aktiv, boost=boost,
+                heizt_gerade=heizt, toleranz=float(h["toleranz"]), frost_vorher=hz._frost.get(bid, False),
+                modus=hz.modus(bid), frost_aus=None if h.get("frost_aus") is None else float(h["frost_aus"]),
+                frei_modus=str(h.get("frei_modus") or "frost"), absenk=float(h.get("absenk") or 10.0),
+                frost_immer=bool(h.get("frost_immer")), tpi=hz._tpi(info, e, temp, soll_t, wetter, jetzt),
+                aussen=wetter.aussen, frost_aussen=None if h.get("frost_aussen") is None else float(h["frost_aussen"]),
+                laeuft_gerade=any((z := hass.states.get(g.schalter)) is not None and z.state == STATE_ON
+                                  for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER),
+                tuer_vorher=hz._tuer_pause.get(bid, False),
+                taste=hz.bis("taste_bis", bid, jetzt) is not None,   # BSM-018: Taste am Plug
+                baseline=h_baseline.laeuft(hz, bid, jetzt),   # BSM-033.04: Baseline-Lauf
+            )
+            soll = soll_container(lage, int(h["tuer_pause_min"]))
+            hz._lern_grund[bid] = soll.grund
+            hz._frost[bid] = soll.grund == SollGrund.FROST
+            hz._tuer_pause[bid] = soll.grund == SollGrund.TUER_OFFEN
+            hz._stufen_rechnen(bid, soll, temp, soll_t, wetter, jetzt, plan, minute, warm_ab)
+            ergebnis[bid] = (soll, lage)
+            st.fehler_vorbei(f"soll:{bid}")
+        except Exception as err:  # noqa: BLE001  (Audit 0.8.165: ein Container darf die anderen nicht anhalten)
+            st.fehler_melden(f"soll:{bid}", err)
+            if (notfall := _notsoll(hz, info, jetzt, minute)) is not None:
+                ergebnis[bid] = notfall
+            else:
+                st.ohne_soll.add(bid)   # kein Soll: die Plugs bekommen kein Lebenszeichen mehr (Steuerung._auswerten)
     return ergebnis
+
+
+def _notsoll(hz: Heizung, info: BereichInfo, jetzt: datetime, minute: int) -> tuple[Soll, LageContainer] | None:
+    """Berechnung des Containers gescheitert: nur Frostschutz (logik/regelung.notsoll); scheitert auch das, None."""
+    st, bid = hz.st, info.id
+    try:
+        h = st.e["heizung"]
+        lage = LageContainer(
+            minute=minute, plan=None, automatik=st.automatik, auto=bool(st.einstellungen.bereich(bid).get("auto", True)), temperatur=hz.temperatur_gehalten(bid, info.fuehler, jetzt),
+            soll=float(h.get("frost_grenze", 5.0)), frost=bool(h.get("frost", True)),
+            frost_grenze=float(h.get("frost_grenze", 5.0)), zu_warm=False, frei=False, tuer_offen_min=None, bedarf=False,
+            bedarf_aktiv=False, boost=False, heizt_gerade=False, frost_vorher=hz._frost.get(bid, False),
+            frost_aus=None if h.get("frost_aus") is None else float(h["frost_aus"]), frost_immer=bool(h.get("frost_immer")),
+            aussen=st.daten.wetter.aussen,
+            frost_aussen=None if h.get("frost_aussen") is None else float(h["frost_aussen"]),
+        )
+        soll = notsoll(lage)
+    except Exception as err:  # noqa: BLE001
+        st.fehler_melden(f"notsoll:{bid}", err)
+        return None
+    hz._lern_grund[bid] = soll.grund
+    hz._frost[bid] = soll.grund == SollGrund.FROST
+    hz._tuer_pause[bid] = False
+    return soll, lage
 
 
 def temperatur_gehalten(hz: Heizung, bid: str, fuehler: str | None, jetzt: datetime) -> float | None:

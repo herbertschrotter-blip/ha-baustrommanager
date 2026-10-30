@@ -86,6 +86,7 @@ GRUND_ART: dict[str, Betriebsart] = {
     SollGrund.BASELINE: "BASELINE",
     SollGrund.BOOST: "SONSTIGE", SollGrund.TASTE: "SONSTIGE", SollGrund.HAND: "SONSTIGE",
     SollGrund.TUER_OFFEN: "SONSTIGE", SollGrund.AUS: "SONSTIGE", SollGrund.AUTOMATIK_AUS: "SONSTIGE",
+    SollGrund.STOERUNG: "SONSTIGE",
 }
 
 QUELLE_HA = "ha"

@@ -69,6 +69,7 @@ def test_abbruch_grund():
     assert abbruch_grund(**{**ok, "taste": True}) == "Taste am Plug"
     assert abbruch_grund(**{**ok, "bedarf": True}) == "Bedarf"
     assert abbruch_grund(**{**ok, "termin": True}) == "Termin"
+    assert abbruch_grund(**{**ok, "modus_aus": True}) == "Modus Aus"   # Audit 0.8.165
 
 
 def test_abbrechen_und_zaehlende_tage():

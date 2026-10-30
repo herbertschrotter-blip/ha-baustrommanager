@@ -56,7 +56,7 @@ ERWARTET = {
     "frost": "FROST", "bereit": "FROST", "frei": "FROST", "ausserhalb": "FROST",
     "baseline": "BASELINE",
     "boost": "SONSTIGE", "taste": "SONSTIGE", "hand": "SONSTIGE", "tuer_offen": "SONSTIGE", "aus": "SONSTIGE",
-    "automatik_aus": "SONSTIGE",
+    "automatik_aus": "SONSTIGE", "stoerung": "SONSTIGE",
 }
 
 

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 import json
 import zlib
 
@@ -172,6 +173,15 @@ class Kopplung:
     name: str | None = None
 
 
+LEBENSZEICHEN_FRISCH = timedelta(minutes=5)   # Audit 0.8.165
+
+
+def haengt(geschaltet: datetime | None, jetzt: datetime) -> bool:
+    """Hängt die Steuerung? Hat sie seit `LEBENSZEICHEN_FRISCH` nicht mehr durchgeschaltet (Audit 0.8.165), bekommen die
+    Plugs kein Lebenszeichen mehr – ihr Notprogramm übernimmt nach `HB_MAX_MIN`, statt passiv zu bleiben."""
+    return geschaltet is None or jetzt - geschaltet > LEBENSZEICHEN_FRISCH
+
+
 def verwaist(bekannt: Mapping[str, str], aktuell: Mapping[str, str], fremd: Iterable[str]) -> tuple[list[str], list[str]]:
     """Plugs mit Skript, die keine Heizkörper dieser Baustelle mehr sind (BSM-034.01, Bauplan Geräte §3 Fehler 1).
 
@@ -179,7 +189,7 @@ def verwaist(bekannt: Mapping[str, str], aktuell: Mapping[str, str], fremd: Iter
     jetzt; `fremd` = Schalter anderer aktiver Baustellen. Ergebnis (abschalten, vergessen): Ein entfernter oder auf eine
     andere Rolle umgestellter Plug wird abgeschaltet, sonst ginge er mit dem alten Programm in Notbetrieb. Steckt derselbe
     Schalter wieder als Heizkörper hier (neuer Unter-Eintrag) oder in einer anderen Baustelle, ist deren Runde zuständig:
-    nur vergessen.
+    nur vergessen. Statt Schaltern dürfen es Geräte sein (Audit 0.8.165: ein Plug kann mehrere Schalter haben).
     """
     hier, andere = set(aktuell.values()), set(fremd)
     abschalten: list[str] = []

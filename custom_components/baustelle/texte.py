@@ -107,6 +107,7 @@ GRUND_TEXT: dict[str, str] = {
     SollGrund.AUSSERHALB: "Heizzeit vorbei",
     SollGrund.AUS: "Aus – nur Frostschutz",
     SollGrund.ABSENKEN: "Abgesenkt",
+    SollGrund.STOERUNG: "Störung – nur Frostschutz",
 }
 TAGE_KURZ = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 

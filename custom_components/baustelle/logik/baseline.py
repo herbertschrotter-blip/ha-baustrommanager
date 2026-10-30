@@ -11,7 +11,8 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
 - **Kosten** (`schaetzung_eur`): erwarteter Verbrauch (Signatur „ohne“), sonst Nennleistung × Stunden × `ANTEIL`
   (Thermostat regelt etwa die Hälfte der Zeit) × Strompreis. Ein Lauf passt, wenn er in den Rest des Monatsrahmens geht
   (`monat_rest`: Rahmen − gemessene bzw. geschätzte Kosten der Läufe des Monats, abgesagte zählen nicht).
-- **Abbruch** (`abbruch_grund`): Automatik aus, Tür/Fenster länger als die Tür-Pause offen, Taste, Bedarf, Termin.
+- **Abbruch** (`abbruch_grund`): Automatik aus, Modus „Aus“, Tür/Fenster länger als die Tür-Pause offen, Taste, Bedarf,
+  Termin.
 - **Zählende Tage** (`zaehlende_tage`): alle Tage eines fertigen Laufs, bei einem abgebrochenen die Tage vor dem Abbruch.
 - **Metadaten für die Prognose V2** (BSM-033.06, Bauvorlage r5 §5.3): `starten` friert beim Laufbeginn Konfiguration
   und Annahme ein. Die Thermostate am Heizkörper gelten als unverändert *angenommen* (Herbert: Läufe am Wochenende,
@@ -153,10 +154,12 @@ def planen(
 
 
 def abbruch_grund(*, automatik: bool, tuer_offen_min: float | None, tuer_pause_min: float, taste: bool, bedarf: bool,
-                  termin: bool) -> str | None:
+                  termin: bool, modus_aus: bool = False) -> str | None:
     """Warum ein laufender Lauf endet (None = weiter)."""
     if not automatik:
         return "Automatik aus"
+    if modus_aus:   # Audit 0.8.165: der Container wurde auf „Aus“ gestellt
+        return "Modus Aus"
     if tuer_offen_min is not None and tuer_offen_min > tuer_pause_min:
         return "Tür oder Fenster offen"
     if taste:

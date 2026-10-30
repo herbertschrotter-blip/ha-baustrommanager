@@ -112,6 +112,9 @@ class Steuerung:
         self._letztes_warten: dict[str, str] = {}
         self._warn_alt: dict[str, warn_logik.Warnung] = {}
         self._letzte_auswertung: datetime | None = None
+        self.geschaltet: dict[str, datetime] = {}   # Audit 0.8.165: Funktion → letzte Auswertung, die bis zum Schalten durchlief
+        self.stoerungen: dict[str, str] = {}        # Stelle → Fehlertext (`fehler_melden`, Diagnose)
+        self.ohne_soll: set[str] = set()            # Bereiche, für die eine Funktion in diesem Lauf kein Soll hat (Fehler)
         self._gestartet = dt_util.now()
         self.kalender_tage: dict[str, set[date]] = {"feiertag": set(), "urlaub": set()}
         self.kalender_namen: dict[date, str] = {}
@@ -459,31 +462,75 @@ class Steuerung:
             self.hass.loop.call_soon(self.auswerten)
 
     def _auswerten(self) -> None:
+        """Ein Lauf. Jede Funktion und jeder Schritt nach dem Schalten ist einzeln abgesichert (Audit 0.8.165): ein
+        Fehler hält nicht mehr alles an. `geschaltet[<Funktion>]` steht nur, wenn ihr Soll (für jeden Bereich, `ohne_soll`),
+        Staffelung und Schalten durchliefen – sonst bekommen ihre Plugs kein Lebenszeichen mehr und das Notprogramm
+        übernimmt (notprogramm.py, logik/notprogramm.haengt). Je Funktion: der Fehler einer Funktion hält die anderen nicht an."""
         jetzt = dt_util.now()
-        self._laufzeit_aufraeumen(jetzt)
-        self.preis_abgleichen()   # neuer Strompreis ab heute (Preisliste mit „gilt ab“)
-        wetter = self._wetter(jetzt)
-        self.daten.wetter = wetter
+        self._sicher("aufraeumen", lambda: self._laufzeit_aufraeumen(jetzt))
+        self._sicher("preis", self.preis_abgleichen)   # neuer Strompreis ab heute (Preisliste mit „gilt ab“)
+        self._sicher("wetter", lambda: setattr(self.daten, "wetter", self._wetter(jetzt)))   # sonst gilt das letzte
+        wetter = self.daten.wetter
         soll: SollJeBereich = {}
+        heil: set[str] = set()
         for f in self.funktionen:
-            if f.aktiv():
-                soll.update(f.soll(jetzt, wetter))
-        an_set, ziel = self._staffeln(jetzt, soll)
-        if self.automatik:
-            for f in self.funktionen:
-                f.nach_soll(soll)
-            self._schalten_alle(jetzt, soll, an_set, ziel)
-            for f in self.funktionen:
-                f.nach_schalten(jetzt, wetter)
-        elif any(f.aktiv() and f.schaltet_ohne_automatik() for f in self.funktionen):
-            # Automatik aus, aber eine Funktion schaltet trotzdem: ziel enthält nur, was ihr `soll` dann noch schalten will
-            self._schalten_alle(jetzt, soll, an_set, ziel)
-        self._warnungen(jetzt, soll)
-        self._anzeige(jetzt, soll)
-        self._status(jetzt)
-        self._zeiten_zaehlen(jetzt)
+            self.ohne_soll = set()
+            if (not f.aktiv() or self._sicher(f"soll:{f.name}", lambda f=f: soll.update(f.soll(jetzt, wetter)))) \
+                    and not self.ohne_soll:
+                heil.add(f.name)
+        try:
+            an_set, ziel = self._staffeln(jetzt, soll)
+            if self.automatik:
+                for f in self.funktionen:
+                    self._sicher(f"nach_soll:{f.name}", lambda f=f: f.nach_soll(soll))
+                self._schalten_alle(jetzt, soll, an_set, ziel)
+                for f in self.funktionen:
+                    self._sicher(f"nach_schalten:{f.name}", lambda f=f: f.nach_schalten(jetzt, wetter))
+            elif any(f.aktiv() and f.schaltet_ohne_automatik() for f in self.funktionen):
+                # Automatik aus, aber eine Funktion schaltet trotzdem: ziel enthält nur, was ihr `soll` dann noch schalten will
+                self._schalten_alle(jetzt, soll, an_set, ziel)
+            self.fehler_vorbei("schalten")
+        except Exception as err:  # noqa: BLE001
+            self.fehler_melden("schalten", err)
+            heil = set()
+        for name in heil:
+            self.geschaltet[name] = jetzt
+        self._sicher("warnungen", lambda: self._warnungen(jetzt, soll))
+        self._sicher("anzeige", lambda: self._anzeige(jetzt, soll))
+        self._sicher("status", lambda: self._status(jetzt))
+        self._sicher("zaehlen", lambda: self._zeiten_zaehlen(jetzt))
+        fehler: Exception | None = None
         for update in list(self._listener):
-            update()
+            try:
+                update()
+            except Exception as err:  # noqa: BLE001
+                fehler = fehler or err
+        if fehler is not None:
+            self.fehler_melden("entitaeten", fehler)
+        else:
+            self.fehler_vorbei("entitaeten")
+
+    def _sicher(self, stelle: str, schritt: Callable[[], Any]) -> bool:
+        """Einen Schritt der Auswertung ausführen; ein Fehler wird gemeldet (`fehler_melden`), die Auswertung läuft weiter."""
+        try:
+            schritt()
+        except Exception as err:  # noqa: BLE001
+            self.fehler_melden(stelle, err)
+            return False
+        self.fehler_vorbei(stelle)
+        return True
+
+    def fehler_melden(self, stelle: str, err: Exception) -> None:
+        """Fehler einer Stelle ins HA-Protokoll – mit Verlauf nur beim ersten Mal (jede Minute dasselbe füllt sonst das
+        Protokoll), danach erst wieder, wenn sich der Text ändert."""
+        text = f"{type(err).__name__}: {err}"
+        if self.stoerungen.get(stelle) != text:
+            _LOGGER.error("Baustelle %s – Fehler bei %s: %s", self.entry.title, stelle, text, exc_info=err)
+            self.stoerungen[stelle] = text
+
+    def fehler_vorbei(self, stelle: str) -> None:
+        if self.stoerungen.pop(stelle, None) is not None:
+            _LOGGER.info("Baustelle %s – %s läuft wieder", self.entry.title, stelle)
 
     def _schalten_alle(
         self, jetzt: datetime, soll: SollJeBereich, an_set: set[str], ziel: dict[str, bool | None]

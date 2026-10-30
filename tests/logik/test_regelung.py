@@ -324,3 +324,25 @@ def test_im_plan_auch_satt_und_tuer_offen():
     for kw in ({"minute": t(22)}, {"frei": True}, {"zu_warm": True}, {"automatik": False}, {"auto": False}):
         assert not im_plan(lage(**kw), soll(**kw)), kw   # außerhalb, frei, Heizgrenze, Automatik aus, Hand
     assert not im_plan(lage(minute=t(22), tuer_offen_min=6), soll(minute=t(22), tuer_offen_min=6))
+
+
+# ---------------------------------------------------------------- Audit 0.8.165: Störung, Baseline bei Modus „Aus“
+from logik.regelung import notsoll  # noqa: E402
+
+
+def test_baseline_nicht_im_modus_aus():
+    assert soll(baseline=True, frei=True) == Soll(True, SollGrund.BASELINE)
+    assert soll(baseline=True, modus="aus") == Soll(False, SollGrund.AUS)
+
+
+def test_notsoll_nur_frostschutz():
+    """Scheitert die Berechnung eines Containers: unter der Frostgrenze ein, sonst aus; ohne Automatik nichts."""
+    assert notsoll(replace(GRUND, temperatur=3.0)) == Soll(True, SollGrund.FROST)
+    assert notsoll(replace(GRUND, temperatur=12.0)) == Soll(False, SollGrund.STOERUNG)
+    assert notsoll(replace(GRUND, temperatur=None)) == Soll(False, SollGrund.STOERUNG)   # ohne Fühler kein Frostschutz
+    assert notsoll(replace(GRUND, temperatur=3.0, automatik=False)) == Soll(None, SollGrund.AUTOMATIK_AUS)
+    assert notsoll(replace(GRUND, temperatur=3.0, automatik=False, frost_immer=True)) == Soll(True, SollGrund.FROST)
+    assert notsoll(replace(GRUND, temperatur=12.0, automatik=False, frost_immer=True, frost_vorher=True)) == \
+        Soll(False, SollGrund.STOERUNG)
+    assert notsoll(replace(GRUND, temperatur=12.0, auto=False)) == Soll(None, SollGrund.HAND)   # Hand bleibt
+    assert notsoll(replace(GRUND, temperatur=3.0, auto=False)) == Soll(True, SollGrund.FROST)

@@ -108,8 +108,14 @@ class Tpi:
     minute_im_zyklus: int
 
 
+UEBER_SOLL_AUS = 1.0   # Audit 0.8.165: ab Soll + 1 °C immer aus (sonst heizt ein großes kext auch weit über dem Soll weiter)
+
+
 def tpi_anteil(innen: float, soll: float, t: Tpi) -> float:
-    """Einschaltanteil 0…1 (siehe Modul-Docstring); ohne Außentemperatur nur der innere Teil."""
+    """Einschaltanteil 0…1 (siehe Modul-Docstring); ohne Außentemperatur nur der innere Teil; ab `UEBER_SOLL_AUS` über
+    dem Soll 0."""
+    if innen >= soll + UEBER_SOLL_AUS:
+        return 0.0
     wert = t.kint * (soll - innen - t.nachlauf) + (t.kext * (soll - t.aussen) if t.aussen is not None else 0.0)
     return max(0.0, min(1.0, wert))
 
