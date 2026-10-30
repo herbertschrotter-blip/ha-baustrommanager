@@ -1271,7 +1271,7 @@ class BaustellePanel extends LitElement {
     const ids = [];
     for (const b of d.bereiche) {
       const en = this.eid(d, b.id, 'energie'); if (en) ids.push(en); else ids.push(...b.geraete.map(g => g.energie).filter(Boolean));
-      ids.push(this.eid(d, b.id, 'heizzeit'));
+      ids.push(this.eid(d, b.id, 'heizzeit'), this.eid(d, b.id, 'kosten'));   // Audit 0.8.165: € je Zeitraum mit dem damaligen Preis
       if (!b.pumpe) ids.push(this.eid(d, b.id, 'heizzeit_strom'));   // AN-0011: davon tatsächlich geheizt (nur Container)
       for (const g of b.geraete) if (g.rolle === 'pumpe') ids.push(this.eid(d, g.id, 'pumpzeit'), this.eid(d, g.id, 'pumpzyklen'));
       if (mitTemp && b.fuehler) ids.push(b.fuehler);
@@ -1335,6 +1335,7 @@ class BaustellePanel extends LitElement {
     const liste = bid ? d.bereiche.filter(b => b.id === bid) : d.bereiche;
     return liste.length ? addieren(liste.map(eins)) : Array(st.n).fill(0);
   }
+  kostenReihe(d, bid, z, versatz = 0) { const r = this.reihe(d, this.eid(d, bid, 'kosten'), z, versatz); return r && r.map(v => v || 0); }
   reihe(d, id, z, versatz = 0) { const st = this.statistik(z, versatz, d); if (!st) return null; return (id && st.werte[id]) || Array(st.n).fill(null); }
   heizStunden(d, b, z, versatz = 0) {
     if (b.pumpe) { const r = b.geraete.filter(g => g.rolle === 'pumpe').map(g => this.reihe(d, this.eid(d, g.id, 'pumpzeit'), z, versatz)); if (r.some(x => !x)) return null; return addieren(r.map(x => x.map(v => v || 0))); }
@@ -2497,12 +2498,14 @@ class BaustellePanel extends LitElement {
         return { zahl: de(kwVon(b), 2), einh: 'kW', wo: 'jetzt', vgl: `${an} von ${b.geraete.length} Geräten an`, funke: r && r.slice(0, +this.z.JETZT.slice(0, 2) + 1), farbe,
           kennz: [['jetzt', `${de(kwVon(b), 2)} kW`], ['Geräte an', `${an}/${b.geraete.length}`], ['heute', `${f(r && summe(r))} kWh`], ['Zustand', esc(TEXT(b))]],
           dia: id => r ? flaeche(id, [{ name: b.name, farbe, v: r }], STUNDEN, 'kW', 6) : '' }; }
-      case 'c-verbrauch': case 'c-kosten': { const eur = x.k === 'c-kosten', fk = eur ? p : 1, r = this.verbrauch(d, b.id, c.zc, c.vc), g = this.verbrauch(d, b.id, c.zc, c.vc + 1);
-        const su = r && summe(r), sg = g && summe(g), e1 = eur ? '€' : 'kWh', k1 = eur ? 2 : 1;
-        return { zahl: f(zahl(su) ? su * fk : null, k1), einh: e1, wo: wannC, vgl: eur ? `${f(su)} kWh × ${de(p, 2)} €/kWh` : `${this.zrVgl(c.zc, c.vc)} ${f(sg)} kWh`, funke: r && r.map(v => (v || 0) * fk), farbe,
-          kennz: eur ? [[wannC, `${f(zahl(su) ? su * p : null, 2)} €`], ['kWh', f(su)], ['Strompreis', `${de(p, 2)} €/kWh`], [this.zrVgl(c.zc, c.vc), `${f(zahl(sg) ? sg * p : null, 2)} €`]]
-            : [[wannC, `${f(su)} kWh`], [this.zrVgl(c.zc, c.vc), `${f(sg)} kWh`], ['Kosten', `${f(zahl(su) ? su * p : null, 2)} €`], ['Heizzeit', (h => h ? stdMin(summe(h)) : '–')(this.heizStunden(d, b, c.zc, c.vc))]],
-          dia: id => r ? balken(id, r.map(v => (v || 0) * fk), lab(c.zc, zrc.labels), e1, eur ? 2 : 1) : '' }; }
+      case 'c-verbrauch': case 'c-kosten': { const eur = x.k === 'c-kosten', r = this.verbrauch(d, b.id, c.zc, c.vc), g = this.verbrauch(d, b.id, c.zc, c.vc + 1);
+        /* Audit 0.8.165: € rechnet die Integration je Abschnitt mit dem Preis des jeweiligen Tages (Kostenreihe) */
+        const k = this.kostenReihe(d, b.id, c.zc, c.vc), kg = this.kostenReihe(d, b.id, c.zc, c.vc + 1);
+        const su = r && summe(r), sg = g && summe(g), ku = k && summe(k), kgu = kg && summe(kg), e1 = eur ? '€' : 'kWh', k1 = eur ? 2 : 1, w = eur ? k : r;
+        return { zahl: f(eur ? ku : su, k1), einh: e1, wo: wannC, vgl: eur ? `${f(su)} kWh · Preis je Tag` : `${this.zrVgl(c.zc, c.vc)} ${f(sg)} kWh`, funke: w && w.map(v => v || 0), farbe,
+          kennz: eur ? [[wannC, `${f(ku, 2)} €`], ['kWh', f(su)], ['Strompreis heute', `${de(p, 2)} €/kWh`], [this.zrVgl(c.zc, c.vc), `${f(kgu, 2)} €`]]
+            : [[wannC, `${f(su)} kWh`], [this.zrVgl(c.zc, c.vc), `${f(sg)} kWh`], ['Kosten', `${f(ku, 2)} €`], ['Heizzeit', (h => h ? stdMin(summe(h)) : '–')(this.heizStunden(d, b, c.zc, c.vc))]],
+          dia: id => w ? balken(id, w.map(v => v || 0), lab(c.zc, zrc.labels), e1, eur ? 2 : 1) : '' }; }
       case 'c-heizzeit': { const r = this.heizStunden(d, b, c.zc, c.vc), rs = this.reihe(d, this.eid(d, b.id, 'heizzeit_strom'), c.zc, c.vc), su = r && summe(r), ss = rs && rs.some(zahl) ? summe(rs.map(v => v || 0)) : null;
         return { zahl: stdMin(su), einh: '', wo: wannC, vgl: zahl(ss) ? `tatsächlich geheizt ${stdMin(ss)}` : esc(this.heuteText(b)), funke: r, farbe,
           kennz: [['eingeschaltet', stdMin(su)], ['tatsächlich geheizt', stdMin(ss)], ['% davon mit Strom', zahl(ss) && su > 0 ? `${de(ss / su * 100, 0)} %` : '–'], ['Plan heute', esc(this.heuteText(b)).replace(/^Heizzeit /, '')]],

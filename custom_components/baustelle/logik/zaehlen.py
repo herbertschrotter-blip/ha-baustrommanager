@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-# Sprung eines Zählerstands, den wir nicht glauben (z. B. falscher Sensor gewählt), in kWh
+# Sprung eines Zählerstands, den wir nicht glauben (z. B. falscher Sensor gewählt), in kWh – nur noch, wenn die Zeit
+# seit dem letzten Stand unbekannt ist
 MAX_SPRUNG_KWH = 50.0
+# Audit 0.8.165: so viel gilt auch bei sehr kurzem Abstand noch als glaubwürdig (Zähler meldet in Schüben)
+MIN_SPRUNG_KWH = 0.5
 # BSM-003: nach einer Lücke (Ausfall von HA, VPN oder Shelly) höchstens so viel je Stunde der Lücke – mehr kann ein
 # Shelly Plug S nicht schalten (16 A · 230 V), mit Reserve
 MAX_KW_GERAET = 3.68
@@ -23,12 +26,14 @@ RUECKSPRUNG_KWH = 0.1
 def sprung_grenze(stunden: float | None) -> float:
     """Größter glaubwürdiger Zuwachs (kWh) zwischen zwei Ständen, die `stunden` auseinander liegen (None = unbekannt).
 
-    Grundsätzlich `MAX_SPRUNG_KWH`; nach einer längeren Lücke so viel, wie ein Shelly in der Zeit höchstens schalten
-    kann (BSM-003: vorher fehlte nach einem Ausfall von mehr als ≈ 25 h Heizen der ganze Verbrauch).
+    So viel, wie ein Shelly in der Zeit höchstens schalten kann, mindestens `MIN_SPRUNG_KWH` (BSM-003: vorher fehlte
+    nach einem Ausfall von mehr als ≈ 25 h Heizen der ganze Verbrauch). Audit 0.8.165: früher galten immer mindestens
+    `MAX_SPRUNG_KWH` – ein Plug-Tausch oder ein Rücksprung knapp über dem Rauschen buchte dann in einer Minute den ganzen
+    Stand (z. B. 32 kWh) in Energie, Kosten und Abrechnung. Ohne bekannte Zeit bleibt `MAX_SPRUNG_KWH`.
     """
-    if stunden is None or stunden <= 0:
+    if stunden is None:
         return MAX_SPRUNG_KWH
-    return max(MAX_SPRUNG_KWH, stunden * MAX_KW_GERAET * SPRUNG_RESERVE)
+    return max(MIN_SPRUNG_KWH, stunden * MAX_KW_GERAET * SPRUNG_RESERVE)
 
 
 def energie_zuwachs(alt: float | None, neu: float | None, stunden: float | None = None) -> float:

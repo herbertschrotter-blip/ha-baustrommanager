@@ -136,7 +136,9 @@ class GeraetMinute:
 # Neustart von HA: Was der Zähler zwischen der letzten geschriebenen Minute und dem Start zählte, gehört in die erste
 # Minute – aber nur bei kurzer Lücke. Ab 15 min ohne Lebenszeichen (alle 5 min) kann das Notprogramm übernommen haben;
 # dessen Stundenbuch trägt die Lücke dann selbst nach (db/nachtrag) und darf nicht doppelt zählen.
-NACHHOLEN_MAX = timedelta(minutes=10)
+# Audit 0.8.165: 8 statt 10 min – das letzte Lebenszeichen kann bis zu 5 min vor dem Stopp liegen, dann übernimmt das
+# Notprogramm schon nach 10 min Lücke (15 − 5); mit 2 min Abstand zählt nichts doppelt
+NACHHOLEN_MAX = timedelta(minutes=8)
 
 
 class GeraetSammler:
@@ -154,6 +156,8 @@ class GeraetSammler:
         self._stand = stand
         self._stand_alt, self._stand_alt_zeit = stand, (t if stand is not None else None)
         self._erste = True
+        self._beginn, self._stand_beginn = t, stand   # für ein spätes Nachholen (erste Minute schon geschrieben)
+        self._nachtrag_wh, self._nachgeholt = 0.0, False
         self._anforderung = Beobachtung(t, None)   # unbekannt bis zum ersten Bericht der Staffelung
         self._gesperrt = Beobachtung(t, None)
 
@@ -176,12 +180,19 @@ class GeraetSammler:
 
     def nachholen(self, stand: float | None, zeit: datetime | None) -> bool:
         """Letzter geschriebener Zählerstand vor dem Start (`zeit` = Ende seiner Minute): Liegt er höchstens
-        `NACHHOLEN_MAX` zurück und ist die erste Minute noch offen, zählt der Zuwachs seitdem in die erste Minute."""
-        if (not self._mit_zaehler or not self._erste or stand is None or zeit is None
-                or not timedelta(0) < self._start - zeit <= NACHHOLEN_MAX):   # Zähler beim Start noch ohne Wert: auch
+        `NACHHOLEN_MAX` zurück, zählt der Zuwachs seitdem in die erste Minute – ist die schon geschrieben (das Lesen
+        dauerte länger), der Zuwachs bis zum Start in die nächste."""
+        if (not self._mit_zaehler or self._nachgeholt or stand is None or zeit is None
+                or not timedelta(0) < self._beginn - zeit <= NACHHOLEN_MAX):   # Zähler beim Start noch ohne Wert: auch
             return False
-        self._stand_alt, self._stand_alt_zeit = stand, zeit
-        return True
+        self._nachgeholt = True
+        if self._erste:
+            self._stand_alt, self._stand_alt_zeit = stand, zeit
+            return True
+        if self._stand_beginn is None:
+            return False
+        self._nachtrag_wh = energie_zuwachs(stand, self._stand_beginn, (self._beginn - zeit).total_seconds() / 3600) * 1000
+        return self._nachtrag_wh > 0
 
     def staffel(self, t: datetime, anforderung: bool | None, gesperrt: bool | None) -> None:
         """Stand nach einem Schritt der Staffelung (gilt bis zum nächsten)."""
@@ -200,7 +211,8 @@ class GeraetSammler:
                 energie = None
             else:   # Zuwachs seit dem letzten bekannten Stand – nach einer Lücke mit der Grenze je Stunde der Lücke
                 stunden = (ende - self._stand_alt_zeit).total_seconds() / 3600
-                energie = energie_zuwachs(self._stand_alt, self._stand, stunden) * 1000
+                energie = energie_zuwachs(self._stand_alt, self._stand, stunden) * 1000 + self._nachtrag_wh
+                self._nachtrag_wh = 0.0
             if self._stand is not None and self._stand != self._stand_alt:
                 self._stand_alt, self._stand_alt_zeit = self._stand, ende
             elif self._stand is not None and self._stand_alt_zeit is None:

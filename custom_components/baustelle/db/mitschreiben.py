@@ -129,7 +129,9 @@ class Mitschreiber:
         """Nach einem Neustart: Zuwachs seit der letzten geschriebenen Minute in die erste Minute (logik/minute).
         Liegen noch ungeschriebene Minuten im Puffer, ist die letzte Minute der Datenbank nicht die letzte – dann nicht
         (sie brächten den Zuwachs selbst mit, er zählte doppelt)."""
-        if self.db.schreiber.ausgelagert:
+        # Audit 0.8.165: erst alles Offene schreiben (Warteschlange einer vorigen Instanz nach Neu-Laden), sonst wäre die
+        # letzte Minute der Datenbank nicht die letzte
+        if not await self.db.schreiber.async_schreiben() or self.db.schreiber.ausgelagert:
             return
         gm = s.geraet_minute
 

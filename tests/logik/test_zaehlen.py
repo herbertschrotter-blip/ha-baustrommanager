@@ -79,7 +79,7 @@ def test_ruecksprung_ist_rauschen_kein_neustart():
 
 def test_luecke_nach_ausfall():
     """BSM-003: nach einem langen Ausfall zählt der ganze Verbrauch, ein unmöglicher Sprung weiter nicht."""
-    assert sprung_grenze(None) == 50.0 and sprung_grenze(0.0) == 50.0 and sprung_grenze(2.0) == 50.0
+    assert sprung_grenze(None) == 50.0 and sprung_grenze(0.0) == 0.5 and sprung_grenze(2.0) == pytest.approx(2 * 3.68 * 1.1)
     assert sprung_grenze(72.0) == pytest.approx(72 * 3.68 * 1.1)
     # 3 Tage Ausfall, 2-kW-Heizkörper 10 h je Tag: 60 kWh – vorher verworfen, jetzt gezählt
     assert energie_zuwachs(100.0, 160.0) == 0.0
@@ -92,6 +92,15 @@ def test_luecke_nach_ausfall():
     assert energie_zuwachs(100.0, 55.0, stunden=72.0) == pytest.approx(55.0)
     # Rauschen bleibt Rauschen
     assert energie_zuwachs(32.688155, 32.687104, stunden=72.0) == 0.0
+
+
+def test_sprung_grenze_nach_zeit():
+    """Audit 0.8.165: in einer Minute höchstens, was ein Plug schalten kann (mindestens 0,5 kWh) – kein ganzer Stand mehr."""
+    minute = 1 / 60
+    assert energie_zuwachs(10.0, 10.05, stunden=minute) == pytest.approx(0.05)
+    assert energie_zuwachs(10.0, 42.0, stunden=minute) == 0.0          # Plug getauscht: anderer Stand
+    assert energie_zuwachs(32.0, 31.85, stunden=minute) == 0.0          # Rücksprung knapp über dem Rauschen
+    assert energie_zuwachs(14.48, 0.3, stunden=minute) == pytest.approx(0.3)   # echter Neustart des Shelly
 
 
 def test_ersparnis_fortlaufend_zum_preis_des_tages():

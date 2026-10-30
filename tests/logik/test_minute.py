@@ -74,6 +74,25 @@ def test_neustart_kurze_luecke_zaehlt_in_die_erste_minute():
     assert not g.nachholen(100.0, T0 - timedelta(minutes=4))   # nur einmal, nur in der ersten Minute
 
 
+def test_neustart_spaetes_nachholen_in_die_naechste_minute():
+    """Audit 0.8.165: Ist die erste Minute schon geschrieben, bevor der letzte Stand gelesen ist, zählt der Zuwachs bis
+    zum Start in die nächste Minute – einmal, nicht doppelt."""
+    g = GeraetSammler(T0, True, 2000.0, 100.15, mit_zaehler=True)
+    g.zaehler(s(30), 100.2)
+    assert g.abschliessen(s(60)).energie_wh == pytest.approx(50.0)
+    assert g.nachholen(100.0, T0 - timedelta(minutes=4))
+    assert not g.nachholen(100.0, T0 - timedelta(minutes=4))
+    g.zaehler(s(90), 100.25)
+    assert g.abschliessen(s(120)).energie_wh == pytest.approx(50.0 + 150.0)
+    g.zaehler(s(150), 100.3)
+    assert g.abschliessen(s(180)).energie_wh == pytest.approx(50.0)
+
+
+def test_nachholen_hoechstens_acht_minuten():
+    """Audit 0.8.165: nach 10 min Lücke kann das Notprogramm schon übernommen haben (Lebenszeichen alle 5 min)."""
+    assert NACHHOLEN_MAX == timedelta(minutes=8)
+
+
 def test_neustart_lange_luecke_zaehlt_nicht():
     """Länger als NACHHOLEN_MAX weg: das Notprogramm kann übernommen haben – dessen Stundenbuch trägt nach."""
     g = GeraetSammler(T0, True, 2000.0, 101.0, mit_zaehler=True)

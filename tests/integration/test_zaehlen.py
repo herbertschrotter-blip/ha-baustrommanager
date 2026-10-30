@@ -244,3 +244,21 @@ async def test_datenbank_holt_kurzen_neustart_nach(hass: HomeAssistant, baustell
     zeilen = sorted((z for z in zeilen_db(hass, "geraet_minute") if z["geraet_id"] == "h1"), key=lambda z: str(z["zeit"]))
     assert sum(z["energie_wh"] or 0 for z in zeilen) == pytest.approx(300.0)
     assert zeilen[-1]["energie_wh"] == pytest.approx(300.0)
+
+
+async def test_anderer_zaehler_bucht_nicht_den_ganzen_stand(hass: HomeAssistant, baustelle, freezer) -> None:
+    """Audit 0.8.165: Plug getauscht bzw. neu konfiguriert (anderer Energiezähler, 42 kWh): sein Stand ist kein Zuwachs –
+    vorher kamen die 32 kWh Unterschied auf einmal in Energie, Kosten und Abrechnung."""
+    e = baustelle.entry_id
+    hass.states.async_set("sensor.hk1_energy", "10.2")
+    await hass.async_block_till_done()
+    assert _wert(hass, f"{e}_energie") == pytest.approx(0.2)
+    hass.states.async_set("sensor.neu_energy", "42.0")
+    sub = baustelle.subentries["h1"]
+    hass.config_entries.async_update_subentry(baustelle, sub, data={**sub.data, "energie": "sensor.neu_energy"})
+    await hass.async_block_till_done()
+    assert _wert(hass, f"{e}_energie") == pytest.approx(0.2)
+    freezer.tick(timedelta(minutes=1))
+    hass.states.async_set("sensor.neu_energy", "42.05")
+    await hass.async_block_till_done()
+    assert _wert(hass, f"{e}_energie") == pytest.approx(0.25)   # ab dem neuen Stand zählt er normal weiter

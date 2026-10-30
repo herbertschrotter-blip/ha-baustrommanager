@@ -6501,7 +6501,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.167";
+var SEITE_VERSION = "0.8.168";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -6926,7 +6926,7 @@ var BaustellePanel = class extends i4 {
       const en = this.eid(d3, b3.id, "energie");
       if (en) ids.push(en);
       else ids.push(...b3.geraete.map((g2) => g2.energie).filter(Boolean));
-      ids.push(this.eid(d3, b3.id, "heizzeit"));
+      ids.push(this.eid(d3, b3.id, "heizzeit"), this.eid(d3, b3.id, "kosten"));
       if (!b3.pumpe) ids.push(this.eid(d3, b3.id, "heizzeit_strom"));
       for (const g2 of b3.geraete) if (g2.rolle === "pumpe") ids.push(this.eid(d3, g2.id, "pumpzeit"), this.eid(d3, g2.id, "pumpzyklen"));
       if (mitTemp && b3.fuehler) ids.push(b3.fuehler);
@@ -7009,6 +7009,10 @@ var BaustellePanel = class extends i4 {
     };
     const liste2 = bid ? d3.bereiche.filter((b3) => b3.id === bid) : d3.bereiche;
     return liste2.length ? addieren(liste2.map(eins)) : Array(st.n).fill(0);
+  }
+  kostenReihe(d3, bid, z2, versatz = 0) {
+    const r5 = this.reihe(d3, this.eid(d3, bid, "kosten"), z2, versatz);
+    return r5 && r5.map((v2) => v2 || 0);
   }
   reihe(d3, id, z2, versatz = 0) {
     const st = this.statistik(z2, versatz, d3);
@@ -9133,17 +9137,18 @@ var BaustellePanel = class extends i4 {
       }
       case "c-verbrauch":
       case "c-kosten": {
-        const eur3 = x2.k === "c-kosten", fk = eur3 ? p4 : 1, r5 = this.verbrauch(d3, b3.id, c4.zc, c4.vc), g2 = this.verbrauch(d3, b3.id, c4.zc, c4.vc + 1);
-        const su = r5 && summe(r5), sg = g2 && summe(g2), e1 = eur3 ? "€" : "kWh", k1 = eur3 ? 2 : 1;
+        const eur3 = x2.k === "c-kosten", r5 = this.verbrauch(d3, b3.id, c4.zc, c4.vc), g2 = this.verbrauch(d3, b3.id, c4.zc, c4.vc + 1);
+        const k2 = this.kostenReihe(d3, b3.id, c4.zc, c4.vc), kg = this.kostenReihe(d3, b3.id, c4.zc, c4.vc + 1);
+        const su = r5 && summe(r5), sg = g2 && summe(g2), ku = k2 && summe(k2), kgu = kg && summe(kg), e1 = eur3 ? "€" : "kWh", k1 = eur3 ? 2 : 1, w2 = eur3 ? k2 : r5;
         return {
-          zahl: f3(zahl(su) ? su * fk : null, k1),
+          zahl: f3(eur3 ? ku : su, k1),
           einh: e1,
           wo: wannC,
-          vgl: eur3 ? `${f3(su)} kWh × ${de(p4, 2)} €/kWh` : `${this.zrVgl(c4.zc, c4.vc)} ${f3(sg)} kWh`,
-          funke: r5 && r5.map((v2) => (v2 || 0) * fk),
+          vgl: eur3 ? `${f3(su)} kWh · Preis je Tag` : `${this.zrVgl(c4.zc, c4.vc)} ${f3(sg)} kWh`,
+          funke: w2 && w2.map((v2) => v2 || 0),
           farbe,
-          kennz: eur3 ? [[wannC, `${f3(zahl(su) ? su * p4 : null, 2)} €`], ["kWh", f3(su)], ["Strompreis", `${de(p4, 2)} €/kWh`], [this.zrVgl(c4.zc, c4.vc), `${f3(zahl(sg) ? sg * p4 : null, 2)} €`]] : [[wannC, `${f3(su)} kWh`], [this.zrVgl(c4.zc, c4.vc), `${f3(sg)} kWh`], ["Kosten", `${f3(zahl(su) ? su * p4 : null, 2)} €`], ["Heizzeit", ((h3) => h3 ? stdMin(summe(h3)) : "–")(this.heizStunden(d3, b3, c4.zc, c4.vc))]],
-          dia: (id) => r5 ? balken(id, r5.map((v2) => (v2 || 0) * fk), lab(c4.zc, zrc.labels), e1, eur3 ? 2 : 1) : ""
+          kennz: eur3 ? [[wannC, `${f3(ku, 2)} €`], ["kWh", f3(su)], ["Strompreis heute", `${de(p4, 2)} €/kWh`], [this.zrVgl(c4.zc, c4.vc), `${f3(kgu, 2)} €`]] : [[wannC, `${f3(su)} kWh`], [this.zrVgl(c4.zc, c4.vc), `${f3(sg)} kWh`], ["Kosten", `${f3(ku, 2)} €`], ["Heizzeit", ((h3) => h3 ? stdMin(summe(h3)) : "–")(this.heizStunden(d3, b3, c4.zc, c4.vc))]],
+          dia: (id) => w2 ? balken(id, w2.map((v2) => v2 || 0), lab(c4.zc, zrc.labels), e1, eur3 ? 2 : 1) : ""
         };
       }
       case "c-heizzeit": {

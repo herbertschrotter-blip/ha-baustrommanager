@@ -62,7 +62,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         if (/aussen|temperatur/.test(id)) p = { mean: id.includes('aussen') ? 4 + 3 * Math.sin((h - 9) / 24 * 2 * Math.PI) + r() : 17 + r() * 3 };
         else if (/pumpzyklen/.test(id)) p = { change: fuenf ? (r() < 1 / 12 ? 1 : 0) : Math.round((std ? 1 : 30) * r()) };
         else if (/heizzeit|pumpzeit/.test(id)) p = { change: (std ? .7 * k : m.period === 'day' ? 6 : 150) * r() };
-        else p = { change: (std ? (h >= 6 && h < 18 ? 2.5 : .2) * k : m.period === 'day' ? (tag === 0 || tag === 6 ? 2 : 14) : 300) * (.6 + r() * .6) * (id.includes('ohne') ? 4 : 1) };
+        else p = { change: (std ? (h >= 6 && h < 18 ? 2.5 : .2) * k : m.period === 'day' ? (tag === 0 || tag === 6 ? 2 : 14) : 300) * (.6 + r() * .6) * (id.includes('ohne') ? 4 : id.endsWith('_kosten') ? .3 : 1) };   // Kosten: € je Abschnitt (Preis je Tag, Audit 0.8.165)
         punkte.push({ start: t, end: t + schritt, ...p });
         if (std) t += schritt; else if (m.period === 'day') t += 864e5; else { const d = new Date(t); d.setUTCMonth(d.getUTCMonth() + 1); t = d.getTime(); }
       }

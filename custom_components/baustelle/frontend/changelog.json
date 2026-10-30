@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.8.168",
+    "datum": "2026-10-30",
+    "punkte": [
+      "Zähler: Ein Sprung zählt nur noch so weit, wie ein Plug in der Zeit seit dem letzten Stand höchstens schalten kann (mindestens 0,5 kWh). Vorher galten immer bis zu 50 kWh – ein Rücksprung knapp über dem Rauschen buchte den ganzen Zählerstand in Energie, Kosten und Abrechnung. Wird einem Heizkörper ein anderer Energiezähler zugeordnet (Plug getauscht, neu konfiguriert), beginnt die Zählung bei dessen Stand, statt den Unterschied auf einmal zu buchen.",
+      "Energie- und Zähler-Sensoren als „total“ statt „total increasing“: Ausbuchen (FE-0016) verringert den Zähler, und die HA-Statistik wertete das bisher als Zähler-Neustart und zählte den ganzen Stand ein zweites Mal.",
+      "Kurzer Neustart (Nachbesserung zu 0.8.165): nachgeholt wird nur noch bis 8 Minuten Lücke (danach kann das Notprogramm schon übernommen haben, dessen Stundenbuch trägt selbst nach), erst nachdem alles Offene geschrieben ist, und auch dann, wenn die erste Minute schon geschrieben war.",
+      "Statistik und Tagessummen: Entfernte Geräte zählen nur noch in ihrem Container (vorher in der Stundenstatistik in jedem, in den Tagessummen in keinem).",
+      "Container › Kosten: € je Zeitraum rechnet jetzt die Integration mit dem Preis des jeweiligen Tages (neue Reihe aus der eigenen Datenbank); vorher rechnete die Seite kWh × heutiger Preis, nach einer Preisänderung stimmten Vormonate nicht mit Auswertung und Bericht überein."
+    ]
+  },
+  {
     "version": "0.8.167",
     "datum": "2026-10-30",
     "punkte": [

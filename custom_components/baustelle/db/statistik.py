@@ -42,7 +42,7 @@ _heute_gerechnet: dict[str, float] = {}
 class Ziel:
     """Was eine Statistik-ID in der Datenbank bedeutet."""
 
-    art: str          # energie_baustelle | energie_bereich | energie_geraet | heizzeit | strom | pumpzeit | zyklen | temperatur | aussen
+    art: str          # energie_baustelle | energie_bereich | kosten_bereich | energie_geraet | heizzeit | strom | pumpzeit | zyklen | temperatur | aussen
     st: Steuerung
     wessen: str       # entry_id, bereich_id oder geraet_id
 
@@ -67,6 +67,7 @@ def _ziele(hass: HomeAssistant, ids: Iterable[str]) -> dict[str, Ziel]:
         merken(f"{eid}_aussen", "aussen", eid)
         for bid, info in st.bereiche.items():
             merken(f"{bid}_energie", "energie_bereich", bid)
+            merken(f"{bid}_kosten", "kosten_bereich", bid)   # Audit 0.8.165: € mit dem Preis des jeweiligen Tages
             merken(f"{bid}_heizzeit", "heizzeit", bid)
             merken(f"{bid}_heizzeit_strom", "strom", bid)
             if info.fuehler in gesucht:
@@ -96,6 +97,25 @@ def _aus_minuten(v: Connection, ziele: dict[str, Ziel], start: datetime, ende: d
     gm, bm, wm = s.geraet_minute, s.bereich_minute, s.wetter_minute
     ergebnis: dict[str, list[dict[str, Any]]] = {}
     zeilen_cache: dict[str, list[Any]] = {}
+    zuordnung_cache: dict[str, dict[str, tuple[str, str]]] = {}
+
+    def zuordnung(st: Steuerung) -> dict[str, tuple[str, str]]:
+        """Gerät → (Bereich, Rolle), auch für entfernte Geräte (Tabelle `geraet`) – sonst zählten sie in jeden Bereich
+        (Audit 0.8.165)."""
+        bid = st.entry.entry_id
+        if bid not in zuordnung_cache:
+            g = s.geraet
+            alle = {r.id: (r.bereich_id, r.rolle) for r in v.execute(select(g.c.id, g.c.bereich_id, g.c.rolle).where(g.c.baustelle_id == bid))}
+            zuordnung_cache[bid] = {**alle, **{gid: (x.bereich, x.rolle) for gid, x in st.geraete.items()}}
+        return zuordnung_cache[bid]
+
+    preis_cache: dict[tuple[str, date], float] = {}
+
+    def preis(st: Steuerung, t: datetime) -> float:
+        tag = dt_util.as_local(t).date()
+        if (st.entry.entry_id, tag) not in preis_cache:
+            preis_cache[(st.entry.entry_id, tag)] = st.preis_am(tag)
+        return preis_cache[(st.entry.entry_id, tag)]
 
     def geraete_zeilen(bid: str) -> list[Any]:   # Minuten aller Geräte einer Baustelle im Zeitraum (einmal je Baustelle)
         if bid not in zeilen_cache:
@@ -108,24 +128,26 @@ def _aus_minuten(v: Connection, ziele: dict[str, Ziel], start: datetime, ende: d
         st, bid = z.st, z.st.entry.entry_id
         werte: dict[float, float] = defaultdict(float)
         gewicht: dict[float, float] = defaultdict(float)
-        if z.art in ("energie_baustelle", "energie_bereich", "energie_geraet", "pumpzeit"):
+        if z.art in ("energie_baustelle", "energie_bereich", "kosten_bereich", "energie_geraet", "pumpzeit"):
+            wo = zuordnung(st)
             for r in geraete_zeilen(bid):
-                if z.art == "energie_bereich" and st.geraete.get(r.geraet_id) and st.geraete[r.geraet_id].bereich != z.wessen:
+                if z.art in ("energie_bereich", "kosten_bereich") and wo.get(r.geraet_id, ("", ""))[0] != z.wessen:
                     continue
                 if z.art in ("energie_geraet", "pumpzeit") and r.geraet_id != z.wessen:
                     continue
                 if z.art == "pumpzeit":
                     werte[eimer(_utc(r.zeit))] += (r.sekunden_ein or 0) / 3600
                 elif r.energie_wh is not None:
-                    werte[eimer(_utc(r.zeit))] += r.energie_wh / 1000
+                    werte[eimer(_utc(r.zeit))] += r.energie_wh / 1000 * (preis(st, _utc(r.zeit)) if z.art == "kosten_bereich" else 1)
         elif z.art in ("heizzeit", "strom"):
             zieht = float(st.e.get("heizung", {}).get("zieht_strom_w") or 50)
             je_minute: dict[datetime, int] = {}
+            wo = zuordnung(st)
             for r in geraete_zeilen(bid):
-                g = st.geraete.get(r.geraet_id)
-                if g is None or g.bereich != z.wessen:
+                bereich, rolle = wo.get(r.geraet_id, ("", ""))
+                if bereich != z.wessen:
                     continue
-                if z.art == "strom" and g.rolle != ROLLE_HEIZKOERPER:
+                if z.art == "strom" and rolle != ROLLE_HEIZKOERPER:
                     continue
                 t = _utc(r.zeit)
                 zeile = GeraetZeile(t, r.dauer_s, r.sekunden_ein, r.leistung_w_max, r.energie_wh, r.sekunden_strom)
@@ -176,11 +198,11 @@ def _aus_tagen(v: Connection, ziele: dict[str, Ziel], start: datetime, ende: dat
     for stat_id, z in ziele.items():
         bid = z.st.entry.entry_id
         werte: dict[tuple[float, float], list[float]] = defaultdict(list)
-        if z.art in ("energie_baustelle", "energie_bereich", "heizzeit", "strom", "temperatur", "aussen"):
-            spalte = {"energie_baustelle": tb.c.kwh, "energie_bereich": tb.c.kwh, "heizzeit": tb.c.heizzeit_min,
+        if z.art in ("energie_baustelle", "energie_bereich", "kosten_bereich", "heizzeit", "strom", "temperatur", "aussen"):
+            spalte = {"energie_baustelle": tb.c.kwh, "energie_bereich": tb.c.kwh, "kosten_bereich": tb.c.eur, "heizzeit": tb.c.heizzeit_min,
                       "strom": tb.c.strom_min, "temperatur": tb.c.temp_mittel, "aussen": tb.c.aussen_mittel}[z.art]
             bedingung = [tb.c.baustelle_id == bid, tb.c.datum >= von, tb.c.datum <= bis]
-            if z.art in ("energie_bereich", "heizzeit", "strom", "temperatur"):
+            if z.art in ("energie_bereich", "kosten_bereich", "heizzeit", "strom", "temperatur"):
                 bedingung.append(tb.c.bereich_id == z.wessen)
             je_tag: dict[date, list[float]] = defaultdict(list)
             for r in v.execute(select(tb.c.datum, spalte.label("w")).where(*bedingung)):

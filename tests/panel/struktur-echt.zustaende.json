@@ -152,7 +152,7 @@
   "sensor.buro_energy": {
    "state": "1840.5",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Büro Energy"
@@ -190,7 +190,7 @@
   "sensor.buro_heating_time": {
    "state": "1102.4",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Büro Heating time"
@@ -199,7 +199,7 @@
   "sensor.buro_heating_time_drawing_power": {
    "state": "0.0",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Büro Heating time drawing power"
@@ -244,7 +244,7 @@
   "sensor.halle_lieboch_energy": {
    "state": "1840.5",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Halle Lieboch Energy"
@@ -253,7 +253,7 @@
   "sensor.halle_lieboch_energy_convectors": {
    "state": "0.0",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Halle Lieboch Energy convectors"
@@ -262,7 +262,7 @@
   "sensor.halle_lieboch_energy_oil_radiators": {
    "state": "1840.5",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Halle Lieboch Energy oil radiators"
@@ -271,7 +271,7 @@
   "sensor.halle_lieboch_energy_without_automation_24_7": {
    "state": "3950.0",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Halle Lieboch Energy without automation (24/7)"
@@ -304,7 +304,7 @@
   "sensor.halle_lieboch_heating_time_convectors": {
    "state": "0.0",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Halle Lieboch Heating time convectors"
@@ -313,7 +313,7 @@
   "sensor.halle_lieboch_heating_time_oil_radiators": {
    "state": "1102.4",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Halle Lieboch Heating time oil radiators"
@@ -410,7 +410,7 @@
   "sensor.magazin_energy": {
    "state": "10.6",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Magazin Energy"
@@ -448,7 +448,7 @@
   "sensor.magazin_heating_time": {
    "state": "7.0667",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Magazin Heating time"
@@ -457,7 +457,7 @@
   "sensor.magazin_heating_time_drawing_power": {
    "state": "7.0667",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Magazin Heating time drawing power"
@@ -500,7 +500,7 @@
   "sensor.mannschaft_energy": {
    "state": "6.9492",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Mannschaft Energy"
@@ -538,7 +538,7 @@
   "sensor.mannschaft_heating_time": {
    "state": "1.75",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Mannschaft Heating time"
@@ -547,7 +547,7 @@
   "sensor.mannschaft_heating_time_drawing_power": {
    "state": "1.75",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Mannschaft Heating time drawing power"
@@ -609,7 +609,7 @@
   "sensor.polier_energy": {
    "state": "14.625",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Polier Energy"
@@ -647,7 +647,7 @@
   "sensor.polier_heating_time": {
    "state": "5.0833",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Polier Heating time"
@@ -656,7 +656,7 @@
   "sensor.polier_heating_time_drawing_power": {
    "state": "5.0833",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Polier Heating time drawing power"
@@ -690,14 +690,14 @@
   "sensor.pumpe_1_pumpenschacht_pumpe_1_pump_cycles": {
    "state": "21.0",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "friendly_name": "Pumpe 1 Pumpenschacht · Pumpe 1 pump cycles"
    }
   },
   "sensor.pumpe_1_pumpenschacht_pumpe_1_pump_time": {
    "state": "1.8333",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Pumpe 1 Pumpenschacht · Pumpe 1 pump time"
@@ -715,7 +715,7 @@
   "sensor.pumpenschacht_energy": {
    "state": "1.3933",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Pumpenschacht Energy"
@@ -775,7 +775,7 @@
   "sensor.wohnbau_kalsdorf_energy": {
    "state": "33.5675",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Wohnbau Kalsdorf Energy"
@@ -784,7 +784,7 @@
   "sensor.wohnbau_kalsdorf_energy_convectors": {
    "state": "11.7732",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Wohnbau Kalsdorf Energy convectors"
@@ -793,7 +793,7 @@
   "sensor.wohnbau_kalsdorf_energy_oil_radiators": {
    "state": "20.401",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Wohnbau Kalsdorf Energy oil radiators"
@@ -802,7 +802,7 @@
   "sensor.wohnbau_kalsdorf_energy_without_automation_24_7": {
    "state": "71.5257",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "kWh",
     "device_class": "energy",
     "friendly_name": "Wohnbau Kalsdorf Energy without automation (24/7)"
@@ -835,7 +835,7 @@
   "sensor.wohnbau_kalsdorf_heating_time_convectors": {
    "state": "5.8833",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Wohnbau Kalsdorf Heating time convectors"
@@ -844,7 +844,7 @@
   "sensor.wohnbau_kalsdorf_heating_time_oil_radiators": {
    "state": "12.0167",
    "attributes": {
-    "state_class": "total_increasing",
+    "state_class": "total",
     "unit_of_measurement": "h",
     "device_class": "duration",
     "friendly_name": "Wohnbau Kalsdorf Heating time oil radiators"

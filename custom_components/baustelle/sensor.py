@@ -184,7 +184,9 @@ class Zaehler:
     lesen: Callable[[Steuerung], float | None]
     einheit: str | None = UnitOfEnergy.KILO_WATT_HOUR
     klasse: SensorDeviceClass | None = SensorDeviceClass.ENERGY
-    art: SensorStateClass | None = SensorStateClass.TOTAL_INCREASING
+    # Audit 0.8.165: TOTAL statt TOTAL_INCREASING – Ausbuchen (FE-0016) verringert den Zähler; bei TOTAL_INCREASING wertet
+    # die HA-Statistik das als Zähler-Neustart und zählt den ganzen Stand ein zweites Mal
+    art: SensorStateClass | None = SensorStateClass.TOTAL
     stellen: int = 2
     geld: bool = False
     nur_heizung: bool = False

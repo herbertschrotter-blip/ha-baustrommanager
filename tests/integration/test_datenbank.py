@@ -457,6 +457,26 @@ async def test_statistik_aus_der_datenbank(hass: HomeAssistant, baustelle, freez
     assert len(tag[e_c1]) == 1 and tag[e_c1][0]["change"] == pytest.approx(0.3, abs=0.01)
     assert tag[h_c1][0]["change"] == pytest.approx(10 / 60, abs=0.01)
     assert (await frage("5minute", [e_c1]))[e_c1] == []   # die laufende Stunde hat die Datenbank schon
+    # Audit 0.8.165: Kosten je Abschnitt mit dem Preis des Tages (Stunden aus den Minuten, Tage aus den Tagessummen)
+    k_c1 = reg.async_get_entity_id("sensor", DOMAIN, f"{C1}_kosten")
+    preis = st.preis_am(dt_util.now().date())
+    kosten = await frage("hour", [k_c1, e_c1])
+    assert sum(p["change"] for p in kosten[k_c1]) == pytest.approx(sum(p["change"] for p in kosten[e_c1]) * preis, abs=1e-4)
+    assert (await frage("day", [k_c1]))[k_c1][0]["change"] == pytest.approx(tag[e_c1][0]["change"] * preis, abs=1e-3)
+    # Audit 0.8.165: ein entferntes Gerät zählt nur in seinem Container (vorher in jedem)
+    db = hass.data[DATA_DB]
+    jetzt = dt_util.utcnow().replace(second=0, microsecond=0) - timedelta(minutes=3)
+
+    def weg(v):
+        v.execute(insert(s.geraet), [{"id": "weg", "baustelle_id": baustelle.entry_id, "bereich_id": C2, "name": "Alt", "rolle": "heizkoerper",
+                                      "angelegt": jetzt, "entfernt": jetzt}])
+        v.execute(insert(s.geraet_minute), [{"geraet_id": "weg", "baustelle_id": baustelle.entry_id, "zeit": jetzt, "dauer_s": 60,
+                                             "energie_wh": 500.0, "erreichbar": True, "quelle": "ha"}])
+    await db.async_ausfuehren(weg)
+    e_c2 = reg.async_get_entity_id("sensor", DOMAIN, f"{C2}_energie")
+    nachher = await frage("hour", [e_c1, e_c2])
+    assert sum(p["change"] for p in nachher[e_c1]) == pytest.approx(sum(p["change"] for p in stunde[e_c1]), abs=1e-6)
+    assert sum(p["change"] for p in nachher[e_c2]) == pytest.approx(0.5, abs=1e-6)
     # Rückweg: auswertung_quelle = statistik → nicht aus der Datenbank
     st.einstellung_setzen(("auswertung_quelle",), "statistik")
     assert e_c1 not in await frage("hour", [e_c1])

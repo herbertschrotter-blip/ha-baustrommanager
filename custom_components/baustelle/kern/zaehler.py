@@ -78,8 +78,11 @@ def _energie_zaehlen(st: Steuerung, g: GeraetInfo, stand: float | None) -> None:
     """Neuer Stand des Energiezählers eines Shelly; der letzte Stand ist gespeichert (übersteht Neustarts)."""
     if stand is None:
         return
-    key, zeit_key = f"stand:{g.id}", f"stand:{g.id}:zeit"
+    key, zeit_key, quelle_key = f"stand:{g.id}", f"stand:{g.id}:zeit", f"stand:{g.id}:quelle"
     alt, vorher = st.zaehler.get(key), st.zaehler.get(zeit_key)
+    if st.zaehler.get(quelle_key) not in (None, g.energie):
+        alt = None   # Audit 0.8.165: anderer Zähler (Plug getauscht, neu konfiguriert) – sein Stand ist kein Zuwachs
+    st.zaehler[quelle_key] = g.energie
     jetzt = dt_util.now().timestamp()
     stunden = (jetzt - vorher) / 3600 if vorher is not None else None   # BSM-003: Lücke seit dem letzten Stand
     st.zaehler[key] = zaehlerstand(alt, stand)   # FE-0016: Rauschen verschiebt den Stand nicht

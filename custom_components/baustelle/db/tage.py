@@ -62,6 +62,10 @@ def tag_rechnen(v: Connection, r: TagRahmen, tag: date) -> tuple[int, int]:
                        .where(gm.c.baustelle_id == r.baustelle_id, gm.c.zeit >= von, gm.c.zeit < bis).order_by(gm.c.zeit)):
         je_geraet[z.geraet_id].append(GeraetZeile(_utc(z.zeit), z.dauer_s, z.sekunden_ein, z.leistung_w_max, z.energie_wh,
                                                   z.sekunden_strom))
+    wo = dict(r.geraete)   # Audit 0.8.165: entfernte Geräte nach der Tabelle `geraet` ihrem Container zuordnen
+    if fehlen := [gid for gid in je_geraet if gid not in wo]:
+        tg = s.geraet
+        wo.update({x.id: (x.bereich_id, x.rolle) for x in v.execute(select(tg.c.id, tg.c.bereich_id, tg.c.rolle).where(tg.c.id.in_(fehlen)))})
     je_bereich: dict[str, list[BereichZeile]] = defaultdict(list)
     for z in v.execute(select(bm.c.bereich_id, bm.c.zeit, bm.c.dauer_s, bm.c.temperatur)
                        .where(bm.c.baustelle_id == r.baustelle_id, bm.c.zeit >= von, bm.c.zeit < bis).order_by(bm.c.zeit)):
@@ -72,18 +76,18 @@ def tag_rechnen(v: Connection, r: TagRahmen, tag: date) -> tuple[int, int]:
 
     geraete_zeilen = []
     for gid, zeilen in je_geraet.items():
-        bereich_id, _rolle = r.geraete.get(gid, ("", ""))
+        bereich_id, _rolle = wo.get(gid, ("", ""))
         t = geraet_tag(zeilen, r.zieht_w)
         geraete_zeilen.append({
             "geraet_id": gid, "datum": tag, "baustelle_id": r.baustelle_id, "bereich_id": bereich_id or None,
             "firma_id": r.firma.get((bereich_id, tag)), "kwh": t.kwh, "eur": round(t.kwh * preis, 4), "preis": preis,
             "heizzeit_min": t.heizzeit_min, "zyklen": t.zyklen, "laufzeit_min": t.heizzeit_min, "ohne_kwh": None,
             "strom_min": t.strom_min})
-    bereiche: set[str] = set(je_bereich) | {r.geraete[g][0] for g in je_geraet if g in r.geraete}
+    bereiche: set[str] = set(je_bereich) | {wo[g][0] for g in je_geraet if g in wo}
     bereich_zeilen = []
     for b_id in sorted(bereiche):
-        geraete = {g: z for g, z in je_geraet.items() if r.geraete.get(g, ("",))[0] == b_id}
-        heizer = {g for g in geraete if r.geraete[g][1] in r.heizrollen}
+        geraete = {g: z for g, z in je_geraet.items() if wo.get(g, ("",))[0] == b_id}
+        heizer = {g for g in geraete if wo[g][1] in r.heizrollen}
         bt = bereich_tag(geraete, heizer, je_bereich.get(b_id, []), aussen, r.zieht_w)
         bereich_zeilen.append({
             "bereich_id": b_id, "datum": tag, "baustelle_id": r.baustelle_id, "firma_id": r.firma.get((b_id, tag)),
