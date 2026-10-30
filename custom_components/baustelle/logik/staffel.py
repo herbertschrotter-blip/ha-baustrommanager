@@ -59,6 +59,11 @@ Entscheidungen, wo der Bauplan (Abschnitt 2.3) offen ist – jeweils im Sinne de
   wird zu voll, geht sofort der zuletzt eingeschaltete aus (Schritt 2) und die Heizkörper wechseln im Rundlauf.
   Wer dazukommen will, zählt mit seiner vollen Leistung; ein eben eingeschalteter die ersten `ANLAUF_MIN` Minuten
   ebenso, bis die Messung nachkommt.
+- **Harte Grenze nach Nennleistung** (Audit 0.8.165): ein satter Heizer zieht gerade nichts, springt sein Thermostat
+  an, zieht er voll – springen alle gleichzeitig an, wäre der Anschluss weit über der Absicherung. Darum kommt ein
+  Heizer nur dazu, wenn alle laufenden Heizer mit ihrer Nennleistung (`nenn_kw`), die übrigen Lasten und die Reserve
+  zusammen unter `hart_kw` bleiben (100 % der Absicherung). Abgeworfen wird dafür nicht – nur nichts Neues eingeschaltet.
+  Phasen und Steckdosenkreise bildet die Staffelung nicht ab: bei Drehstrom gilt die Summe über alle Phasen.
 """
 
 from __future__ import annotations
@@ -99,6 +104,7 @@ class Anschluss:
     id: str
     grenze_kw: float
     reserve_kw: float
+    hart_kw: float | None = None   # volle Absicherung (Grenze nach Nennleistung); None = ohne
 
 
 @dataclass(frozen=True)
@@ -126,6 +132,7 @@ class Last:
     gruppe: str = ""
     im_plan: bool = False   # AN-0017: laut Plan gerade dran (Automatik an, Heizzeit läuft) – auch wer satt ist
     ruht: str = ""          # warum ein Heizer im Plan gerade nicht heizen will (Ruhe: satt, tuer_offen, zurueckgehalten)
+    nenn_kw: float | None = None   # Nennleistung für die harte Grenze (None = `kw`)
 
 
 @dataclass(frozen=True)
@@ -156,7 +163,13 @@ def grenze_kw(ampere: float, phasen: int, nutzbar_prozent: float) -> float:
 
 def anschluss(id: str, ampere: float, phasen: int, reserve_kw: float, nutzbar_prozent: float = 67) -> Anschluss:
     """Anschluss aus den Einstellungen (Absicherung, Phasen, Reserve) und „nutzbar je Anschluss“."""
-    return Anschluss(id=id, grenze_kw=grenze_kw(ampere, phasen, nutzbar_prozent), reserve_kw=reserve_kw)
+    return Anschluss(id=id, grenze_kw=grenze_kw(ampere, phasen, nutzbar_prozent), reserve_kw=reserve_kw,
+                     hart_kw=grenze_kw(ampere, phasen, 100))
+
+
+def _nenn(last: Last) -> float:
+    """Womit ein Gerät gegen die harte Grenze zählt: Heizer mit der Nennleistung, alle anderen wie gemessen."""
+    return max(last.kw, last.nenn_kw) if last.heizer and last.nenn_kw is not None else last.kw
 
 
 def last_kw(gemessen_w: float | None, nenn_kw: float, an: bool, an_seit_min: float) -> float:
@@ -311,15 +324,28 @@ def staffeln(
                 n[g] = n.get(g, 0) + 1
         return n
 
+    # Harte Grenze: Last je Anschluss, wenn alle laufenden Heizer voll zögen
+    hart = {a.id: a.hart_kw for a in anschluesse if a.hart_kw is not None}
+    voll = {a.id: a.reserve_kw + sum(_nenn(l) for l in lasten if l.an and l.anschluss == a.id and (not l.heizer or l.id in an))
+            for a in anschluesse}
+
+    def ueber_hart(k: Last, statt: Last | None = None) -> bool:
+        if k.anschluss not in hart:
+            return False
+        weg = _nenn(statt) if statt is not None and statt.anschluss == k.anschluss else 0.0
+        return voll[k.anschluss] - weg + _nenn(k) > hart[k.anschluss] + TOLERANZ_KW
+
     def schalte_aus(last: Last) -> None:
         an.discard(last.id)
         frei_ist[last.anschluss] += last.kw
         platz[last.anschluss] += last.kw
+        voll[last.anschluss] -= _nenn(last)
 
     def schalte_ein(last: Last) -> None:
         an.add(last.id)
         frei_ist[last.anschluss] -= last.kw
         platz[last.anschluss] -= last.kw
+        voll[last.anschluss] += _nenn(last)
 
     # 1. Regelung will nicht mehr → aus (die Leistung wird frei)
     for l in heizer:
@@ -365,7 +391,7 @@ def staffeln(
             wartet[k.id] = Warten.MINDESTPAUSE
             dran_in[k.id] = regeln.min_pause_min - k.aus_seit_min
             continue
-        zu_voll = k.anschluss in ueberlast or k.kw > platz[k.anschluss] + TOLERANZ_KW
+        zu_voll = k.anschluss in ueberlast or k.kw > platz[k.anschluss] + TOLERANZ_KW or ueber_hart(k)
         zu_viele = len(an) >= regeln.max_gleichzeitig
         if not zu_voll and not zu_viele:
             if neu >= regeln.neue_je_schritt:
@@ -393,6 +419,7 @@ def staffeln(
                 r.anschluss != k.anschluss
                 or k.anschluss in ueberlast
                 or k.kw > platz[k.anschluss] + r.kw + TOLERANZ_KW
+                or ueber_hart(k, r)
             ):
                 continue
             if vorrang:

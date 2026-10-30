@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.8.167",
+    "datum": "2026-10-30",
+    "punkte": [
+      "Notprogramm im Plug (Skript Version 7): Ohne frischen Fühlerwert heizt der Plug im Notbetrieb jetzt in den Stunden, in denen die stündliche Vorhersage unter „Frostschutz ohne Fühler“ liegt (ohne Einstellung unter 0 °C). Vorher gab es ohne Fühler am Plug keinen Frostschutz. Die Frost-Fenster reichen so weit wie die Vorhersage.",
+      "Notbetrieb: Die Plugs schalten um je 1 Minute versetzt ein, nicht mehr alle im selben Augenblick. Passt ein Plug nach Nennleistung nicht mehr unter die Grenze seines Anschlusses (höhere Priorität zuerst), macht er im Notbetrieb nur Frostschutz – die Plugs wissen nichts voneinander, ohne HA gibt es keine Staffelung.",
+      "Staffelung mit harter Grenze nach Nennleistung (Herbert 30.10.2026): Ein Heizkörper kommt nur dazu, wenn alle laufenden Heizkörper mit voller Leistung zusammen mit den übrigen Lasten und der Reserve unter 100 % der Absicherung bleiben. Vorher zählte ein satter Heizkörper (Thermostat am Gerät aus) mit 0 W; sprangen alle an, flossen bis zu 163 % der Absicherung, bis nach 30 s abgeworfen wurde. Bei Drehstrom gilt die Summe über alle Phasen – Phasen und Steckdosenkreise kennt die Staffelung nicht; mehrere Heizkörper an einer Steckdosenleiste bleiben Sache der Verkabelung."
+    ]
+  },
+  {
     "version": "0.8.166",
     "datum": "2026-10-30",
     "punkte": [

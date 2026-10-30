@@ -656,18 +656,29 @@ async def test_nach_neustart_keine_mindestpause_ab_dem_start(hass: HomeAssistant
 async def test_staffel_nach_gemessenem_verbrauch(hass: HomeAssistant, freezer, shellys) -> None:
     """FE-0011 (Herbert 01.10.2026): gerechnet wird mit dem gemessenen Verbrauch. Zieht der laufende Heizkörper nichts
     (Thermostat am Gerät), darf der wartende dazu; springt der erste wieder an und der Anschluss wird zu voll, geht der
-    zuletzt eingeschaltete sofort aus."""
-    entry, st = await _start(hass, freezer, shellys)
+    zuletzt eingeschaltete sofort aus. Seit 0.8.167 nur, solange beide mit Nennleistung unter der vollen Absicherung
+    bleiben (harte Grenze, Herbert 30.10.2026): 20 A · 230 V = 4,6 kW ≥ 2 × 2 kW, nutzbar 50 % = 2,3 kW."""
+    entry, st = await _start(hass, freezer, shellys, a1=(20, 1, 0.0), staffel={"nutzbar_prozent": 50})
     assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")
     hass.states.async_set("sensor.hk1_power", "0")          # Thermostat am Heizkörper 1 schaltet ab
     await _minuten(hass, freezer, st, 6)                     # Mindestlauf/Takt egal: Platz ist da
     assert _an(hass, "switch.hk1") and _an(hass, "switch.hk2")
     assert _anschluss(hass, entry)["heiz_kw"] == pytest.approx(2.0)   # gemessen: nur Heizkörper 2
     voll = _texte(st, "schalten").count("Staffelung: Heizkörper 2 wartet (Anschluss voll)")
-    hass.states.async_set("sensor.hk1_power", "2000")       # Heizkörper 1 springt wieder an: 4 kW > 2,47 kW
+    hass.states.async_set("sensor.hk1_power", "2000")       # Heizkörper 1 springt wieder an: 4 kW > 2,3 kW
     await _minuten(hass, freezer, st, 3)
     assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")
     assert _texte(st, "schalten").count("Staffelung: Heizkörper 2 wartet (Anschluss voll)") == voll + 1
+
+
+async def test_harte_grenze_satter_heizer_zaehlt_voll(hass: HomeAssistant, freezer, shellys) -> None:
+    """Audit 0.8.165 (Herbert 30.10.2026: „harte Grenze immer“): 16 A einphasig = 3,68 kW Absicherung. Zieht Heizkörper 1
+    nichts, wäre nach Messung Platz – springen aber beide an, wären es 4 kW: Heizkörper 2 wartet."""
+    entry, st = await _start(hass, freezer, shellys)
+    assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")
+    hass.states.async_set("sensor.hk1_power", "0")
+    await _minuten(hass, freezer, st, 6)
+    assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")
 
 
 async def test_einer_je_container_zuerst(hass: HomeAssistant, freezer, shellys) -> None:

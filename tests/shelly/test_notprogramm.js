@@ -101,7 +101,7 @@ function mitFuehler(wert) { return (p) => fuehler(p, 202, typeof wert === 'funct
 fall('Programm wird beim Start mit einem Aufruf geladen', () => {
   const p = plug({ kvs: { ...GRUND, bs_p1: fenster([30, 42, 21]), anderes: 'x' } });
   const a = p.hb();
-  gleich([a.v, a.programm, a.fenster], [6, 1, 2], 'hb-Antwort (Version, Programm, Fenster)');
+  gleich([a.v, a.programm, a.fenster], [7, 1, 2], 'hb-Antwort (Version, Programm, Fenster)');
   gleich(p.maxOffen, 1, 'gleichzeitige Aufrufe beim Laden');
   return p;
 });
@@ -358,6 +358,59 @@ fall('Ohne Programm im Speicher: das Skript tut nichts', () => {
   p.minuten(24 * 60, mitFuehler(2));
   gleich(p.schaltungen, [], 'Schaltungen ohne bs_cfg');
   gleich(p.hb().programm, null, 'hb meldet kein Programm');
+  return p;
+});
+
+
+// ---------------------------------------------------------------- Audit 0.8.165: Frost ohne Fühler, Startversatz, nur Frost
+fall('Ohne Fühler: Frost-Fenster aus der Vorhersage heizen, außerhalb aus', () => {
+  const frostF = `${T0 + 20 * 3600},${T0 + 26 * 3600}`;   // 20–02 Uhr unter der Frostgrenze außen
+  const p = plug({ kvs: { ...GRUND, bs_f: frostF }, uhr: T0 + 19 * 3600 });
+  p.minuten(16);                                          // Notbetrieb, kein Fühlerwert, außerhalb der Heizzeit
+  gleich(p.relais, false, '19:16 ohne Frost-Fenster');
+  p.minuten(60);
+  gleich(p.relais, true, '20:16 im Frost-Fenster');
+  p.minuten(6 * 60);
+  gleich(p.relais, false, 'nach dem Frost-Fenster');
+  return p;
+});
+
+fall('Frost-Fenster gelten nicht ohne Frostschutz und nicht mit frischem Fühler', () => {
+  const frostF = `${T0 + 20 * 3600},${T0 + 26 * 3600}`;
+  const ohne = plug({ kvs: { ...GRUND, bs_cfg: cfg({ fe: null, fa: null }), bs_f: frostF }, uhr: T0 + 19 * 3600 });
+  ohne.minuten(90);
+  gleich(ohne.relais, false, 'Frostschutz aus');
+  const mit = plug({ kvs: { ...GRUND, bs_f: frostF }, uhr: T0 + 19 * 3600 });
+  mit.minuten(90, mitFuehler(12));
+  gleich(mit.relais, false, 'Fühler sagt 12 °C');
+  return mit;
+});
+
+fall('Startversatz: ein erst nach vs Minuten, aus sofort', () => {
+  const p = plug({ kvs: { ...GRUND, bs_cfg: cfg({ m: 'plan', vs: 3 }) }, uhr: T0 + 7 * 3600 });
+  p.minuten(16);
+  gleich(p.relais, false, 'erste Minute im Notbetrieb');
+  p.minuten(2);
+  gleich(p.relais, false, 'nach 2 min');
+  p.minuten(1);
+  gleich(p.relais, true, 'nach 3 min + 1');
+  p.minuten(11 * 60);                                     // 18:xx – Fenster vorbei
+  gleich(p.relais, false, 'aus ohne Versatz');
+  return p;
+});
+
+fall('Nur Frostschutz (Anschluss zu voll): kein Plan, aber Frost und Taste', () => {
+  const p = plug({ kvs: { ...GRUND, bs_cfg: cfg({ m: 'plan', nf: 1 }) }, uhr: T0 + 7 * 3600 });
+  p.minuten(30, mitFuehler(15));
+  gleich(p.schaltungen, [], 'im Fenster, aber nur Frost');
+  p.minuten(1, mitFuehler(3));
+  gleich(p.relais, true, 'Frost');
+  p.minuten(1, mitFuehler(8));
+  gleich(p.relais, false, 'Frost vorbei');
+  p.taste();
+  gleich(p.relais, true, 'Taste: 1 h heizen');
+  p.minuten(5, mitFuehler(8));
+  gleich(p.relais, true, 'Taste hält');
   return p;
 });
 

@@ -186,7 +186,7 @@ async def test_einrichten_programm_und_lebenszeichen(hass: HomeAssistant, anlage
     assert skript["enable"] and skript["running"]
     assert f"let VERSION = {VERSION};" in skript["code"] and "// Notprogramm" not in skript["code"]   # ohne Kommentare
     assert p1.aufrufe.count("Script.PutCode") > 1   # in Stücken
-    assert set(p1.kvs) == {"bs_cfg"} | {f"bs_p{w}" for w in range(7)}
+    assert set(p1.kvs) == {"bs_cfg", "bs_f"} | {f"bs_p{w}" for w in range(7)}
     cfg1 = json.loads(p1.kvs["bs_cfg"])
     assert cfg1["m"] == "hand" and cfg1["fe"] is None   # Automatik aus: nicht anfassen, kein Frostschutz
     assert cfg1["t"] == 202                             # genau der Fühler des Containers, über die Bluetooth-Adresse
@@ -223,7 +223,7 @@ async def test_skript_geloescht_oder_veraltet(hass: HomeAssistant, anlage) -> No
     del p1.skripte[i]                 # jemand löscht das Skript
     p1.kvs.clear()
     await np.async_runde()
-    assert p1.eigenes() is not None and p1.eigenes()[1]["running"] and len(p1.kvs) == 8
+    assert p1.eigenes() is not None and p1.eigenes()[1]["running"] and len(p1.kvs) == 9
     i, skript = p1.eigenes()
     skript["code"] = skript["code"].replace(f"let VERSION = {VERSION};", "let VERSION = 0;")   # alte Version
     p1.aufrufe.clear()
@@ -287,7 +287,7 @@ async def test_plug_nicht_erreichbar(hass: HomeAssistant, anlage) -> None:
     assert plugs["plug2"].eigenes() is not None
     plugs["plug1"].erreichbar = True
     await np.async_runde()
-    assert stand["switch.hk1"].fehler is None and len(plugs["plug1"].kvs) == 8
+    assert stand["switch.hk1"].fehler is None and len(plugs["plug1"].kvs) == 9
     assert np.info()["plugs"]["Heizkörper 1"]["programm"] is not None
 
 
@@ -637,3 +637,24 @@ async def test_zweiter_schalter_am_plug_ist_nicht_verwaist(hass: HomeAssistant, 
     assert plugs["plug1"].eigenes()[1]["running"]
     assert "inventar:x" not in st.lz["np_plugs"]
     assert not any("abgeschaltet" in str(e[-1]) for e in st.e["protokoll"])
+
+
+async def test_frost_fenster_versatz_und_nur_frost_im_programm(hass: HomeAssistant, anlage) -> None:
+    """Audit 0.8.165 Paket 2: Frost-Fenster aus der stündlichen Vorhersage, Startversatz je Plug, Grenze je Anschluss."""
+    entry, np, plugs = anlage
+    st = entry.runtime_data
+    st.e["heizung"]["notprogramm"] = True
+    st.e["automatik"] = True
+    st.e["heizung"]["frost_aussen"] = -3.0
+    stunde = dt_util.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=2)
+    st.lz["wetter_stunden"] = {stunde.isoformat(): -5.0, (stunde + timedelta(hours=1)).isoformat(): 1.0}
+    await np.async_runde()
+    p1, p2 = plugs["plug1"], plugs["plug2"]
+    assert p1.kvs["bs_f"] == f"{int(stunde.timestamp())},{int(stunde.timestamp()) + 3600}"
+    assert sorted([json.loads(p1.kvs["bs_cfg"])["vs"], json.loads(p2.kvs["bs_cfg"])["vs"]]) == [0, 1]
+    assert {json.loads(p.kvs["bs_cfg"])["nf"] for p in plugs.values()} == {0}
+    # Anschluss klein: nur noch einer passt nach Nennleistung, der andere macht im Notbetrieb nur Frostschutz
+    st.e["anschluesse"][0].update(ampere=16, phasen=1, reserve_kw=0.0)   # 16 A · 230 V · 67 % = 2,47 kW, je Heizkörper 2 kW
+    await np.async_runde()
+    nf = sorted(json.loads(p.kvs["bs_cfg"])["nf"] for p in plugs.values())
+    assert nf == [0, 1], nf

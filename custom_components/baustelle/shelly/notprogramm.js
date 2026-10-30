@@ -8,8 +8,10 @@
 //   bs_cfg  {"v":1,"m":"plan|thermo|bedarf|hand|aus","tol":0.3,"fe":5,"fa":7,"t":202,"d":[203,207],"tp":3}
 //           m Modus, tol Toleranz, fe/fa Frostschutz ein unter/aus über (°C, null = aus), t Nummer des Messwerts
 //           Temperatur (bthomesensor:<nr>, null = keiner), d Nummern der Türen und Fenster (Liste, bis 0.8.118 eine
-//           Nummer; null = keine) – irgendeiner offen zählt, tp Tür-Pause in Minuten
+//           Nummer; null = keine) – irgendeiner offen zählt, tp Tür-Pause in Minuten, vs Startversatz in Minuten
+//           (jeder Plug schaltet versetzt ein), nf 1 = im Notbetrieb nur Frostschutz (Anschluss sonst zu voll)
 //   bs_p0 … bs_p6  Fenster „start,ende,soll;…“ in Unix-Sekunden (UTC, keine Zeitzonen im Gerät)
+//   bs_f    Frost-Fenster „start,ende;…“: ohne frischen Fühlerwert dann an (Vorhersage unter der Frostgrenze außen)
 // Lebenszeichen: HA ruft alle 5 min  http://<plug>/script/<id>/hb  auf (?neu = Programm neu laden); die Antwort nennt
 //   Version, Stand des Programms, Notbetrieb seit (0 = nein) und das Ende der Taste.
 // Stundenbuch (nur im Notbetrieb): bb_<0…27> = „stunde,wh,min_ein,temp*10,tuer_s;…“ – 6 Stunden je Schlüssel, 7 Tage
@@ -17,13 +19,13 @@
 // Grenzen am Gerät (BSM-013): höchstens 5 gleichzeitige Aufrufe je Skript – hier höchstens zwei; Arbeitsspeicher
 // für alle Skripte zusammen knapp (Plug S Gen3) – Fenster als Zahlenlisten, keine großen Objekte.
 
-let VERSION = 6;
+let VERSION = 7;
 let HB_MAX_MIN = 15;        // Minuten ohne Lebenszeichen → Notbetrieb (gezählt, braucht keine Uhrzeit)
 let FUEHLER_MAX_S = 1800;   // älterer Fühlerwert gilt als weg → im Thermostat wie Zeitplan
 let TASTE_S = 3600;         // Taste: 1 h heizen
 let BUCH_N = 28;            // Schlüssel im Stundenbuch (28 × 6 h = 7 Tage)
 
-let cfg = null, fen = [], still = 0, nbSeit = 0, frost = false, taste = 0, tuerSeit = 0;
+let cfg = null, fen = [], ff = [], still = 0, nbSeit = 0, frost = false, taste = 0, tuerSeit = 0, einWarte = 0;
 let bStunde = 0, bE0 = -1, bSek = 0, bTs = 0, bTn = 0, bTuer = 0;
 
 function jetzt() { let s = Shelly.getComponentStatus("sys"); return s && s.unixtime ? s.unixtime : 0; }   // 0 = keine Uhrzeit
@@ -31,10 +33,17 @@ function jetzt() { let s = Shelly.getComponentStatus("sys"); return s && s.unixt
 function laden() {   // ein Aufruf für alles
   Shelly.call("KVS.GetMany", { match: "bs_*" }, function (r) {
     if (!r || !r.items) return;
-    let c = null, f = [];
+    let c = null, f = [], g = [];
     for (let i = 0; i < r.items.length; i++) {
       let k = r.items[i].key, w = r.items[i].value;
       if (k === "bs_cfg") c = JSON.parse(w);
+      else if (k === "bs_f" && w) {
+        let teile = w.split(";");
+        for (let j = 0; j < teile.length; j++) {
+          let x = teile[j].split(",");
+          if (x.length === 2) g.push([JSON.parse(x[0]), JSON.parse(x[1])]);
+        }
+      }
       else if (k.indexOf("bs_p") === 0 && w) {
         let teile = w.split(";");
         for (let j = 0; j < teile.length; j++) {
@@ -43,7 +52,7 @@ function laden() {   // ein Aufruf für alles
         }
       }
     }
-    cfg = c; fen = f;
+    cfg = c; fen = f; ff = g;
   });
 }
 
@@ -58,6 +67,11 @@ function wert(nr) {   // [wert, alter in s] oder null
 function fenster(t) {
   for (let i = 0; i < fen.length; i++) if (fen[i][0] <= t && t < fen[i][1]) return fen[i];
   return null;
+}
+
+function frostFenster(t) {
+  for (let i = 0; i < ff.length; i++) if (ff[i][0] <= t && t < ff[i][1]) return true;
+  return false;
 }
 
 function offen() {   // irgendeine Tür bzw. ein Fenster offen (BSM-034.03)
@@ -82,9 +96,11 @@ function entscheiden(t) {
     if (frost) return true;
   }
   if (t === 0) return false;                               // ohne Uhrzeit nur Frostschutz
+  if (!ok && cfg.fe !== null && cfg.fe !== undefined && frostFenster(t)) return true;   // ohne Fühler: Vorhersage
   if (offen()) { if (!tuerSeit) tuerSeit = t; if (t - tuerSeit > cfg.tp * 60) return false; }
   else tuerSeit = 0;
   if (taste > t) return true;                              // Taste: 1 h heizen
+  if (cfg.nf) return cfg.m === "hand" ? (frostEnde ? false : null) : false;   // Anschluss: nur Frostschutz
   if (cfg.m === "hand") return frostEnde ? false : null;   // Frost vorbei: einmal aus, danach nicht anfassen
   if (cfg.m === "aus") return false;
   let f = fenster(t);
@@ -97,8 +113,11 @@ function entscheiden(t) {
   return true;                                             // Zeitplan, Bei Bedarf, Thermostat ohne Fühler
 }
 
-function schalten(soll) {
+function schalten(soll, sofort) {   // ein erst nach dem Startversatz (cfg.vs Minuten), außer sofort (Taste)
+  if (soll !== true || an()) einWarte = 0;
   if (soll === null || soll === an()) return;
+  if (soll && !sofort && cfg.vs && ++einWarte <= cfg.vs) return;
+  einWarte = 0;
   Shelly.call("Switch.Set", { id: 0, on: soll });
 }
 
@@ -155,7 +174,7 @@ Shelly.addStatusHandler(function (ev) {
   let t = jetzt();
   taste = taste > t ? 0 : t + TASTE_S;
   Shelly.emitEvent("baustelle_taste", { bis: taste });
-  if (cfg !== null && still > HB_MAX_MIN) schalten(entscheiden(t));
+  if (cfg !== null && still > HB_MAX_MIN) schalten(entscheiden(t), true);
 });
 
 laden();

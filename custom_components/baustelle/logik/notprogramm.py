@@ -12,6 +12,12 @@ Abbildung der Regelung (logik/regelung) auf das Skript:
 - Frei (Urlaub, freier Feiertag): kein Fenster; mit „absenken“ und Thermostat den ganzen Tag auf `absenk`.
 - Vereinfachungen im Notbetrieb: keine Heizgrenze, kein Lernen (Hysterese statt TPI), keine Zusatzstufe, Frostschutz
   auch bei „frei: alles aus“ (Rückfallebene – lieber warm als eingefroren).
+- Frostschutz ohne Fühler (Audit 0.8.165): Ist im Notbetrieb kein frischer Fühlerwert am Plug, heizt er in den
+  Frost-Fenstern `bs_f` – Stunden, in denen die stündliche Vorhersage unter `frost_aussen` liegt (ohne Einstellung
+  unter `FROST_AUSSEN_NOT`). Reicht so weit wie die Vorhersage.
+- Strom im Notbetrieb (Audit 0.8.165): jeder Plug schaltet um `vs` Minuten versetzt ein (`versatz`), damit nicht alle
+  im selben Augenblick anlaufen; Plugs, die je Anschluss nach Nennleistung nicht mehr unter die Grenze passen, machen
+  im Notbetrieb nur Frostschutz (`nf`, `nur_frost`) – die Plugs wissen nichts voneinander, eine Staffelung gibt es dort nicht.
 - Fenster werden auf `RASTER_MIN` nach außen gerundet (Beginn früher, Ende später), damit „Warm ab“, das sich mit der
   Temperatur verschiebt, nicht alle paar Minuten neu in den Plug geschrieben werden muss (Flash).
 """
@@ -31,6 +37,8 @@ MAX_WERT = 253        # längster KVS-Wert am Plug S Gen3 (BSM-013)
 RASTER_MIN = 15
 TAGE = 7
 LEER = "-"            # leerer Tag (das Skript überspringt Teile ohne drei Zahlen)
+FROST_AUSSEN_NOT = 0.0   # °C: Frost-Fenster ohne Einstellung „Frostschutz ohne Fühler“ (lieber warm als eingefroren)
+VERSATZ_MIN = 1          # Startversatz je Plug im Notbetrieb
 
 Fenster = tuple[int, int, float]   # Unix-Sekunden von, bis, Soll
 
@@ -53,6 +61,9 @@ class Vorgaben:
     tuer_pause_min: int
     temp_nr: int | None
     tuer_nrn: tuple[int, ...] = ()   # Messwerte aller Türen und Fenster am Plug (BSM-034.03)
+    frost_aussen: float | None = None   # Frostschutz ohne Fühler unter dieser Außentemperatur (Frost-Fenster)
+    versatz_min: int = 0                # Startversatz im Notbetrieb (`versatz`)
+    nur_frost: bool = False             # im Notbetrieb nur Frostschutz (`nur_frost`)
 
 
 def modus(v: Vorgaben) -> str:
@@ -118,8 +129,46 @@ def tag_wert(fenster: list[Fenster]) -> str:
     return _text(f)
 
 
-def programm(v: Vorgaben, fenster: Iterable[Fenster], wochentag: Mapping[int, int], jetzt: int) -> dict[str, str]:
-    """KVS-Werte für einen Plug: `bs_cfg` und `bs_p0…bs_p6`.
+def frost_fenster(stunden: Iterable[tuple[int, float]], grenze: float | None, jetzt: int) -> str:
+    """Frost-Fenster „start,ende;…“ (Unix-Sekunden): Stunden der Vorhersage (Beginn, °C) unter `grenze` (None →
+    `FROST_AUSSEN_NOT`), zusammengelegt; vergangene fallen weg, zu lang → die spätesten fallen weg."""
+    g = FROST_AUSSEN_NOT if grenze is None else grenze
+    raus: list[list[int]] = []
+    for beginn, temp in sorted(stunden):
+        if temp >= g or beginn + 3600 <= jetzt:
+            continue
+        if raus and beginn <= raus[-1][1]:
+            raus[-1][1] = max(raus[-1][1], beginn + 3600)
+        else:
+            raus.append([beginn, beginn + 3600])
+    text = ";".join(f"{s},{e}" for s, e in raus)
+    while len(text) > MAX_WERT:
+        text = text.rsplit(";", 1)[0]
+    return text or LEER
+
+
+def versatz(ids: Iterable[str]) -> dict[str, int]:
+    """Startversatz je Plug im Notbetrieb: fest nach Reihenfolge, `VERSATZ_MIN` Minuten auseinander."""
+    return {gid: i * VERSATZ_MIN for i, gid in enumerate(sorted(ids))}
+
+
+def nur_frost(plugs: Iterable[tuple[str, str, float, int]], grenzen: Mapping[str, float]) -> set[str]:
+    """Plugs, die im Notbetrieb nur Frostschutz machen: je Anschluss nach Rang (höher zuerst, dann id) aufsummiert, wer
+    mit seiner Nennleistung nicht mehr unter die Grenze passt. `plugs`: (id, Anschluss, kW, Rang); ohne Grenze alle frei."""
+    raus: set[str] = set()
+    summe: dict[str, float] = {}
+    for gid, a, kw, _ in sorted(plugs, key=lambda p: (-p[3], p[0])):
+        if a not in grenzen:
+            continue
+        summe[a] = summe.get(a, 0.0) + kw
+        if summe[a] > grenzen[a] + 1e-6:
+            raus.add(gid)
+    return raus
+
+
+def programm(v: Vorgaben, fenster: Iterable[Fenster], wochentag: Mapping[int, int], jetzt: int,
+             frost_stunden: Iterable[tuple[int, float]] = ()) -> dict[str, str]:
+    """KVS-Werte für einen Plug: `bs_cfg`, `bs_p0…bs_p6` und `bs_f` (Frost-Fenster, nur mit Frostschutz).
 
     `fenster`: alle Heizfenster der nächsten Tage (Unix-Sekunden, Soll); `wochentag`: Beginn eines Tages (Unix-Sekunden,
     lokale Mitternacht) → Wochentag 0–6, für die Tage, die das Programm abdeckt. Vergangene Fenster fallen weg; ein Fenster
@@ -134,8 +183,9 @@ def programm(v: Vorgaben, fenster: Iterable[Fenster], wochentag: Mapping[int, in
         je_tag[wochentag[beginn]].append(f)
     fe, fa = frost(v)
     werte = {f"bs_p{w}": tag_wert(je_tag.get(w, [])) for w in range(TAGE)}
+    werte["bs_f"] = frost_fenster(frost_stunden, v.frost_aussen, jetzt) if fe is not None else LEER
     cfg: dict[str, object] = {"m": modus(v), "tol": v.toleranz, "fe": fe, "fa": fa, "t": v.temp_nr, "d": list(v.tuer_nrn) or None,
-                              "tp": v.tuer_pause_min}
+                              "tp": v.tuer_pause_min, "vs": v.versatz_min, "nf": 1 if v.nur_frost else 0}
     stand = zlib.crc32(json.dumps([cfg, werte], sort_keys=True).encode()) % 100000
     werte["bs_cfg"] = json.dumps({"v": stand, **cfg}, separators=(",", ":"))
     return werte

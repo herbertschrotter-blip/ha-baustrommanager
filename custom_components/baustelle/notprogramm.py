@@ -52,6 +52,8 @@ from .db.tage import async_tage_rechnen
 from .logik import notprogramm as logik
 from .logik.arbeitszeit import ausnahme_am, bedarf_fenster, frei_gilt
 from .logik.sensoren import kontakte
+from .kern.typen import PRIO
+from .logik.staffel import grenze_kw
 
 if TYPE_CHECKING:
     from .funktionen.heizung import Heizung
@@ -672,6 +674,8 @@ class Notprogramm:
             modus=h.modus(bid), bedarf=bool(e["bedarf"]), toleranz=float(eh["toleranz"]), frost=bool(eh["frost"]),
             frost_grenze=float(eh["frost_grenze"]), frost_aus=None if eh.get("frost_aus") is None else float(eh["frost_aus"]),
             frost_immer=bool(eh.get("frost_immer")), tuer_pause_min=int(eh["tuer_pause_min"]), temp_nr=temp_nr, tuer_nrn=tuple(tuer_nrn or ()),
+            frost_aussen=None if eh.get("frost_aussen") is None else float(eh["frost_aussen"]),
+            versatz_min=self._versatz().get(g.id, 0), nur_frost=g.id in self._nur_frost(),
         )
         soll, modus = h.soll_temperatur(bid), logik.modus(v)
         fenster: list[logik.Fenster] = []
@@ -697,7 +701,21 @@ class Notprogramm:
         for ende in (h.bis("boost_bis", bid, jetzt), h.jetzt_bis(jetzt)):   # Boost, „alle jetzt heizen“
             if ende is not None:
                 fenster.append((int(jetzt.timestamp()), int(ende.timestamp()), soll))
-        return logik.programm(v, fenster, wochentag, int(jetzt.timestamp()))
+        stunden = [(int(t.timestamp()), float(w)) for iso, w in (st.lz.get("wetter_stunden") or {}).items()
+                   if (t := dt_util.parse_datetime(iso)) is not None]
+        return logik.programm(v, fenster, wochentag, int(jetzt.timestamp()), stunden)
+
+    def _versatz(self) -> dict[str, int]:
+        return logik.versatz(g.id for g, _ in self.plugs())
+
+    def _nur_frost(self) -> set[str]:
+        """Plugs, die im Notbetrieb nur Frostschutz machen (Grenze je Anschluss nach Nennleistung, Audit 0.8.165)."""
+        st, s = self.st, self.st.e["staffel"]
+        grenzen = {a["id"]: grenze_kw(float(a["ampere"]), int(a["phasen"]), float(s["nutzbar_prozent"])) - float(a["reserve_kw"])
+                   for a in st.e["anschluesse"]}
+        plugs = [(g.id, st.einstellungen.bereich(g.bereich).get("anschluss") or "", st.nenn_kw(g),
+                  PRIO.get(st.einstellungen.bereich(g.bereich).get("prio") or "normal", 1)) for g, _ in self.plugs()]
+        return logik.nur_frost(plugs, grenzen)
 
     def info(self) -> dict[str, Any]:
         """Für die Diagnose (ohne Adressen)."""

@@ -6,6 +6,7 @@ import json
 from logik.arbeitszeit import Plan
 from logik.notprogramm import (
     LEER, MAX_WERT, Vorgaben, frost, minuten_fenster, modus, programm, stand, tag_wert, verwaist, zusammenfassen, haengt, LEBENSZEICHEN_FRISCH,
+    FROST_AUSSEN_NOT, frost_fenster, nur_frost, versatz,
 )
 
 T0 = 1791158400   # Mo 05.10.2026 00:00 UTC
@@ -69,7 +70,7 @@ def test_programm_je_wochentag() -> None:
         (T0 + 6 * TAG + 6 * H, T0 + 6 * TAG + 12 * H, 10.0),   # So, absenken
     ]
     w = programm(V, fenster, WOCHE, jetzt)
-    assert set(w) == {"bs_cfg"} | {f"bs_p{i}" for i in range(7)}
+    assert set(w) == {"bs_cfg", "bs_f"} | {f"bs_p{i}" for i in range(7)}
     assert w["bs_p0"] == f"{T0 + 6 * H},{T0 + 17 * H},20"
     assert w["bs_p1"] == f"{T0 + TAG + 6 * H},{T0 + TAG + 17 * H},20;{T0 + 2 * TAG - H},{T0 + 2 * TAG + 2 * H},21"
     assert w["bs_p2"] == LEER and w["bs_p6"].endswith(",10")
@@ -156,3 +157,32 @@ def test_haengt_nach_fuenf_minuten_ohne_schalten() -> None:
     assert haengt(None, jetzt)
     assert not haengt(jetzt - LEBENSZEICHEN_FRISCH, jetzt)
     assert haengt(jetzt - LEBENSZEICHEN_FRISCH - timedelta(seconds=1), jetzt)
+
+
+
+# ---------------------------------------------------------------- Audit 0.8.165: Notbetrieb und Strom
+def test_frost_fenster_aus_der_vorhersage() -> None:
+    stunden = [(T0 + i * H, w) for i, w in enumerate([1.0, -4.0, -5.0, -2.0, -3.5, 2.0])]
+    assert frost_fenster(stunden, -3.0, T0) == f"{T0 + H},{T0 + 3 * H};{T0 + 4 * H},{T0 + 5 * H}"
+    assert frost_fenster(stunden, -3.0, T0 + 3 * H) == f"{T0 + 4 * H},{T0 + 5 * H}"   # vergangene fallen weg
+    assert frost_fenster(stunden, -10.0, T0) == LEER
+    assert FROST_AUSSEN_NOT == 0.0 and frost_fenster(stunden, None, T0).startswith(f"{T0 + H},{T0 + 5 * H}")
+    viele = [(T0 + 2 * i * H, -9.0) for i in range(40)]   # jede zweite Stunde: zu lang → die spätesten fallen weg
+    text = frost_fenster(viele, -3.0, T0)
+    assert len(text) <= MAX_WERT and text.startswith(f"{T0},{T0 + H};")
+
+
+def test_programm_mit_frost_fenster_versatz_und_nur_frost() -> None:
+    w = programm(replace(V, frost_aussen=-3.0, versatz_min=2, nur_frost=True), [], WOCHE, T0, [(T0 + H, -5.0)])
+    assert w["bs_f"] == f"{T0 + H},{T0 + 2 * H}"
+    cfg = json.loads(w["bs_cfg"])
+    assert (cfg["vs"], cfg["nf"]) == (2, 1)
+    assert programm(replace(V, frost=False), [], WOCHE, T0, [(T0 + H, -5.0)])["bs_f"] == LEER   # ohne Frostschutz keine
+    assert len(w["bs_cfg"]) <= MAX_WERT
+
+
+def test_versatz_und_nur_frost() -> None:
+    assert versatz(["c", "a", "b"]) == {"a": 0, "b": 1, "c": 2}
+    plugs = [("h1", "a1", 2.0, 1), ("h2", "a1", 2.0, 2), ("h3", "a1", 2.0, 1), ("h4", "x", 9.0, 1)]
+    assert nur_frost(plugs, {"a1": 4.5}) == {"h3"}   # h2 (hoch) zuerst, dann h1; h3 passt nicht mehr; x ohne Grenze
+    assert nur_frost(plugs, {"a1": 10.0}) == set()

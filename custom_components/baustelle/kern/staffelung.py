@@ -92,6 +92,7 @@ def _staffeln(st: Steuerung, jetzt: datetime, soll: SollJeBereich) -> tuple[set[
         lasten.append(
             staffel_logik.Last(
                 id=g.id, anschluss=e.get("anschluss") or "", kw=kw, heizer=schaltet, an=an, gruppe=g.bereich,
+                nenn_kw=st.nenn_kw(g) if schaltet else None,
                 will=bool(schaltet and ein), prio=PRIO.get(e.get("prio") or "normal", 1), **vorrang,
                 an_seit_min=an_seit,
                 aus_seit_min=_minuten_seit(seit, jetzt) if not an and not seit_unbekannt else 1e9,

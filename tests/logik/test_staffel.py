@@ -394,3 +394,31 @@ def test_rangliste_mit_satten_heizkoerpern_im_plan():
     z3 = rang_anzeige([lasten[0], hz("mann", im_plan=True)], {"mann": Warten.ANSCHLUSS_VOLL}, 5)["zeilen"]
     assert {z["id"]: z["zustand"] for z in z3} == {"polier": "heizt", "mann": "wartet"}
     assert rang_anzeige(voll, {}, 5, an=False)["kopf"].startswith("Staffelung aus")
+
+
+# ---------------------------------------------------------------- Audit 0.8.165: harte Grenze nach Nennleistung
+def test_satte_heizer_zaehlen_gegen_die_harte_grenze():
+    """16 A einphasig = 3,68 kW Absicherung. Zwei laufende Heizer (je 2 kW) ziehen gerade nichts, weil ihr Thermostat
+    satt ist – nach Messung wäre Platz für einen dritten, springen aber alle an, wären es 6 kW: er wartet."""
+    a = anschluss("nord", 16, 1, 0.0, 100)
+    assert a.hart_kw == pytest.approx(3.68)
+    satt = [hz("h1", 0.0, an=True, nenn_kw=2.0), hz("h2", 0.0, an=True, nenn_kw=2.0)]
+    e = staffeln([a], [*satt, hz("h3", 2.0, nenn_kw=2.0)], REGELN)
+    assert "h3" not in e.an and e.wartet["h3"] == Warten.ANSCHLUSS_VOLL
+    assert {"h1", "h2"} <= e.an   # abgeworfen wird dafür nicht
+    # ohne Nennleistung (alte Aufrufer) wie bisher nach Messung
+    e = staffeln([a], [hz("h1", 0.0, an=True), hz("h2", 0.0, an=True), hz("h3", 2.0)], REGELN)
+    assert "h3" in e.an
+
+
+def test_harte_grenze_im_rundlauf():
+    """Getauscht wird nur, wenn der Wartende danach auch gegen die harte Grenze passt (Absicherung 3,68 kW)."""
+    a = anschluss("nord", 16, 1, 0.0, 100)
+    laufen = [hz("h1", 0.5, an=True, nenn_kw=2.0, an_seit_min=30, gruppe="c1"),
+              hz("h2", 0.0, an=True, nenn_kw=1.5, an_seit_min=30, gruppe="c2")]
+    # 1,6 kW: nach Messung wäre Platz, nach Nennleistung nicht (5,1 kW) – Tausch gegen h1: 1,5 + 1,6 = 3,1 kW passt
+    e = staffeln([a], [*laufen, hz("h3", 1.6, nenn_kw=1.6, gruppe="c3", wartet_seit_min=20)], REGELN)
+    assert "h3" in e.an and e.wartet.get("h1") == Warten.RUNDLAUF
+    # 2,5 kW: auch nach jedem Tausch zu viel (1,5 + 2,5 bzw. 2,0 + 2,5) – kein Tausch
+    e = staffeln([a], [*laufen, hz("h3", 2.5, nenn_kw=2.5, gruppe="c3", wartet_seit_min=20)], REGELN)
+    assert e.an == {"h1", "h2"} and e.wartet["h3"] == Warten.ANSCHLUSS_VOLL
