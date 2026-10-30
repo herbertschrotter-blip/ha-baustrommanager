@@ -239,7 +239,7 @@ async def test_datenbank_holt_kurzen_neustart_nach(hass: HomeAssistant, baustell
     freezer.tick(timedelta(minutes=3))
     hass.states.async_set("sensor.hk1_energy", "10.3")
     assert await hass.config_entries.async_setup(baustelle.entry_id)
-    await hass.async_block_till_done()
+    await hass.async_block_till_done(wait_background_tasks=True)   # Nachholen liest im Hintergrund (CI langsamer als eine Minute)
     await minute()
     zeilen = sorted((z for z in zeilen_db(hass, "geraet_minute") if z["geraet_id"] == "h1"), key=lambda z: str(z["zeit"]))
     assert sum(z["energie_wh"] or 0 for z in zeilen) == pytest.approx(300.0)
