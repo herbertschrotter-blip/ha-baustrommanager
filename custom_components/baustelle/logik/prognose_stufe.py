@@ -64,7 +64,7 @@ def validiere(
     wape = bias = None
     if energie and ist > 0:
         wape = sum(abs(x.energie_modell_kwh - x.energie_ist_kwh) for x in energie) / ist   # type: ignore[operator]
-        bias = sum(x.energie_modell_kwh - x.energie_ist_kwh for x in energie) / ist          # type: ignore[operator]
+        bias = sum((x.energie_modell_kwh - x.energie_ist_kwh for x in energie), 0.0) / ist          # type: ignore[operator]
     temp = [(x.innen_modell_c - x.innen_ist_c) ** 2 for x in p if x.innen_ist_c is not None and x.innen_modell_c is not None]
     aussen = [x.aussen_c for x in p]
     return Validierung(

@@ -151,9 +151,9 @@ def _verdrahten(hass: HomeAssistant, st: Steuerung, bid: str, geraet: dr.DeviceE
     if typ in ("DOOR", "FEN") and eid:   # BSM-034.03: weitere Tür bzw. Fenster ins Aussehen – pausiert dann auch
         e = st.einstellungen.bereich(bid)
         art = "tuer" if typ == "DOOR" else "fenster"
-        if (neu := sensor_eintragen(e.get("symbol"), art, eid, e.get("tuer"))) is not None:
-            st.einstellung_setzen(("bereiche", bid, "symbol"), neu)
-            nr = next(i + 1 for i, x in enumerate(neu["tueren" if art == "tuer" else "fenster"]) if x["sensor"] == eid)
+        if (symbol := sensor_eintragen(e.get("symbol"), art, eid, e.get("tuer"))) is not None:
+            st.einstellung_setzen(("bereiche", bid, "symbol"), symbol)
+            nr = next(i + 1 for i, x in enumerate(symbol["tueren" if art == "tuer" else "fenster"]) if x["sensor"] == eid)
             return None, f"als {'Tür' if art == 'tuer' else 'Fenster'} {nr} des Containers eingetragen"
     return None, None
 

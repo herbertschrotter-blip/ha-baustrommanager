@@ -12,6 +12,7 @@ des Notprogramms zum Abschalten (Skripte von vor 0.8.115, BSM-034.01).
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from datetime import datetime
 import logging
 from typing import TYPE_CHECKING, Any
@@ -102,7 +103,8 @@ async def async_abgleich(hass: HomeAssistant, st: Steuerung, *, plugs: bool = Fa
     roh = await db.async_ausfuehren(db_inventar.lesen)
     if roh is None:
         return {"nachgetragen": [], "nicht_in_ha": []}
-    jetzt, arbeit, namen, fremd = dt_util.utcnow(), [], [], []
+    jetzt, namen, fremd = dt_util.utcnow(), [], []
+    arbeit: list[Callable[[Any], Any]] = []
     for bid, info in st.bereiche.items():
         if (cid := _container_von(roh, st.entry.entry_id, bid)) is None:
             continue
@@ -111,8 +113,8 @@ async def async_abgleich(hass: HomeAssistant, st: Steuerung, *, plugs: bool = Fa
         fremd += nicht
         for k in nachtragen:
             typ, gid, modell, name = ha[k]
-            arbeit.append(lambda v, k=k, typ=typ, gid=gid, modell=modell, cid=cid: db_inventar.geraet_im_container(
-                v, kennung=k, modell=modell, container_id=cid, geraet_id=gid, jetzt=jetzt, typ=typ))
+            arbeit.append(partial(db_inventar.geraet_im_container, kennung=k, modell=modell, container_id=cid, geraet_id=gid,
+                                  jetzt=jetzt, typ=typ))
             namen.append((bid, f"{name} ({info.name})"))
     if arbeit and await db.async_ausfuehren(lambda v: [f(v) for f in arbeit]) is None:
         _LOGGER.warning("Abgleich Inventar: nicht nachgetragen (%s)", db.fehler)

@@ -94,8 +94,8 @@ def korrektur(zeit: datetime, key: str, betrag: float, grund: str, vorher: Mappi
     Statistik dadurch gesprungen ist (`sprung`, Sensor-Schlüssel → Betrag) – das ist der Ausgleich für Regel 2."""
     if key not in KORRIGIERBAR:
         raise ValueError(f"Zähler {key!r} lässt sich nicht korrigieren")
-    sprung = {k: round(float(n) - float(vorher[k]), STELLEN) for k, n in nachher.items()
-              if ist_zahl(n) and ist_zahl(vorher.get(k)) and abs(float(n) - float(vorher[k])) > 1e-9}
+    sprung = {k: round(float(n or 0.0) - float(vorher[k] or 0.0), STELLEN) for k, n in nachher.items()
+              if ist_zahl(n) and ist_zahl(vorher.get(k)) and abs(float(n or 0.0) - float(vorher[k] or 0.0)) > 1e-9}
     return {"zeit": zeit.astimezone(timezone.utc).isoformat(timespec="seconds"), "key": key, "kwh": round(float(betrag), STELLEN),
             "grund": grund, "von": von, "sprung": sprung}
 

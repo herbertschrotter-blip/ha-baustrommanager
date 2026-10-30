@@ -11,7 +11,9 @@ neuen Container beginnen), Unter-Einträge, Protokoll, am Ende einmal neu laden.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 import logging
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
@@ -125,6 +127,12 @@ def plan(hass: HomeAssistant, st: Steuerung, schritte: list[dict[str, Any]]) -> 
     return aus
 
 
+def _ins_inventar(v: Any, *, kennung: tuple[str, str | None], bereich: str, geraet_id: str, jetzt: datetime) -> dict[str, Any] | None:
+    """Ein Gerät ins Inventar seines Containers (Arbeit für die Datenbank, `_async_inventar`)."""
+    return db_inventar.geraet_im_container(v, kennung=kennung[0], modell=kennung[1], container_id=db_inventar.container_von_bereich(v, bereich),
+                                           geraet_id=geraet_id, jetzt=jetzt)
+
+
 def _kennung(hass: HomeAssistant, schalter: str) -> tuple[str, str | None] | None:
     """Kennung (MAC, sonst HA-Gerät) und Modell des Shelly hinter dem Schalter – wie im Inventar."""
     from ..inventar_geraete import _kennung as kennung  # noqa: PLC0415
@@ -139,19 +147,18 @@ async def _async_inventar(hass: HomeAssistant, st: Steuerung, schritte: list[tup
     Inventar beginnt dort einen. Ohne Datenbank oder bei einem Fehler bleibt HA maßgeblich (Abgleich BSM-034.04)."""
     if (db := hass.data.get(DATA_DB)) is None or not db.bereit:
         return
-    jetzt, arbeit = dt_util.utcnow(), []
+    jetzt = dt_util.utcnow()
+    arbeit: list[Callable[[Any], Any]] = []
     for aktion, sid, daten in schritte:
         if aktion == "entfernen":
-            arbeit.append(lambda v, sid=sid: db_inventar.geraet_entfernt(v, sid, jetzt))
+            arbeit.append(partial(db_inventar.geraet_entfernt, geraet_id=sid, jetzt=jetzt))
             continue
         alt = st.entry.subentries.get(sid)
         if alt is not None and all(alt.data.get(k) == daten.get(k) for k in (CONF_BEREICH, CONF_SCHALTER)):  # type: ignore[union-attr]
             continue
         if (k := _kennung(hass, str(daten[CONF_SCHALTER]))) is None:  # type: ignore[index]
             continue
-        arbeit.append(lambda v, sid=sid, d=daten, k=k: db_inventar.geraet_im_container(
-            v, kennung=k[0], modell=k[1], container_id=db_inventar.container_von_bereich(v, d[CONF_BEREICH]), geraet_id=sid,
-            jetzt=jetzt))
+        arbeit.append(partial(_ins_inventar, kennung=k, bereich=str(daten[CONF_BEREICH]), geraet_id=sid, jetzt=jetzt))  # type: ignore[index]
     if arbeit and await db.async_ausfuehren(lambda v: [f(v) for f in arbeit]) is None:
         _LOGGER.warning("Geräte: Inventar nicht nachgezogen (%s) – der Abgleich holt es nach", db.fehler)
 

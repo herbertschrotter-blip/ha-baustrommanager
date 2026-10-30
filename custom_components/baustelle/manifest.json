@@ -6,6 +6,7 @@
     "history",
     "holiday",
     "logbook",
+    "lovelace",
     "mobile_app",
     "notify",
     "recorder",
@@ -26,5 +27,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/herbertschrotter-blip/ha-baustrommanager/issues",
   "requirements": ["psycopg[binary]==3.3.6"],
-  "version": "0.8.168"
+  "version": "0.8.169"
 }

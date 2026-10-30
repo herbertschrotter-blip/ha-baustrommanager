@@ -231,7 +231,7 @@ def auskuehlen(innen: float, von_m: int, bis_m: int, tau_h: float, aussen: Calla
     return punkte
 
 
-def _bei(punkte: Sequence[tuple[int, float]], m: float) -> float:
+def _bei(punkte: Sequence[tuple[float, float]], m: float) -> float:
     """Wert der Kurve bei Minute `m` (linear zwischen den Punkten; davor der erste, danach der letzte)."""
     if m <= punkte[0][0]:
         return punkte[0][1]
@@ -332,7 +332,7 @@ def rechnen(e: Eingabe) -> Start | None:
     tau_n = int(e.tau[1]) if e.tau else 0
     aussen = _aussen_fn(e, jetzt_m, heute)
     fest = e.fest if e.fest and e.fest.get("tag") == e.tag.isoformat() and e.fest.get("beginn") is not None else None
-    gemeinsam = dict(tag=e.tag, jetzt_m=jetzt_m, ziel_m=ziel_m, a_m=a_m, grenze_m=grenze_m, soll=e.soll, innen_jetzt=e.innen,
+    gemeinsam: dict[str, Any] = dict(tag=e.tag, jetzt_m=jetzt_m, ziel_m=ziel_m, a_m=a_m, grenze_m=grenze_m, soll=e.soll, innen_jetzt=e.innen,
                      tau_h=tau_h, tau_n=tau_n, tau_geschaetzt=not tau_gelernt, vor_min=e.warm.vor_min, max_min=e.warm.max_min,
                      stufen=e.stufen and e.anzahl >= 2, ziel_wand=e.a - e.warm.vor_min,
                      null_utc=datetime.combine(heute, time(), tzinfo=zone).astimezone(UTC), zone=zone)
@@ -524,7 +524,7 @@ def anzeige(s: Start, jetzt: datetime, heute_ende: int | None = None, m2: float 
     av = None if s.aussen_von is None else round(s.aussen_von)
     ab = None if s.aussen_bis is None else round(s.aussen_bis)
     aussen_t = (f"außen laut Vorhersage {zahl(av, 0)} → {zahl(ab, 0)} °C" if av is not None and ab is not None and av != ab
-                else f"außen etwa {zahl(av if av is not None else ab, 0)} °C" if av is not None or ab is not None else None)
+                else f"außen etwa {zahl(av if av is not None else (ab or 0), 0)} °C" if av is not None or ab is not None else None)
     hk = _heizkoerper(s.anzahl)
     spaet_min = s.warm_m - s.ziel_m
     if s.laeuft:
@@ -627,10 +627,10 @@ def _schritte(s: Start, aussen_t: str | None, hk: str, m2: float | None, spaet_m
     else:
         wie = "1 Heizkörper" + (" reicht" if s.stufen and not s.zusatz else "")
     if s.laeuft and s.jetzt_m >= s.ziel_m:   # Ziel vorbei: was beim Start gerechnet war
-        auf = {"k": "auf", "t": "Aufheizen", "wert": f"≈ {dauer(max(0, s.warm_m - s.beginn_m))}",
+        auf: dict[str, Any] = {"k": "auf", "t": "Aufheizen", "wert": f"≈ {dauer(max(0, s.warm_m - s.beginn_m))}",
                "rechnung": f"{zahl(s.innen_start)} → {zahl(s.soll)} °C mit {zahl(s.rate)} °C/h · {wie}",
                "marke": rate_marke[0], "marke_t": rate_marke[1]}
-        warm = {"k": "warm", "t": "Warm", "wert": f"≈ {s.uhr(s.warm_m)}", "rechnung": "gerechnet beim Start",
+        warm: dict[str, Any] = {"k": "warm", "t": "Warm", "wert": f"≈ {s.uhr(s.warm_m)}", "rechnung": "gerechnet beim Start",
                 "marke": None, "marke_t": None, "ton": "ergebnis"}
         return [kuehl, ziel, auf, warm] + _frueher_kachel(s)
     if s.laeuft:

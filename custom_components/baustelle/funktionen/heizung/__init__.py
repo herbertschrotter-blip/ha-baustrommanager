@@ -24,6 +24,7 @@ from ...const import ART_CONTAINER, CONF_HEIZUNG, HEIZROLLEN, ROLLE_HEIZKOERPER,
 from ...logik import bedarf as bedarf_logik, lernen, soll as soll_logik, stufen
 from ...logik import prognose_merkmale, regen as regen_logik, sensoren as sensor_logik, warnungen as warn_logik
 from ...logik.arbeitszeit import HeizRegeln, Plan, WarmAb
+from ...logik.prognose_typen import Regelungsart
 from ...logik import regelung
 from ...logik.regelung import LageContainer, Soll, SollGrund
 from ..basis import Funktion, zeit
@@ -124,7 +125,7 @@ class Heizung(Funktion):
         info = self.st.bereiche.get(bid)
         return regelung.modus_von(self.st.einstellungen.bereich(bid), bool(info is not None and info.fuehler)) or "plan"
 
-    def prognose_kontext(self, bid: str) -> tuple[str, str]:
+    def prognose_kontext(self, bid: str) -> tuple[Regelungsart, str]:
         """Regelungsart und Konfigurations-ID eines Containers für die Prognose V2 (BSM-033.06, `logik/prognose_merkmale`)."""
         info = self.st.bereiche.get(bid)
         art = prognose_merkmale.regelungsart(self.modus(bid), bool(info is not None and info.fuehler))

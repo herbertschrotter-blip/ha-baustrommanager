@@ -76,8 +76,8 @@ class Lauf:
                     str(d.get("status") or "geplant"), float(d.get("schaetzung_eur") or 0.0),   # type: ignore[arg-type]
                     None if d.get("kosten_eur") is None else float(d["kosten_eur"]),   # type: ignore[arg-type]
                     d.get("grund") or None, date.fromisoformat(str(d["ende"])) if d.get("ende") else None,   # type: ignore[arg-type]
-                    nachweis if nachweis in THERMOSTAT_NACHWEISE else "unbekannt",   # type: ignore[arg-type]
-                    stellung if stellung in THERMOSTATSTELLUNGEN else "unbekannt",   # type: ignore[arg-type]
+                    nachweis if nachweis in THERMOSTAT_NACHWEISE else "unbekannt",
+                    stellung if stellung in THERMOSTATSTELLUNGEN else "unbekannt",
                     datetime.fromisoformat(str(d["annahme_am"])) if d.get("annahme_am") else None,
                     str(d["konfiguration_id"]) if d.get("konfiguration_id") else None,
                     tuple(str(b) for b in belege) if isinstance(belege, (list, tuple)) else (),

@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
+from functools import partial
 import logging
 from typing import Any
 
@@ -473,19 +474,22 @@ class Steuerung:
         wetter = self.daten.wetter
         soll: SollJeBereich = {}
         heil: set[str] = set()
+
+        def soll_von(f: Funktion) -> None:
+            soll.update(f.soll(jetzt, wetter))
+
         for f in self.funktionen:
             self.ohne_soll = set()
-            if (not f.aktiv() or self._sicher(f"soll:{f.name}", lambda f=f: soll.update(f.soll(jetzt, wetter)))) \
-                    and not self.ohne_soll:
+            if (not f.aktiv() or self._sicher(f"soll:{f.name}", partial(soll_von, f))) and not self.ohne_soll:
                 heil.add(f.name)
         try:
             an_set, ziel = self._staffeln(jetzt, soll)
             if self.automatik:
                 for f in self.funktionen:
-                    self._sicher(f"nach_soll:{f.name}", lambda f=f: f.nach_soll(soll))
+                    self._sicher(f"nach_soll:{f.name}", partial(f.nach_soll, soll))
                 self._schalten_alle(jetzt, soll, an_set, ziel)
                 for f in self.funktionen:
-                    self._sicher(f"nach_schalten:{f.name}", lambda f=f: f.nach_schalten(jetzt, wetter))
+                    self._sicher(f"nach_schalten:{f.name}", partial(f.nach_schalten, jetzt, wetter))
             elif any(f.aktiv() and f.schaltet_ohne_automatik() for f in self.funktionen):
                 # Automatik aus, aber eine Funktion schaltet trotzdem: ziel enthält nur, was ihr `soll` dann noch schalten will
                 self._schalten_alle(jetzt, soll, an_set, ziel)

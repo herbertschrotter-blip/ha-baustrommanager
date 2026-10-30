@@ -7,15 +7,21 @@ on:
     - cron: "0 4 * * 1"   # montags; Versionen fest angeheftet, Anheben von Hand
   workflow_dispatch:
 
+concurrency:
+  group: pruefen-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hassfest:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3  # master, Stand 2026-09-30
 
   hacs:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: hacs/action@22.5.0
         with:
@@ -23,6 +29,7 @@ jobs:
 
   typen:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

@@ -357,7 +357,7 @@ def preis_fn(preise: Sequence[PreisIntervall]) -> Callable[[datetime], float | N
 def _art(arten: set[str]) -> MitteArt:
     for a in ("keine", "haltebedarf", "duty"):
         if a in arten:
-            return a   # type: ignore[return-value]
+            return a
     return "verbrauch"
 
 
@@ -503,7 +503,7 @@ class Aggregat:
         s = self._s.get((seite, lauf, i, b))
         if s is None or s.dauer < noetig - 1e-6 or getattr(s, "n" + feld[-1]) or (euro and s.np):
             return None
-        return basis + getattr(s, feld)
+        return float(basis + getattr(s, feld))
 
     def _summe(self, seite: str, lauf: str, i: int, feld: str) -> tuple[float | None, list[str]]:
         werte, fehlend = 0.0, []
@@ -557,7 +557,8 @@ class Aggregat:
             gruende=tuple(gruende), teil_mitte_kwh=teil)
 
     def _ist_summen(self, i: int) -> tuple[float, float | None]:
-        baseline, sonder = 0.0, 0.0
+        baseline = 0.0
+        sonder: float | None = 0.0
         for b in self.bereiche:
             if (s := self._ist.get((i, b))) is not None:
                 baseline += s.baseline

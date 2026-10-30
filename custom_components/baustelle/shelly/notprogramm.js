@@ -19,11 +19,15 @@
 // Grenzen am Gerät (BSM-013): höchstens 5 gleichzeitige Aufrufe je Skript – hier höchstens zwei; Arbeitsspeicher
 // für alle Skripte zusammen knapp (Plug S Gen3) – Fenster als Zahlenlisten, keine großen Objekte.
 
-let VERSION = 7;
+let VERSION = 8;
 let HB_MAX_MIN = 15;        // Minuten ohne Lebenszeichen → Notbetrieb (gezählt, braucht keine Uhrzeit)
 let FUEHLER_MAX_S = 1800;   // älterer Fühlerwert gilt als weg → im Thermostat wie Zeitplan
 let TASTE_S = 3600;         // Taste: 1 h heizen
 let BUCH_N = 28;            // Schlüssel im Stundenbuch (28 × 6 h = 7 Tage)
+
+// Ganz oben: Die Shelly-Integration liest nur die ersten 5120 Zeichen eines Skripts und legt nur für die Ereignisse, die
+// sie darin findet, die Event-Entität an (Taste in HA, BSM-018). Steht der Aufruf weiter unten, fehlt sie (Audit 0.8.165).
+function tasteMelden(bis) { Shelly.emitEvent("baustelle_taste", { bis: bis }); }
 
 let cfg = null, fen = [], ff = [], still = 0, nbSeit = 0, frost = false, taste = 0, tuerSeit = 0, einWarte = 0;
 let bStunde = 0, bE0 = -1, bSek = 0, bTs = 0, bTn = 0, bTuer = 0;
@@ -173,7 +177,7 @@ Shelly.addStatusHandler(function (ev) {
   if (!ev || ev.component !== "switch:0" || !ev.delta || ev.delta.source !== "button" || ev.delta.output === undefined) return;
   let t = jetzt();
   taste = taste > t ? 0 : t + TASTE_S;
-  Shelly.emitEvent("baustelle_taste", { bis: taste });
+  tasteMelden(taste);
   if (cfg !== null && still > HB_MAX_MIN) schalten(entscheiden(t), true);
 });
 

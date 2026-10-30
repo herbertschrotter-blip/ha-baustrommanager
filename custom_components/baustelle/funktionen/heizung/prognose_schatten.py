@@ -277,7 +277,7 @@ def _modell(m: ContainerModelle | None) -> dict[str, Any] | None:
         mit_d = {"methode": mit.methode, "h_kw_k": _z(mit.h_kw_k, 5), "unten": _z(mit.h_unten_kw_k, 5),   # type: ignore[union-attr]
                  "oben": _z(mit.h_oben_kw_k, 5)}   # type: ignore[union-attr]
     else:
-        mit_d = {"methode": "duty", "duty": _z(mit.duty, 4), "tage": mit.tage}   # type: ignore[union-attr]
+        mit_d = {"methode": "duty", "duty": _z(mit.duty, 4), "tage": mit.tage}
     o = m.ohne
     return {"mit": mit_d, "ohne": {"methode": o.methode, "t_max_c": _z(o.t_max_c, 2),
                                    "h_kw_k": _z(o.h.h_kw_k, 5) if o.h is not None else None, "thermostat": o.thermostat_nachweis}}

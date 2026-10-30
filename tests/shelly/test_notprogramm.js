@@ -101,7 +101,7 @@ function mitFuehler(wert) { return (p) => fuehler(p, 202, typeof wert === 'funct
 fall('Programm wird beim Start mit einem Aufruf geladen', () => {
   const p = plug({ kvs: { ...GRUND, bs_p1: fenster([30, 42, 21]), anderes: 'x' } });
   const a = p.hb();
-  gleich([a.v, a.programm, a.fenster], [7, 1, 2], 'hb-Antwort (Version, Programm, Fenster)');
+  gleich([a.v, a.programm, a.fenster], [8, 1, 2], 'hb-Antwort (Version, Programm, Fenster)');
   gleich(p.maxOffen, 1, 'gleichzeitige Aufrufe beim Laden');
   return p;
 });

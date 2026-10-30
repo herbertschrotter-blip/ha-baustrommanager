@@ -27,6 +27,7 @@ const ergebnis = await build({
   sourcemap: false,
   write: false,
   absWorkingDir: hier,
+  preserveSymlinks: true,      // tools/deploy.sh leiht node_modules im git worktree per Verknüpfung – Pfade im Bundle gleich
   define: { __BAUSTELLE_VERSION__: JSON.stringify(version) },
   banner: { js: '// Seite „Baustelle“ – gebaut mit esbuild aus custom_components/baustelle/frontend/src (nicht von Hand ändern, BSM-022)' },
   logLevel: 'warning',

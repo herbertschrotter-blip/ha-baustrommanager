@@ -8,7 +8,7 @@ den Plan), Plan-Chip und Dialog lesen dasselbe Ergebnis. Je Minute und Eingabe h
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.util import dt as dt_util
 
@@ -102,7 +102,7 @@ def _vorhersage_gelesen(hz: Heizung) -> tuple[tuple[datetime, float], ...]:
     roh = hz.st.lz.get("wetter_stunden") or {}
     alt = hz._vorhersage_cache
     if alt is not None and alt[0] is roh and alt[1] == len(roh):
-        return alt[2]
+        return cast("tuple[tuple[datetime, float], ...]", alt[2])
     neu = _vorhersage(hz)
     hz._vorhersage_cache = (roh, len(roh), neu)
     return neu
@@ -130,7 +130,7 @@ def start(hz: Heizung, bid: str, jetzt: datetime | None = None) -> start_logik.S
     schnell = (hz._start_runde, jetzt, innen, aussen, hz.soll_temperatur(bid), id(st.lz.get("wetter_stunden")))
     alt = hz._start_cache.get(bid)
     if alt is not None and alt[0] == schnell:
-        return alt[2]
+        return cast("start_logik.Start | None", alt[2])
     hz.start_eingaben += 1
     e, h = st.einstellungen.bereich(bid), st.e["heizung"]
     heute, minute = jetzt.date(), jetzt.hour * 60 + jetzt.minute
@@ -157,7 +157,7 @@ def start(hz: Heizung, bid: str, jetzt: datetime | None = None) -> start_logik.S
                len(eingabe.verlauf), eingabe.verlauf[-1][0] if eingabe.verlauf else None)
     if alt is not None and alt[1] == zeichen:
         hz._start_cache[bid] = (schnell, zeichen, alt[2])
-        return alt[2]
+        return cast("start_logik.Start | None", alt[2])
     ergebnis = start_logik.rechnen(eingabe)
     hz.start_gerechnet += 1
     hz._start_cache[bid] = (schnell, zeichen, ergebnis)

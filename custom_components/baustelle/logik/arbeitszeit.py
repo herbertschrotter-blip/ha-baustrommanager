@@ -489,7 +489,7 @@ def abweichung(mit: Plan | None, ohne: Plan | None) -> dict[str, Any]:
     abweicht – `normal` {start, ende} (None = normal frei), `teile` [[von, bis, „mehr“ | „weniger“]] (mehr = zusätzlich
     geheizt, weniger = entfällt) und `diff_min` (mehr − weniger). Die Seite legt die Teile nur über die Spur."""
     m, o = _spannen(mit), _spannen(ohne)
-    teile = [[a, b, "mehr"] for a, b in _ohne(m, o)] + [[a, b, "weniger"] for a, b in _ohne(o, m)]
+    teile: list[list[Any]] = [[a, b, "mehr"] for a, b in _ohne(m, o)] + [[a, b, "weniger"] for a, b in _ohne(o, m)]
     teile.sort(key=lambda t: t[0])
     return {"normal": {"start": ohne.start, "ende": ohne.ende} if ohne is not None else None, "teile": teile,
             "diff_min": sum((t[1] - t[0]) * (1 if t[2] == "mehr" else -1) for t in teile)}

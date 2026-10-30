@@ -447,7 +447,7 @@ def _pulse(minuten: Sequence[BereichIntervall], ids: Sequence[str], r: PrognoseR
                     p_ref = g.p_ref
                 if (_energie_ok(g) and g.strom_belegt and g.sekunden_ein is not None and g.sekunden_strom is not None
                         and g.sekunden_ein >= d and g.sekunden_strom >= d and d > 0):
-                    voll.append(g.energie_wh / 1000 / (d / 3600))
+                    voll.append((g.energie_wh or 0.0) / 1000 / (d / 3600))   # _energie_ok: nie None
         if p_ref is None or p_ref.kw <= 0:
             fehler.append("p_ref_fehlt")
         elif len(voll) < r.puls_minuten_min:
@@ -734,10 +734,10 @@ def _bilanz(s: StartMerkmal, liste: Sequence[_Bewertet], i: int, r: PrognoseRege
     teil = liste[i:ende + 1]
     ms = [m for m, _, _ in teil]
     schluss = [m.innen_c for m in ms if m.zeit.von >= ms[-1].zeit.bis - timedelta(minutes=r.start_vorlauf_min)]
-    x = sum(max(0.0, m.innen_c - m.aussen_c) * _dauer_s(m) / 3600 for m in ms)   # type: ignore[operator]
-    e = sum(g.energie_wh for m in ms for g in m.geraete if _energie_ok(g)) / 1000
+    x = sum((max(0.0, m.innen_c - m.aussen_c) * _dauer_s(m) / 3600 for m in ms), 0.0)   # type: ignore[operator]
+    e = sum((g.energie_wh or 0.0 for m in ms for g in m.geraete if _energie_ok(g)), 0.0) / 1000
     q = fenster_qualitaet(ms, [(k, q) for _, k, q in teil], r)
-    return StartBilanz(s, Intervall(ms[0].zeit.von, ms[-1].zeit.bis), median(schluss) - s.innen_start_c,  # type: ignore[arg-type,operator]
+    return StartBilanz(s, Intervall(ms[0].zeit.von, ms[-1].zeit.bis), median(schluss) - s.innen_start_c,  # type: ignore[type-var,operator]
                        x, e, q)
 
 
@@ -813,7 +813,7 @@ def _tag(  # noqa: C901, PLR0912, PLR0915 – eine Tagesbilanz, Schritt für Sch
         h = d / 3600
         exp = _exposition(m, k, q)
         gem = _gemeinsam(m, q)
-        e_kwh = sum(x.energie_wh for x in m.geraete if _energie_ok(x)) / 1000
+        e_kwh = sum((x.energie_wh or 0.0 for x in m.geraete if _energie_ok(x)), 0.0) / 1000
         ist += e_kwh
         arten[k.art] += e_kwh
         for gid in geraete_tag:

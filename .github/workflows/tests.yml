@@ -4,9 +4,15 @@ on:
   push:
   pull_request:
 
+# Audit 0.8.165: ein neuer Push bricht den alten Lauf desselben Branches ab; hängt etwas, nach 45 min Schluss
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     # Phase 8 (BSM-026): PostgreSQL mit TimescaleDB für den zweiten Lauf der Integrationstests (ohne Passwort, nur im Job)
     services:
       postgres:

@@ -23,6 +23,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Connection, Insert, Table
@@ -81,13 +82,19 @@ def einfuegen(v: Connection, tabelle: str, zeilen: list[dict[str, Any]]) -> None
     v.execute(insert(metadata.tables[tabelle]), zeilen)
 
 
+def _einmal(werk: Werk, v: Connection) -> bool:
+    """Ein Vorgang für sich (`_einzeln`): True, wenn er durchlief."""
+    werk(v)
+    return True
+
+
 def ohne_doppelte(v: Connection, tabelle: Table) -> Insert:
     """Einfügen, das eine schon vorhandene Zeile (gleicher Schlüssel) überspringt statt zu scheitern."""
     if v.dialect.name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert   # noqa: PLC0415
-    else:
-        from sqlalchemy.dialects.sqlite import insert   # noqa: PLC0415
-    return insert(tabelle).on_conflict_do_nothing()
+        from sqlalchemy.dialects.postgresql import insert as pg_insert   # noqa: PLC0415
+        return pg_insert(tabelle).on_conflict_do_nothing()
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert   # noqa: PLC0415
+    return sqlite_insert(tabelle).on_conflict_do_nothing()
 
 
 def datenfehler(err: BaseException | None) -> bool:
@@ -203,7 +210,7 @@ class Schreiber:
         abgelehnt: list[Werk] = []
         grund: BaseException | None = None
         for i, werk in enumerate(werke):
-            if await self._db.async_ausfuehren(lambda v, w=werk: w(v) or True) is not None:
+            if await self._db.async_ausfuehren(partial(_einmal, werk)) is not None:
                 continue
             if not datenfehler(self._db.letzter_fehler):   # Verbindung weg: Rest später, in Reihenfolge
                 await self._ablehnen(abgelehnt, grund)
@@ -241,6 +248,7 @@ class Schreiber:
         arbeiten = [w for w in werke if isinstance(w, Arbeit)] if self.puffer is not None else []
         bleiben = [w for w in werke if not isinstance(w, Arbeit)] if self.puffer is not None else werke
         if arbeiten:
+            assert self.puffer is not None   # nur mit Pufferdatei gibt es `arbeiten`
             zeilen = [zeile_von(a) for a in arbeiten]
             await self._db.hass.async_add_executor_job(self._anhaengen, self.puffer, zeilen)
             self.ausgelagert += len(arbeiten)

@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
+from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.config_entries import ConfigEntry
@@ -394,7 +395,7 @@ async def _gespart(hass: HomeAssistant, quellen: list[Quelle], jetzt: list[dict[
             g = await _gespart_tage(hass, x, zr.von, zr.bis, preis_sim)
             teile.append(a.gespart_zusammen([g], zr.n, [(zr.von + timedelta(days=i)).month - 1 for i in range(len(g["mit_kwh"]))]) if g else None)
         else:
-            preise = preis_sim if preis_sim is not None else a.perioden_preise(zr, lambda t, x=x: preise_logik.preis_am(x.preise, t))
+            preise = preis_sim if preis_sim is not None else a.perioden_preise(zr, partial(preise_logik.preis_am, x.preise))
             teile.append(a.gespart_reihen(s["mit_je"], s["ohne_je"], preise))
     return a.gespart_zusammen(teile, zr.n)
 

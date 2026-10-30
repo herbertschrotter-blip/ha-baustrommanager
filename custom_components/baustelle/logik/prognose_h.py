@@ -29,10 +29,11 @@ from __future__ import annotations
 
 from bisect import bisect_left
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from statistics import median
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from .prognose_merkmale import (
@@ -128,12 +129,12 @@ def _trend_k_h(ms: Sequence[BereichIntervall]) -> float:
     ys = [m.innen_c for m in ms]
     mx, my = sum(xs) / len(xs), sum(ys) / len(ys)   # type: ignore[arg-type]
     sxx = sum((x - mx) ** 2 for x in xs)
-    return 0.0 if sxx == 0 else sum((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)) / sxx   # type: ignore[operator]
+    return 0.0 if sxx == 0 else sum(((x - mx) * (y - my) for x, y in zip(xs, ys, strict=True)), 0.0) / sxx   # type: ignore[operator]
 
 
-def _mittel(ms: Sequence[BereichIntervall], wert) -> float:   # noqa: ANN001 – Zugriff auf ein Feld
+def _mittel(ms: Sequence[BereichIntervall], wert: Callable[[BereichIntervall], Any]) -> float:   # Episodenminuten: belegt
     dauer = sum(_h(m) for m in ms)
-    return sum(wert(m) * _h(m) for m in ms) / dauer
+    return float(sum(wert(m) * _h(m) for m in ms) / dauer)
 
 
 def bewerte_fenster(  # noqa: C901, PLR0912 – die Kriterien §7.1 der Reihe nach
@@ -145,8 +146,8 @@ def bewerte_fenster(  # noqa: C901, PLR0912 – die Kriterien §7.1 der Reihe na
     r = regeln
     ms = [m for m, _, _ in block]
     dauer_h = sum(_h(m) for m in ms)
-    energie = sum(g.energie_wh for m in ms for g in m.geraete if energie_ok(g)) / 1000
-    x = sum(max(0.0, m.innen_c - m.aussen_c) * _h(m) for m in ms)   # type: ignore[operator]
+    energie = sum((g.energie_wh or 0.0 for m in ms for g in m.geraete if energie_ok(g)), 0.0) / 1000
+    x = sum((max(0.0, m.innen_c - m.aussen_c) * _h(m) for m in ms), 0.0)   # type: ignore[operator]
     innen = [m.innen_c for m in ms]
     gr: list[str] = []
     soll_mittel = None
@@ -167,19 +168,19 @@ def bewerte_fenster(  # noqa: C901, PLR0912 – die Kriterien §7.1 der Reihe na
     if anfang and schluss and abs(_mittel(anfang, lambda m: m.innen_c) - _mittel(schluss, lambda m: m.innen_c)) \
             > r.randmittel_diff_max_k + EPS:
         gr.append("randmittel")
-    if _mittel(ms, lambda m: m.innen_c - m.aussen_c) < r.innen_aussen_min_k - EPS:
+    if _mittel(ms, lambda m: m.innen_c - m.aussen_c) < r.innen_aussen_min_k - EPS:   # type: ignore[operator]
         gr.append("innen_aussen_zu_klein")
     if sollnaehe and soll_mittel is not None:
-        nah = sum(_h(m) for m in ms if abs(m.innen_c - m.soll_c) <= r.sollnaehe_max_k + EPS)   # type: ignore[operator]
+        nah = sum((_h(m) for m in ms if abs(m.innen_c - m.soll_c) <= r.sollnaehe_max_k + EPS), 0.0)   # type: ignore[operator]
         if nah / dauer_h < r.sollnaehe_anteil_min - EPS:
             gr.append("sollnaehe")
     ids = sorted({g.geraet_id for m in ms for g in m.geraete})
-    refs = {}
+    refs: dict[str, Any] = {}
     for m in ms:
         for g in m.geraete:
             refs.setdefault(g.geraet_id, g.p_ref)
     p_max = sum(p.kw for p in refs.values() if p is not None) if ids and all(
-        refs.get(i) is not None and refs[i].kw > 0 for i in ids) else None   # type: ignore[union-attr]
+        refs.get(i) is not None and refs[i].kw > 0 for i in ids) else None
     if p_max is None:
         gr.append("p_ref_fehlt")
     else:
@@ -245,7 +246,7 @@ def _grundwechsel_dulden(liste: list[Bewertet], regeln: PrognoseRegeln) -> set[i
 
 
 def episoden(
-    liste: list[Bewertet], regeln: PrognoseRegeln, ok, neu,   # noqa: ANN001 – Prädikate je Minute
+    liste: Sequence[Bewertet], regeln: PrognoseRegeln, ok: Callable[[int], bool], neu: Callable[[int], bool],
     beobachtet_ab: datetime | None = None,
 ) -> list[tuple[int, int, bool]]:
     """Episoden (Anfang, Ende exklusiv, Anker bekannt) aus Minuten, die `ok(i)` erfüllen; `neu(i)` erzwingt einen
@@ -271,8 +272,8 @@ def episoden(
     return aus
 
 
-def _bloecke(liste: Sequence[Bewertet], beginne: Sequence[datetime], s: int, e: int, t0: datetime,   # noqa: ANN202
-             vorlauf: timedelta, laenge: timedelta):
+def _bloecke(liste: Sequence[Bewertet], beginne: Sequence[datetime], s: int, e: int, t0: datetime,
+             vorlauf: timedelta, laenge: timedelta) -> Iterator[tuple[Sequence[Bewertet], Sequence[Bewertet]]]:
     """Nicht überlappende Blöcke [a, b) nach dem Vorlauf ab dem Anker `t0`; Restblock verworfen. Blöcke, deren Vorlauf
     vor dem ersten Minutenbeginn der Episode in der Eingabe liegt (Anker aus einem früheren Abschnitt), entfallen.
     `beginne`: Minutenbeginne des Containers (einmal je Container gebaut)."""

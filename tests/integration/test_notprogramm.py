@@ -658,3 +658,10 @@ async def test_frost_fenster_versatz_und_nur_frost_im_programm(hass: HomeAssista
     await np.async_runde()
     nf = sorted(json.loads(p.kvs["bs_cfg"])["nf"] for p in plugs.values())
     assert nf == [0, 1], nf
+
+
+def test_taste_ereignis_in_den_ersten_5120_zeichen() -> None:
+    """Audit 0.8.165: Die Shelly-Integration sucht `Shelly.emitEvent` nur in den ersten 5120 Zeichen des Skripts – sonst
+    gibt es die Event-Entität der Taste nicht (seit 10.10. nicht verfügbar)."""
+    _, code = skript_lesen()
+    assert 0 <= code.find('Shelly.emitEvent("baustelle_taste"') < 5120 - 40

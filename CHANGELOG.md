@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.169] – 2026-10-30
+
+Prozess (Audit 0.8.165, Paket 4) und Taste am Plug:
+
+- Taste am Plug („1 h heizen“): Die Event-Entitäten `event.*_baustelle` waren seit 10.10. nicht verfügbar. Die
+  Shelly-Integration liest nur die ersten 5120 Zeichen eines Skripts und legt die Entität nur für Ereignisse an, die sie
+  darin findet – das Skript ist gewachsen, der Aufruf stand dahinter. Er steht jetzt ganz oben (Skript Version 8). Die
+  Entität kommt zurück, sobald die Shelly-Integration das neue Skript gelesen hat (nach dem Einspielen ins Plug und dem
+  nächsten HA-Neustart).
+- CI wieder grün: hassfest (`lovelace` in den Abhängigkeiten), mypy --strict ohne Fehler (Typangaben, keine
+  Verhaltensänderung), der wacklige Panel-Test aus 0.8.165 wartet jetzt auf das Ergebnis statt 30 ms. Die Workflows haben Zeitlimits und brechen einen
+  älteren Lauf desselben Branches ab.
+- `tools/deploy.sh` spielt nur noch aus einem sauberen, eingecheckten Stand ein, prüft Seite und Version (`--pruefen`)
+  und bricht ab, wenn die CI des Commits rot ist (`DEPLOY_TROTZ_CI=1` übergeht das). Der eingespielte Commit steht in
+  `custom_components/baustelle/.ausgeliefert`. Aus einem git worktree leiht es sich das Bauwerkzeug des Haupt-Checkouts.
+- `docs/betrieb.md` auf den Stand gebracht (PostgreSQL im Pilot, Einspielen mit CI, eingespielter Stand).
+
 ## [0.8.168] – 2026-10-30
 
 Zahlen stimmen (Audit 0.8.165, Paket 3):

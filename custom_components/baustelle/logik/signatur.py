@@ -92,13 +92,14 @@ def berechnen(tage: Iterable[Tag]) -> Signatur:
             best = (fit[2], g, fit[0], fit[1])
     if best is None:
         return Signatur("unsicher", n, "kein Zusammenhang mit der Außentemperatur")
-    sse, grenze, grundlast, steigung = best
+    sse, g_best, grundlast, steigung = best
+    grenze: float | None = g_best
     bezug: float | None = None
     p = 3
-    if grenze >= max(t):
+    if g_best >= max(t):
         # Grenze nicht bestimmbar → Gerade; dieselbe Fehlerquadratsumme, nur ein Parameter weniger
         bezug, p = max(t), 2
-        grundlast += steigung * (grenze - bezug)
+        grundlast += steigung * (g_best - bezug)
         grenze = None
     mittel = sum(y) / n
     rmse = sqrt(sse / (n - p))

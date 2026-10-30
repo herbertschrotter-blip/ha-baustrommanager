@@ -31,12 +31,11 @@ from .prognose_h import (
     Bewertet,
     ZyklenZaehler,
     bewerte_fenster,
-    bewerten,
     episoden,
     fensterlaenge_min,
     schaetzung_aus_fenstern,
 )
-from .prognose_merkmale import LAUF_BESTAETIGT, MINUTE_S, Bewertung, TYP_KONVEKTOR, energie_ok, ist_gesperrt, nachlauf_min
+from .prognose_merkmale import LAUF_BESTAETIGT, MINUTE_S, Bewertung, bewerten, TYP_KONVEKTOR, energie_ok, ist_gesperrt, nachlauf_min
 from .prognose_regeln import PrognoseRegeln
 from .prognose_typen import (
     BaselineMetadaten,
@@ -111,13 +110,15 @@ def plateaus(
     bestaetigt = {l.lauf_id: l for l in laeufe if l.status in LAUF_GEZAEHLT}
     aus: list[Fenster] = []
     for liste in (bewertet if bewertet is not None else bewerten(minuten, regeln)).values():
-        def neu(i: int, liste: list[Bewertet] = liste) -> bool:
+        def neu(i: int, liste: Sequence[Bewertet] = liste) -> bool:
             a, b = liste[i - 1][0], liste[i][0]
             return (a.zeit.bis != b.zeit.von or a.kontext.baseline_lauf_id != b.kontext.baseline_lauf_id
                     or a.kontext.konfiguration_id != b.kontext.konfiguration_id)
 
-        for s, e, anker in episoden(liste, regeln, lambda i, liste=liste: _b_minute(liste[i], bestaetigt), neu,
-                                    beobachtet_ab):
+        def ok(i: int, liste: Sequence[Bewertet] = liste) -> bool:
+            return _b_minute(liste[i], bestaetigt)
+
+        for s, e, anker in episoden(liste, regeln, ok, neu, beobachtet_ab):
             if not anker:
                 continue
             erste = liste[s][0]
@@ -155,7 +156,7 @@ def h_ohne(o: OhneSchaetzung) -> float | None:
 def _thermostat(nachweise: Sequence[ThermostatNachweis]) -> ThermostatNachweis:
     for n in ("geaendert", "unbekannt", "angenommen"):
         if n in nachweise:
-            return n   # type: ignore[return-value]
+            return n
     return "bestaetigt" if nachweise else "unbekannt"
 
 

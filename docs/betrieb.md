@@ -1,7 +1,7 @@
 # Betriebsanleitung Baustelle
 
 Für eine zweite Person, die den Baustrommanager ohne Claude betreuen soll: einspielen, sichern, wiederherstellen und
-was bei Störungen zu tun ist (BSM-027). Stand 0.8.105 (08.10.2026). Technische Einzelheiten: `README.md`, Datenbank
+was bei Störungen zu tun ist (BSM-027). Stand 0.8.169 (30.10.2026). Technische Einzelheiten: `README.md`, Datenbank
 `docs/bauplan-datenbank.md`, Schnittstellen `docs/api-datenbank.md`.
 
 ## 1. Was läuft wo
@@ -12,11 +12,12 @@ was bei Störungen zu tun ist (BSM-027). Stand 0.8.105 (08.10.2026). Technische 
 | Quelle (Code, Doku, Werkzeuge) | Git-Repo `herbertschrotter-blip/ha-baustrommanager`, auf dem Pi unter `/config/projekte/ha-baustrommanager` |
 | Eingespielte Integration | `/config/custom_components/baustelle` (nie dort ändern – immer aus dem Repo einspielen) |
 | Seite „Baustelle“ | Seitenleiste von HA; Version unter ⚙ → Über |
-| Datenbank | Standard: Datei `/config/baustelle/baustelle.db` (SQLite). Mit `db_url` in `/config/packages/baustelle.yaml`: Server im Add-on „TimescaleDB“ (PostgreSQL) |
+| Datenbank | Pilot: Server im Add-on „TimescaleDB“ (PostgreSQL), eingestellt mit `db_url` in `/config/packages/baustelle.yaml` (Zugangsdaten über `!secret`). Ohne `db_url`: Datei `/config/baustelle/baustelle.db` (SQLite) |
 | Puffer bei Datenbank-Ausfall | `/config/baustelle/puffer/arbeiten.jsonl` (leer bzw. fehlt im Normalbetrieb) |
 | Meldungen (Melden-Knopf) | in der Datenbank; lesbar als `/config/baustelle/meldungen.md` und `.json` |
 | Sicherungen | Einstellungen → System → Backups; automatisch jede Nacht um 03:00, verschlüsselt |
-| Notprogramm | Skript in jedem Heizungs-Plug (Shelly Plug S Gen3); übernimmt, wenn HA 15 min nichts schickt |
+| Notprogramm | Skript in jedem Heizungs-Plug (Shelly Plug S Gen3); übernimmt, wenn HA 15 min nichts schickt – auch, wenn HA läuft, die Steuerung aber 5 min lang nicht mehr schaltet (0.8.166) |
+| Eingespielter Stand | `/config/custom_components/baustelle/.ausgeliefert` (Commit und Zeit, schreibt `deploy.sh`) |
 
 **Werkzeug für die Kommandozeile:** Add-on „Terminal“ in HA (Seitenleiste). Alle Befehle unten dort eingeben.
 **Zugangsdaten** (Passwörter, Schlüssel der Sicherungen, `secrets.yaml`) verwaltet Herbert; sie stehen in keinem Repo.
@@ -34,8 +35,10 @@ nach `/config` kopieren, Konfiguration prüfen, HA neu starten.
    tools/deploy.sh
    tools/neustart.sh
    ```
-   `deploy.sh` kopiert nur die Integration (mit der fertig gebauten Seite); `neustart.sh` prüft zuerst die
-   Konfiguration und startet nur bei gültiger neu, dann wartet es, bis HA wieder läuft.
+   `deploy.sh` kopiert nur die Integration (mit der fertig gebauten Seite) – und nur aus einem sauberen, eingecheckten
+   Stand, zu dem Seite und Version passen; sonst bricht es mit einer Meldung ab. `neustart.sh` prüft zuerst die
+   Konfiguration und startet nur bei gültiger neu, dann wartet es, bis HA wieder läuft. Vor dem Einspielen sollen die
+   GitHub-Prüfungen der Version grün sein (Actions „Tests“ und „Prüfen“). Einspielen bevorzugt tagsüber, gebündelt.
 3. Prüfen: Einstellungen → Geräte & Dienste → Baustelle ist „geladen“; Seite neu laden, unter ⚙ → Über steht die neue
    Version; Sensor „… Datenbank“ der Baustelle zeigt Zustand `ok`.
 4. Etwas stimmt nicht: zurück auf die vorige Version (Abschnitt 4 C).

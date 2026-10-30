@@ -144,7 +144,7 @@ def heiztag(d: date, heiztage: Collection[date] | None) -> bool:
 def kwh_je_hgt(gezaehlt: Iterable[TagRoh]) -> float | None:
     """Gradtagverfahren (FE-0030): Verbrauch ÷ Heizgradtage 20/12 derselben Tage; None ohne Heizgradtage."""
     liste = [t for t in gezaehlt if t.aussen is not None]
-    summe = sum(hgt(t.aussen) for t in liste)   # type: ignore[arg-type]  # oben auf None geprüft
+    summe = sum((hgt(t.aussen) for t in liste), 0.0)   # type: ignore[arg-type]  # oben auf None geprüft
     return sum(t.kwh or 0.0 for t in liste) / summe if summe > 0 else None
 
 
@@ -294,14 +294,14 @@ def tageswerte(
         ohne = None if o is None else o - vorher_ohne
         vorher_ohne = o or 0.0
         if d < heute:
-            t = temp.get(d)
-            aus.append(Tageswert(d, ist.get(d, 0.0), 0.0, None, None, ohne, sum(t) / len(t) if t else None, "gemessen"))
+            tt = temp.get(d)
+            aus.append(Tageswert(d, ist.get(d, 0.0), 0.0, None, None, ohne, sum(tt) / len(tt) if tt else None, "gemessen"))
             continue
         if d == heute:
             rest = sum(r.heute_kwh for r in werte)
-            t = temp.get(d)
+            tt = temp.get(d)
             aussen, quelle = ((aussen_heute, "vorhersage") if aussen_heute is not None
-                              else (sum(t) / len(t), "gemessen") if t else (klima_tag(d, klima), "klima"))
+                              else (sum(tt) / len(tt), "gemessen") if tt else (klima_tag(d, klima), "klima"))
             aus.append(Tageswert(d, ist.get(d, 0.0), rest, rest if spanne else None, rest if spanne else None, ohne, aussen, quelle))
             continue
         prog = sum(r.je_tag[k] for r in werte if k < len(r.je_tag))
