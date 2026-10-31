@@ -617,6 +617,28 @@ async def test_vorhersage_sobald_wetter_da(hass: HomeAssistant, baustelle) -> No
     assert st.daten.wetter.frueh == -1.0  # nach 8 Uhr: der Morgen von morgen
 
 
+async def test_regen_anzeige_erst_ab_schwelle(hass: HomeAssistant, baustelle) -> None:
+    """Die Quelle meldet Regen, die laufende Stunde hat 0,1 mm: angezeigt wird Bedeckt, der Rohwert bleibt; die Stunde
+    mit 2 mm bleibt Regen (logik/regen.anzeige_zustand)."""
+    stunde = dt_util.now().replace(minute=0, second=0, microsecond=0)
+    leicht, stark = stunde.isoformat(), (stunde + timedelta(hours=1)).isoformat()
+
+    async def vorhersage(call):
+        return {"weather.regen": {"forecast": [
+            {"datetime": leicht, "condition": "rainy", "temperature": 5.0, "precipitation": 0.1},
+            {"datetime": stark, "condition": "rainy", "temperature": 5.0, "precipitation": 2.0}]}}
+
+    hass.services.async_register("weather", "get_forecasts", vorhersage, supports_response=SupportsResponse.ONLY)
+    hass.states.async_set("weather.regen", "rainy", {"temperature": 4.0})
+    hass.config_entries.async_update_entry(baustelle, options={**baustelle.options, "wetter": "weather.regen"})
+    await hass.async_block_till_done()
+    st = baustelle.runtime_data
+    await st._async_prognose()
+    wetter = struktur(hass, baustelle)["laufzeit"]["wetter"]
+    assert wetter["zustand"] == "rainy" and wetter["zustand_anzeige"] == "cloudy"
+    assert wetter["vorhersage_anzeige"]["hourly"] == {leicht: "cloudy"}
+
+
 async def test_nachricht_tag_je_baustelle_und_ungueltiger_knopf(hass: HomeAssistant, baustelle, nachrichten) -> None:
     """Gleiche Warnung zweier Baustellen (z. B. `baustelle_offline`) darf sich auf dem Handy nicht ersetzen;
     ein Knopf mit kaputtem Datum ändert nichts."""

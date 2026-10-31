@@ -470,6 +470,13 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     panel.hass = { ...hass, states: { ...states, [we]: sonnig } }; await ruhe(); await klick({ act: 'tab', v: 'uebersicht' }, 20);
     erwarte('FE-0005: tagsüber weiter „Sonnig“', ui.innerHTML.includes('aria-label="sunny"') && /Sonnig/.test(ui.innerHTML));
     panel.hass = hass; await ruhe(); }
+  /* Regen nur ab der Menge der Integration (logik/regen.anzeige_zustand): die Seite wendet nur deren Ergebnis an */
+  { const we = panel.d.wetterEid, s = { entity_id: we, ...(states[we] || { attributes: { temperature: 12 } }), state: 'rainy' }, w = panel.d.wetter, alt = { ...w };
+    Object.assign(w, { zustand: 'rainy', zustand_anzeige: 'cloudy', vorhersage_anzeige: { hourly: { a: 'cloudy' }, daily: {} } });
+    erwarte('Wetter: leichter Regen als Bedeckt', panel.wetterZustand(s) === 'cloudy' && panel.vorhersageZustand({ datetime: 'a', condition: 'rainy' }, 'hourly') === 'cloudy');
+    erwarte('Wetter: Vorhersage ohne Abweichung bleibt', panel.vorhersageZustand({ datetime: 'b', condition: 'rainy' }, 'hourly') === 'rainy' && panel.vorhersageZustand({ datetime: 'a', condition: 'rainy' }, 'daily') === 'rainy');
+    erwarte('Wetter: neuer Zustand gilt, bis die Integration nachzieht', panel.wetterZustand({ ...s, state: 'pouring' }) === 'pouring');
+    for (const k of ['zustand', 'zustand_anzeige', 'vorhersage_anzeige']) { if (k in alt) w[k] = alt[k]; else delete w[k]; } }
   /* FE-0007: Container ohne Heizkörper erscheint in „Wann welche Heizung heizt“ mit Hinweis und Weg zum Zuordnen */
   { await klick({ act: 'tab', v: 'heizung' }, 20);
     const leer = { ...panel.d.bereiche.find(b => !b.pumpe), id: 'mannschaft', name: 'Mannschaft 01', geraete: [] }; panel.d.bereiche.push(leer);

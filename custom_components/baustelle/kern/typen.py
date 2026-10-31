@@ -61,6 +61,7 @@ class WetterWerte:
     regen_vortag: float | None = None
     regen_heute: float | None = None
     zustand: str | None = None
+    zustand_anzeige: str | None = None   # logik/regen.anzeige_zustand
 
     # Namen wie 0.6 für die Wetter-Sensoren
     @property

@@ -2,7 +2,9 @@
 
 from datetime import datetime, timedelta, timezone
 
-from logik.regen import regen_des_tages, regen_vorhersage, stunden_merken
+from logik.regen import (
+    REGEN_AB_H_MM, REGEN_AB_TAG_MM, anzeige_abweichungen, anzeige_zustand, regen_des_tages, regen_vorhersage, stunden_merken,
+)
 
 Z = timezone(timedelta(hours=2))
 
@@ -22,6 +24,38 @@ def test_vergangene_stunden_bleiben_kommende_sind_neu():
 def test_laufende_stunde_nimmt_die_neue_vorhersage():
     alt = {_h(12): 2.0}
     assert stunden_merken(alt, {_h(12): 0.1}, datetime(2026, 10, 8, 12, 30, tzinfo=Z)) == {_h(12): 0.1}
+
+
+def test_laufende_stunde_bleibt_wenn_die_vorhersage_sie_nicht_nennt():
+    """Open-Meteo beginnt bei der nächsten Stunde: sonst fiele jede Stunde weg, sobald sie läuft – auch später."""
+    z12 = stunden_merken({_h(11): 0.4, _h(12): 2.0}, {_h(13): 0.1}, datetime(2026, 10, 8, 12, 30, tzinfo=Z))
+    assert z12 == {_h(11): 0.4, _h(12): 2.0, _h(13): 0.1}
+    z13 = stunden_merken(z12, {_h(14): 0.0}, datetime(2026, 10, 8, 13, 30, tzinfo=Z))
+    assert z13[_h(12)] == 2.0 and z13[_h(13)] == 0.1
+
+
+def test_vergangene_stunde_bleibt_auch_wenn_die_vorhersage_sie_noch_nennt():
+    assert stunden_merken({_h(11): 0.4}, {_h(11): 9.0, _h(13): 0.1}, datetime(2026, 10, 8, 12, 30, tzinfo=Z)) == {
+        _h(11): 0.4, _h(13): 0.1}
+
+
+def test_anzeige_regen_erst_ab_schwelle():
+    assert anzeige_zustand("rainy", 0.0, REGEN_AB_H_MM) == "cloudy"
+    assert anzeige_zustand("rainy", 0.4, REGEN_AB_H_MM) == "cloudy"
+    assert anzeige_zustand("rainy", 0.5, REGEN_AB_H_MM) == "rainy"
+    assert anzeige_zustand("rainy", 0.9, REGEN_AB_TAG_MM) == "cloudy"
+    assert anzeige_zustand("rainy", None, REGEN_AB_H_MM) == "rainy"      # keine Menge: bleibt wie gemeldet
+    assert anzeige_zustand("pouring", 0.0, REGEN_AB_H_MM) == "pouring"
+    assert anzeige_zustand("lightning-rainy", 0.0, REGEN_AB_H_MM) == "lightning-rainy"
+    assert anzeige_zustand("sunny", 0.0, REGEN_AB_H_MM) == "sunny" and anzeige_zustand(None, 0.0, 1.0) is None
+
+
+def test_anzeige_abweichungen_nur_was_anders_ist():
+    liste = [{"datetime": "a", "condition": "rainy", "precipitation": 0.1},
+             {"datetime": "b", "condition": "rainy", "precipitation": 3.0},
+             {"datetime": "c", "condition": "rainy"},
+             {"datetime": "d", "condition": "cloudy", "precipitation": 0.0}]
+    assert anzeige_abweichungen(liste, REGEN_AB_TAG_MM) == {"a": "cloudy"}
 
 
 def test_ohne_neue_stunden_bleibt_alt_und_ohne_stunden_gilt_der_tag():

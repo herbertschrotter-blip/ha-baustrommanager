@@ -16,6 +16,10 @@ Jetzt:
 Feierabend macht keine Kleidung nass. Es zählt nur der Regen in der Arbeitszeit des Tages (`regen_arbeitszeit`), gestuft
 (`TrocknenStufe`, Vorgabe ab 2 mm 60 min länger / 15 min früher, ab 5 mm 100 / 30): „länger heute“ nach dem Regen in der
 Arbeitszeit heute, „früher morgen“ nach dem von gestern.
+
+**Anzeige „Regen“ (Herbert 31.10.2026):** Wetterdienste melden `rainy` schon bei 0,0–0,1 mm. Angezeigt wird Regen erst ab
+`REGEN_AB_H_MM` je Stunde bzw. `REGEN_AB_TAG_MM` je Tag, darunter Bedeckt (`anzeige_zustand`). Nur für die Anzeige; die
+Regeln oben rechnen weiter mit Millimetern.
 """
 
 from __future__ import annotations
@@ -32,7 +36,9 @@ def stunden_merken(alt: Mapping[str, float] | None, neu: Mapping[str, float] | N
     if neu is None:
         return dict(alt or {})
     ab = jetzt.replace(minute=0, second=0, microsecond=0)
-    vorbei = {k: v for k, v in (alt or {}).items() if datetime.fromisoformat(k) < ab}
+    # die laufende Stunde bleibt, wenn die Vorhersage sie nicht mehr nennt (Open-Meteo beginnt bei der nächsten)
+    vorbei = {k: v for k, v in (alt or {}).items()
+              if datetime.fromisoformat(k) < ab or (datetime.fromisoformat(k) == ab and k not in neu)}
     kommend = {k: v for k, v in neu.items() if datetime.fromisoformat(k) >= ab}
     return dict(sorted({**vorbei, **kommend}.items()))
 
@@ -48,6 +54,31 @@ def regen_des_tages(werte: Mapping[str, Any]) -> float | None:
     """Gemessen vor Vorhersage."""
     mess = werte.get("regen_mess")
     return float(mess) if mess is not None else werte.get("regen")
+
+
+REGEN_AB_H_MM = 0.5
+REGEN_AB_TAG_MM = 1.0
+ZUSTAND_REGEN = "rainy"
+ZUSTAND_BEDECKT = "cloudy"
+
+
+def anzeige_zustand(zustand: str | None, mm: float | None, ab_mm: float) -> str | None:
+    """Wetterzustand für die Anzeige: `rainy` unter `ab_mm` wird Bedeckt. Ohne Menge bleibt der Zustand der Quelle;
+    Starkregen, Gewitter und Schneeregen bleiben immer."""
+    if zustand == ZUSTAND_REGEN and mm is not None and mm < ab_mm:
+        return ZUSTAND_BEDECKT
+    return zustand
+
+
+def anzeige_abweichungen(eintraege: Iterable[Mapping[str, Any]], ab_mm: float) -> dict[str, str]:
+    """Vorhersage-Einträge, die anders angezeigt werden als gemeldet: `datetime` des Eintrags → Zustand."""
+    aus: dict[str, str] = {}
+    for e in eintraege:
+        roh, mm = e.get("condition"), e.get("precipitation")
+        neu = anzeige_zustand(roh, float(mm) if mm is not None else None, ab_mm)
+        if neu is not None and neu != roh:
+            aus[str(e.get("datetime"))] = neu
+    return aus
 
 
 # ------------------------------------------------------------------ AN-0021: Regen in der Arbeitszeit, gestuft

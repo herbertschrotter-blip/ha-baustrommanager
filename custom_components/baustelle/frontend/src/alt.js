@@ -1187,7 +1187,7 @@ class BaustellePanel extends LitElement {
   _stimmung(erzwingen = false) {
     if (!this.bg || !this._hass) return;
     const h = this._hass, eid = this.d && this.d.wetterEid, w = eid && h.states[eid];
-    const sonne = h.states['sun.sun'], phase = phaseAusSonne(sonne), wetter = WETTER_STIMMUNG[w && w.state] || 'wolkig', hell = !(h.themes && h.themes.darkMode);
+    const sonne = h.states['sun.sun'], phase = phaseAusSonne(sonne), wetter = WETTER_STIMMUNG[w && this.wetterZustand(w)] || 'wolkig', hell = !(h.themes && h.themes.darkMode);
     /* Sonne/Mond wandern und Farben gleiten stufenlos (WU-0001): bei jedem Update nachführen, nicht nur beim Wechsel der Tageszeit */
     const lauf = this.lauf = himmelLauf(sonne);
     if (this.himmel) this.himmel.setze(phase, wetter, hell, sonne, lauf);
@@ -2200,10 +2200,14 @@ class BaustellePanel extends LitElement {
   wetterJetzt() {
     const d = this.d, s = this.zustand(d.wetterEid), w = d.wetter || {};
     if (!s) return [w.zustand || 'cloudy', d.wetterEid ? 'kein Wetter' : 'Wetter wählen', w.aussen];
-    const regen = ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy'].includes(s.state) && zahl(w.regen_heute) && w.regen_heute > 0 ? ` · ${de(w.regen_heute, w.regen_heute % 1 ? 1 : 0)} mm` : '';
-    const z = this.nachtWetter(s.state);
+    const zustand = this.wetterZustand(s);
+    const regen = ['rainy', 'pouring', 'lightning-rainy', 'snowy-rainy'].includes(zustand) && zahl(w.regen_heute) && w.regen_heute > 0 ? ` · ${de(w.regen_heute, w.regen_heute % 1 ? 1 : 0)} mm` : '';
+    const z = this.nachtWetter(zustand);
     return [z, (WETTER_TEXT[z] || z) + regen, zahl(w.aussen) ? w.aussen : s.attributes.temperature];
   }
+  /* Was die Integration aus dem Wetter macht (logik/regen.anzeige_zustand): die Seite wendet nur deren Ergebnis an */
+  wetterZustand(s) { const w = (this.d && this.d.wetter) || {}; return w.zustand === s.state && w.zustand_anzeige || s.state; }
+  vorhersageZustand(x, art) { return (((this.d.wetter || {}).vorhersage_anzeige || {})[art] || {})[x.datetime] || x.condition; }
   /* FE-0005: Open-Meteo & Co. melden nachts „sunny“ bzw. „partlycloudy“ – wie die Wetterkarten von HA zeigt die Seite
      nachts Mond statt Sonne. Nacht = jetzt: sun.sun unter dem Horizont; später: vor Aufgang bzw. nach Untergang */
   nachtWetter(zustand, ms = Date.now()) {

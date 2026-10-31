@@ -14,7 +14,10 @@ from homeassistant.util import dt as dt_util
 from ..const import CONF_REGEN_SENSOR, CONF_TEMP_SENSOR, CONF_WETTER
 from ..funktionen.basis import ZAEHLER_SPEICHERN_S, zahl as _zahl
 from ..logik import regelung as regel_logik
-from ..logik.regen import regen_arbeitszeit, regen_des_tages, regen_vorhersage, stunden_merken
+from ..logik.regen import (
+    REGEN_AB_H_MM, REGEN_AB_TAG_MM, anzeige_abweichungen, anzeige_zustand, regen_arbeitszeit, regen_des_tages,
+    regen_vorhersage, stunden_merken,
+)
 from ..logik.arbeitszeit import WetterTag, arbeit_am
 from .typen import WetterWerte
 
@@ -50,6 +53,8 @@ async def _async_prognose_holen(st: Steuerung, wetter: str) -> None:
             _LOGGER.debug("Vorhersage %s von %s nicht verfügbar: %s", art, wetter, err)
             continue
         liste = _antwort_liste(antwort, wetter, "forecast")
+        st.lz.setdefault("wetter_anzeige", {})[art] = anzeige_abweichungen(
+            liste, REGEN_AB_H_MM if art == "hourly" else REGEN_AB_TAG_MM)
         if art == "hourly":
             st.lz["wetter_stunden"] = _stunden(liste, jetzt)
         for tag, werte in _prognose_je_tag(liste, art).items():
@@ -106,6 +111,7 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     elif (z := st.lz.get("aussen_zuletzt")) and (t := dt_util.parse_datetime(str(z[0]))) is not None:
         aussen = regel_logik.letzter_wert(None, (t, float(z[1])), jetzt, regel_logik.AUSSEN_HALTEN_MIN)
     tag = st._wetter_tag(heute)
+    mm_jetzt = (tag.get("regen_h") or {}).get(jetzt.replace(minute=0, second=0, microsecond=0).isoformat())
     regen = _zahl(st.hass.states.get(o[CONF_REGEN_SENSOR])) if o.get(CONF_REGEN_SENSOR) else None
     if regen is not None:
         # gemessen (Wetterstation): für „nach Regen früher“ am nächsten Tag merken
@@ -134,7 +140,7 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     return WetterWerte(
         aussen=aussen, aussen_max=aussen_max, frueh=frueh,
         regen_vortag=regen_des_tages(st._wetter_tag(heute - timedelta(days=1))),
-        regen_heute=regen, zustand=zustand,
+        regen_heute=regen, zustand=zustand, zustand_anzeige=anzeige_zustand(zustand, mm_jetzt, REGEN_AB_H_MM),
     )
 
 

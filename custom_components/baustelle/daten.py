@@ -275,7 +275,8 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
         "baseline": heizung.baseline_anzeige() if heizung.aktiv() else None,   # J4b: Baseline-Läufe (baseline.html B)
         "warnungen": warnungen,
         "wetter": {"aussen": w.aussen, "aussen_max": w.aussen_max, "frueh_min": w.frueh, "regen_vortag": w.regen_vortag,
-                   "regen_heute": w.regen_heute, "zustand": w.zustand},
+                   "regen_heute": w.regen_heute, "zustand": w.zustand, "zustand_anzeige": w.zustand_anzeige,
+                   "vorhersage_anzeige": st.lz.get("wetter_anzeige") or {}},
         "trocknen": heizung.trocknen_anzeige(heute) if heizung.aktiv() else None,   # AN-0021: Regen in der Arbeitszeit, gestuft
         "heizgrenze": {"bezug": heizgrenze_bezug(str(h["heizgrenze_basis"]), w.aussen_max, w.aussen),
                        "zu_warm": heizung.zu_warm(w)},

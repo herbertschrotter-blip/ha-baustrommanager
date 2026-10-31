@@ -48,7 +48,7 @@ function wetter(p, s) {
   let inhalt;
   if (a === 'std') {
     const std = (H || []).filter(x => Date.parse(x.datetime) > jetzt - 36e5).slice(0, 6);
-    inhalt = H === null ? LAEDT : !std.length ? html`<div class="leer">Keine stündliche Vorhersage</div>` : html`<div class="w-std">${std.map(x => html`<div><span class="leise">${p.lokal(x.datetime).slice(11, 13)}:00</span>${svg(wetterIcon(p.nachtWetter(x.condition, Date.parse(x.datetime)), 36))}<b>${de(x.temperature, 0)}°</b>
+    inhalt = H === null ? LAEDT : !std.length ? html`<div class="leer">Keine stündliche Vorhersage</div>` : html`<div class="w-std">${std.map(x => html`<div><span class="leise">${p.lokal(x.datetime).slice(11, 13)}:00</span>${svg(wetterIcon(p.nachtWetter(p.vorhersageZustand(x, 'hourly'), Date.parse(x.datetime)), 36))}<b>${de(x.temperature, 0)}°</b>
           ${regen(x)}<span class="leise">${zahl(x.precipitation_probability) ? x.precipitation_probability : 0} %</span></div>`)}</div>`;
   } else if (a === 'tag') {
     const teile = [['Morgen', 7], ['Mittag', 12], ['Nachmittag', 16], ['Nacht', 22]], jetztH = +d.z.JETZT.slice(0, 2);
@@ -56,11 +56,11 @@ function wetter(p, s) {
     const stunde = (tag, h) => (H || []).find(x => p.lokal(x.datetime).slice(0, 13) === `${tag} ${String(h).padStart(2, '0')}`);
     inhalt = H === null ? LAEDT : [['Heute', d.z.HEUTE], ['Morgen', plusTage(d.z.HEUTE, 1)]].map(([name, tag]) => html`<div class="w-tag"><div class="w-tag-n">${name}</div><div class="w-teile">${teile.map(([t, h]) => {
       const x = stunde(tag, h), vorbei = tag === d.z.HEUTE && h < jetztH, temp = x ? x.temperature : vorbei && aussen ? aussen[h] : null;
-      return html`<div class=${vorbei ? 'vorbei' : ''}><span class="leise">${t}</span>${svg(wetterIcon(x ? p.nachtWetter(x.condition, Date.parse(x.datetime)) : (ws ? p.nachtWetter(ws.state) : 'cloudy'), 34))}<b>${zahl(temp) ? de(temp, 0) + '°' : '–'}</b>${regen(x)}</div>`; })}</div></div>`);
+      return html`<div class=${vorbei ? 'vorbei' : ''}><span class="leise">${t}</span>${svg(wetterIcon(x ? p.nachtWetter(p.vorhersageZustand(x, 'hourly'), Date.parse(x.datetime)) : (ws ? p.nachtWetter(p.wetterZustand(ws)) : 'cloudy'), 34))}<b>${zahl(temp) ? de(temp, 0) + '°' : '–'}</b>${regen(x)}</div>`; })}</div></div>`);
   } else {
     const tage = (D || []).filter(x => p.lokal(x.datetime).slice(0, 10) > d.z.HEUTE).slice(0, 3);
     inhalt = D === null ? LAEDT : !tage.length ? html`<div class="leer">Keine Tagesvorhersage</div>` : html`<div class="w-3">${tage.map(x => { const t = p.lokal(x.datetime).slice(0, 10); return html`<div class="w-3z">
-          <div class="w-3t"><b>${wtag(t)}</b><span class="leise">${kurzDatum(t)}</span></div>${svg(wetterIcon(x.condition, 40))}
+          <div class="w-3t"><b>${wtag(t)}</b><span class="leise">${kurzDatum(t)}</span></div>${svg(wetterIcon(p.vorhersageZustand(x, 'daily'), 40))}
           <div class="w-3w"><b>${de(x.temperature, 0)}°</b><span class="leise">${de(x.templow, 0)}°</span></div>
           <div class="w-3r">${regen(x)}<span class="leise">${zahl(x.precipitation_probability) ? x.precipitation_probability : 0} %</span></div>
           <div class="w-3f">${folge(x.templow, t)}</div></div>`; })}</div>`;

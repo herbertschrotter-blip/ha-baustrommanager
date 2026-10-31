@@ -5025,7 +5025,7 @@ function wetter(p4, s4) {
   let inhalt;
   if (a3 === "std") {
     const std = (H2 || []).filter((x2) => Date.parse(x2.datetime) > jetzt - 36e5).slice(0, 6);
-    inhalt = H2 === null ? LAEDT7 : !std.length ? b2`<div class="leer">Keine stündliche Vorhersage</div>` : b2`<div class="w-std">${std.map((x2) => b2`<div><span class="leise">${p4.lokal(x2.datetime).slice(11, 13)}:00</span>${svg(wetterIcon(p4.nachtWetter(x2.condition, Date.parse(x2.datetime)), 36))}<b>${de(x2.temperature, 0)}°</b>
+    inhalt = H2 === null ? LAEDT7 : !std.length ? b2`<div class="leer">Keine stündliche Vorhersage</div>` : b2`<div class="w-std">${std.map((x2) => b2`<div><span class="leise">${p4.lokal(x2.datetime).slice(11, 13)}:00</span>${svg(wetterIcon(p4.nachtWetter(p4.vorhersageZustand(x2, "hourly"), Date.parse(x2.datetime)), 36))}<b>${de(x2.temperature, 0)}°</b>
           ${regen(x2)}<span class="leise">${zahl(x2.precipitation_probability) ? x2.precipitation_probability : 0} %</span></div>`)}</div>`;
   } else if (a3 === "tag") {
     const teile = [["Morgen", 7], ["Mittag", 12], ["Nachmittag", 16], ["Nacht", 22]], jetztH = +d3.z.JETZT.slice(0, 2);
@@ -5033,14 +5033,14 @@ function wetter(p4, s4) {
     const stunde = (tag, h3) => (H2 || []).find((x2) => p4.lokal(x2.datetime).slice(0, 13) === `${tag} ${String(h3).padStart(2, "0")}`);
     inhalt = H2 === null ? LAEDT7 : [["Heute", d3.z.HEUTE], ["Morgen", plusTage(d3.z.HEUTE, 1)]].map(([name3, tag]) => b2`<div class="w-tag"><div class="w-tag-n">${name3}</div><div class="w-teile">${teile.map(([t5, h3]) => {
       const x2 = stunde(tag, h3), vorbei = tag === d3.z.HEUTE && h3 < jetztH, temp = x2 ? x2.temperature : vorbei && aussen ? aussen[h3] : null;
-      return b2`<div class=${vorbei ? "vorbei" : ""}><span class="leise">${t5}</span>${svg(wetterIcon(x2 ? p4.nachtWetter(x2.condition, Date.parse(x2.datetime)) : ws ? p4.nachtWetter(ws.state) : "cloudy", 34))}<b>${zahl(temp) ? de(temp, 0) + "°" : "–"}</b>${regen(x2)}</div>`;
+      return b2`<div class=${vorbei ? "vorbei" : ""}><span class="leise">${t5}</span>${svg(wetterIcon(x2 ? p4.nachtWetter(p4.vorhersageZustand(x2, "hourly"), Date.parse(x2.datetime)) : ws ? p4.nachtWetter(p4.wetterZustand(ws)) : "cloudy", 34))}<b>${zahl(temp) ? de(temp, 0) + "°" : "–"}</b>${regen(x2)}</div>`;
     })}</div></div>`);
   } else {
     const tage = (D2 || []).filter((x2) => p4.lokal(x2.datetime).slice(0, 10) > d3.z.HEUTE).slice(0, 3);
     inhalt = D2 === null ? LAEDT7 : !tage.length ? b2`<div class="leer">Keine Tagesvorhersage</div>` : b2`<div class="w-3">${tage.map((x2) => {
       const t5 = p4.lokal(x2.datetime).slice(0, 10);
       return b2`<div class="w-3z">
-          <div class="w-3t"><b>${wtag(t5)}</b><span class="leise">${kurzDatum(t5)}</span></div>${svg(wetterIcon(x2.condition, 40))}
+          <div class="w-3t"><b>${wtag(t5)}</b><span class="leise">${kurzDatum(t5)}</span></div>${svg(wetterIcon(p4.vorhersageZustand(x2, "daily"), 40))}
           <div class="w-3w"><b>${de(x2.temperature, 0)}°</b><span class="leise">${de(x2.templow, 0)}°</span></div>
           <div class="w-3r">${regen(x2)}<span class="leise">${zahl(x2.precipitation_probability) ? x2.precipitation_probability : 0} %</span></div>
           <div class="w-3f">${folge(x2.templow, t5)}</div></div>`;
@@ -6501,7 +6501,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.169";
+var SEITE_VERSION = "0.8.170";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -6782,7 +6782,7 @@ var BaustellePanel = class extends i4 {
   _stimmung(erzwingen = false) {
     if (!this.bg || !this._hass) return;
     const h3 = this._hass, eid = this.d && this.d.wetterEid, w2 = eid && h3.states[eid];
-    const sonne = h3.states["sun.sun"], phase = phaseAusSonne(sonne), wetter2 = WETTER_STIMMUNG[w2 && w2.state] || "wolkig", hell = !(h3.themes && h3.themes.darkMode);
+    const sonne = h3.states["sun.sun"], phase = phaseAusSonne(sonne), wetter2 = WETTER_STIMMUNG[w2 && this.wetterZustand(w2)] || "wolkig", hell = !(h3.themes && h3.themes.darkMode);
     const lauf = this.lauf = himmelLauf(sonne);
     if (this.himmel) this.himmel.setze(phase, wetter2, hell, sonne, lauf);
     this.bg.style.setProperty("--sonne-x", (lauf.uSonnePos[0] * 100).toFixed(1) + "%");
@@ -8634,9 +8634,18 @@ var BaustellePanel = class extends i4 {
   wetterJetzt() {
     const d3 = this.d, s4 = this.zustand(d3.wetterEid), w2 = d3.wetter || {};
     if (!s4) return [w2.zustand || "cloudy", d3.wetterEid ? "kein Wetter" : "Wetter wählen", w2.aussen];
-    const regen = ["rainy", "pouring", "lightning-rainy", "snowy-rainy"].includes(s4.state) && zahl(w2.regen_heute) && w2.regen_heute > 0 ? ` · ${de(w2.regen_heute, w2.regen_heute % 1 ? 1 : 0)} mm` : "";
-    const z2 = this.nachtWetter(s4.state);
+    const zustand2 = this.wetterZustand(s4);
+    const regen = ["rainy", "pouring", "lightning-rainy", "snowy-rainy"].includes(zustand2) && zahl(w2.regen_heute) && w2.regen_heute > 0 ? ` · ${de(w2.regen_heute, w2.regen_heute % 1 ? 1 : 0)} mm` : "";
+    const z2 = this.nachtWetter(zustand2);
     return [z2, (WETTER_TEXT[z2] || z2) + regen, zahl(w2.aussen) ? w2.aussen : s4.attributes.temperature];
+  }
+  /* Was die Integration aus dem Wetter macht (logik/regen.anzeige_zustand): die Seite wendet nur deren Ergebnis an */
+  wetterZustand(s4) {
+    const w2 = this.d && this.d.wetter || {};
+    return w2.zustand === s4.state && w2.zustand_anzeige || s4.state;
+  }
+  vorhersageZustand(x2, art) {
+    return (((this.d.wetter || {}).vorhersage_anzeige || {})[art] || {})[x2.datetime] || x2.condition;
   }
   /* FE-0005: Open-Meteo & Co. melden nachts „sunny“ bzw. „partlycloudy“ – wie die Wetterkarten von HA zeigt die Seite
      nachts Mond statt Sonne. Nacht = jetzt: sun.sun unter dem Horizont; später: vor Aufgang bzw. nach Untergang */

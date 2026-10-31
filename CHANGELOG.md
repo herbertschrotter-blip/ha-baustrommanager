@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.170] – 2026-10-31
+
+Wetter zeigt nicht mehr dauernd Regen:
+
+- Wetterdienste melden „Regen“ schon bei 0,0–0,1 mm. Die Seite zeigt Regen (Kachel, Hintergrund, Vorhersage) jetzt erst ab
+  0,5 mm je Stunde bzw. 1 mm je Tag, darunter Bedeckt. In der Vorhersage stehen die Millimeter weiter daneben;
+  Starkregen und Gewitter bleiben immer. Nur Anzeige, die Regeln rechnen weiter mit Millimetern.
+- Regen je Stunde: Die laufende Stunde ging verloren, wenn die Vorhersage sie nicht mehr nennt (Open-Meteo beginnt bei der
+  nächsten Stunde). Dadurch fehlte vergangener Regen in „Regen heute“ und „Kleidung trocknen“, die jetzt mehr zählen.
+
 ## [0.8.169] – 2026-10-30
 
 Prozess (Audit 0.8.165, Paket 4) und Taste am Plug:
