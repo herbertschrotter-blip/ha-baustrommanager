@@ -110,6 +110,7 @@ function kopfChips(p, b) {
   return L;
 }
 
+const LANG_AB = 18;   // ab so vielen Zeichen passt ein Chip nicht in ein einspaltiges Kästchen: das Kästchen wird zweispaltig
 const chipText = c => html`<span class="ck-l">${c.lang}</span><span class="ck-k">${c.kurz}</span>`;
 function chip(p, c) {
   const auf = ckZ(p).info === c.k;
@@ -180,7 +181,7 @@ function kopf(p, b) {
         ?disabled=${k === 'thermo' && !b.fuehler} title=${k === 'thermo' && !b.fuehler ? 'kein Temperaturfühler' : nothing} @click=${() => { ckSetzen(p, { modus: false }); return p.modusSetzen(b, k); }}>${t}</button>`)}</div>` : nothing;
   const GR = [['Steuerung', steuerung, modi, []], ['Jetzt', null, null, von(['zust', 'tuer', 'fenster'])], ['Plan', null, null, von(['warm', 'regel'])],
     ['Lernen', null, null, von(['lern', 'nach', 'takt'])], ['Hinweise', null, null, von(['bat'])]];
-  const gruppe = ([t, fest, dazu, X]) => fest || X.length ? html`<div class="ckd-g" data-g=${t}><div class="ckd-gt">${t}</div><div class="ck-chips">${fest || nothing}${X.map(c => chip(p, c))}</div>${dazu || info(p, X)}</div>` : nothing;
+  const gruppe = ([t, fest, dazu, X]) => fest || X.length ? html`<div class="ckd-g ${X.some(c => String(c.lang).length >= LANG_AB) ? 'ckd-lang' : ''}" data-g=${t}><div class="ckd-gt">${t}</div><div class="ck-chips">${fest || nothing}${X.map(c => chip(p, c))}</div>${dazu || info(p, X)}</div>` : nothing;
   const mitRad = b.fuehler && b.t !== null, mitSoll = mitRad && p.sollAktiv(b) && !b.baseline;
   return html`<div class="glas-panel ck ck-d ck-d2 ${b.z}" style="--c:${FARBE[b.z]}">
       <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b.name}</span></div>${eingestellt(p, b)}</div>

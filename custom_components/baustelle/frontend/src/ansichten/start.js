@@ -64,7 +64,8 @@ export function startAbschnitt(p, b) {
 
 /** CSS des Abschnitts und des Plan-Chips (aus dem Mockup start.html) */
 export const START_STIL = `
-@container (min-width: 641px) { .ck-d .ckd-gruppen .ckd-g[data-g="Plan"] { grid-column: span 2; } }   /* Plan-Chip mit Tag und zwei Uhrzeiten: zwei Spalten breit */
+@container (min-width: 641px) {   /* Plan-Chip mit Tag und zwei Uhrzeiten und jeder lange Chip: zwei Spalten breit; Lücken füllt das nächste Kästchen */
+  .ck-d .ckd-gruppen { grid-auto-flow: dense; } .ck-d .ckd-gruppen .ckd-g[data-g="Plan"], .ck-d .ckd-gruppen .ckd-g.ckd-lang { grid-column: span 2; } }
 .st-link { border: 0; background: none; padding: 0; font: inherit; color: var(--blau); cursor: pointer; white-space: nowrap; }
 .st-stand { opacity: .8; }
 .st-mini { font-size: 10.5px; padding: 0 5px; border-radius: 5px; border: 1px dashed var(--amber); color: var(--amber); margin-left: 2px; }

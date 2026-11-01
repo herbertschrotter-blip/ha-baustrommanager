@@ -3552,6 +3552,7 @@ function kopfChips(p4, b3) {
   } else L2.push({ k: "regel", ic: "ⓘ", ton: "", lang: REGEL_T[b3.modus] || "Regel", kurz: REGEL_T[b3.modus] || "Regel", info: p4.cRegelText(b3) });
   return L2;
 }
+var LANG_AB = 18;
 var chipText = (c4) => b2`<span class="ck-l">${c4.lang}</span><span class="ck-k">${c4.kurz}</span>`;
 function chip(p4, c4) {
   const auf = ckZ(p4).info === c4.k;
@@ -3653,7 +3654,7 @@ function kopf2(p4, b3) {
     ["Lernen", null, null, von(["lern", "nach", "takt"])],
     ["Hinweise", null, null, von(["bat"])]
   ];
-  const gruppe = ([t5, fest, dazu, X]) => fest || X.length ? b2`<div class="ckd-g" data-g=${t5}><div class="ckd-gt">${t5}</div><div class="ck-chips">${fest || A}${X.map((c4) => chip(p4, c4))}</div>${dazu || info(p4, X)}</div>` : A;
+  const gruppe = ([t5, fest, dazu, X]) => fest || X.length ? b2`<div class="ckd-g ${X.some((c4) => String(c4.lang).length >= LANG_AB) ? "ckd-lang" : ""}" data-g=${t5}><div class="ckd-gt">${t5}</div><div class="ck-chips">${fest || A}${X.map((c4) => chip(p4, c4))}</div>${dazu || info(p4, X)}</div>` : A;
   const mitRad = b3.fuehler && b3.t !== null, mitSoll = mitRad && p4.sollAktiv(b3) && !b3.baseline;
   return b2`<div class="glas-panel ck ck-d ck-d2 ${b3.z}" style="--c:${FARBE[b3.z]}">
       <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b3.name}</span></div>${eingestellt(p4, b3)}</div>
@@ -3762,7 +3763,8 @@ function startAbschnitt(p4, b3) {
     <div class="leise st-fuss">↻ Rechnet bei jedem neuen Messwert und jeder neuen Vorhersage nach; weicht das Auskühlen ab, lernt er τ nach · Stand ${S3.jetzt} · Regelung, „Jetzt“ und „Plan“ zeigen dieselbe Rechnung</div></div>`;
 }
 var START_STIL = `
-@container (min-width: 641px) { .ck-d .ckd-gruppen .ckd-g[data-g="Plan"] { grid-column: span 2; } }   /* Plan-Chip mit Tag und zwei Uhrzeiten: zwei Spalten breit */
+@container (min-width: 641px) {   /* Plan-Chip mit Tag und zwei Uhrzeiten und jeder lange Chip: zwei Spalten breit; Lücken füllt das nächste Kästchen */
+  .ck-d .ckd-gruppen { grid-auto-flow: dense; } .ck-d .ckd-gruppen .ckd-g[data-g="Plan"], .ck-d .ckd-gruppen .ckd-g.ckd-lang { grid-column: span 2; } }
 .st-link { border: 0; background: none; padding: 0; font: inherit; color: var(--blau); cursor: pointer; white-space: nowrap; }
 .st-stand { opacity: .8; }
 .st-mini { font-size: 10.5px; padding: 0 5px; border-radius: 5px; border: 1px dashed var(--amber); color: var(--amber); margin-left: 2px; }
@@ -6023,7 +6025,8 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .ckd-gt { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--ink2); }
 .ckd-gruppen { grid-area: rest; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; min-width: 0; }
 .ckd-g { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px 10px; border-radius: 12px; background: rgba(120,120,128,.12); border: 1px solid var(--panel-rand); min-width: 0; }
-.ck-d .ckd-g .ck-chip { height: 32px; padding: 0 12px; }
+.ck-d .ckd-g .ck-chip { height: 32px; padding: 0 12px; max-width: 100%; }   /* nie über das eigene Kästchen hinaus */
+.ck-d .ckd-g .ck-chip .ck-l, .ck-d .ckd-g .ck-chip .ck-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ck-d .ckd-g[data-g="Hinweise"] .ckd-gt { color: var(--amber); }
 .ck-d .ck-chip.modus { font-weight: 600; }
 .ck-k { display: none; }
@@ -6501,7 +6504,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.170";
+var SEITE_VERSION = "0.8.171";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];

@@ -640,7 +640,8 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .ckd-gt { font-size: 11px; letter-spacing: .8px; text-transform: uppercase; color: var(--ink2); }
 .ckd-gruppen { grid-area: rest; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; min-width: 0; }
 .ckd-g { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px 10px 10px; border-radius: 12px; background: rgba(120,120,128,.12); border: 1px solid var(--panel-rand); min-width: 0; }
-.ck-d .ckd-g .ck-chip { height: 32px; padding: 0 12px; }
+.ck-d .ckd-g .ck-chip { height: 32px; padding: 0 12px; max-width: 100%; }   /* nie über das eigene Kästchen hinaus */
+.ck-d .ckd-g .ck-chip .ck-l, .ck-d .ckd-g .ck-chip .ck-k { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ck-d .ckd-g[data-g="Hinweise"] .ckd-gt { color: var(--amber); }
 .ck-d .ck-chip.modus { font-weight: 600; }
 .ck-k { display: none; }

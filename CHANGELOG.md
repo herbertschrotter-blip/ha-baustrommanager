@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.171] – 2026-11-01
+
+- Container-Kopf: Ein langer Chip (z. B. „Baseline-Lauf bis So 24:00 · Thermostat regelt“) lief aus seinem Kästchen in das
+  Kästchen „Plan“. Sein Kästchen wird jetzt zweispaltig; was trotzdem nicht passt, wird mit „…“ gekürzt und steht beim
+  Antippen ganz da.
+
 ## [0.8.170] – 2026-10-31
 
 Wetter zeigt nicht mehr dauernd Regen:

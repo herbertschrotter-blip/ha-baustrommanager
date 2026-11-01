@@ -655,6 +655,15 @@ await fall('B10 Baseline am Handy', browser, async (page, erwarte) => {
       drin: ch.getBoundingClientRect().right <= sc.getBoundingClientRect().right + 1 }; });
   erwarte('Container-Kopf im Lauf: kurzer Chip „bis So 24:00“ am Handy', c && c.kurz && c.text === 'bis So 24:00' && c.drin, JSON.stringify(c));
   await bild(page, 'b10-kopf');
+  /* Desktop: der lange Chip passt ganz in sein zweispaltiges Kästchen und überdeckt das Kästchen Plan nicht */
+  const cd = await panel(page, D, async () => { const b = p.d.bereiche.find(x => !x.pumpe && x.fuehler) || p.d.bereiche.find(x => !x.pumpe); p.containerOeffnen(b.id);
+    await new Promise(r => setTimeout(r, 300)); const x = p.d.bereiche.find(y => y.id === b.id);
+    x.baseline = { lauf_id: 'r9', von: '2026-10-03', letzter: '2026-10-04', von_t: 'Sa 03.10.', letzter_t: 'So 04.10.', bis: '2026-10-05T00:00:00+02:00', bis_t: 'So 24:00', bisher_kwh: 13.1, bisher_eur: 2.62 };
+    p.s.ck = null; await p.neuZeichnen(); await new Promise(r => setTimeout(r, 200));
+    const ch = [...sr.querySelectorAll('.ck-d .ckd-g .ck-chip')], l = sr.querySelector('.ck-d .ck-chip[data-k="zust"] .ck-l');
+    return { zweispaltig: !!l && !!l.closest('.ckd-lang'), raus: ch.filter(c => c.getBoundingClientRect().right > c.closest('.ckd-g').getBoundingClientRect().right + 1).map(c => c.textContent.trim()),
+      gekuerzt: !!l && l.scrollWidth > l.clientWidth + 1, text: l && l.textContent }; });
+  erwarte('Container-Kopf im Lauf am Desktop: langer Chip ganz sichtbar, nichts ragt aus seinem Kästchen', cd.zweispaltig && !cd.raus.length && !cd.gekuerzt && /Thermostat regelt$/.test(cd.text), JSON.stringify(cd));
 });
 
 /* B11 Wochenplan „Diese Woche“ (FE-0034): alle Spuren gleich breit und > 0, auch an einem Tag ohne Gründe (heute). Die
