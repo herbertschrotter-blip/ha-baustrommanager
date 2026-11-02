@@ -6,8 +6,11 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
 
 - **Block** (`freier_block`): erster freier Tag ab einem Datum, mit dem nächsten freien Tag zusammen höchstens
   `MAX_TAGE` Tage (Samstag + Sonntag = 48 h).
-- **Container** (`container_waehlen`): nicht fertig (Signatur „ohne“ noch nicht gut), Container mit nur einem
-  Heizkörper-Typ zuerst, abwechselnd Ölradiator und Konvektor, dann die wenigsten Baseline-Tage.
+- **Ein Container je Typ** (`messung_je_typ`, Herbert 02.11.2026): je Heizkörper-Typ misst genau ein Container bis zur
+  guten Signatur, die anderen dieses Typs bekommen keinen Lauf und übernehmen (`uebernimmt`, `hochrechnung.quellen`).
+  Gesperrt = dieser Typ setzt aus, kein anderer Container springt ein.
+- **Container** (`container_waehlen`): der Messcontainer eines Typs, der nicht fertig ist (Signatur „ohne“ noch nicht
+  gut); Container mit nur einem Heizkörper-Typ zuerst, abwechselnd Ölradiator und Konvektor, dann die wenigsten Tage.
 - **Kosten** (`schaetzung_eur`): erwarteter Verbrauch (Signatur „ohne“), sonst Nennleistung × Stunden × `ANTEIL`
   (Thermostat regelt etwa die Hälfte der Zeit) × Strompreis. Ein Lauf passt, wenn er in den Rest des Monatsrahmens geht
   (`monat_rest`: Rahmen − gemessene bzw. geschätzte Kosten der Läufe des Monats, abgesagte zählen nicht).
@@ -22,10 +25,11 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
+from .hochrechnung import EIGEN
 from .prognose_typen import THERMOSTAT_NACHWEISE, THERMOSTATSTELLUNGEN, ThermostatNachweis, Thermostatstellung
 
 MAX_TAGE = 2                # höchstens zwei ganze Tage je Lauf (48 h)
@@ -110,9 +114,30 @@ def freier_block(ab: date, frei: Callable[[date], bool], suche: int = SUCHE_TAGE
     return None
 
 
+def messung_je_typ(kandidaten: Iterable[Kandidat]) -> dict[str, Kandidat]:
+    """Je Heizkörper-Typ der eine Container, der misst: ein fertiger, sonst der mit den meisten Baseline-Tagen (so bleibt
+    die Messung beim selben Container), bei Gleichstand der erste nach Name. Ohne Heizkörper zählt keiner."""
+    aus: dict[str, Kandidat] = {}
+    for k in sorted(kandidaten, key=lambda k: (not k.fertig, -k.baseline_tage, k.name)):
+        if k.typ and k.nenn_kw > 0:
+            aus.setdefault(k.typ, k)
+    return aus
+
+
+def uebernimmt(bereich: str, typ: str, quelle: object, je_typ: Mapping[str, Kandidat]) -> tuple[str, ...]:
+    """Von wem ein Container „ohne Automatik“ übernimmt: `quelle` nach `logik/hochrechnung.quellen`, solange dort noch
+    nichts gemessen ist der Messcontainer seines Typs; eigene Signatur oder selbst Messcontainer: niemand."""
+    m = je_typ.get(typ)
+    if m is not None and m.bereich == bereich:
+        return ()
+    if isinstance(quelle, (list, tuple)):
+        return tuple(quelle)
+    return (m.bereich,) if m is not None and quelle != EIGEN else ()
+
+
 def container_waehlen(kandidaten: Iterable[Kandidat], letzter_typ: str | None, tage: Sequence[date]) -> Kandidat | None:
-    """Nächster Container (siehe Modul-Docstring); ohne Heizkörper, fertig oder an einem der Tage gesperrt zählt keiner."""
-    frei = [k for k in kandidaten if not k.fertig and k.typ and k.nenn_kw > 0 and not k.gesperrt.intersection(tage)]
+    """Nächster Container (siehe Modul-Docstring): nur Messcontainer, die nicht fertig und an den Tagen nicht gesperrt sind."""
+    frei = [k for k in messung_je_typ(kandidaten).values() if not k.fertig and not k.gesperrt.intersection(tage)]
     if not frei:
         return None
     return min(frei, key=lambda k: (k.typ == "gemischt", k.typ == letzter_typ, k.baseline_tage, k.name))
@@ -301,13 +326,14 @@ class Stand:
     stand: str | None               # Stand der Signatur „ohne“ (lernt|gut|brauchbar|unsicher)
     kein_lauf: str | None = None
     uebernimmt: tuple[str, ...] = ()   # gemessene Container, deren Verhältnis gilt (ohne eigene Messung)
+    misst: bool = False             # Messcontainer seines Typs (`messung_je_typ`)
 
 
 def stand_anzeige(c: Stand, noetig: int) -> dict[str, object]:
     """Stand je Container: Tage/nötig, Signatur „ohne“ (ohne Tage kein Stand), fertig = gut (dann kein Lauf mehr)."""
     stand = c.stand if c.tage else None
     return {"bereich": c.bereich, "name": c.name, "typ": c.typ, "tage": c.tage, "noetig": noetig, "stand": stand,
-            "fertig": stand == "gut", "kein_lauf": c.kein_lauf, "uebernimmt": list(c.uebernimmt)}
+            "fertig": stand == "gut", "kein_lauf": c.kein_lauf, "uebernimmt": list(c.uebernimmt), "misst": c.misst}
 
 
 def offener(laeufe: Iterable[Lauf]) -> Lauf | None:
@@ -320,7 +346,7 @@ def stand_text(*, an: bool, automatik: bool, container: Sequence[dict[str, objec
     """Stand unter dem Hinweis der Hochrechnung: „1 von 4 Containern gemessen · nächster Lauf Sa 31.10. (003_C_MAN).“"""
     if not an:
         return "Baseline messen ist aus."
-    mit = [c for c in container if not c["kein_lauf"]]
+    mit = [c for c in container if c["misst"]]
     text = f"{sum(1 for c in mit if c['fertig'])} von {len(mit)} {'Container' if len(mit) == 1 else 'Containern'} gemessen"
     if offen is not None:
         art = "Lauf läuft" if offen.status == "laeuft" else "nächster Lauf"

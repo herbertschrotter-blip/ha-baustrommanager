@@ -1479,6 +1479,9 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       Object.assign(W().container.find(c => c.bereich === 'sanitaer'), { tage: 10, stand: 'gut', fertig: true });
       W().container.find(c => c.bereich === 'magazin').kein_lauf = 'ohne Heizkörper'; await laden();
       erwarte('J4b: fertig ✓ (Balken grün) und „ohne Heizkörper – kein Lauf“', z('sanitaer').includes('Signatur ohne: gut · fertig ✓') && !!litEl('.bl-stand .bl-s[data-b="sanitaer"] .bl-tbahn i.ok') && z('magazin').includes('ohne Heizkörper – kein Lauf'));
+      W().container.find(c => c.bereich === 'lager').uebernimmt = ['sanitaer']; await laden();
+      erwarte('Ein Container je Typ: „übernimmt von …“ statt Tage-Balken', z('lager').includes('übernimmt von') && !z('lager').includes('/10') && !litEl('.bl-stand .bl-s[data-b="lager"] .bl-tbahn'));
+      W().container.find(c => c.bereich === 'lager').uebernimmt = []; await laden();
       const L = () => litEls('.bl-liste .bl-l'), lz = id => ((litEl(`.bl-liste .bl-l[data-l="${id}"]`) || {}).textContent || '').replace(/\s+/g, ' ');
       erwarte('J4b: Läufe neueste zuerst, zählt/abgebrochen/abgesagt mit Grund und Uhrzeit', L().map(e => e.dataset.l).join() === 'r3,r2,r1'
         && lz('r3').includes('1/2 Tg') && lz('r3').includes('15,7 kWh') && lz('r3').includes('4,40 €') && lz('r3').includes('abgebrochen') && lz('r3').includes('So 27.09. 09:12: Tür oder Fenster offen · erster Tag zählt')

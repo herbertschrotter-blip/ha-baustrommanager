@@ -125,7 +125,7 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     mit = {bid: sum(t.kwh or 0.0 for t in roh[bid] if beginn <= t.datum <= heute) + reste[bid].rest_kwh for bid in ids}
     # Typ nach allen Heizkörpern (auch inaktiven – der Verbrauch der Heizperiode stammt von ihnen); J4b: ohne Heizkörper
     # „ohne“ = „mit“; Container, die keinen Lauf bekommen (Planen kennt nur aktive Heizkörper), nehmen das Verhältnis der gemessenen
-    typen = {bid: h_baseline._typ({g.typ for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER}) for bid in ids}
+    typen = {bid: h_baseline.typ_alle(hz, bid) for bid in ids}
     ohne_lauf = [bid for bid in ids if typen[bid] and h_baseline.kein_lauf_von(hz, bid)]
     ohne_kwh = h.ohne_baustelle(ohne, mit, typen, ohne_lauf)
     quelle = h.quellen(ohne, mit, typen, ohne_lauf)

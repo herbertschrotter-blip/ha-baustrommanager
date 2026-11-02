@@ -62,15 +62,16 @@ function standListe(p) {
   return html`<div class="bl-titel">Stand je Container</div>
     <div class="bl-stand">${C.map(c => {
       const t = c.tage, n = c.noetig, uebernimmt = (c.uebernimmt || []).map(x => name(p, x)).join(', ');
-      const rechts = c.kein_lauf ? html`<span class="leise">${c.kein_lauf} – kein Lauf</span>`
-        : c.fertig ? html`<span class="hp-st gruen-t">Signatur ohne: gut · fertig ✓</span>`
+      const rechts = c.fertig ? html`<span class="hp-st gruen-t">Signatur ohne: gut · fertig ✓</span>`
+        : c.kein_lauf ? html`<span class="leise">${c.kein_lauf} – kein Lauf</span>`
+        : uebernimmt ? html`<span class="leise">übernimmt von ${uebernimmt}</span>`
         : c.stand ? html`<span class="hp-st">Signatur ohne: ${c.stand === 'lernt' ? 'lernt' : c.stand} · ${t}/${n} Tage</span>`
-        : html`<span class="leise">noch nicht gemessen${c.typ === 'gemischt' ? ' · nach den reinen Typen' : ''}${uebernimmt ? ` · rechnet wie ${uebernimmt}` : ''}</span>`;
+        : html`<span class="leise">noch nicht gemessen${c.typ === 'gemischt' ? ' · nach den reinen Typen' : ''}</span>`;
       return html`<div class="bl-s ${c.kein_lauf ? 'aus' : ''}" data-b=${c.bereich}><b>${name(p, c.bereich, c.name)}</b><span class="leise bl-typ">${TYP[c.typ] ?? c.typ}</span>
-        ${c.kein_lauf ? html`<span></span>` : html`<span class="bl-tage" title="${t} von ${n} Tagen ohne Automatik"><span class="bl-tbahn"><i style="width:${Math.min(100, t / n * 100)}%" class=${c.fertig ? 'ok' : ''}></i></span><span class="bl-tz">${t}/${n}</span></span>`}
+        ${c.kein_lauf || (uebernimmt && !c.fertig) ? html`<span></span>` : html`<span class="bl-tage" title="${t} von ${n} Tagen ohne Automatik"><span class="bl-tbahn"><i style="width:${Math.min(100, t / n * 100)}%" class=${c.fertig ? 'ok' : ''}></i></span><span class="bl-tz">${t}/${n}</span></span>`}
         ${rechts}</div>`; })}</div>
-    <div class="leise">Tage „ohne“ = ganze Tage eines Laufs, die zählen. Ein Container ist fertig, sobald seine Signatur „ohne Automatik“ gut ist;
-      dann läuft er nicht mehr. Gemischte Container (Ölradiator und Konvektor) kommen nach den reinen.</div>`;
+    <div class="leise">Tage „ohne“ = ganze Tage eines Laufs, die zählen. Je Heizkörper-Typ misst ein Container, die anderen dieses Typs übernehmen von ihm.
+      Er ist fertig, sobald seine Signatur „ohne Automatik“ gut ist; dann läuft er nicht mehr. Gemischte Container (Ölradiator und Konvektor) kommen nach den reinen.</div>`;
 }
 function laufListe(p) {
   const A = (p.d.baseline.laeufe || []).filter(l => l.status !== 'geplant' && l.status !== 'laeuft').slice().reverse();   // neueste zuerst

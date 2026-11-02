@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.172",
+    "datum": "2026-11-02",
+    "punkte": [
+      "Baseline: Je Heizkörper-Typ misst nur noch ein Container, bei dem bleibt es, bis seine Signatur gut ist. Die anderen Container dieses Typs bekommen keine Läufe mehr, sondern übernehmen seine Werte. Das spart Strom und Zeit; im Reiter Baseline steht bei ihnen „übernimmt von …“ statt „x/10“, „n von m gemessen“ zählt nur die messenden Container."
+    ]
+  },
+  {
     "version": "0.8.171",
     "datum": "2026-11-01",
     "punkte": [

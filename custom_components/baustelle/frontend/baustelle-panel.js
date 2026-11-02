@@ -2672,13 +2672,13 @@ function standListe(p4) {
   return b2`<div class="bl-titel">Stand je Container</div>
     <div class="bl-stand">${C2.map((c4) => {
     const t5 = c4.tage, n4 = c4.noetig, uebernimmt = (c4.uebernimmt || []).map((x2) => name(p4, x2)).join(", ");
-    const rechts = c4.kein_lauf ? b2`<span class="leise">${c4.kein_lauf} – kein Lauf</span>` : c4.fertig ? b2`<span class="hp-st gruen-t">Signatur ohne: gut · fertig ✓</span>` : c4.stand ? b2`<span class="hp-st">Signatur ohne: ${c4.stand === "lernt" ? "lernt" : c4.stand} · ${t5}/${n4} Tage</span>` : b2`<span class="leise">noch nicht gemessen${c4.typ === "gemischt" ? " · nach den reinen Typen" : ""}${uebernimmt ? ` · rechnet wie ${uebernimmt}` : ""}</span>`;
+    const rechts = c4.fertig ? b2`<span class="hp-st gruen-t">Signatur ohne: gut · fertig ✓</span>` : c4.kein_lauf ? b2`<span class="leise">${c4.kein_lauf} – kein Lauf</span>` : uebernimmt ? b2`<span class="leise">übernimmt von ${uebernimmt}</span>` : c4.stand ? b2`<span class="hp-st">Signatur ohne: ${c4.stand === "lernt" ? "lernt" : c4.stand} · ${t5}/${n4} Tage</span>` : b2`<span class="leise">noch nicht gemessen${c4.typ === "gemischt" ? " · nach den reinen Typen" : ""}</span>`;
     return b2`<div class="bl-s ${c4.kein_lauf ? "aus" : ""}" data-b=${c4.bereich}><b>${name(p4, c4.bereich, c4.name)}</b><span class="leise bl-typ">${TYP[c4.typ] ?? c4.typ}</span>
-        ${c4.kein_lauf ? b2`<span></span>` : b2`<span class="bl-tage" title="${t5} von ${n4} Tagen ohne Automatik"><span class="bl-tbahn"><i style="width:${Math.min(100, t5 / n4 * 100)}%" class=${c4.fertig ? "ok" : ""}></i></span><span class="bl-tz">${t5}/${n4}</span></span>`}
+        ${c4.kein_lauf || uebernimmt && !c4.fertig ? b2`<span></span>` : b2`<span class="bl-tage" title="${t5} von ${n4} Tagen ohne Automatik"><span class="bl-tbahn"><i style="width:${Math.min(100, t5 / n4 * 100)}%" class=${c4.fertig ? "ok" : ""}></i></span><span class="bl-tz">${t5}/${n4}</span></span>`}
         ${rechts}</div>`;
   })}</div>
-    <div class="leise">Tage „ohne“ = ganze Tage eines Laufs, die zählen. Ein Container ist fertig, sobald seine Signatur „ohne Automatik“ gut ist;
-      dann läuft er nicht mehr. Gemischte Container (Ölradiator und Konvektor) kommen nach den reinen.</div>`;
+    <div class="leise">Tage „ohne“ = ganze Tage eines Laufs, die zählen. Je Heizkörper-Typ misst ein Container, die anderen dieses Typs übernehmen von ihm.
+      Er ist fertig, sobald seine Signatur „ohne Automatik“ gut ist; dann läuft er nicht mehr. Gemischte Container (Ölradiator und Konvektor) kommen nach den reinen.</div>`;
 }
 function laufListe(p4) {
   const A2 = (p4.d.baseline.laeufe || []).filter((l4) => l4.status !== "geplant" && l4.status !== "laeuft").slice().reverse();
@@ -6504,7 +6504,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.171";
+var SEITE_VERSION = "0.8.172";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];

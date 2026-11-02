@@ -198,6 +198,29 @@ async def test_stand_ohne_heizkoerper(hass: HomeAssistant, freezer, shellys, nac
     assert A["stand_t"].startswith("0 von 1 Container gemessen") and A["vorschau"]["bereich"] == C1
 
 
+async def test_ein_container_je_typ(hass: HomeAssistant, freezer, shellys, nachrichten, monkeypatch) -> None:
+    """Herbert 02.11.2026: zwei Container desselben Typs – einer misst, der andere zeigt „übernimmt von“ und zählt nicht
+    mit; ist der Messcontainer fertig, gibt es auch dann keinen Lauf mehr, wenn er inzwischen auf „aus“ steht."""
+    from dataclasses import replace
+
+    from custom_components.baustelle.daten import struktur
+    st, hz = await _baustelle(hass, freezer, zeit="2026-11-20 10:00:00+01:00")
+    geraete = st.geraete_in
+    monkeypatch.setattr(st, "geraete_in", lambda bid: [replace(g, typ="konvektor") for g in geraete(bid)])
+    A = struktur(hass, st.entry)["laufzeit"]["baseline"]
+    misst = A["vorschau"]["bereich"]
+    anderer = next(b for b in (C1, C2) if b != misst)
+    c = {x["bereich"]: x for x in A["container"]}
+    assert c[anderer]["uebernimmt"] == [misst] and c[misst]["uebernimmt"] == []
+    assert A["stand_t"].startswith("0 von 1 Container gemessen")
+    hb._speichern(hz, [Lauf("a1", misst, SAMSTAG, MONTAG, "fertig", 9.0)])
+    hz.hochrechnung = {"ohne": {"container": [{"bereich": misst, "stand": "gut"}]}}
+    monkeypatch.setattr(hz, "modus", lambda bid: "aus" if bid == misst else "zeitplan")
+    assert [k.bereich for k in hb.kandidaten(hz, SAMSTAG) if k.fertig] == [misst]
+    A = struktur(hass, st.entry)["laufzeit"]["baseline"]
+    assert A["vorschau"] is None and A["stand_t"].startswith("1 von 1 Container gemessen")
+
+
 async def test_kosten_und_kwh_erst_nach_dem_letzten_tag(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
     """J4b: Kosten und kWh eines beendeten Laufs erst, wenn sein letzter Tag (beim Abbruch der Abbruchtag) vorbei ist –
     sonst bliebe ein halber Tag für immer stehen."""

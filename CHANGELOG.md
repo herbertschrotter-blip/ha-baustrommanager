@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.172] – 2026-11-02
+
+- Baseline: Je Heizkörper-Typ misst nur noch ein Container, bei dem bleibt es, bis seine Signatur gut ist. Die anderen
+  Container dieses Typs bekommen keine Läufe mehr, sondern übernehmen seine Werte. Das spart Strom und Zeit; im Reiter
+  Baseline steht bei ihnen „übernimmt von …“ statt „x/10“, „n von m gemessen“ zählt nur die messenden Container.
+
 ## [0.8.171] – 2026-11-01
 
 - Container-Kopf: Ein langer Chip (z. B. „Baseline-Lauf bis So 24:00 · Thermostat regelt“) lief aus seinem Kästchen in das

@@ -452,7 +452,8 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
   je Container der Heizung: `{bereich, name, typ: oelradiator|konvektor|gemischt|"", tage (zählende Baseline-Tage), noetig
   (10), stand (Signatur „ohne“: lernt|gut|brauchbar|unsicher, ohne Tage null), fertig (gut – dann kein Lauf mehr),
   kein_lauf ("ohne Heizkörper"|"Modus aus"|"ohne Automatik"|"bei Bedarf"|null), uebernimmt ([bereich] – gemessene
-  Container, deren Verhältnis ohne ÷ mit gilt – aus `hochrechnung.ohne.container[].quelle`, `logik/hochrechnung.quellen`)}`. `laeufe[]` (letzte 12) = `Lauf.als_dict` (`id, bereich, von, bis`
+  Container, deren Verhältnis ohne ÷ mit gilt – aus `hochrechnung.ohne.container[].quelle`, `logik/hochrechnung.quellen`;
+  solange dort nichts gemessen ist, der Messcontainer des Typs, `logik/baseline.uebernimmt`), misst (Messcontainer seines Typs)}`. `laeufe[]` (letzte 12) = `Lauf.als_dict` (`id, bereich, von, bis`
   (ausschließlich), `status geplant|laeuft|fertig|abgebrochen|abgesagt, schaetzung_eur, kosten_eur, kwh, grund, ende,
   angekuendigt, abbruch_um`, Metadaten) und dazu `name, typ, letzter` (letzter Tag inklusive), `von_t, letzter_t`
   („Sa 31.10.“), `tage, zaehlt` (zählende

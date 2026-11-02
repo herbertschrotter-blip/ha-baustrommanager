@@ -6,6 +6,7 @@ import pytest
 
 from logik.baseline import (
     ANTEIL, HINWEIS, MAX_TAGE, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, freier_block, kein_lauf, kopf_anzeige,
+    messung_je_typ, uebernimmt,
     laeuft_am, lauf_anzeige, monat_rest, offener, plant_am, planen, rahmen, schaetzung_eur, stand_anzeige, stand_text,
     starten, tag_t, vorschau, zaehlende_tage, zeit_t,
 )
@@ -30,11 +31,37 @@ def test_freier_block_samstag_und_sonntag():
 
 def test_container_waehlen():
     K = [k("a", "oelradiator", tage=4), k("b", "konvektor", tage=2), k("c", "gemischt"), k("d", "konvektor", tage=1)]
-    assert container_waehlen(K, None, [SA]).bereich == "d"               # wenigste Tage, nicht gemischt
+    assert container_waehlen(K, None, [SA]).bereich == "b"               # wenigste Tage je Typ, nicht gemischt
     assert container_waehlen(K, "konvektor", [SA]).bereich == "a"        # abwechselnd
     fertig = [k("a", "oelradiator", fertig=True), k("b", "konvektor", gesperrt=frozenset({SA})), k("c", "gemischt")]
     assert container_waehlen(fertig, None, [SA, SO]).bereich == "c"      # fertig und gesperrt fallen weg
     assert container_waehlen([k("x", "", kw=0)], None, [SA]) is None
+
+
+def test_ein_container_je_typ():
+    """Herbert 02.11.2026: je Typ misst einer, bei dem bleibt es; ist er fertig, bekommt dieser Typ keinen Lauf mehr."""
+    K = [k("a", "konvektor"), k("b", "konvektor"), k("c", "oelradiator")]
+    assert {t: m.bereich for t, m in messung_je_typ(K).items()} == {"konvektor": "a", "oelradiator": "c"}
+    K = [k("a", "konvektor", tage=2), k("b", "konvektor", tage=4)]
+    assert messung_je_typ(K)["konvektor"].bereich == "b"                 # bleibt bei dem, der schon misst
+    K = [k("a", "konvektor", tage=10, fertig=True), k("b", "konvektor", tage=12), k("c", "oelradiator", tage=2)]
+    assert container_waehlen(K, None, [SA]).bereich == "c"               # Typ fertig: b läuft nicht mehr
+    assert container_waehlen(K[:2], None, [SA]) is None
+    K = [k("a", "konvektor", tage=2, gesperrt=frozenset({SA})), k("b", "konvektor")]
+    assert container_waehlen(K, None, [SA]) is None                      # gesperrt: kein anderer springt ein
+    assert container_waehlen(K, None, [SO]).bereich == "a"
+    assert messung_je_typ([k("x", "", kw=0), k("y", "konvektor", kw=0)]) == {}
+
+
+def test_uebernimmt():
+    je_typ = messung_je_typ([k("a", "konvektor", tage=3), k("b", "konvektor")])
+    assert uebernimmt("b", "konvektor", None, je_typ) == ("a",)          # misst noch: künftige Quelle
+    assert uebernimmt("a", "konvektor", None, je_typ) == ()              # misst selbst
+    assert uebernimmt("b", "konvektor", ["x", "y"], je_typ) == ("x", "y")   # Quelle der Rechnung geht vor
+    assert uebernimmt("a", "konvektor", ["b"], je_typ) == ()             # der Messcontainer übernimmt nie
+    assert uebernimmt("b", "konvektor", "eigen", je_typ) == ()           # eigene Signatur
+    assert uebernimmt("c", "oelradiator", None, je_typ) == ()            # niemand misst diesen Typ
+    assert uebernimmt("m", "", "gleich", je_typ) == ()
 
 
 def test_schaetzung():
@@ -175,8 +202,8 @@ def test_vorschau_und_plant_am():
 
 
 def test_stand_und_text():
-    C = [stand_anzeige(Stand("p", "001_C_POL", "oelradiator", 10, "gut"), 10),
-         stand_anzeige(Stand("s", "002_C_SAN", "konvektor", 5, "lernt"), 10),
+    C = [stand_anzeige(Stand("p", "001_C_POL", "oelradiator", 10, "gut", misst=True), 10),
+         stand_anzeige(Stand("s", "002_C_SAN", "konvektor", 5, "lernt", misst=True), 10),
          stand_anzeige(Stand("b", "004_C_BES", "gemischt", 0, "lernt", uebernimmt=("p",)), 10),
          stand_anzeige(Stand("m", "005_C_MAG", "", 0, None, "ohne Heizkörper"), 10)]
     assert [(c["fertig"], c["stand"]) for c in C] == [(True, "gut"), (False, "lernt"), (False, None), (False, None)]   # ohne Tage kein Stand
@@ -184,9 +211,9 @@ def test_stand_und_text():
     namen = {"s": "002_C_SAN"}
     offen = Lauf("1", "s", SA, MO)
     assert stand_text(an=False, automatik=True, container=C, offen=None, vor=None, namen=namen) == "Baseline messen ist aus."
-    assert stand_text(an=True, automatik=True, container=C, offen=offen, vor=None, namen=namen) == "1 von 3 Containern gemessen · nächster Lauf Sa 14.11. (002_C_SAN)."
+    assert stand_text(an=True, automatik=True, container=C, offen=offen, vor=None, namen=namen) == "1 von 2 Containern gemessen · nächster Lauf Sa 14.11. (002_C_SAN)."
     assert stand_text(an=True, automatik=True, container=C, offen=Lauf("1", "s", SA, MO, "laeuft"), vor=None, namen=namen).endswith("· Lauf läuft Sa 14.11. (002_C_SAN).")
-    assert stand_text(an=True, automatik=True, container=C, offen=None, vor={"von": "2026-11-21"}, namen=namen) == "1 von 3 Containern gemessen · nächster Lauf voraussichtlich Sa 21.11."
+    assert stand_text(an=True, automatik=True, container=C, offen=None, vor={"von": "2026-11-21"}, namen=namen) == "1 von 2 Containern gemessen · nächster Lauf voraussichtlich Sa 21.11."
     assert stand_text(an=True, automatik=False, container=C, offen=None, vor=None, namen=namen).endswith("· Läufe nur mit eingeschalteter Automatik.")
     assert offener([Lauf("1", "s", SA, MO, "fertig"), offen]) is offen and offener([]) is None
     assert HINWEIS.startswith("Prognose ohne Automatik: Schätzung 24/7")

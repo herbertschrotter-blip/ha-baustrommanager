@@ -128,8 +128,14 @@ freie Tage** (keine Arbeitszeit, keine Ausnahme mit Arbeit, kein Termin, kein Be
 **Regeln (logik/baseline.py, mit Test):**
 - **Startet aus:** Einstellung `heizung.baseline` (Vorgabe aus); Läufe nur bei eingeschalteter Automatik.
 - **Lauf** = ein freier Block aus 1–2 ganzen Tagen (00:00–24:00, Samstag+Sonntag = 48 h), frühestens morgen.
-- **Welcher Container:** abwechselnd Ölradiator und Konvektor (Container mit nur einem Heizkörper-Typ zuerst), darunter
-  der mit den wenigsten Baseline-Tagen; ein Container ist fertig, sobald seine Signatur „ohne“ gut ist.
+- **Welcher Container:** ~~je Typ der mit den wenigsten Tagen~~ – seit 0.8.172 (Herbert 02.11.2026) **ein Container je
+  Heizkörper-Typ** (`messung_je_typ`; „gemischt“ zählt als eigener Typ, wie in `quelle_ohne`): der schon fertige, sonst der mit
+  den meisten Baseline-Tagen, bei Gleichstand der erste nach Name; so bleibt die Messung beim selben Container. Die Typen wechseln sich ab
+  (Container mit nur einem Heizkörper-Typ zuerst). Ein Container ist fertig, sobald seine Signatur „ohne“ gut ist; danach bekommt
+  sein Typ keinen Lauf mehr. Die anderen des Typs übernehmen (`quellen`), die Seite zeigt „übernimmt von …“ statt „x/10“
+  (`uebernimmt`), und der Stand „n von m gemessen“ zählt nur Messcontainer. Ist der Messcontainer gesperrt (Termin), setzt
+  der Typ aus; fällt er ganz weg (Modus aus, Bedarf), rückt der nächste nach. Damit entfallen Container-Auswahl und
+  Nachtläufe (Nacht 22–6 Uhr reicht bei Öl nicht und zählt nicht für `MIN_TAGE`).
 - **Kosten** vorher geschätzt: Nennleistung aller Heizkörper × Stunden × 50 % (Thermostat) × Strompreis; mit Signatur
   „ohne“ deren erwarteter Verbrauch. Ein Lauf startet nur, wenn er in den Rest des Monatsrahmens passt (gemessene
   Kosten der Läufe des Monats + Schätzung).

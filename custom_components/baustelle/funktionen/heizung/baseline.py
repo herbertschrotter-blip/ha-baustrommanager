@@ -17,6 +17,7 @@ import uuid
 
 from homeassistant.util import dt as dt_util
 
+from ...const import ROLLE_HEIZKOERPER
 from ...kern.staffelung import nenn_kw
 from ...logik import baseline as b
 from ...logik.signatur import MIN_TAGE
@@ -68,6 +69,12 @@ def typ_von(hz: Heizung, bid: str) -> str:
     return _typ({g.typ for g in hz.heizer_von(bid)})
 
 
+def typ_alle(hz: Heizung, bid: str) -> str:
+    """Typ nach allen Heizkörpern, auch inaktiven (der Verbrauch der Heizperiode stammt von ihnen): für die Übernahme
+    „ohne“ – Planung und Rechnung (`logik/hochrechnung.quellen`) müssen denselben Typ sehen."""
+    return _typ({g.typ for g in hz.st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER})
+
+
 def kein_lauf_von(hz: Heizung, bid: str, typ: str | None = None) -> str | None:
     """Warum der Container keinen Lauf bekommt (logik/baseline.kein_lauf)."""
     e = hz.st.einstellungen.bereich(bid)
@@ -81,13 +88,14 @@ def kandidaten(hz: Heizung, heute: date) -> list[b.Kandidat]:
     ohne = {c["bereich"]: c for c in ((hz.hochrechnung or {}).get("ohne") or {}).get("container", [])}
     for info in hz.bereiche():
         heizer = hz.heizer_von(info.id)
-        if kein_lauf_von(hz, info.id, _typ({g.typ for g in heizer})):
-            continue   # Container ohne Heizkörper, ohne Automatik, bei Bedarf oder aus: kein Lauf
+        o = ohne.get(info.id) or {}
+        fertig = o.get("stand") == "gut"
+        if not fertig and kein_lauf_von(hz, info.id):
+            continue   # ohne Heizkörper, ohne Automatik, bei Bedarf oder aus: kein Lauf; ein fertiger zählt weiter für seinen Typ
         gesperrt = frozenset(d for von, bis, _ in hz.termin_fenster(info.id)
                              for d in (von.date() + timedelta(days=i) for i in range((bis.date() - von.date()).days + 1)))
-        o = ohne.get(info.id) or {}
-        aus.append(b.Kandidat(info.id, info.name, _typ({g.typ for g in heizer}), sum(nenn_kw(st, g) for g in heizer),
-                              len(tage.get(info.id, ())), o.get("stand") == "gut", o.get("kwh_je_tag"), gesperrt))
+        aus.append(b.Kandidat(info.id, info.name, typ_alle(hz, info.id), sum(nenn_kw(st, g) for g in heizer),
+                              len(tage.get(info.id, ())), fertig, o.get("kwh_je_tag"), gesperrt))
     return aus
 
 
@@ -219,22 +227,27 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
     typen = {bid: typ_von(hz, bid) for bid in namen}
     budget = float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR))
     offen = b.offener(liste)
+    alle = kandidaten(hz, heute) if an else []
     vor = None
     if an and st.automatik and offen is None:
         # heute schon geplant (ab 12:00, ohne Lauf für morgen): der nächste Lauf beginnt frühestens übermorgen
         ab = heute + timedelta(days=1) if _lz(hz).get("geplant_am") == heute.isoformat() else heute
-        lauf = b.planen(ab, lambda d: frei(hz, d), kandidaten(hz, heute), liste, budget,
+        lauf = b.planen(ab, lambda d: frei(hz, d), alle, liste, budget,
                         st.preis_am(ab + timedelta(days=1)), "vorschau")
         vor = b.vorschau(lauf, namen.get(lauf.bereich, lauf.bereich), jetzt) if lauf else None
     hr = hz.hochrechnung or {}
     ohne = {c["bereich"]: c for c in (hr.get("ohne") or {}).get("container", [])}
     tage = b.zaehlende_tage(liste)
+    je_typ = b.messung_je_typ(alle)
     container = []
     for bid, name in namen.items():
         o = ohne.get(bid) or {}
-        q = o.get("quelle")   # logik/hochrechnung.quellen – dieselbe Regel wie die Rechnung „ohne“
+        ta = typ_alle(hz, bid)
+        # o["quelle"]: logik/hochrechnung.quellen – dieselbe Regel wie die Rechnung „ohne“
         container.append(b.stand_anzeige(b.Stand(bid, name, typen[bid], len(tage.get(bid, ())), o.get("stand"),
-                                                 kein_lauf_von(hz, bid, typen[bid]), tuple(q) if isinstance(q, list) else ()), MIN_TAGE))
+                                                 kein_lauf_von(hz, bid, typen[bid]),
+                                                 b.uebernimmt(bid, ta, o.get("quelle"), je_typ),
+                                                 ta in je_typ and je_typ[ta].bereich == bid), MIN_TAGE))
     methode = (hr.get("ohne") or {}).get("methode") or "schaetzung"
     anz = {l.id: b.lauf_anzeige(l, namen.get(l.bereich, l.bereich), typen.get(l.bereich, ""), _bisher(hz, l)) for l in liste[-12:]}
     return {"an": an, "rahmen": b.rahmen(liste, heute, budget), "vorschau": vor, "container": container,
