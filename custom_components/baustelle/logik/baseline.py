@@ -101,7 +101,7 @@ class Lauf:
 def _stellung(nachweis: object, stellung: object) -> Thermostatstellung:
     """Gespeicherte Stellung; vor 17.11.2026 schrieb `starten` neben der Annahme „unbekannt“ – das gilt jetzt als „max“."""
     if stellung in THERMOSTATSTELLUNGEN and stellung != "unbekannt":
-        return stellung   # type: ignore[return-value]
+        return stellung
     return STELLUNG_ANGENOMMEN if nachweis == "angenommen" else "unbekannt"
 
 
