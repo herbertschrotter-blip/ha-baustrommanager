@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from homeassistant.util import dt as dt_util
 
+from ...db import DATA_DB
 from ...const import ART_CONTAINER, CONF_ENDE, CONF_HEIZPERIODE_BIS, CONF_HEIZPERIODE_VON, ROLLE_HEIZKOERPER
 from ...logik.zaehlen import (
     ABKUEHL_MIN_H,
@@ -141,7 +142,9 @@ def mittel_typ(hz: Heizung, typ: str) -> float | None:
 
 def hochrechnung_heizperiode(hz: Heizung, key: str, *, schaetzung: bool = False) -> float | None:
     """Hochrechnung der Heizperiode (kWh): mit Automatik aus Energiesignatur und Klimamitteln (BSM-033.02), solange es
-    davon noch keine gibt – und „ohne Automatik“ bis zur gemessenen Baseline (BSM-033.04) – Tagesschnitt seit Zählbeginn."""
+    davon noch keine gibt – und „ohne Automatik“ bis zur gemessenen Baseline (BSM-033.04) – Tagesschnitt seit Zählbeginn.
+    Mit Datenbank vor der ersten Rechnung nach dem Start: None (sonst springt der Sensor bei jedem Neustart kurz); bleibt die
+    Rechnung ohne Ergebnis (Datenbank nicht bereit), danach wieder der Tagesschnitt."""
     st = hz.st
     if not schaetzung and key in ("energie_heizen", "ohne"):
         from .hochrechnung import werte   # noqa: PLC0415
@@ -149,6 +152,8 @@ def hochrechnung_heizperiode(hz: Heizung, key: str, *, schaetzung: bool = False)
         feld = "mit_kwh" if key == "energie_heizen" else "ohne_kwh"   # ohne: gemessene Baseline (BSM-033.04)
         if (w := werte(hz)) is not None and w.get(feld) is not None:
             return float(w[feld])
+        if w is None and DATA_DB in st.hass.data and not hz.hochrechnung_versucht:
+            return None   # mit Datenbank: bis zur ersten Rechnung nach dem Start leer statt Tagesschnitt (Sprung je Neustart)
     seit = dt_util.parse_datetime(st.zaehler["seit"]) if st.zaehler.get("seit") else None
     if seit is None:
         return None

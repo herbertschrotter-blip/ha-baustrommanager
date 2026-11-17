@@ -14,7 +14,9 @@ Je Container:
 - **Solange die Signatur lernt oder unsicher ist** (FE-0030): Gradtagverfahren – kWh je Heizgradtag der bisherigen
   Heiztage (Summe kWh ÷ Summe HGT 20/12) × Heizgradtage jedes künftigen Heiztags (Vorhersage, sonst Klimamittel), also
   kältere Monate mehr (`methode` „heizgradtage“). Hatten die bisherigen Heiztage keine Heizgradtage (alle ab 12 °C):
-  Tagesschnitt der Heiztage × Resttage mit Heizplan („tagesschnitt“). Beides ohne Spanne.
+  Tagesschnitt der Heiztage × Resttage mit Heizplan („tagesschnitt“). Beides ohne Spanne. Ein Container ganz ohne
+  gezählte Heiztage, der künftig Heiztage hat, rechnet mit kWh je Heizgradtag der anderen Container desselben
+  Heizkörper-Typs („ersatz“, `ersatz_kwh_je_hgt`) statt 0 kWh.
 - **Spanne**: wärmerer bzw. kälterer Winter (alle Tage ohne Vorhersage um `WINTER_K` wärmer/kälter) und die Streuung der
   Signatur (1,645 · rmse · √Tage, rund 90 %).
 
@@ -53,6 +55,8 @@ class TagRoh:
     aussen: float | None
     erfasst_s: float              # mitgeschriebene Sekunden des Tages (ohne Stunden aus dem Notprogramm)
     dauer_s: float = 86400.0      # Länge des Tages (Sommerzeit: 23 h / 25 h)
+    geraete_s: float | None = None   # gemessene Sekunden des am wenigsten gemessenen Heizkörpers (erreichbar, nicht
+                                     # Notprogramm); None = unbekannt bzw. ohne Heizkörper (Baseline, Bauplan §6)
 
 
 @dataclass(frozen=True)
@@ -60,7 +64,7 @@ class ContainerRest:
     rest_kwh: float
     unten_kwh: float | None
     oben_kwh: float | None
-    methode: str                  # "signatur" | "heizgradtage" | "tagesschnitt" | "keine"
+    methode: str                  # "signatur" | "heizgradtage" | "ersatz" | "tagesschnitt" | "keine"
     signatur: Signatur
     normjahr_kwh: float | None    # ganze Heizperiode bei Klimamitteln (nur mit Signatur)
     je_tag: tuple[float, ...] = ()            # erwarteter Verbrauch je Resttag (Mitte)
@@ -148,16 +152,37 @@ def kwh_je_hgt(gezaehlt: Iterable[TagRoh]) -> float | None:
     return sum(t.kwh or 0.0 for t in liste) / summe if summe > 0 else None
 
 
+def gezaehlte_tage(
+    roh: Sequence[TagRoh], heute: date, ohne_tage: Collection[date] = (), heiztage: Collection[date] | None = None,
+) -> list[TagRoh]:
+    """Tage eines Containers, die in seine Signatur gehen: ganz mitgeschrieben, kein Baseline-Tag, Heiztag."""
+    return [t for t in roh if tag_zaehlt(t, heute) and t.datum not in ohne_tage and heiztag(t.datum, heiztage)]
+
+
+def ersatz_kwh_je_hgt(gezaehlt: Mapping[str, Sequence[TagRoh]], typen: Mapping[str, str], bid: str) -> float | None:
+    """Ersatz für einen Container ohne eigene gezählte Heiztage: kWh je Heizgradtag der anderen Container desselben
+    Heizkörper-Typs (gepoolt: Σ kWh ÷ Σ HGT), sonst aller anderen; None, wenn es keine gibt oder der Container keinen
+    Heizkörper hat (Typ leer – dann bleibt sein Rest 0)."""
+    typ = typen.get(bid, "")
+    if not typ:
+        return None
+    andere = [b for b, ts in gezaehlt.items() if b != bid and ts]
+    gleich = [b for b in andere if typen.get(b, "") == typ]
+    return kwh_je_hgt(t for b in (gleich or andere) for t in gezaehlt[b])
+
+
 def container_rest(
     roh: Sequence[TagRoh], heute: date, ende: date, vorhersage: Mapping[date, float], klima: Sequence[float],
     beginn: date, ohne_tage: Collection[date] = (), *, rest_heute: float = 0.0, aussen_heute: float | None = None,
-    heiztage: Collection[date] | None = None,
+    heiztage: Collection[date] | None = None, ersatz_kwh_je_hgt: float | None = None,
 ) -> ContainerRest:
     """Rest der Heizperiode eines Containers (Rest von heute, morgen bis `ende`); `beginn` = erster Tag der Heizperiode
     (Normjahr). Tage eines Baseline-Laufs (`ohne_tage`, BSM-033.04) zählen nicht für die Signatur mit Automatik.
     `rest_heute`: Anteil des heutigen Tages, der noch kommt (0–1); `aussen_heute`: Außentemperatur dafür.
-    `heiztage` (FE-0030): nur diese Tage gehen in die Signatur und in den Rest (andere 0 kWh); None = jeder Tag."""
-    gezaehlt = [t for t in roh if tag_zaehlt(t, heute) and t.datum not in ohne_tage and heiztag(t.datum, heiztage)]
+    `heiztage` (FE-0030): nur diese Tage gehen in die Signatur und in den Rest (andere 0 kWh); None = jeder Tag.
+    `ersatz_kwh_je_hgt` (Wert der gleichnamigen Funktion): ohne eigene gezählte Heiztage, aber mit Heiztagen im Rest das Gradtagverfahren
+    mit dem Wert der anderen Container („ersatz“) statt 0 kWh."""
+    gezaehlt = gezaehlte_tage(roh, heute, ohne_tage, heiztage)
     sig = berechnen(Tag(t.aussen, t.kwh) for t in gezaehlt)    # type: ignore[arg-type]  # tag_zaehlt prüft None
     rest_tage = tage(max(heute + timedelta(days=1), beginn), ende)
     temps = temperaturen(rest_tage, vorhersage, klima)
@@ -165,13 +190,15 @@ def container_rest(
     anteil = min(1.0, max(0.0, rest_heute)) if beginn <= heute <= ende and heiztag(heute, heiztage) else 0.0
     t_heute = aussen_heute if aussen_heute is not None else klima_tag(heute, klima)
     if erwartet(sig, 0.0) is None:
-        if not gezaehlt:
+        ersatz = not gezaehlt and ersatz_kwh_je_hgt is not None and (any(plan) or anteil > 0)
+        if not gezaehlt and not ersatz:
             return ContainerRest(0.0, None, None, "keine", sig, None, (0.0,) * len(rest_tage))
-        k = kwh_je_hgt(gezaehlt)
+        k = ersatz_kwh_je_hgt if ersatz else kwh_je_hgt(gezaehlt)
         if k is not None:
             je = tuple(k * hgt(t) if p else 0.0 for (t, _), p in zip(temps, plan))
             heute_kwh = anteil * k * hgt(t_heute)
-            return ContainerRest(heute_kwh + sum(je), None, None, "heizgradtage", sig, None, je, heute_kwh=heute_kwh)
+            return ContainerRest(heute_kwh + sum(je), None, None, "ersatz" if ersatz else "heizgradtage", sig, None, je,
+                                 heute_kwh=heute_kwh)
         schnitt = sum(t.kwh or 0.0 for t in gezaehlt) / len(gezaehlt)
         return ContainerRest(schnitt * (sum(plan) + anteil), None, None, "tagesschnitt", sig, None,
                              tuple(schnitt if p else 0.0 for p in plan), heute_kwh=schnitt * anteil)
@@ -190,14 +217,14 @@ def container_rest(
 
 def baustelle(bisher_kwh: float | None, reste: Mapping[str, ContainerRest]) -> dict[str, float | str | None]:
     """Hochrechnung der Baustelle: bisher + Reste; Spanne nur, wenn alle Container eine Signatur haben. Methode: die
-    „signatur“, wenn jeder Container eine hat; sonst „heizgradtage“, wenn kein Container mit dem Tagesschnitt rechnet;
+    „signatur“, wenn jeder Container eine hat; sonst „heizgradtage“ (auch „ersatz“), wenn kein Container mit dem Tagesschnitt rechnet;
     sonst „tagesschnitt“ (wie bisher); ohne gezählte Tage „keine“."""
     if bisher_kwh is None:
         return {"mit_kwh": None, "unten_kwh": None, "oben_kwh": None, "methode": "keine", "normjahr_kwh": None}
     werte = list(reste.values())
     alle = bool(werte) and all(r.methode == "signatur" for r in werte)
     methoden = {r.methode for r in werte}
-    methode = ("signatur" if alle else "heizgradtage" if "heizgradtage" in methoden and "tagesschnitt" not in methoden
+    methode = ("signatur" if alle else "heizgradtage" if methoden & {"heizgradtage", "ersatz"} and "tagesschnitt" not in methoden
                else "tagesschnitt" if methoden - {"keine"} else "keine")
     return {
         "mit_kwh": bisher_kwh + sum(r.rest_kwh for r in werte) if methode != "keine" else None,

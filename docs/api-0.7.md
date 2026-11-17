@@ -457,7 +457,9 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
   (ausschließlich), `status geplant|laeuft|fertig|abgebrochen|abgesagt, schaetzung_eur, kosten_eur, kwh, grund, ende,
   angekuendigt, abbruch_um`, Metadaten) und dazu `name, typ, letzter` (letzter Tag inklusive), `von_t, letzter_t`
   („Sa 31.10.“), `tage, zaehlt` (zählende
-  Tage, abgebrochen: die vor dem Abbruchtag), `angekuendigt_t, abbruch_t` („Fr 30.10. 12:00“), `bis_t` („So 24:00“),
+  Tage, abgebrochen: die vor dem Abbruchtag; ohne Tage mit Ausfall), `ausfall` ([{tag, grund: offline|nicht
+  mitgeschrieben|keine Daten}], Tage, die nicht zählen; ihr Grund steht auch in `grund`, nach einem Abbruchgrund:
+  „offline: Sa 07.11., So 08.11. – zählen nicht“), `angekuendigt_t, abbruch_t` („Fr 30.10. 12:00“), `bis_t` („So 24:00“),
   `bisher_kwh, bisher_eur` (nur während des Laufs: Zähler des Containers seit dem Start, sonst `null`; `kwh` und
   `kosten_eur` kommen erst am Tag nach dem letzten Tag). `offen` = der geplante bzw. laufende Lauf (wie in `laeufe`) oder `null`. `hinweis` = „Prognose
   ohne Automatik: Schätzung 24/7 – wird durch Baseline-Läufe ersetzt.“, solange `ohne_methode` `schaetzung` ist, sonst

@@ -401,6 +401,8 @@ def test_hochrechnung_herkunft():
     assert "kältere Monate mehr, Tage ohne Heizplan 0" in text and "Tagesschnitt" not in text
     lernt, text = a.hochrechnung_herkunft("tagesschnitt", [{"methode": "tagesschnitt"}, {"methode": "heizgradtage"}], 0, None)
     assert lernt is True and "1 von 2 Containern rechnen mit dem Tagesschnitt" in text and "1 von 2 Containern verteilen" in text
+    lernt, text = a.hochrechnung_herkunft("heizgradtage", [{"methode": "ersatz"}, {"methode": "signatur"}], 0, None)
+    assert lernt is True and text.startswith("1 von 2 Containern noch ohne eigene Heiztage rechnen je Heizgradtag")
     h = a.hochrechnung_signatur(a.hochrechnung_werte(1.0, 2.0, None, 0.25), {"methode": "heizgradtage"},
                                 {"container": C, "vorhersage_tage": 6}, 0.25)
     assert h["herkunft_lernt"] is True and h["herkunft"].startswith("3 von 4")

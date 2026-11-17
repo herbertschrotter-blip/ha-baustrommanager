@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.8.174",
+    "datum": "2026-11-17",
+    "punkte": [
+      "Baseline: Ein Messtag zählt nur noch, wenn der Container und jeder Heizkörper mindestens 95 % des Tages gemessen wurden. Der Lauf von 002_C_MAN am 07.–08.11. zählte 2 Tage, obwohl die Baustelle 40 h offline war; jetzt zählt er 0, im Reiter Baseline steht „offline: Sa 07.11., So 08.11. – zählen nicht“. Die Hochrechnung bewertet alle Lauftage neu.",
+      "Baseline: Der Thermostat am Heizkörper gilt als voll aufgedreht (Herbert: so ist es auf der Baustelle meist). Die Messungen bestätigen das (001 und 002 wurden 33–37 °C warm). Die Kostenschätzung vor einem Lauf rechnet daher mit 75 % Volllast bzw. dem gemessenen Anteil des Containers; sie lag bei 001 um 40–47 % zu tief (jetzt etwa 22 € statt 15 €).",
+      "Baseline: Im Lauf pausiert die Heizung nicht mehr wegen „Tür vermutlich offen“. Bei voll aufgedrehtem Thermostat schaltet das Gerät selbst ab und der Raum kühlt – das sah aus wie eine offene Tür. Der echte Türkontakt gilt weiter.",
+      "Hochrechnung: Die Heizgrenze der Energiesignatur zählt nur noch, wenn mindestens ein Viertel der Tage darunter liegt und sie 4 K auseinander liegen. Einzelne Tage ließen die Hochrechnung um bis zu 1.000 kWh springen.",
+      "Hochrechnung: Ein Container ohne eigene Heiztage rechnet mit kWh je Heizgradtag der anderen Container (gleicher Typ, sonst alle) statt mit 0. Im Modus „aus“ bleibt er bei 0.",
+      "Hochrechnung: Nach einem Neustart zeigt der Sensor bis zur ersten Rechnung keinen Wert mehr statt kurz den alten Tagesschnitt (daher kamen viele der Sprünge im Verlauf)."
+    ]
+  },
+  {
     "version": "0.8.173",
     "datum": "2026-11-17",
     "punkte": [

@@ -29,7 +29,7 @@ from ...kern.staffelung import nenn_kw
 from ...db.tage import hochrechnung_tage, stunden
 from ...kern.kalender import async_frei_tage
 from ..basis import mitternacht
-from ...logik import baseline as b, hochrechnung as h, tagesverlauf as tv
+from ...logik import hochrechnung as h, tagesverlauf as tv
 from ...logik.arbeitszeit import WetterTag, tagesplan
 from ...logik.signatur import Tag, berechnen
 from ...logik.auswertung import heizperiode_bis, heizperiode_ende
@@ -116,16 +116,22 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     vor = vorhersage(st, heute)
     ids = [b.id for b in hz.bereiche()]
     roh = {bid: roh.get(bid, []) for bid in ids}
-    ohne_tage = b.zaehlende_tage(h_baseline.laeufe(hz))   # BSM-033.04: Tage der Baseline-Läufe
+    ohne_tage = h_baseline.zaehlende(hz)   # BSM-033.04: gemessene Tage der Baseline-Läufe (ohne Ausfall) für „ohne“
+    lauf_tage = h_baseline.lauf_tage(hz)    # alle Lauftage, auch mit Ausfall: nie in die Signatur „mit Automatik“
     aussen = aussen_heute(st, heute, roh)
-    reste = {bid: h.container_rest(roh[bid], heute, ende, vor, klima, beginn, ohne_tage.get(bid, set()),
-                                   rest_heute=anteil_heute, aussen_heute=aussen, heiztage=plan.get(bid)) for bid in ids}
+    # Typ nach allen Heizkörpern (auch inaktiven – der Verbrauch der Heizperiode stammt von ihnen)
+    typen = {bid: h_baseline.typ_alle(hz, bid) for bid in ids}
+    # Container ohne eigene gezählte Heiztage: kWh je Heizgradtag der anderen desselben Typs statt 0 (logik/hochrechnung)
+    gezaehlt = {bid: h.gezaehlte_tage(roh[bid], heute, lauf_tage.get(bid, set()), plan.get(bid)) for bid in ids}
+    reste = {bid: h.container_rest(roh[bid], heute, ende, vor, klima, beginn, lauf_tage.get(bid, set()),
+                                   rest_heute=anteil_heute, aussen_heute=aussen, heiztage=plan.get(bid),
+                                   ersatz_kwh_je_hgt=None if gezaehlt[bid] else h.ersatz_kwh_je_hgt(gezaehlt, typen, bid))
+             for bid in ids}
     # Ersparnis nach IPMVP: Signatur „ohne“ je Container, Heizperiode damit; andere über das Verhältnis je Heizkörper-Typ
     ohne = {bid: h.ohne_container(roh[bid], ohne_tage.get(bid, set()), heute, beginn, ende, vor, klima) for bid in ids}
     mit = {bid: sum(t.kwh or 0.0 for t in roh[bid] if beginn <= t.datum <= heute) + reste[bid].rest_kwh for bid in ids}
-    # Typ nach allen Heizkörpern (auch inaktiven – der Verbrauch der Heizperiode stammt von ihnen); J4b: ohne Heizkörper
-    # „ohne“ = „mit“; Container, die keinen Lauf bekommen (Planen kennt nur aktive Heizkörper), nehmen das Verhältnis der gemessenen
-    typen = {bid: h_baseline.typ_alle(hz, bid) for bid in ids}
+    # J4b: ohne Heizkörper „ohne“ = „mit“; Container, die keinen Lauf bekommen (Planen kennt nur aktive Heizkörper),
+    # nehmen das Verhältnis der gemessenen
     ohne_lauf = [bid for bid in ids if typen[bid] and h_baseline.kein_lauf_von(hz, bid)]
     ohne_kwh = h.ohne_baustelle(ohne, mit, typen, ohne_lauf)
     quelle = h.quellen(ohne, mit, typen, ohne_lauf)
@@ -185,6 +191,16 @@ def _kosten_nachtragen(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date)
 
 
 async def async_rechnen(hass: HomeAssistant, hz: Heizung) -> None:
+    """Hochrechnung rechnen; danach gilt sie als versucht – auch ohne Ergebnis (dann zeigt der Sensor den Tagesschnitt)."""
+    vor = hz.hochrechnung_lauf
+    try:
+        await _rechnen(hass, hz)
+    finally:
+        if hz.hochrechnung_lauf <= vor + 1:   # keine neuere Rechnung gestartet (die zählt dann)
+            hz.hochrechnung_versucht = True
+
+
+async def _rechnen(hass: HomeAssistant, hz: Heizung) -> None:
     st = hz.st
     db = hass.data.get(DATA_DB)
     if db is None or not db.bereit or not hz.aktiv():
@@ -195,13 +211,18 @@ async def async_rechnen(hass: HomeAssistant, hz: Heizung) -> None:
     hz.hochrechnung_lauf += 1   # nur die zuletzt gestartete Rechnung zählt (eine ältere, langsamere überschreibt sonst)
     lauf = hz.hochrechnung_lauf
     zone = dt_util.get_default_time_zone()
-    roh = await db.async_ausfuehren(lambda v: hochrechnung_tage(v, st.entry.entry_id, beginn, heute, zone))
+    # Baseline: erreichbar? Alle Heizkörper, auch später abgeschaltete (alte Lauftage werden je Rechnung neu bewertet);
+    # ein Heizkörper ohne Minute an einem Tag zählt dort nicht (db/tage)
+    heizer = {g.id: g.bereich for g in st.geraete.values() if g.rolle == ROLLE_HEIZKOERPER and g.bereich}
+    nur = {d for ds in h_baseline.lauf_tage(hz).values() for d in ds}   # Erreichbarkeit nur an Lauftagen lesen (Last)
+    roh = await db.async_ausfuehren(lambda v: hochrechnung_tage(v, st.entry.entry_id, beginn, heute, zone, heizer, nur))
     if roh is None:
         _LOGGER.debug("Hochrechnung: Tage nicht lesbar (%s)", db.fehler)
         return
     frei = await async_frei_tage(st, mitternacht(beginn), mitternacht(ende + timedelta(days=1)))   # FE-0030
     if lauf != hz.hochrechnung_lauf:
         return
+    h_baseline.ausfall_bewerten(hz, roh, beginn, heute)   # Lauftage ohne ausreichende Messung zählen nicht (Bauplan §6)
     hz.hochrechnung = ergebnis(hz, roh, heute, rest_heute(jetzt), frei)
 
 
@@ -214,7 +235,7 @@ async def async_tagesverlauf(hass: HomeAssistant, hz: Heizung, tag: date) -> dic
         return {"datum": tag.isoformat(), "stunden": [], "heizzeit": []}
     ids = {b.id for b in hz.bereiche()}
     geraete = {g.id: g.bereich for g in st.geraete.values() if g.bereich in ids}
-    ohne_tage = b.zaehlende_tage(h_baseline.laeufe(hz))
+    ohne_tage = h_baseline.zaehlende(hz)
     db = hass.data.get(DATA_DB)
     ist: dict[int, float] = {}
     aussen: dict[int, float] = {}
@@ -245,7 +266,7 @@ async def async_tagesverlauf(hass: HomeAssistant, hz: Heizung, tag: date) -> dic
 
 def werte(hz: Heizung) -> dict[str, Any] | None:
     """Hochrechnung der Baustelle aus dem letzten Ergebnis (bisher = Tage der Heizperiode aus der Datenbank); None ohne
-    Ergebnis (dann gilt der Tagesschnitt)."""
+    Ergebnis (dann gilt der Tagesschnitt, nach dem Start erst nach der ersten Rechnung – `zaehlen.hochrechnung_heizperiode`)."""
     if not hz.hochrechnung:
         return None
     return {**h.baustelle(hz.hochrechnung["bisher_kwh"], hz.hochrechnung["reste"]),

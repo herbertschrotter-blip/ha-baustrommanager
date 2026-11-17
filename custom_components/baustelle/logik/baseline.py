@@ -11,16 +11,23 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
   Gesperrt = dieser Typ setzt aus, kein anderer Container springt ein.
 - **Container** (`container_waehlen`): der Messcontainer eines Typs, der nicht fertig ist (Signatur „ohne“ noch nicht
   gut); Container mit nur einem Heizkörper-Typ zuerst, abwechselnd Ölradiator und Konvektor, dann die wenigsten Tage.
-- **Kosten** (`schaetzung_eur`): erwarteter Verbrauch (Signatur „ohne“), sonst Nennleistung × Stunden × `ANTEIL`
-  (Thermostat regelt etwa die Hälfte der Zeit) × Strompreis. Ein Lauf passt, wenn er in den Rest des Monatsrahmens geht
-  (`monat_rest`: Rahmen − gemessene bzw. geschätzte Kosten der Läufe des Monats, abgesagte zählen nicht).
+- **Kosten** (`schaetzung_eur`, Herbert 17.11.2026: „ohne Automatik“ heißt Thermostat am Heizkörper voll aufgedreht):
+  Nennleistung × Stunden × Volllastanteil × Strompreis. Volllastanteil = der höhere von `ANTEIL` (gemessen 001_C_POL:
+  0,72 und 0,78) und dem gemessenen des Containers (`volllastanteil`: kWh ÷ Nenn-kWh seiner fertigen Läufe); eine
+  höhere Signatur „ohne“ geht vor. Nie darunter: die Schätzung schützt den Kostenrahmen, eine noch nicht gute Signatur lag
+  bei 001 um 47 % zu tief, und ein Lauf mit Ausfall misst zu wenig. Ein Lauf passt, wenn er in den Rest des Monatsrahmens
+  geht (`monat_rest`: Rahmen − gemessene bzw. geschätzte Kosten der Läufe des Monats, abgesagte zählen nicht).
 - **Abbruch** (`abbruch_grund`): Automatik aus, Modus „Aus“, Tür/Fenster länger als die Tür-Pause offen, Taste, Bedarf,
   Termin.
-- **Zählende Tage** (`zaehlende_tage`): alle Tage eines fertigen Laufs, bei einem abgebrochenen die Tage vor dem Abbruch.
+- **Zählende Tage** (`zaehlende_tage`): alle Tage eines fertigen Laufs, bei einem abgebrochenen die Tage vor dem Abbruch –
+  ohne die Tage mit Ausfall (`ausfall`, `tag_ausfall`): ein Tag zählt nur, wenn er wie in der Hochrechnung zu mindestens
+  `VOLL_ANTEIL` (95 %) mitgeschrieben ist **und** jeder Heizkörper des Containers so lange erreichbar gemessen wurde
+  (nicht Notprogramm). Sonst bleibt der Lauf „fertig“, der Tag zählt nicht, der Grund steht am Lauf (Anzeige).
 - **Metadaten für die Prognose V2** (BSM-033.06, Bauvorlage r5 §5.3): `starten` friert beim Laufbeginn Konfiguration
   und Annahme ein. Die Thermostate am Heizkörper gelten als unverändert *angenommen* (Herbert: Läufe am Wochenende,
-  niemand verstellt) – eine Annahme, keine Messung; die Stellung selbst bleibt „unbekannt“. Alte Läufe ohne diese
-  Felder lesen sich als „unbekannt“.
+  niemand verstellt) – eine Annahme, keine Messung. Die Stellung ist `STELLUNG_ANGENOMMEN` = „max“ (Herbert 17.11.2026:
+  meist voll aufgedreht, „wie in einer Sauna“; gemessen 001_C_POL 32–36 °C, 002_C_MAN 30–33 °C). Alte Läufe ohne diese
+  Felder lesen sich als „unbekannt“; ältere Läufe mit Annahme, aber Stellung „unbekannt“, als „max“.
 """
 
 from __future__ import annotations
@@ -29,12 +36,13 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
-from .hochrechnung import EIGEN
+from .hochrechnung import EIGEN, VOLL_ANTEIL, TagRoh
 from .prognose_typen import THERMOSTAT_NACHWEISE, THERMOSTATSTELLUNGEN, ThermostatNachweis, Thermostatstellung
 
 MAX_TAGE = 2                # höchstens zwei ganze Tage je Lauf (48 h)
 SUCHE_TAGE = 14             # so weit voraus wird ein freier Block gesucht
-ANTEIL = 0.5                # ohne Signatur: der Thermostat am Heizkörper lässt ihn etwa die Hälfte der Zeit heizen
+ANTEIL = 0.75               # Thermostat voll: Anteil der Nennleistung über den Lauf (gemessen 001_C_POL 0,72 / 0,78)
+STELLUNG_ANGENOMMEN: Thermostatstellung = "max"   # Herbert 17.11.2026: Thermostat am Heizkörper voll aufgedreht
 BUDGET_EUR = 60.0           # Vorgabe Kostenrahmen je Monat (Herbert 11.10.2026)
 OFFEN = ("geplant", "laeuft")
 STATUS = ("geplant", "laeuft", "fertig", "abgebrochen", "abgesagt")
@@ -81,13 +89,20 @@ class Lauf:
                     None if d.get("kosten_eur") is None else float(d["kosten_eur"]),   # type: ignore[arg-type]
                     d.get("grund") or None, date.fromisoformat(str(d["ende"])) if d.get("ende") else None,   # type: ignore[arg-type]
                     nachweis if nachweis in THERMOSTAT_NACHWEISE else "unbekannt",
-                    stellung if stellung in THERMOSTATSTELLUNGEN else "unbekannt",
+                    _stellung(nachweis, stellung),
                     datetime.fromisoformat(str(d["annahme_am"])) if d.get("annahme_am") else None,
                     str(d["konfiguration_id"]) if d.get("konfiguration_id") else None,
                     tuple(str(b) for b in belege) if isinstance(belege, (list, tuple)) else (),
                     None if d.get("kwh") is None else float(d["kwh"]),   # type: ignore[arg-type]
                     datetime.fromisoformat(str(d["angekuendigt"])) if d.get("angekuendigt") else None,
                     datetime.fromisoformat(str(d["abbruch_um"])) if d.get("abbruch_um") else None)
+
+
+def _stellung(nachweis: object, stellung: object) -> Thermostatstellung:
+    """Gespeicherte Stellung; vor 17.11.2026 schrieb `starten` neben der Annahme „unbekannt“ – das gilt jetzt als „max“."""
+    if stellung in THERMOSTATSTELLUNGEN and stellung != "unbekannt":
+        return stellung   # type: ignore[return-value]
+    return STELLUNG_ANGENOMMEN if nachweis == "angenommen" else "unbekannt"
 
 
 @dataclass(frozen=True)
@@ -143,9 +158,17 @@ def container_waehlen(kandidaten: Iterable[Kandidat], letzter_typ: str | None, t
     return min(frei, key=lambda k: (k.typ == "gemischt", k.typ == letzter_typ, k.baseline_tage, k.name))
 
 
-def schaetzung_eur(k: Kandidat, tage: int, preis: float) -> float:
-    kwh = k.erwartet_kwh_tag * tage if k.erwartet_kwh_tag is not None else k.nenn_kw * 24 * tage * ANTEIL
-    return kwh * preis
+def volllastanteil(laeufe: Iterable[Lauf], k: Kandidat) -> float | None:
+    """Gemessener Anteil der Nennleistung in den fertigen Läufen des Containers (Σ kWh ÷ Σ Nennleistung × Stunden)."""
+    ls = [l for l in laeufe if l.bereich == k.bereich and l.status == "fertig" and l.kwh is not None]
+    nenn = k.nenn_kw * 24 * sum(len(l.tage()) for l in ls)
+    return sum(l.kwh or 0.0 for l in ls) / nenn if nenn > 0 else None
+
+
+def schaetzung_eur(k: Kandidat, tage: int, preis: float, laeufe: Iterable[Lauf] = ()) -> float:
+    """Kosten eines Laufs mit Thermostat voll (Modul-Docstring): nie unter `ANTEIL` der Nennleistung."""
+    anteil = max(ANTEIL, volllastanteil(laeufe, k) or 0.0)
+    return max(k.nenn_kw * 24 * tage * anteil, (k.erwartet_kwh_tag or 0.0) * tage) * preis
 
 
 def monat_rest(laeufe: Iterable[Lauf], jahr: int, monat: int, budget: float) -> float:
@@ -172,10 +195,18 @@ def planen(
     k = container_waehlen(kandidaten, typen.get(letzter.bereich) if letzter else None, tage)
     if k is None:
         return None
-    eur = schaetzung_eur(k, len(tage), preis)
+    eur = schaetzung_eur(k, len(tage), preis, laeufe)
     if eur > monat_rest(laeufe, von.year, von.month, budget):
         return None
     return Lauf(neue_id, k.bereich, von, bis, "geplant", eur)
+
+
+def tuer_vermuten(*, baseline: bool) -> bool:
+    """Gilt die vermutete Tür (FE-0025) für diesen Container? Im Baseline-Lauf nicht: Der Thermostat am Heizkörper steht
+    meist voll auf (Herbert 17.11.2026) und schaltet das Gerät bei Höchststellung selbst ab, das Relais bleibt an und der
+    Raum kühlt ab – das sähe aus wie eine offene Tür und hätte den Lauf pausiert (Lauf 002, 07.11.2026). Im Lauf zählt nur
+    der echte Tür- oder Fensterkontakt."""
+    return not baseline
 
 
 def abbruch_grund(*, automatik: bool, tuer_offen_min: float | None, tuer_pause_min: float, taste: bool, bedarf: bool,
@@ -197,8 +228,8 @@ def abbruch_grund(*, automatik: bool, tuer_offen_min: float | None, tuer_pause_m
 
 
 def starten(l: Lauf, jetzt: datetime, konfiguration_id: str | None, p_ref_belege: Sequence[str] = ()) -> Lauf:
-    """Lauf beginnt: Status „laeuft“, Metadaten für die Prognose eingefroren (Thermostate angenommen unverändert)."""
-    return replace(l, status="laeuft", thermostat_unveraendert="angenommen", thermostatstellung="unbekannt",
+    """Lauf beginnt: Status „laeuft“, Metadaten für die Prognose eingefroren (Thermostate angenommen unverändert, voll)."""
+    return replace(l, status="laeuft", thermostat_unveraendert="angenommen", thermostatstellung=STELLUNG_ANGENOMMEN,
                    annahme_am=jetzt, konfiguration_id=konfiguration_id, p_ref_belege=tuple(p_ref_belege))
 
 
@@ -209,15 +240,75 @@ def abbrechen(l: Lauf, heute: date, grund: str, um: datetime | None = None) -> L
     return replace(l, status="abgebrochen", grund=grund, ende=heute, abbruch_um=um)
 
 
-def zaehlende_tage(laeufe: Iterable[Lauf]) -> dict[str, set[date]]:
-    """Je Container die Tage „ohne Automatik“ (für `logik/signatur.je_betrieb`)."""
+def _gelaufen(l: Lauf) -> list[date]:
+    """Tage, an denen der Lauf ganz lief: alle eines fertigen, bei einem abgebrochenen die vor dem Abbruch."""
+    if l.status == "fertig":
+        return l.tage()
+    if l.status == "abgebrochen" and l.ende is not None:
+        return [d for d in l.tage() if d < l.ende]
+    return []
+
+
+def zaehlende_tage(laeufe: Iterable[Lauf], ausfall: Mapping[str, Mapping[str, str]] | None = None) -> dict[str, set[date]]:
+    """Je Container die Tage „ohne Automatik“ (für `logik/signatur.je_betrieb`); ohne die Tage mit Ausfall
+    (`ausfall`: Lauf-ID → {ISO-Tag: Grund}, aus `ausfall`)."""
     aus: dict[str, set[date]] = {}
     for l in laeufe:
-        if l.status == "fertig":
-            aus.setdefault(l.bereich, set()).update(l.tage())
-        elif l.status == "abgebrochen" and l.ende is not None:
-            aus.setdefault(l.bereich, set()).update(d for d in l.tage() if d < l.ende)
+        weg = (ausfall or {}).get(l.id) or {}
+        if tage := [d for d in _gelaufen(l) if d.isoformat() not in weg]:
+            aus.setdefault(l.bereich, set()).update(tage)
     return aus
+
+
+AUSFALL_DATEN = "keine Daten"
+AUSFALL_MITSCHRIFT = "nicht mitgeschrieben"
+AUSFALL_OFFLINE = "offline"
+
+
+def tag_ausfall(t: TagRoh | None) -> str | None:
+    """Warum ein Baseline-Tag nicht ausreichend gemessen ist (None = gemessen): ohne Tageszeile bzw. Verbrauch, weniger als
+    `VOLL_ANTEIL` des Tages mitgeschrieben (wie `hochrechnung.tag_zaehlt`) oder ein Heizkörper weniger als `VOLL_ANTEIL`
+    erreichbar gemessen („offline“; Minuten des Notprogramms zählen nicht – dann regelt das Gerät selbst, nicht der Lauf)."""
+    if t is None or t.kwh is None:
+        return AUSFALL_DATEN
+    if t.erfasst_s < VOLL_ANTEIL * t.dauer_s:
+        return AUSFALL_MITSCHRIFT
+    if t.geraete_s is not None and t.geraete_s < VOLL_ANTEIL * t.dauer_s:
+        return AUSFALL_OFFLINE
+    return None
+
+
+def ausfall(laeufe: Iterable[Lauf], roh: Mapping[str, Sequence[TagRoh]], von: date, heute: date,
+            bisher: Mapping[str, Mapping[str, str]] | None = None) -> dict[str, dict[str, str]]:
+    """Tage mit Ausfall je Lauf (Lauf-ID → {ISO-Tag: Grund}), neu bewertet für alle vergangenen Lauftage ab `von` (so weit
+    `roh` reicht: die Tage der Heizperiode); ältere Tage behalten ihre Bewertung aus `bisher`. Wirkt rückwirkend auf alle
+    gespeicherten Läufe. Tage ab heute bewertet erst die nächste Rechnung (bis dahin zählen sie), ebenso gestern ohne Tageszeile. Jede
+    Rechnung bewertet neu, eine vorläufige Bewertung heilt also von selbst."""
+    aus: dict[str, dict[str, str]] = {}
+    for l in laeufe:
+        tage = {t.datum: t for t in roh.get(l.bereich, ())}
+        alt = (bisher or {}).get(l.id) or {}
+        neu: dict[str, str] = {}
+        for d in _gelaufen(l):
+            if d < von:
+                if d.isoformat() in alt:
+                    neu[d.isoformat()] = alt[d.isoformat()]
+            elif d < heute and (g := tag_ausfall(tage.get(d))) is not None and not (g == AUSFALL_DATEN and d == heute - timedelta(days=1)):
+                neu[d.isoformat()] = g   # gestern ohne Tageszeile: Nachtrag/Abgleich steht evtl. noch aus – zählt vorläufig
+        if neu:
+            aus[l.id] = neu
+    return aus
+
+
+def ausfall_text(weg: Mapping[str, str]) -> str | None:
+    """„offline: Sa 07.11., So 08.11. – zählt nicht“ (None ohne Ausfall); je Grund eine Gruppe."""
+    if not weg:
+        return None
+    gruppen: dict[str, list[str]] = {}
+    for tag, grund in sorted(weg.items()):
+        gruppen.setdefault(grund, []).append(tag_t(date.fromisoformat(tag)))
+    zahl = len(weg)
+    return "; ".join(f"{g}: {', '.join(t)}" for g, t in gruppen.items()) + (" – zählt nicht" if zahl == 1 else " – zählen nicht")
 
 
 def laeuft_am(laeufe: Iterable[Lauf], bereich: str, tag: date) -> Lauf | None:
@@ -287,12 +378,18 @@ def kopf_anzeige(l: Lauf, bisher: tuple[float, float] | None, bis: str) -> dict[
             "letzter_t": tag_t(letzter_tag(l)), "bis": bis, "bis_t": bis_t(l), "bisher_kwh": kwh, "bisher_eur": eur}
 
 
-def lauf_anzeige(l: Lauf, name: str, typ: str, bisher: tuple[float, float] | None = None) -> dict[str, object]:
+def lauf_anzeige(l: Lauf, name: str, typ: str, bisher: tuple[float, float] | None = None,
+                 ausfall_: Mapping[str, str] | None = None) -> dict[str, object]:
     """Ein Lauf für die Seite: dazu letzter Tag (inklusive), Anzahl Tage, zählende Tage, Texte für Uhrzeiten und – solange
-    er läuft – `bisher` (kWh, €) seit dem Start."""
-    zaehlt = len(zaehlende_tage([l]).get(l.bereich, ()))
+    er läuft – `bisher` (kWh, €) seit dem Start. Tage mit Ausfall (`ausfall_`: {ISO-Tag: Grund}) zählen nicht; ihr Grund
+    steht in `grund` (nach einem Abbruchgrund) und als Liste in `ausfall`."""
+    weg = dict(ausfall_ or {})
+    zaehlt = len(zaehlende_tage([l], {l.id: weg}).get(l.bereich, ()))
     kwh, eur = _bisher(l, bisher)
-    return {**l.als_dict(), "name": name, "typ": typ, "letzter": letzter_tag(l).isoformat(), "tage": len(l.tage()), "zaehlt": zaehlt,
+    text = ausfall_text(weg)
+    grund = " · ".join(g for g in (l.grund, text) if g) or None
+    return {**l.als_dict(), "grund": grund, "ausfall": [{"tag": t, "grund": g} for t, g in sorted(weg.items())],
+            "name": name, "typ": typ, "letzter": letzter_tag(l).isoformat(), "tage": len(l.tage()), "zaehlt": zaehlt,
             "von_t": tag_t(l.von), "letzter_t": tag_t(letzter_tag(l)),
             "kwh": None if l.kwh is None else round(l.kwh, 2),
             "angekuendigt_t": zeit_t(l.angekuendigt) if l.angekuendigt else None,

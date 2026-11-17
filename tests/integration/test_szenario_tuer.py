@@ -684,6 +684,29 @@ async def test_tuer_vermutet_ohne_lernen_bei_taktendem_radiator(hass: HomeAssist
     assert not _an(hass, "switch.hk1") and st.daten.grund[C1] == "tuer_offen"
 
 
+async def test_keine_vermutete_tuer_im_baseline_lauf(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
+    """Baseline-Lauf, Thermostat am Radiator voll auf: das Gerät taktet selbst, der Raum kühlt – keine vermutete Tür, der
+    Lauf heizt durch (Lauf 002 am 07.11.2026, Herbert 17.11.2026). Nur der echte Kontakt pausiert."""
+    from custom_components.baustelle.funktionen.heizung import baseline as hb
+    from custom_components.baustelle.logik.baseline import Lauf
+    st = baustelle.runtime_data
+    st.einstellungen.bereich(C1)["soll"] = 20.0
+    hass.states.async_set("sensor.aussen", "5.0")
+    hass.states.async_set("sensor.temp_c1", "19.1")
+    await _start(hass, freezer, st, tuer=None)
+    heute = dt_util.now().date()
+    st.e["heizung"]["baseline"] = True
+    hz = Heizung.von(st)
+    hb._speichern(hz, [Lauf("b1", C1, heute, heute + timedelta(days=2), "laeuft", 10.0)])
+    minute = _minuten(hass, freezer, st, "10:00:00")
+    for i in range(33):
+        hass.states.async_set("sensor.hk1_power", "2300" if i % 7 < 3 else "0")
+        await minute(19.1 - 0.027 * i)
+    assert "Tür vermutlich offen – der Raum kühlt beim Heizen ab, Heizung pausiert 10 min" not in _texte(st, "warnung")
+    assert C1 not in hz._vermutet_bis
+    assert _an(hass, "switch.hk1") and st.daten.grund[C1] == "baseline"
+
+
 async def test_tuer_vermutet_mit_geschlossenem_kontakt(hass: HomeAssistant, baustelle, freezer, shellys, nachrichten) -> None:
     """Kontakt zu (z. B. Fenster ohne Sensor offen): die Vermutung greift trotzdem (art „vermutet“, nicht „kontakt“)
     und pausiert die Heizung (FE-0025)."""

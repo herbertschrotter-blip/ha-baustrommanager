@@ -504,6 +504,9 @@ def hochrechnung_herkunft(methode: str | None, container: Sequence[Mapping[str, 
                      "künftigen Heiztage (kältere Monate mehr, Tage ohne Heizplan 0)")
     if schnitt_n:
         teile.append(f"{schnitt_n} von {n} Containern rechnen mit dem Tagesschnitt der Heiztage (bisher keine Heizgradtage)")
+    if ersatz_n := sum(1 for c in container if c.get("methode") == "ersatz"):
+        teile.append(f"{ersatz_n} von {n} Containern noch ohne eigene Heiztage rechnen je Heizgradtag wie die anderen "
+                     "Container desselben Heizkörper-Typs")
     if not teile:
         teile.append(f"{sum(1 for c in container if c.get('methode') != 'signatur')} von {n} Containern noch ohne Heiztage")
     return True, " · ".join(teile) + ", bis die Signatur steht (10 ganze Heiztage, 4 K Spanne)."

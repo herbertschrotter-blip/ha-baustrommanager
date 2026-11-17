@@ -93,7 +93,7 @@ def test_haltebedarf_und_hinweise():
                               "Der Einfluss kälteren Wetters ist noch nicht bestimmt.",
                               "Frostverbrauch noch nicht geprüft.", "Für kältere Bedingungen fehlen noch Messungen.",
                               "Die Heizleistung kann für das gewünschte Soll zu klein sein.")
-    assert a.ohne.hinweise == ("Die unveränderte Thermostatstellung ist angenommen.",)
+    assert a.ohne.hinweise == ("Angenommen: Thermostat am Heizkörper voll aufgedreht und nicht verstellt.",)
     assert a.gespart.wert_kwh is None and a.gespart.band_text == "Möglicher Bereich: -2,0–8,0 kWh"
     assert a.vergleichshinweis == HALTE_VERGLEICH and a.gespart_prozent is None
 

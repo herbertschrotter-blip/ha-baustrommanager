@@ -36,6 +36,11 @@ Modell mit Heizgrenze („3P-Heizen“): **kWh am Tag = Grundlast + kWh je Grad 
 
 - **Heizgrenze** im Raster 5–22 °C in 0,5-K-Schritten gesucht. Je Grenze wird mit kleinsten Quadraten gerechnet, die
   kleinste Fehlerquadratsumme gewinnt. Mindestens 3 Tage müssen unter der Grenze liegen, die Steigung muss positiv sein.
+  **Datenbelegung** (17.11.2026, Vorschlag zur Abnahme durch Herbert): unter der Grenze zusätzlich mindestens ein Viertel
+  aller Tage mit mindestens 4 K Spanne (`MIN_SEITE_ANTEIL`, `MIN_SPANNE`) – wie die Belegungsprüfung bei
+  Change-Point-Modellen (ASHRAE RP-1050/Inverse Modeling Toolkit). Befund: Mit nur 3–4 kalten Tagen (4,2–6,7 °C) unter
+  einer Grenze von 6,5 °C sprang die Steigung von 1,7 auf 6,2 kWh/K; ein einzelner Tag (nach dem Baseline-Lauf, Container
+  noch warm, 6,3 kWh) hob die Hochrechnung um rund 760 kWh, ein anderer (09.11.) senkte sie um 1.100 kWh.
 - Liegt die beste Grenze über allen gemessenen Tagen, ist sie nicht bestimmbar. Dann gilt eine **Gerade** („2P“), mit
   dem wärmsten Tag als Bezug. Das ist der Normalfall, solange nur kalte Tage gemessen sind.
 - **Gütemaß** CV(RMSE) = √(SSE ÷ (n − p)) ÷ mittlerer Tagesverbrauch: bis 20 % „gut“, bis 30 % „brauchbar“, darüber
@@ -63,7 +68,9 @@ nach ÖNORM); es zählen nur **ganze Tage ohne Ausfall und ohne Notbetrieb** (mi
   (Herbert 28.10.2026) **Gradtagverfahren**: kWh je Heizgradtag der bisherigen Heiztage (Σ kWh ÷ Σ HGT 20/12) × HGT
   jedes künftigen Heiztags (Vorhersage, sonst Klimamittel) – kältere Monate mehr, die Linie ist eine Kurve
   (`methode` „heizgradtage“). Nur wenn die bisherigen Heiztage keine Heizgradtage hatten (alle ab 12 °C): Tagesschnitt
-  der Heiztage × Resttage mit Heizplan. Beides ohne Spanne.
+  der Heiztage × Resttage mit Heizplan. Beides ohne Spanne. **Ganz ohne gezählte Heiztage** (neuer Container, Fühler
+  oder Erfassung fehlt), aber mit Heiztagen im Rest: kWh je Heizgradtag der anderen Container desselben Heizkörper-Typs
+  (sonst aller), `methode` „ersatz“ – statt 0 kWh (17.11.2026). Modus „aus“ hat keine Heiztage und bleibt bei 0.
 - **Nur Heiztage** (FE-0030, Herbert 28.10.2026): Tage ohne Heizplan (Wochenende, Feiertag, Urlaub, Ausnahme frei,
   Container „aus“) gehören nicht in die Signatur und ihre Punkte (sie streuten mit 0 kWh so stark, dass die Signatur
   „unsicher“ blieb); im Rest bekommen sie 0 kWh, auch heute. Regel `logik/hochrechnung.heiztage_container`; der Plan je
@@ -85,6 +92,14 @@ nach ÖNORM); es zählen nur **ganze Tage ohne Ausfall und ohne Notbetrieb** (mi
   (J4b: Hinweis unter der Legende, solange geschätzt wird – §6).
 - Arbeitszeitplan, Vorheizen und Frostschutz stecken in der Signatur, weil sie aus dem echten Betrieb gelernt ist.
   Getrennte Signaturen für Arbeits- und freie Tage erst, wenn das Gütemaß zeigt, dass es nötig ist.
+
+- **Sprünge der Hochrechnung (Befund 17.11.2026)**: (1) Nach jedem HA-Neustart zeigt der Sensor für Sekunden den
+  Tagesschnitt seit Zählbeginn, bis die erste Rechnung fertig ist (`heizung/zaehlen.hochrechnung_heizperiode`) – der
+  „erste Wert des Tages“ war am 02., 07. und 13.11. so ein Neustartwert (offen: bis zur ersten Rechnung keinen Wert
+  oder den letzten zeigen). (2) Die Heizgrenze aus zu wenigen kalten Tagen (§3, behoben mit der Datenbelegung).
+  (3) Container 004 seit 12.11. im Modus „aus“: keine Heiztage, also weder Signatur („0 von 10 Tagen“, auch die
+  Tage davor fallen weg) noch Rest – −1.200 kWh; der Frostschutz (bis 3 kWh am kalten Tag) fehlt im Rest (offen).
+  (4) Wechsel Signatur ↔ Heizgradtage an CV(RMSE) 30 % verschiebt einen Container um rund 20 % (offen: Übergang).
 
 ## 5. Anzeige (.03) – abgenommen 10.10.2026
 
@@ -136,16 +151,53 @@ freie Tage** (keine Arbeitszeit, keine Ausnahme mit Arbeit, kein Termin, kein Be
   (`uebernimmt`), und der Stand „n von m gemessen“ zählt nur Messcontainer. Ist der Messcontainer gesperrt (Termin), setzt
   der Typ aus; fällt er ganz weg (Modus aus, Bedarf), rückt der nächste nach. Damit entfallen Container-Auswahl und
   Nachtläufe (Nacht 22–6 Uhr reicht bei Öl nicht und zählt nicht für `MIN_TAGE`).
-- **Kosten** vorher geschätzt: Nennleistung aller Heizkörper × Stunden × 50 % (Thermostat) × Strompreis; mit Signatur
-  „ohne“ deren erwarteter Verbrauch. Ein Lauf startet nur, wenn er in den Rest des Monatsrahmens passt (gemessene
-  Kosten der Läufe des Monats + Schätzung).
+- **Kosten** vorher geschätzt: Nennleistung aller Heizkörper × Stunden × Volllastanteil × Strompreis (seit 17.11.2026,
+  vorher 50 % bzw. Signatur „ohne“). Volllastanteil = der höhere von 75 % (`ANTEIL`) und dem gemessenen des Containers
+  (`volllastanteil`: kWh ÷ Nenn-kWh seiner fertigen Läufe); eine höhere Signatur „ohne“ geht vor. Ein Lauf startet nur,
+  wenn er in den Rest des Monatsrahmens passt (gemessene Kosten der Läufe des Monats + Schätzung).
 - **Abbruch** (Lauf endet, Tag zählt nicht): Tür/Fenster länger als die Tür-Pause offen, Taste am Plug, Bedarf, Termin,
   Automatik aus, Absagen über die Nachricht oder die Seite. Frostschutz, Hand und Tür-Pause haben weiter Vorrang.
 - **Zählende Tage:** ganze Tage eines nicht abgebrochenen Laufs (wie §4: ohne Ausfall/Notbetrieb) → `Tag(automatik=False)`;
   diese Tage fehlen in der Signatur „mit Automatik“.
+- **Nur gemessene Tage zählen** (Fehler Lauf `a8f0d4a7`, 07.–08.11.2026: Baustelle von Sa 11:51 bis Mo 04:23 offline,
+  trotzdem „fertig“ mit 2 zählenden Tagen): ein Lauftag zählt nur, wenn er wie §4 zu mindestens 95 % in `bereich_minute`
+  mitgeschrieben ist (nicht Notprogramm) **und** jeder aktive Heizkörper des Containers mindestens 95 % des Tages
+  erreichbar gemessen wurde (`geraet_minute`: `erreichbar` nicht falsch, nicht Notprogramm, Summe `dauer_s`; Heizkörper
+  ohne eine Minute am Tag zählen nicht mit). Die Mitschrift des Containers allein reicht nicht – HA schreibt weiter, wenn
+  nur die Shellys weg sind. Datenquelle `db/tage.hochrechnung_tage` (`TagRoh.geraete_s`), Regel
+  `logik/baseline.tag_ausfall`/`ausfall`; die Hochrechnung (Start, 03:50) bewertet alle Lauftage der Heizperiode neu und
+  merkt sie in `lz["baseline"]["ausfall"]` (Lauf-ID → {Tag: Grund}) – rückwirkend, ohne Migration. Der Lauf bleibt
+  „fertig“ (kein Abbruch: ein Ausfall kann kurz sein, die Automatik schaltet offline ohnehin nicht); der Tag fehlt in
+  `zaehlende_tage` (Signatur „ohne“, Tage/10, Wahl des Messcontainers) und die Seite zeigt den Grund im vorhandenen Feld
+  `grund` („offline: Sa 07.11., So 08.11. – zählen nicht“, `zaehlt` 0/2). Seine Kosten zählen weiter gegen den Rahmen.
 - **Ersparnis:** je Container mit Signatur „ohne“ (gut/brauchbar) dieselbe Hochrechnung wie „mit“; Container ohne eigene
   Messung übernehmen das Verhältnis ohne ÷ mit eines gemessenen Containers mit demselben Heizkörper-Typ; erst wenn das
   für alle geht, ersetzt das die 24/7-Schätzung.
+
+**Entscheidung Herbert 17.11.2026 – „ohne Automatik“ heißt Thermostat voll aufgedreht:** „Meistens drehen die Leute den
+Thermostat einfach voll auf. Man kommt in den Container und es fühlt sich an wie in einer Sauna.“ Der Vergleich ohne
+Automatik ist also das Gerät mit seinem Thermostat in Höchststellung. Umsetzung (`logik/baseline.py`, mit Test):
+`starten` setzt `thermostatstellung = "max"` (`STELLUNG_ANGENOMMEN`, weiter `thermostat_unveraendert = "angenommen"`);
+gespeicherte Läufe mit Annahme, aber Stellung „unbekannt“ (vor 17.11.) lesen sich als „max“, „andere“ bleibt. Die
+Prognose V2 übernimmt die Stellung der Läufe ins Gegenmodell (`OhneSchaetzung.thermostatstellung`, alle „max“ → „max“,
+eine „andere“ schlägt durch; Ausgabe `ohne.stellung`), T_max ist damit die Raumtemperatur bei voll aufgedrehtem
+Thermostat; Hinweis „Angenommen: Thermostat am Heizkörper voll aufgedreht und nicht verstellt.“ Die Kostenschätzung
+rechnet mit dem Volllastanteil (oben).
+Belege aus der HA-History (Baseline-Läufe ohne Automatik):
+
+| Lauf | Container | Innen max (Plateau) | Anteil Leistung > 100 W je Plug | kWh ÷ Nenn-kWh 48 h |
+|---|---|---|---|---|
+| 31.10.–01.11. | 001_C_POL | 37 °C (35,5–36,5; zweiter Fühler 33,5–35) | 001-01: 92 %, 001-02: 41 % | 106,68 ÷ 148 = 72 % |
+| 14.–15.11. | 001_C_POL | 34 °C (31,5–34; zweiter Fühler 30–32) | 001-01: 98 %, 001-02: 45 % | 115,47 ÷ 148 = 78 % |
+| 07.11. (bis offline) | 002_C_MAN | 33,2 °C (29,5–32 nach 4 h) | 100 % Aufheizen, danach 45–64 % | ungültig (40 h offline) |
+
+Alle Plateaus ≥ 30 °C: der Thermostat stand jeweils hoch – die Annahme „max“ passt zu den Messungen. Die alte Schätzung
+(50 % bzw. junge Signatur) lag bei 001 um 40–47 % zu tief; mit 75 % ergibt sich 22,20 € (gemessen 21,34/23,09 €).
+Befund 002 am 07.11.: Die drei Ausschaltungen (05:12, 07:00, 10:08 Ortszeit, je 10 min) kamen von der Integration selbst –
+„Tür vermutlich offen – der Raum kühlt beim Heizen ab“ (`lernen.tuer_vermutet`, FE-0025, Tür-Pause vor `BASELINE`); der
+Türkontakt war zu. Ursache: der Gerätethermostat taktet bei Höchststellung, der Raum kühlt bei Relay an. Seit
+0.8.174: im Baseline-Lauf keine vermutete Tür, nur der echte Kontakt pausiert (`logik/baseline.tuer_vermuten`).
+Die 24-h-Volllast der alten Hochrechnung bleibt vorerst Obergrenze (gemessen nur ein Ölradiator-Container; Konvektor fehlt).
 
 **Integration (J4a):** `funktionen/heizung/baseline.py` – Planen und Ankündigen um 12:00 für morgen, Start/Ende an den
 Tagesgrenzen, Abbruch je Minute, Läufe in `lz["baseline"]`, Protokoll „Baseline“; Soll-Grund `BASELINE` nach „Taste“
@@ -183,7 +235,8 @@ kWh eines beendeten Laufs trägt die Hochrechnung erst am Tag nach seinem letzte
 ## 7. Tests
 
 `tests/logik/test_signatur.py`: Grenze und Steigung aus Modelldaten, Streuung, lernt (Tage, Spanne), Gerade, ohne
-Zusammenhang, starke Streuung, Gütestufen, erwarteter Verbrauch, getrennter Betrieb.
+Zusammenhang, starke Streuung, Gütestufen, erwarteter Verbrauch, getrennter Betrieb, Datenbelegung unter der Grenze,
+ein Tag mehr kippt die Signatur nicht (gemessene Tage der Baustelle).
 `tests/logik/test_hochrechnung.py`: Klimamittel, Klima je Tag, HGT, welche Tage zählen (auch Sommerzeit), Vorhersage vor
 Klima, Rest mit Spanne und Normjahr, lernt (Heizgradtage; warm: Tagesschnitt), nur Heiztage, Heiztage je Container,
 Kurve Oktober gegen Jänner, ohne Tage, Summe der Baustelle.

@@ -14,7 +14,9 @@ ohne HA-Code. Lieferung P3 (BSM-033.08); der elektrische Wetterfit (`fit_ohne_we
   T_max_eff = Median der Nächte, Band von der kältesten bis zur wärmsten Nacht ± `tmax_band_min_k`; liegen die Nächte
   mehr als `tmax_nacht_diff_max_k` auseinander, ist T_max nicht identifiziert. H_ohne robust wie H regulär
   (`prognose_h.schaetzung_aus_fenstern`: Mindestband ±30 %, Ersatz ±50 %). Die Thermostatannahme bleibt als Hinweis
-  sichtbar; eine geänderte Thermostatstellung verhindert das Gegenmodell. Stufe: `prognose_stufe.evidenz_ohne`.
+  sichtbar; eine geänderte Thermostatstellung verhindert das Gegenmodell. Die Stellung der Läufe (`_stellung`: alle
+  „max“ → „max“, Herbert 17.11.2026: „ohne Automatik“ = Thermostat voll aufgedreht) steht im Ergebnis; T_max ist damit
+  die Raumtemperatur bei voll aufgedrehtem Thermostat. Stufe: `prognose_stufe.evidenz_ohne`.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from .prognose_typen import (
     ModellKontext,
     OhneSchaetzung,
     ThermostatNachweis,
+    Thermostatstellung,
     Validierung,
 )
 
@@ -160,6 +163,13 @@ def _thermostat(nachweise: Sequence[ThermostatNachweis]) -> ThermostatNachweis:
     return "bestaetigt" if nachweise else "unbekannt"
 
 
+def _stellung(stellungen: Sequence[Thermostatstellung]) -> Thermostatstellung:
+    """Stellung der Läufe eines Gegenmodells: „max“ nur, wenn alle voll aufgedreht waren; eine andere schlägt durch."""
+    if "andere" in stellungen:
+        return "andere"
+    return "max" if stellungen and all(s == "max" for s in stellungen) else "unbekannt"
+
+
 def schaetze_ohne(
     kontext: ModellKontext, plateaus: Sequence[Fenster], laeufe: Sequence[BaselineMetadaten],
     validierung: Validierung | None, regeln: PrognoseRegeln, *, zeitzone: str,
@@ -170,6 +180,7 @@ def schaetze_ohne(
     ps = [p for p in alle if p.gueltig]
     lauf_ids = sorted({p.lauf_id for p in ps if p.lauf_id})
     nachweis = _thermostat([l.thermostat_unveraendert for l in laeufe if l.lauf_id in lauf_ids])
+    stellung = _stellung([l.thermostatstellung for l in laeufe if l.lauf_id in lauf_ids])
     gruende: list[str] = []
     if nachweis == "angenommen":
         gruende.append("thermostat_angenommen")   # Betriebsannahme, keine Messung (Herbert)
@@ -177,7 +188,8 @@ def schaetze_ohne(
         gruende.append(f"thermostat_{nachweis}")
     if not ps:
         return OhneSchaetzung(kontext.bereich_id, kontext.konfiguration_id, "keine", None, None, None, None, None, None,
-                              None, 0, 0, 0.0, nachweis, validierung, (*gruende, "keine_plateaus"))
+                              None, 0, 0, 0.0, nachweis, validierung, (*gruende, "keine_plateaus"),
+                              thermostatstellung=stellung)
     naechte: dict[date, list[Fenster]] = defaultdict(list)
     je_lauf: dict[str, dict[date, float]] = defaultdict(lambda: defaultdict(float))
     for p in ps:
@@ -200,6 +212,7 @@ def schaetze_ohne(
         methode="plateau" if identifiziert else "keine", h=h, t_max_c=t_max, t_max_unten_c=unten, t_max_oben_c=oben,
         duty=None, a_kw=None, b_kw_k=None, laeufe=len(lauf_ids), beobachtungstage=len(naechte),
         plateau_h=sum(stunden.values()), thermostat_nachweis=nachweis, guete=validierung, gruende=tuple(gruende),
+        thermostatstellung=stellung,
         # B: zwei Nächte mit je ≥ 3 h im selben Lauf (zusammen ≥ 6 h prüft `evidenz_ohne` über `plateau_h`)
         naechte_b=max((sum(1 for x in je.values() if x >= regeln.baseline_b_nacht_min_h - EPS) for je in je_lauf.values()),
                       default=0))

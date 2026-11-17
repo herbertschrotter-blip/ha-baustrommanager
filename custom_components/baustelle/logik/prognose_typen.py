@@ -348,6 +348,7 @@ class OhneSchaetzung:
     guete: Validierung | None
     gruende: Gruende
     naechte_b: int = 0   # additiv: höchste Zahl Nächte ≥ `baseline_b_nacht_min_h` innerhalb EINES Laufs (Stufe B)
+    thermostatstellung: Thermostatstellung = "unbekannt"   # additiv (Herbert 17.11.2026): „max“ = voll aufgedreht
 
 
 @dataclass(frozen=True)

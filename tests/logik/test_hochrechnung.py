@@ -5,7 +5,7 @@ from datetime import date, timedelta
 import pytest
 
 from logik.hochrechnung import (
-    KLIMA_GRAZ, VOLL_ANTEIL, WINTER_K, ContainerRest, Ohne, TagRoh, baustelle, baustelle_tage, bisher, container_rest, heiztag,
+    KLIMA_GRAZ, VOLL_ANTEIL, WINTER_K, ContainerRest, Ohne, TagRoh, baustelle, baustelle_tage, bisher, container_rest, ersatz_kwh_je_hgt, gezaehlte_tage, heiztag,
     heiztage_container, hgt, hgt_summe, klima_tag, klimamittel, klimamittel_pruefen, kwh_je_hgt, ohne_baustelle, ohne_container, perioden, quelle_ohne, quellen, reihe, tag_zaehlt, tage, tageswerte, temperaturen,
 )
 from logik.signatur import Signatur
@@ -164,6 +164,34 @@ def test_heiztage_je_container():
 def test_ohne_gezaehlte_tage():
     r = container_rest([], HEUTE, HEUTE + timedelta(days=10), {}, KLIMA, date(2026, 10, 1))
     assert r.methode == "keine" and r.rest_kwh == 0.0
+
+
+def test_ohne_eigene_tage_ersatz_statt_null():
+    """Befund 17.11.2026: ein Container ohne gezählte Heiztage bekam 0 kWh Rest. Mit Heiztagen im Rest rechnet er je
+    Heizgradtag wie die anderen Container desselben Typs („ersatz“); ohne Heiztage (Modus „aus“) bleibt es bei 0."""
+    beginn, ende = date(2026, 10, 1), HEUTE + timedelta(days=20)
+    plan = frozenset(d for d in tage(beginn, ende) if d.weekday() < 5)
+    r = container_rest([], HEUTE, ende, {}, KLIMA, beginn, heiztage=plan, ersatz_kwh_je_hgt=0.5)
+    rest = tage(HEUTE + timedelta(days=1), ende)
+    assert r.methode == "ersatz" and r.unten_kwh is None
+    assert r.je_tag == pytest.approx([0.5 * hgt(klima_tag(d, KLIMA)) if d in plan else 0.0 for d in rest])
+    assert r.rest_kwh == pytest.approx(sum(r.je_tag)) and r.rest_kwh > 0
+    aus = container_rest([], HEUTE, ende, {}, KLIMA, beginn, heiztage=frozenset(), ersatz_kwh_je_hgt=0.5)
+    assert aus.methode == "keine" and aus.rest_kwh == 0.0
+    g = ContainerRest(40.0, None, None, "heizgradtage", Signatur("lernt", 3), None)
+    assert baustelle(100.0, {"e": r, "g": g})["methode"] == "heizgradtage"
+    assert baustelle(100.0, {"e": r, "g": g})["mit_kwh"] == pytest.approx(140.0 + r.rest_kwh)
+
+
+def test_ersatz_vom_gleichen_typ_sonst_von_allen():
+    a = [TagRoh(date(2026, 11, 2), 10.0, 5.0, 86400), TagRoh(date(2026, 11, 3), 6.0, 7.0, 86400)]   # 16 kWh / 28 HGT
+    b = [TagRoh(date(2026, 11, 2), 30.0, 5.0, 86400)]                                                # 30 kWh / 15 HGT
+    gez = {"a": gezaehlte_tage(a, HEUTE), "b": gezaehlte_tage(b, HEUTE), "neu": []}
+    assert ersatz_kwh_je_hgt(gez, {"a": "oel", "b": "konv", "neu": "oel"}, "neu") == pytest.approx(16 / 28)
+    assert ersatz_kwh_je_hgt(gez, {"a": "oel", "b": "konv", "neu": "gemischt"}, "neu") == pytest.approx(46 / 43)
+    assert ersatz_kwh_je_hgt(gez, {"a": "oel", "b": "konv", "neu": ""}, "neu") is None   # ohne Heizkörper: kein Ersatz
+    assert ersatz_kwh_je_hgt({"neu": []}, {}, "neu") is None
+    assert gezaehlte_tage(a, HEUTE, ohne_tage={date(2026, 11, 2)}) == [a[1]]
 
 
 def test_baustelle_summe_und_spanne():

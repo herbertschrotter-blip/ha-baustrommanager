@@ -86,6 +86,7 @@ class Heizung(Funktion):
         self._grund_beim_heizen: dict[str, str | None] = {}   # Grund der letzten Minute, in der geheizt wurde (K innen)
         self.hochrechnung: dict[str, Any] | None = None   # letzte Hochrechnung mit Signatur (BSM-033.02, hochrechnung.py)
         self.hochrechnung_lauf = 0   # Nummer der zuletzt gestarteten Rechnung
+        self.hochrechnung_versucht = False   # erste Rechnung nach dem Start gelaufen (Sensor bis dahin leer)
         # BSM-033.09: Schattenprognose V2 (prognose_schatten.py) – getrennt von der Hochrechnung, schaltet nichts
         self.prognose_v2: dict[str, Any] | None = None
         self.prognose_v2_lauf = 0

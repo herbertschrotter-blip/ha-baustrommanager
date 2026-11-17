@@ -5,7 +5,10 @@ Tagesverbrauch gegen mittlere Außentemperatur nach ASHRAE Guideline 14, Modell 
     kWh am Tag = Grundlast + kWh je Grad · max(0, Heizgrenze − außen)
 
 - **Heizgrenze** wird gesucht (Raster `GRENZE_VON` … `GRENZE_BIS`): für jede Grenze kleinste Quadrate, gewählt wird die
-  mit der kleinsten Fehlerquadratsumme. Liegt die beste Grenze über allen gemessenen Tagen, ist sie nicht bestimmbar:
+  mit der kleinsten Fehlerquadratsumme. Eine Grenze zählt nur mit genug Tagen darunter (`MIN_SEITE`, mindestens
+  `MIN_SEITE_ANTEIL` aller Tage) und `MIN_SPANNE` K Spanne dort (Datenbelegung, Befund 17.11.2026: sonst bestimmten drei
+  kalte Tage die Steigung, ein Tag mehr verschob den Jännertag um drei Viertel). Liegt die beste Grenze über allen
+  gemessenen Tagen, ist sie nicht bestimmbar:
   dann eine Gerade („2P“, `grenze` None); `bezug` ist der wärmste gemessene Tag, `grundlast` der Verbrauch dort.
 - **Gütemaß** CV(RMSE) = √(Fehlerquadratsumme ÷ (n − p)) ÷ mittlerer Tagesverbrauch, p = Anzahl der Parameter (3 bzw. 2).
   Bis `GUT` „gut“, bis `BRAUCHBAR` „brauchbar“, darüber „unsicher“.
@@ -26,6 +29,7 @@ from math import sqrt
 MIN_TAGE = 10                 # so viele Tage braucht eine Signatur mindestens
 MIN_SPANNE = 4.0              # K zwischen kältestem und wärmstem Tag
 MIN_SEITE = 3                 # Tage unter der Heizgrenze, damit eine Grenze zählt
+MIN_SEITE_ANTEIL = 0.25       # … und mindestens dieser Anteil aller Tage (Datenbelegung, Bauplan Hochrechnung §3)
 GRENZE_VON, GRENZE_BIS, GRENZE_SCHRITT = 5.0, 22.0, 0.5
 GUT = 0.20                    # CV(RMSE) bis hier „gut“
 BRAUCHBAR = 0.30              # … bis hier „brauchbar“, darüber „unsicher“
@@ -83,7 +87,8 @@ def berechnen(tage: Iterable[Tag]) -> Signatur:
     best: tuple[float, float, float, float] | None = None      # (Fehlerquadratsumme, Grenze, Grundlast, Steigung)
     for g in _raster():
         x = [max(0.0, g - v) for v in t]
-        if sum(1 for v in x if v > 0) < MIN_SEITE:
+        unter = [v for v in t if v < g]
+        if len(unter) < max(MIN_SEITE, MIN_SEITE_ANTEIL * n) or max(unter) - min(unter) < MIN_SPANNE:
             continue
         fit = _gerade(x, y)
         if fit is None or fit[1] <= 0:

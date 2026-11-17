@@ -284,7 +284,7 @@ def _ohne(o: OhneSchaetzung) -> dict[str, Any]:
             "t_max_band_c": [_zahl(o.t_max_unten_c, 2), _zahl(o.t_max_oben_c, 2)],
             "h": _h(o.h, evidenz_h(o.h, None, REGELN)) if o.h is not None else None, "laeufe": o.laeufe,
             "beobachtungstage": o.beobachtungstage, "naechte_b": o.naechte_b, "plateau_h": _zahl(o.plateau_h, 2),
-            "thermostat": o.thermostat_nachweis, "gruende": list(o.gruende)}
+            "thermostat": o.thermostat_nachweis, "stellung": o.thermostatstellung, "gruende": list(o.gruende)}
 
 
 def _zaehlung(fs: Sequence[Fenster]) -> dict[str, Any]:

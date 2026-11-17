@@ -174,6 +174,23 @@ async def test_lernt_nach_heizgradtagen(hass: HomeAssistant, freezer, shellys, n
     assert h["herkunft"].startswith("2 von 2 Containern verteilen den Verbrauch je Heizgradtag")
 
 
+async def test_container_ohne_tage_rechnet_mit_ersatz(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """Befund 17.11.2026: ein Container ohne eigene gezählte Heiztage bekommt den Rest je Heizgradtag der anderen
+    Container (gleicher Heizkörper-Typ, sonst alle) statt 0 kWh; Modus „aus“ (keine Heiztage) bleibt bei 0."""
+    entry, st = await _mit_heizplan(hass, freezer, shellys, nachrichten)
+    hz = Heizung.von(st)
+    await _tage_eintragen(hass, C1, n=7, frei={date(2026, 11, 14), date(2026, 11, 15)})
+    await async_rechnen(hass, hz)
+    je = {c["bereich"]: c for c in hz.hochrechnung["container"]}
+    assert je[C1]["methode"] == "heizgradtage" and je[C2]["methode"] == "ersatz" and je[C2]["tage"] == 0
+    assert je[C2]["rest_kwh"] == pytest.approx(je[C1]["rest_kwh"], rel=1e-6)   # gleicher Plan, gleiches kWh je HGT
+    assert werte(hz)["mit_kwh"] == pytest.approx(hz.hochrechnung["bisher_kwh"] + 2 * je[C1]["rest_kwh"])
+    st.einstellungen.bereich(C2)["modus"] = "aus"
+    await async_rechnen(hass, hz)
+    je = {c["bereich"]: c for c in hz.hochrechnung["container"]}
+    assert je[C2]["methode"] == "keine" and je[C2]["rest_kwh"] == 0.0
+
+
 async def test_klimamittel_einstellen(hass: HomeAssistant, baustelle_november, hass_ws_client) -> None:
     """BSM-033.03: Klimamittel als Einstellung (12 Werte, sonst abgelehnt); die Hochrechnung rechnet gleich damit."""
     st = baustelle_november.runtime_data
@@ -205,6 +222,22 @@ async def test_ohne_tage_bleibt_der_tagesschnitt(hass: HomeAssistant, baustelle_
     assert werte(hz)["mit_kwh"] is None
     st.zaehler["energie_heizen"] = 100.0
     st.zaehler["seit"] = (datetime(2026, 11, 10, tzinfo=WIEN)).isoformat()
+    assert hz.hochrechnung_heizperiode("energie_heizen") == pytest.approx(100.0 / 10.4167 * 212, rel=0.02)
+
+
+async def test_vor_der_ersten_rechnung_leer(hass: HomeAssistant, baustelle_november) -> None:
+    """Mit Datenbank: vor der ersten Rechnung nach dem Start kein Tagesschnitt (der Sensor sprang bei jedem Neustart kurz
+    auf den Tagesschnitt), danach das Ergebnis der Rechnung."""
+    st = baustelle_november.runtime_data
+    hz = Heizung.von(st)
+    st.zaehler["energie_heizen"] = 100.0
+    st.zaehler["seit"] = (datetime(2026, 11, 10, tzinfo=WIEN)).isoformat()
+    hz.hochrechnung, hz.hochrechnung_versucht = None, False
+    assert hz.hochrechnung_heizperiode("energie_heizen") is None
+    assert hz.hochrechnung_heizperiode("ohne") is None
+    await async_rechnen(hass, hz)
+    assert hz.hochrechnung_versucht and hz.hochrechnung_heizperiode("energie_heizen") is not None
+    hz.hochrechnung = None   # Rechnung ohne Ergebnis (z. B. Datenbank nicht bereit): wieder der Tagesschnitt
     assert hz.hochrechnung_heizperiode("energie_heizen") == pytest.approx(100.0 / 10.4167 * 212, rel=0.02)
 
 

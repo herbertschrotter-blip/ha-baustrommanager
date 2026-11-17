@@ -9,12 +9,12 @@ um (Phase 5).
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Connection, delete, func, insert, select
+from sqlalchemy import Connection, case, delete, func, insert, select
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
@@ -186,13 +186,18 @@ async def async_abgleich(hass: HomeAssistant, db: Datenbank, st: Steuerung, von:
     return zeilen
 
 
-def hochrechnung_tage(v: Connection, baustelle_id: str, von: date, bis: date, zone: tzinfo) -> dict[str, list[TagRoh]]:
+def hochrechnung_tage(v: Connection, baustelle_id: str, von: date, bis: date, zone: tzinfo,
+                      heizer: Mapping[str, str] | None = None, heizer_tage: Collection[date] | None = None) -> dict[str, list[TagRoh]]:
     """Je Container die Tage `von` … `bis` für die Hochrechnung (BSM-033.02): Verbrauch, Außenmittel und wie viel des
-    Tages mitgeschrieben ist (HA oder übernommen, ohne Stunden aus dem Notprogramm)."""
-    tb, bm = s.tag_bereich, s.bereich_minute
+    Tages mitgeschrieben ist (HA oder übernommen, ohne Stunden aus dem Notprogramm). Mit `heizer` (Heizkörper → Container)
+    dazu `geraete_s`: die Sekunden, die der am wenigsten gemessene Heizkörper erreichbar gemessen wurde (nicht
+    Notprogramm) – für die Baseline-Tage (Bauplan Hochrechnung §6). Heizkörper ohne eine Minute am Tag (noch nicht
+    angelegt) zählen dabei nicht. `heizer_tage`: nur an diesen Tagen (Lauftage der Baseline); None = an jedem Tag."""
+    tb, bm, gm = s.tag_bereich, s.bereich_minute, s.geraet_minute
     zeilen = list(v.execute(select(tb.c.bereich_id, tb.c.datum, tb.c.kwh, tb.c.aussen_mittel).where(
         tb.c.baustelle_id == baustelle_id, tb.c.datum >= von, tb.c.datum <= bis).order_by(tb.c.datum)))
     erfasst: dict[tuple[str, date], float] = {}
+    geraete: dict[tuple[str, date], float] = {}   # (Container, Tag) → Sekunden des am wenigsten gemessenen Heizkörpers
     dauer: dict[date, float] = {}
     for tag in sorted({z.datum for z in zeilen}):
         a, b = _grenzen(tag, zone)
@@ -200,9 +205,17 @@ def hochrechnung_tage(v: Connection, baustelle_id: str, von: date, bis: date, zo
         for bid, sek in v.execute(select(bm.c.bereich_id, func.sum(bm.c.dauer_s)).where(
                 bm.c.baustelle_id == baustelle_id, bm.c.zeit >= a, bm.c.zeit < b, bm.c.quelle != "notprogramm").group_by(bm.c.bereich_id)):
             erfasst[(bid, tag)] = float(sek or 0)
+        if heizer and (heizer_tage is None or tag in heizer_tage):
+            gemessen = (gm.c.quelle != "notprogramm") & gm.c.erreichbar.is_not(False)
+            for gid, alle, gut in v.execute(select(gm.c.geraet_id, func.count(), func.sum(case((gemessen, gm.c.dauer_s), else_=0))).where(
+                    gm.c.baustelle_id == baustelle_id, gm.c.zeit >= a, gm.c.zeit < b, gm.c.geraet_id.in_(list(heizer))).group_by(gm.c.geraet_id)):
+                if alle:
+                    k = (heizer[gid], tag)
+                    geraete[k] = min(geraete.get(k, float(gut or 0)), float(gut or 0))
     aus: dict[str, list[TagRoh]] = defaultdict(list)
     for z in zeilen:
-        aus[z.bereich_id].append(TagRoh(z.datum, z.kwh, z.aussen_mittel, erfasst.get((z.bereich_id, z.datum), 0.0), dauer[z.datum]))
+        aus[z.bereich_id].append(TagRoh(z.datum, z.kwh, z.aussen_mittel, erfasst.get((z.bereich_id, z.datum), 0.0), dauer[z.datum],
+                                        geraete.get((z.bereich_id, z.datum))))
     return dict(aus)
 
 

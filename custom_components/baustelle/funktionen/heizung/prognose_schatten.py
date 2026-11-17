@@ -280,7 +280,8 @@ def _modell(m: ContainerModelle | None) -> dict[str, Any] | None:
         mit_d = {"methode": "duty", "duty": _z(mit.duty, 4), "tage": mit.tage}
     o = m.ohne
     return {"mit": mit_d, "ohne": {"methode": o.methode, "t_max_c": _z(o.t_max_c, 2),
-                                   "h_kw_k": _z(o.h.h_kw_k, 5) if o.h is not None else None, "thermostat": o.thermostat_nachweis}}
+                                   "h_kw_k": _z(o.h.h_kw_k, 5) if o.h is not None else None, "thermostat": o.thermostat_nachweis,
+                                   "stellung": o.thermostatstellung}}
 
 
 def ergebnis(agg: Aggregat, raeume: Mapping[str, Sequence[Intervall]], modelle: Mapping[str, ContainerModelle],

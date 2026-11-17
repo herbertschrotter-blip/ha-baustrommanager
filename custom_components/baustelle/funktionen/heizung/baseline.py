@@ -46,6 +46,31 @@ def _speichern(hz: Heizung, liste: list[b.Lauf]) -> None:
     hz.st.einstellungen.speichern()
 
 
+def ausfall(hz: Heizung) -> dict[str, dict[str, str]]:
+    """Tage mit Ausfall je Lauf (Lauf-ID → {ISO-Tag: Grund}), bewertet von der Hochrechnung (`ausfall_bewerten`)."""
+    return _lz(hz).get("ausfall") or {}
+
+
+def ausfall_bewerten(hz: Heizung, roh: dict[str, list[Any]], von: date, heute: date) -> None:
+    """Lauftage nach den gemessenen Tagen neu bewerten (logik/baseline.ausfall) und merken – auch rückwirkend für
+    alte Läufe; gespeichert nur, wenn sich etwas ändert."""
+    liste = laeufe(hz)
+    neu = b.ausfall(liste, roh, von, heute, ausfall(hz))
+    if neu != ausfall(hz):
+        _lz(hz)["ausfall"] = neu
+        hz.st.einstellungen.speichern()
+
+
+def zaehlende(hz: Heizung, liste: list[b.Lauf] | None = None) -> dict[str, set[date]]:
+    """Zählende Baseline-Tage je Container, ohne Tage mit Ausfall."""
+    return b.zaehlende_tage(laeufe(hz) if liste is None else liste, ausfall(hz))
+
+
+def lauf_tage(hz: Heizung) -> dict[str, set[date]]:
+    """Alle Tage der gelaufenen Läufe je Container, auch die mit Ausfall – ohne Automatik, also nie „mit Automatik“."""
+    return b.zaehlende_tage(laeufe(hz))
+
+
 def eingeschaltet(hz: Heizung) -> bool:
     return bool(hz.st.e["heizung"].get("baseline"))
 
@@ -84,7 +109,7 @@ def kein_lauf_von(hz: Heizung, bid: str, typ: str | None = None) -> str | None:
 
 def kandidaten(hz: Heizung, heute: date) -> list[b.Kandidat]:
     st, aus = hz.st, []
-    tage = b.zaehlende_tage(laeufe(hz))
+    tage = zaehlende(hz)
     ohne = {c["bereich"]: c for c in ((hz.hochrechnung or {}).get("ohne") or {}).get("container", [])}
     for info in hz.bereiche():
         heizer = hz.heizer_von(info.id)
@@ -237,7 +262,7 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
         vor = b.vorschau(lauf, namen.get(lauf.bereich, lauf.bereich), jetzt) if lauf else None
     hr = hz.hochrechnung or {}
     ohne = {c["bereich"]: c for c in (hr.get("ohne") or {}).get("container", [])}
-    tage = b.zaehlende_tage(liste)
+    tage = zaehlende(hz, liste)
     je_typ = b.messung_je_typ(alle)
     container = []
     for bid, name in namen.items():
@@ -249,7 +274,9 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
                                                  b.uebernimmt(bid, ta, o.get("quelle"), je_typ),
                                                  ta in je_typ and je_typ[ta].bereich == bid), MIN_TAGE))
     methode = (hr.get("ohne") or {}).get("methode") or "schaetzung"
-    anz = {l.id: b.lauf_anzeige(l, namen.get(l.bereich, l.bereich), typen.get(l.bereich, ""), _bisher(hz, l)) for l in liste[-12:]}
+    weg = ausfall(hz)
+    anz = {l.id: b.lauf_anzeige(l, namen.get(l.bereich, l.bereich), typen.get(l.bereich, ""), _bisher(hz, l), weg.get(l.id))
+           for l in liste[-12:]}
     return {"an": an, "rahmen": b.rahmen(liste, heute, budget), "vorschau": vor, "container": container,
             "laeufe": list(anz.values()), "offen": anz.get(offen.id) if offen is not None else None,
             "hinweis": b.HINWEIS if methode != "baseline" else None,

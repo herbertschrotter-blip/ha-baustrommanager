@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
-from logik.baseline import Lauf
+from logik.baseline import Lauf, starten
 from logik.prognose_baseline import baseline_metadaten, plateaus, schaetze_ohne
 from logik.prognose_regeln import PrognoseRegeln
 from logik.prognose_stufe import evidenz_ohne
@@ -24,9 +24,10 @@ def utc(tag: date, stunde: float = 0) -> datetime:
     return (datetime.combine(tag, datetime.min.time(), WIEN) + timedelta(hours=stunde)).astimezone(UTC)
 
 
-def lauf(lid: str, von: date, tage: int, *, status: str = "fertig", nachweis: str = "angenommen") -> BaselineMetadaten:
+def lauf(lid: str, von: date, tage: int, *, status: str = "fertig", nachweis: str = "angenommen",
+         stellung: str = "unbekannt") -> BaselineMetadaten:
     return BaselineMetadaten(lid, "c1", Intervall(utc(von), utc(von + timedelta(days=tage))), status, nachweis,   # type: ignore[arg-type]
-                             "unbekannt", None, KID, ())
+                             stellung, None, KID, ())   # type: ignore[arg-type]
 
 
 def lauf_minuten(lid: str, von: date, stunden: float, *, typ: str = "oelradiator", strom=lambda i: takt(i, 9),
@@ -120,6 +121,22 @@ def test_naechte_ueber_2_k_auseinander():
     ms, laeufe = nacht_laeufe(innen2=32.5)
     o = schaetze_ohne(KTX, plateaus(ms, laeufe, R), laeufe, None, R, zeitzone=ZONE)
     assert o.t_max_c is None and "tmax_nicht_konstant" in o.gruende and o.methode == "keine"
+
+
+def test_thermostat_voll_im_gegenmodell():
+    """Herbert 17.11.2026: Läufe mit Thermostat voll → Gegenmodell „max“; eine andere Stellung schlägt durch."""
+    ms, _ = nacht_laeufe()
+    voll = [lauf("L1", SA, 2, stellung="max")]
+    o = schaetze_ohne(KTX, plateaus(ms, voll, R), voll, None, R, zeitzone=ZONE)
+    assert o.methode == "plateau" and o.thermostatstellung == "max" and "thermostat_angenommen" in o.gruende
+    ms2 = ms + lauf_minuten("L2", SA + timedelta(days=7), 24)
+    gemischt = [*voll, lauf("L2", SA + timedelta(days=7), 1, stellung="andere")]
+    assert schaetze_ohne(KTX, plateaus(ms2, gemischt, R), gemischt, None, R, zeitzone=ZONE).thermostatstellung == "andere"
+    halb = [*voll, lauf("L2", SA + timedelta(days=7), 1)]
+    assert schaetze_ohne(KTX, plateaus(ms2, halb, R), halb, None, R, zeitzone=ZONE).thermostatstellung == "unbekannt"
+    assert schaetze_ohne(KTX, [], voll, None, R, zeitzone=ZONE).thermostatstellung == "unbekannt"   # ohne Plateaus kein Lauf
+    m = baseline_metadaten(starten(Lauf("L9", "c1", SA, SA + timedelta(days=2)), utc(SA), KID), ZONE)
+    assert m.thermostatstellung == "max"
 
 
 def test_thermostat_geaendert_kein_gegenmodell():

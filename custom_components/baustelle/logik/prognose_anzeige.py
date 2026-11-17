@@ -40,7 +40,7 @@ WERT_TEXT_GESPART = {"verbrauch": "Ersparnis", "haltebedarf": "Ersparnis", "duty
 HINWEISE: tuple[tuple[str, str], ...] = (
     ("aufheizen_unmodelliert", "Haltebedarf: Das zusätzliche Aufheizen ist noch nicht bestimmt."),
     ("ersatz", "Ältere Messdaten wurden mit vereinfachten Prüfungen verwendet."),
-    ("thermostat_angenommen", "Die unveränderte Thermostatstellung ist angenommen."),
+    ("thermostat_angenommen", "Angenommen: Thermostat am Heizkörper voll aufgedreht und nicht verstellt."),
     ("duty", "Der Einfluss kälteren Wetters ist noch nicht bestimmt."),
     ("frost_unvalidiert", "Frostverbrauch noch nicht geprüft."),
     ("extrapolation", "Für kältere Bedingungen fehlen noch Messungen."),

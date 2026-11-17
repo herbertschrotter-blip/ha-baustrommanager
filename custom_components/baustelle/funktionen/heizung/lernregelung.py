@@ -9,12 +9,12 @@ from homeassistant.const import STATE_ON
 from homeassistant.util import dt as dt_util
 
 from ...const import TYP_OELRADIATOR, ROLLE_HEIZKOERPER
-from ...logik import groesse, lernen, stufen
+from ...logik import baseline as b, groesse, lernen, stufen
 from ...logik.arbeitszeit import Plan, WarmAb
 from ...logik.regelung import Soll, SollGrund
 from ...logik.zaehlen import rate
 from ..basis import zeit
-from . import start as h_start
+from . import baseline as h_baseline, start as h_start
 from .typen import LERN_GRUENDE
 
 if TYPE_CHECKING:
@@ -96,10 +96,12 @@ def _tpi(hz: Heizung, info: BereichInfo, e: Mapping[str, Any], temp: float | Non
 def _tuer_vermuten(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
     """Einmal je Minute, für jeden Container mit Fühler (FE-0025, auch ohne Lernen): kühlt der Raum beim Heizen ab,
     obwohl es draußen kaum kälter wird, ist eine Tür oder ein Fenster vermutlich offen – die Heizung pausiert dann
-    `lernen.VERMUTET_PAUSE_MIN` Minuten (plan.py) und versucht es danach neu. Von Hand geschaltet: keine Vermutung."""
+    `lernen.VERMUTET_PAUSE_MIN` Minuten (plan.py) und versucht es danach neu. Von Hand geschaltet oder im
+    Baseline-Lauf (`logik/baseline.tuer_vermuten`): keine Vermutung."""
     for info in hz.bereiche():
         heizer = [g for g in hz.st.geraete_in(info.id) if g.rolle == ROLLE_HEIZKOERPER]
-        if not info.fuehler or not heizer or any(g.id in hz.st.lz["hand"] for g in heizer):
+        if (not info.fuehler or not heizer or any(g.id in hz.st.lz["hand"] for g in heizer)
+                or not b.tuer_vermuten(baseline=h_baseline.laeuft(hz, info.id, jetzt))):   # Baseline: nur echter Kontakt
             hz._tuer_verlauf.pop(info.id, None)
             hz._vermutet.pop(info.id, None)
             hz._vermutet_bis.pop(info.id, None)   # von Hand geschaltet: auch keine laufende Pause

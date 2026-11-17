@@ -65,7 +65,7 @@ async def test_lauf_schaltet_alle_heizkoerper_und_endet(hass: HomeAssistant, fre
     l = hb.laeufe(hz)[0]
     assert l.status == "laeuft"
     # BSM-033.06: beim Start eingefroren – Thermostate angenommen unverändert, Stellung unbekannt, Konfiguration
-    assert (l.thermostat_unveraendert, l.thermostatstellung, l.annahme_am is not None) == ("angenommen", "unbekannt", True)
+    assert (l.thermostat_unveraendert, l.thermostatstellung, l.annahme_am is not None) == ("angenommen", "max", True)
     assert l.konfiguration_id == hz.prognose_kontext(C1)[1]
     assert st.lz["baseline"]["laeufe"][0]["thermostat_unveraendert"] == "angenommen"
     st.auswerten()

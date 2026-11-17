@@ -1,14 +1,15 @@
 """Baseline-Läufe „ohne Automatik“ (BSM-033.04)."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
 from logik.baseline import (
-    ANTEIL, HINWEIS, MAX_TAGE, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, freier_block, kein_lauf, kopf_anzeige,
+    ANTEIL, HINWEIS, MAX_TAGE, STELLUNG_ANGENOMMEN, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, freier_block, kein_lauf, kopf_anzeige,
     messung_je_typ, uebernimmt,
     laeuft_am, lauf_anzeige, monat_rest, offener, plant_am, planen, rahmen, schaetzung_eur, stand_anzeige, stand_text,
-    starten, tag_t, vorschau, zaehlende_tage, zeit_t,
+    starten, tag_t, volllastanteil, vorschau, zaehlende_tage, zeit_t,
 )
 
 FR = date(2026, 11, 13)          # Freitag
@@ -66,7 +67,30 @@ def test_uebernimmt():
 
 def test_schaetzung():
     assert schaetzung_eur(k("a", "konvektor", kw=2.0), 2, 0.25) == pytest.approx(2.0 * 48 * ANTEIL * 0.25)
-    assert schaetzung_eur(k("a", "konvektor", erwartet_kwh_tag=10.0), 2, 0.25) == pytest.approx(5.0)
+    assert schaetzung_eur(k("a", "konvektor", erwartet_kwh_tag=40.0), 2, 0.25) == pytest.approx(20.0)   # Signatur höher
+    assert schaetzung_eur(k("a", "konvektor", erwartet_kwh_tag=10.0), 2, 0.25) == pytest.approx(2.0 * 48 * ANTEIL * 0.25)
+
+
+def test_schaetzung_thermostat_voll_001():
+    """Herbert 17.11.2026: ohne Automatik = Thermostat voll. 001_C_POL (3,083 kW, 0,20 €/kWh) maß 106,68 und 115,47 kWh
+    in 48 h; die Schätzung vorher lag mit 50 % bzw. der jungen Signatur bei 15,22/15,73 € (40–47 % zu tief)."""
+    p = k("p", "oelradiator", kw=3.083, erwartet_kwh_tag=39.3)
+    assert ANTEIL == 0.75 and schaetzung_eur(p, 2, 0.20) == pytest.approx(22.20, abs=0.01)   # gemessen 21,34 und 23,09 €
+    l1 = Lauf("1", "p", SA, MO, "fertig", 15.22, 21.34, kwh=106.68)
+    l2 = Lauf("2", "p", SA + timedelta(days=7), MO + timedelta(days=7), "fertig", 15.73, 23.09, kwh=115.47)
+    assert volllastanteil([l1], p) == pytest.approx(0.721, abs=0.001)
+    assert volllastanteil([l1, l2], p) == pytest.approx(0.7505, abs=0.001)
+    hoch = Lauf("3", "p", SA, MO, "fertig", 0.0, 0.0, kwh=133.2)   # 90 % gemessen → Schätzung zieht mit
+    assert schaetzung_eur(p, 2, 0.20, [hoch]) == pytest.approx(133.2 * 0.20)
+    # nie darunter: ein Lauf mit Ausfall (002_C_MAN: 16,79 kWh statt ~65) und fremde, offene oder ohne kWh zählen nicht
+    ausfall = Lauf("4", "p", SA, MO, "fertig", 0.0, 3.36, kwh=16.79)
+    fremd, offen, ohne_kwh = replace(hoch, bereich="x"), replace(hoch, status="laeuft"), replace(hoch, kwh=None)
+    assert volllastanteil([fremd, offen, ohne_kwh], p) is None
+    assert schaetzung_eur(p, 2, 0.20, [ausfall, fremd, offen]) == pytest.approx(22.20, abs=0.01)
+    assert volllastanteil([l1], k("p", "", kw=0.0)) is None
+    # planen nimmt die Läufe des Containers mit
+    neu = planen(FR, wochenende, [p], [hoch], 100.0, 0.20, "n")
+    assert neu is not None and neu.schaetzung_eur == pytest.approx(133.2 * 0.20)
 
 
 def test_monat_rest():
@@ -125,11 +149,18 @@ def test_lauf_metadaten_alt_und_neu():
         "unbekannt", "unbekannt", None, None, ())
     jetzt = datetime(2026, 11, 14, 0, 0, tzinfo=UTC)
     neu = starten(Lauf("2", "a", SA, MO), jetzt, "kabc", ["p1"])
-    assert (neu.status, neu.thermostat_unveraendert, neu.thermostatstellung) == ("laeuft", "angenommen", "unbekannt")
+    assert (neu.status, neu.thermostat_unveraendert, neu.thermostatstellung) == ("laeuft", "angenommen", "max")
+    assert STELLUNG_ANGENOMMEN == "max"   # Herbert 17.11.2026: Thermostat am Heizkörper voll aufgedreht
     assert Lauf.aus_dict(neu.als_dict()) == neu
     assert neu.als_dict()["annahme_am"] == "2026-11-14T00:00:00+00:00" and neu.als_dict()["p_ref_belege"] == ["p1"]
     assert Lauf.aus_dict({**alt, "thermostat_unveraendert": "quatsch", "thermostatstellung": "max"}).thermostat_unveraendert == "unbekannt"
     assert Lauf.aus_dict({**alt, "thermostatstellung": "max"}).thermostatstellung == "max"
+    # vor 17.11.2026 gestartet: Annahme, Stellung „unbekannt“ → liest sich als „max“; „andere“ bleibt
+    gestartet = {**alt, "thermostat_unveraendert": "angenommen", "thermostatstellung": "unbekannt"}
+    assert Lauf.aus_dict(gestartet).thermostatstellung == "max"
+    assert Lauf.aus_dict({**gestartet, "thermostatstellung": "andere"}).thermostatstellung == "andere"
+    assert Lauf.aus_dict({**gestartet, "thermostatstellung": "quatsch"}).thermostatstellung == "max"
+    assert Lauf.aus_dict({**alt, "thermostat_unveraendert": "geaendert"}).thermostatstellung == "unbekannt"
 
 
 # ---------------------------------------------------------------- Anzeige (J4b, Mockup baseline.html Variante B)
