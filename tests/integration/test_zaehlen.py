@@ -17,6 +17,7 @@ from .conftest import eid as _eid, sub as _sub
 async def baustelle(hass: HomeAssistant, freezer):
     await hass.config.async_set_time_zone("Europe/Vienna")
     hass.config.currency = "EUR"
+    freezer.move_to("2026-11-10 07:00:00+01:00")   # fest vor dem Testtag, nicht die echte Uhr (sonst Sprung zurück)
     for eid, wert in {
         "switch.hk1": "off", "sensor.hk1_power": "0", "sensor.hk1_energy": "10.0",
         "switch.hk2": "off", "sensor.hk2_power": "0",
