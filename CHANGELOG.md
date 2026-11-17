@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.173] – 2026-11-17
+
+- Datenbank: Die Luftfeuchte im Container wird jetzt je Minute mitgeschrieben (`bereich_minute.feuchte`, Mittel der
+  Minute). Sie kommt vom Feuchte-Sensor am selben Gerät wie der Innenfühler – derselbe, den die Fühler-Kachel zeigt;
+  ohne solchen Sensor bleibt das Feld leer. Damit lässt sich später prüfen, ob Regen und nasse Kleidung die Feuchte
+  im Container heben.
+
 ## [0.8.172] – 2026-11-02
 
 - Baseline: Je Heizkörper-Typ misst nur noch ein Container, bei dem bleibt es, bis seine Signatur gut ist. Die anderen

@@ -12,6 +12,8 @@ Fühler (`last_reported`, auch bei unverändertem Wert über die gefilterte Beri
 Meldung einer anderen Entität desselben HA-Geräts (Feuchte, Batterie, Signal …) als Lebenszeichen, solange der Fühler
 einen gültigen Wert hat (Herbert, 28.10.2026: BLE-Fühler melden die Temperatur nur bei Änderung); ohne Gerät wie bisher
 nur die Fühler-Entität.
+Die Luftfeuchte (`bereich_minute.feuchte`, Minutenmittel) kommt vom ersten Feuchte-Sensor am Gerät des Fühlers – dieselbe
+Wahl wie die Fühler-Kachel (AN-0018); ohne Gerät oder Feuchte-Sensor bleibt sie leer (Herbert 17.11.2026).
 Gelesen wird in dieser Phase weiter aus Store und HA-Statistik – der Pilot merkt nichts.
 """
 
@@ -105,13 +107,19 @@ class Mitschreiber:
             # BSM-034.03: alle Türen und Fenster; „Tür offen“ je Minute = irgendein Kontakt offen
             tueren = kontakte(self.st.sensoren(bid)) if info.art == ART_CONTAINER else []
             self._kontakte[bid] = tueren
+            geschwister = self._geschwister(info.fuehler) if info.fuehler else []
+            feuchte = next((e.entity_id for e in geschwister if e.entity_id.startswith("sensor.")
+                            and (e.device_class or e.original_device_class) == "humidity"), None)
             self._bereiche[bid] = BereichSammler(
                 jetzt, _zahl(get(info.fuehler)) if info.fuehler else None, self._offen(bid) if tueren else None,
-                mit_tuer=bool(tueren), geraete=[gid for gid, g in self.st.geraete.items() if g.bereich == bid])
+                mit_tuer=bool(tueren), geraete=[gid for gid, g in self.st.geraete.items() if g.bereich == bid],
+                feuchte=_zahl(get(feuchte)) if feuchte else None)
             if info.fuehler:
                 self._merken(info.fuehler, "fuehler", bid)
-                for eid in self._geschwister(info.fuehler):   # Lebenszeichen des Fühler-Geräts (28.10.2026)
-                    self._merken(eid, "lebenszeichen", bid)
+                for e in geschwister:   # Lebenszeichen des Fühler-Geräts (28.10.2026)
+                    self._merken(e.entity_id, "lebenszeichen", bid)
+            if feuchte:
+                self._merken(feuchte, "feuchte", bid)
             for eid in tueren:
                 self._merken(eid, "tuer", bid)
         if self._wer:
@@ -154,13 +162,13 @@ class Mitschreiber:
         werte = [_an(self.hass.states.get(eid)) for eid in self._kontakte.get(bid, [])]
         return True if any(werte) else (False if any(w is False for w in werte) else None)
 
-    def _geschwister(self, fuehler: str) -> list[str]:
+    def _geschwister(self, fuehler: str) -> list[er.RegistryEntry]:
         """Die anderen Entitäten des HA-Geräts eines Fühlers (leer ohne Registereintrag oder ohne Gerät)."""
         reg = er.async_get(self.hass)
         eintrag = reg.async_get(fuehler)
         if eintrag is None or eintrag.device_id is None:
             return []
-        return [e.entity_id for e in er.async_entries_for_device(reg, eintrag.device_id) if e.entity_id != fuehler]
+        return [e for e in er.async_entries_for_device(reg, eintrag.device_id) if e.entity_id != fuehler]
 
     def _merken(self, entity_id: str, art: str, wessen: str) -> None:
         self._wer.setdefault(entity_id, []).append((art, wessen))
@@ -192,6 +200,8 @@ class Mitschreiber:
                 b.temperatur(t, wert)
                 # echter Bericht nur mit Wert und nicht direkt nach „nicht verfügbar“/Start (zwischengespeicherter Wert)
                 b.bericht(t, neu.last_reported if neu is not None and wert is not None and _zahl(alt) is not None else None)
+            elif art == "feuchte" and (b := self._bereiche.get(wessen)):
+                b.feuchte(t, _zahl(neu))
             elif art == "lebenszeichen" and (b := self._bereiche.get(wessen)):
                 # wie beim Fühler: Rückkehr aus „nicht verfügbar“/Start ist keine Meldung
                 if neu is not None and _gemeldet(neu) and _gemeldet(alt):
@@ -319,7 +329,7 @@ class Mitschreiber:
                 continue
             dauern.append(bm.dauer_s)
             bereiche.append({"bereich_id": bid, "zeit": ende - _sek(bm.dauer_s), "baustelle_id": self.bid,
-                             "dauer_s": bm.dauer_s, "temperatur": bm.temperatur, "feuchte": None, "soll": self._soll(bid),
+                             "dauer_s": bm.dauer_s, "temperatur": bm.temperatur, "feuchte": bm.feuchte, "soll": self._soll(bid),
                              "tuer_offen_s": bm.tuer_offen_s, "zustand": d.zustand.get(bid), "grund": d.grund.get(bid),
                              "quelle": "ha", "temp_alter_s": bm.temp_alter_s, "staffel_begrenzt_s": bm.staffel_begrenzt_s})
         dauer = max(dauern, default=60)

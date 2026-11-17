@@ -97,7 +97,7 @@ Start dasselbe Wörterbuch `e` wie heute aus dem Store – `steuerung.py` und di
 | Tabelle | eine Zeile je | Spalten | Schlüssel |
 |---|---|---|---|
 | `geraet_minute` | Gerät × Minute | `zeit` (Minutenbeginn), `baustelle_id`, `geraet_id`, `dauer_s` (60; 3600 bei übernommenen Stundenwerten), `sekunden_ein`, `leistung_w` (Ø), `leistung_w_max`, `energie_wh` (Zuwachs), `zaehlerstand_kwh`, `erreichbar`, `quelle` (ha/notprogramm/import_verlauf/import_statistik) | (`geraet_id`, `zeit`) |
-| `bereich_minute` | Container × Minute | `zeit`, `baustelle_id`, `bereich_id`, `dauer_s`, `temperatur`, `feuchte`, `soll`, `tuer_offen_s`, `zustand`, `grund`, `quelle` | (`bereich_id`, `zeit`) |
+| `bereich_minute` | Container × Minute | `zeit`, `baustelle_id`, `bereich_id`, `dauer_s`, `temperatur`, `feuchte` (Ø %, Feuchte-Sensor am Gerät des Innenfühlers, ab 0.8.173), `soll`, `tuer_offen_s`, `zustand`, `grund`, `quelle` | (`bereich_id`, `zeit`) |
 | `wetter_minute` | Baustelle × Minute | `zeit`, `baustelle_id`, `dauer_s`, `aussen_temp`, `regen_mm`, `hoechst_heute`, `quelle` | (`baustelle_id`, `zeit`) |
 | `ereignis` | jede Schaltung/Änderung | `id`, `zeit` (sekundengenau), `baustelle_id`, `bereich_id`, `geraet_id`, `art` (schalten/tuer/hand/bedarf/boost/notbetrieb/erreichbar), `wert`, `quelle` (automatik/hand/seite/taste/notprogramm), `grund` – **ohne Benutzer** (§6) | `id`; Index (`baustelle_id`, `zeit`) |
 

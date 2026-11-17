@@ -190,11 +190,13 @@ async def test_alter_innenwert_lebenszeichen_des_geraets(hass: HomeAssistant, fr
     ble.add_to_hass(hass)
     geraet = dr.async_get(hass).async_get_or_create(config_entry_id=ble.entry_id, identifiers={("bthome", "blu-ht-c1")})
     reg = er.async_get(hass)
-    for uid, objekt in (("temp", "temp_c1"), ("batterie", "temp_c1_batterie")):
+    for uid, objekt, klasse in (("temp", "temp_c1", None), ("batterie", "temp_c1_batterie", "battery"),
+                                ("feuchte", "temp_c1_feuchte", "humidity")):
         assert reg.async_get_or_create("sensor", "bthome", uid, suggested_object_id=objekt, config_entry=ble,
-                                       device_id=geraet.id).entity_id == f"sensor.{objekt}"
+                                       device_id=geraet.id, original_device_class=klasse).entity_id == f"sensor.{objekt}"
     entry = await baustelle_anlegen(hass, freezer)
     hass.states.async_set("sensor.temp_c1_batterie", "90")
+    hass.states.async_set("sensor.temp_c1_feuchte", "50")
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     shellys.anmelden()
@@ -214,6 +216,17 @@ async def test_alter_innenwert_lebenszeichen_des_geraets(hass: HomeAssistant, fr
     await hass.async_block_till_done()
     c1 = [r for r in _zeilen(hass, "bereich_minute") if r["bereich_id"] == C1]
     assert [r["temp_alter_s"] for r in c1[1:3]] == [50, 40]   # ohne Lebenszeichen 60 und 120
+    # Herbert 17.11.2026: Feuchte am Fühler-Gerät je Minute mitgeschrieben (ohne Feuchte-Sensor leer)
+    assert [r["feuchte"] for r in c1[:3]] == [50.0, 50.0, 50.0]
+    hass.states.async_set("sensor.temp_c1_feuchte", "62")
+    freezer.tick(timedelta(seconds=30))
+    hass.states.async_set("sensor.temp_c1_feuchte", "unavailable")
+    freezer.tick(timedelta(seconds=30))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    c1 = [r for r in _zeilen(hass, "bereich_minute") if r["bereich_id"] == C1]
+    assert c1[3]["feuchte"] == pytest.approx(62.0)
+    assert all(r["feuchte"] is None for r in _zeilen(hass, "bereich_minute") if r["bereich_id"] == C2)
 
 
 async def test_beobachtung_stoert_die_auswertung_nicht(hass: HomeAssistant, baustelle, freezer, monkeypatch) -> None:

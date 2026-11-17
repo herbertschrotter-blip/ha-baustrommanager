@@ -234,6 +234,7 @@ class BereichMinute:
     tuer_offen_s: int | None
     temp_alter_s: int | None = None         # P1: höchstes Alter des Innenwerts; None = unbekannt
     staffel_begrenzt_s: int | None = None   # P1: Vereinigung der Sperrzeiten der Geräte
+    feuchte: float | None = None            # Mittel der Luftfeuchte (%) am Fühler-Gerät; None = keine Feuchte
 
 
 def vereinigt(gesperrt: Iterable[bool | None]) -> bool | None:
@@ -277,12 +278,13 @@ class Alter:
 
 
 class BereichSammler:
-    """Temperatur und Tür eines Containers; dazu Alter des Innenwerts und Staffelungssperre seiner Geräte (P1)."""
+    """Temperatur, Feuchte und Tür eines Containers; dazu Alter des Innenwerts und Staffelungssperre seiner Geräte (P1)."""
 
     def __init__(self, t: datetime, temperatur: float | None, tuer_offen: bool | None, *, mit_tuer: bool,
-                 geraete: Sequence[str] = (), beobachtet: datetime | None = None) -> None:
+                 geraete: Sequence[str] = (), beobachtet: datetime | None = None, feuchte: float | None = None) -> None:
         self._start = t
         self._temp = Zeitmittel(t, temperatur)
+        self._feuchte = Zeitmittel(t, feuchte)
         self._tuer = Zeitanteil(t, tuer_offen)
         self._mit_tuer = mit_tuer
         self._alter = Alter(t, beobachtet)
@@ -293,6 +295,10 @@ class BereichSammler:
     def temperatur(self, t: datetime, wert: float | None) -> None:
         self._temp.setzen(t, wert)
         self._wert_da = wert is not None
+
+    def feuchte(self, t: datetime, wert: float | None) -> None:
+        """Luftfeuchte (%) am Fühler-Gerät; nur beobachtet, für die Auswertung Regen ↔ Feuchte (Herbert 17.11.2026)."""
+        self._feuchte.setzen(t, wert)
 
     def bericht(self, t: datetime, beobachtet: datetime | None) -> None:
         """Bericht des Fühlers (auch mit unverändertem Wert); `beobachtet` None = Wert ohne echten Bericht."""
@@ -315,13 +321,15 @@ class BereichSammler:
 
     def abschliessen(self, ende: datetime) -> BereichMinute:
         mittel, _hoechst, _summe = self._temp.abschliessen(ende)
+        feuchte, _fh, _fs = self._feuchte.abschliessen(ende)
         offen, _unbekannt = self._tuer.abschliessen(ende)
         alter = self._alter.abschliessen(ende)
         begrenzt, begrenzt_unbekannt = self._begrenzt.abschliessen(ende)
         dauer = int(round((ende - self._start).total_seconds()))
         self._start = ende
         return BereichMinute(dauer, None if mittel is None else round(mittel, 2), int(round(offen)) if self._mit_tuer else None,
-                             alter, None if begrenzt_unbekannt else int(round(begrenzt)))
+                             alter, None if begrenzt_unbekannt else int(round(begrenzt)),
+                             None if feuchte is None else round(feuchte, 1))
 
 
 # ---------------------------------------------------------------------- Verlauf nachspielen (BSM-008, Altdaten)

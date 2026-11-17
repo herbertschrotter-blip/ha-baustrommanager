@@ -122,7 +122,17 @@ def test_bereich_temperatur_und_tuer():
     m = b.abschliessen(s(60))
     assert (m.dauer_s, m.temperatur, m.tuer_offen_s) == (60, 19.0, 10)
     ohne = BereichSammler(T0, None, None, mit_tuer=False).abschliessen(s(60))
-    assert ohne.temperatur is None and ohne.tuer_offen_s is None
+    assert ohne.temperatur is None and ohne.tuer_offen_s is None and ohne.feuchte is None
+
+
+def test_bereich_feuchte_minutenmittel():
+    """Herbert 17.11.2026: Feuchte je Minute als Zeitmittel; unbekannte Zeit zählt nicht, ohne Wert leer."""
+    b = BereichSammler(T0, 21.0, None, mit_tuer=False, feuchte=50.0)
+    b.feuchte(s(45), 58.0)
+    assert b.abschliessen(s(60)).feuchte == 52.0
+    b.feuchte(s(90), None)                                   # nicht verfügbar ab der Hälfte
+    assert b.abschliessen(s(120)).feuchte == 58.0
+    assert b.abschliessen(s(180)).feuchte is None
 
 
 def test_nachspielen_geraet_wie_mitschreiben():
