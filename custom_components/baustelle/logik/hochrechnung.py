@@ -2,7 +2,9 @@
 
 Je Container:
 - **Welche Tage zählen** (`tag_zaehlt`): ganze Tage vor heute, mit Verbrauch und Außentemperatur (Tagesmittel über 24 h),
-  zu mindestens `VOLL_ANTEIL` mitgeschrieben (HA oder übernommen) – Tage mit Ausfall oder Notbetrieb fallen weg (Herbert 10.10.2026).
+  zu mindestens `VOLL_ANTEIL` mitgeschrieben (HA oder übernommen) – Tage mit Ausfall oder Notbetrieb fallen weg (Herbert 10.10.2026);
+  seit 0.8.175 auch Tage, an denen ein Heizkörper des Containers weniger als `VOLL_ANTEIL` erreichbar gemessen wurde
+  (offline: die Tagessumme wäre zu niedrig) – dieselbe Regel wie für die Baseline-Tage (Bauplan §6).
 - **Rest der Heizperiode** (morgen bis zum Ende): je Tag der erwartete Verbrauch aus der Signatur (`logik/signatur`)
   bei der Außentemperatur des Tages – aus der Vorhersage, sonst aus den Klimamitteln (Monatsmittel, zwischen den
   Monatsmitten linear). **Heute** (`rest_heute`, Anteil des Tages, der noch kommt): der gemessene Verbrauch bis jetzt
@@ -114,7 +116,8 @@ def hgt(aussen: float) -> float:
 
 
 def tag_zaehlt(t: TagRoh, heute: date) -> bool:
-    return t.datum < heute and t.kwh is not None and t.aussen is not None and t.erfasst_s >= VOLL_ANTEIL * t.dauer_s
+    return (t.datum < heute and t.kwh is not None and t.aussen is not None and t.erfasst_s >= VOLL_ANTEIL * t.dauer_s
+            and (t.geraete_s is None or t.geraete_s >= VOLL_ANTEIL * t.dauer_s))
 
 
 def tage(von: date, bis: date) -> list[date]:

@@ -9,7 +9,7 @@ um (Phase 5).
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Collection, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
 from typing import TYPE_CHECKING, Any
@@ -187,12 +187,12 @@ async def async_abgleich(hass: HomeAssistant, db: Datenbank, st: Steuerung, von:
 
 
 def hochrechnung_tage(v: Connection, baustelle_id: str, von: date, bis: date, zone: tzinfo,
-                      heizer: Mapping[str, str] | None = None, heizer_tage: Collection[date] | None = None) -> dict[str, list[TagRoh]]:
+                      heizer: Mapping[str, str] | None = None) -> dict[str, list[TagRoh]]:
     """Je Container die Tage `von` … `bis` für die Hochrechnung (BSM-033.02): Verbrauch, Außenmittel und wie viel des
     Tages mitgeschrieben ist (HA oder übernommen, ohne Stunden aus dem Notprogramm). Mit `heizer` (Heizkörper → Container)
     dazu `geraete_s`: die Sekunden, die der am wenigsten gemessene Heizkörper erreichbar gemessen wurde (nicht
-    Notprogramm) – für die Baseline-Tage (Bauplan Hochrechnung §6). Heizkörper ohne eine Minute am Tag (noch nicht
-    angelegt) zählen dabei nicht. `heizer_tage`: nur an diesen Tagen (Lauftage der Baseline); None = an jedem Tag."""
+    Notprogramm) – ein Tag zählt nur, wenn jeder Heizkörper erreichbar war (`logik/hochrechnung.tag_zaehlt`, Baseline:
+    Bauplan Hochrechnung §6). Heizkörper ohne eine Minute am Tag (noch nicht angelegt) zählen dabei nicht."""
     tb, bm, gm = s.tag_bereich, s.bereich_minute, s.geraet_minute
     zeilen = list(v.execute(select(tb.c.bereich_id, tb.c.datum, tb.c.kwh, tb.c.aussen_mittel).where(
         tb.c.baustelle_id == baustelle_id, tb.c.datum >= von, tb.c.datum <= bis).order_by(tb.c.datum)))
@@ -205,7 +205,7 @@ def hochrechnung_tage(v: Connection, baustelle_id: str, von: date, bis: date, zo
         for bid, sek in v.execute(select(bm.c.bereich_id, func.sum(bm.c.dauer_s)).where(
                 bm.c.baustelle_id == baustelle_id, bm.c.zeit >= a, bm.c.zeit < b, bm.c.quelle != "notprogramm").group_by(bm.c.bereich_id)):
             erfasst[(bid, tag)] = float(sek or 0)
-        if heizer and (heizer_tage is None or tag in heizer_tage):
+        if heizer:
             gemessen = (gm.c.quelle != "notprogramm") & gm.c.erreichbar.is_not(False)
             for gid, alle, gut in v.execute(select(gm.c.geraet_id, func.count(), func.sum(case((gemessen, gm.c.dauer_s), else_=0))).where(
                     gm.c.baustelle_id == baustelle_id, gm.c.zeit >= a, gm.c.zeit < b, gm.c.geraet_id.in_(list(heizer))).group_by(gm.c.geraet_id)):

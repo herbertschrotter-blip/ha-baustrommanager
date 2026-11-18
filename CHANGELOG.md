@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.175] – 2026-11-18
+
+- Hochrechnung: Auch mit Automatik zählt ein Tag nur noch, wenn jeder Heizkörper des Containers mindestens 95 % des
+  Tages erreichbar gemessen wurde – dieselbe Regel wie für die Baseline. An Tagen, an denen ein Shelly offline war
+  (wie am 07.–08.11.), fehlt Verbrauch; die zu niedrige Tagessumme zog die Energiesignatur und damit die Hochrechnung
+  nach unten.
+
 ## [0.8.174] – 2026-11-17
 
 Baseline und Hochrechnung der Heizperiode (Auswertung 17.11.2026):

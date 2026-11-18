@@ -211,11 +211,10 @@ async def _rechnen(hass: HomeAssistant, hz: Heizung) -> None:
     hz.hochrechnung_lauf += 1   # nur die zuletzt gestartete Rechnung zählt (eine ältere, langsamere überschreibt sonst)
     lauf = hz.hochrechnung_lauf
     zone = dt_util.get_default_time_zone()
-    # Baseline: erreichbar? Alle Heizkörper, auch später abgeschaltete (alte Lauftage werden je Rechnung neu bewertet);
-    # ein Heizkörper ohne Minute an einem Tag zählt dort nicht (db/tage)
+    # Erreichbar? Alle Heizkörper, auch später abgeschaltete (alte Tage werden je Rechnung neu bewertet); ein Heizkörper
+    # ohne Minute an einem Tag zählt dort nicht (db/tage). Offline-Tage zählen weder mit noch ohne Automatik.
     heizer = {g.id: g.bereich for g in st.geraete.values() if g.rolle == ROLLE_HEIZKOERPER and g.bereich}
-    nur = {d for ds in h_baseline.lauf_tage(hz).values() for d in ds}   # Erreichbarkeit nur an Lauftagen lesen (Last)
-    roh = await db.async_ausfuehren(lambda v: hochrechnung_tage(v, st.entry.entry_id, beginn, heute, zone, heizer, nur))
+    roh = await db.async_ausfuehren(lambda v: hochrechnung_tage(v, st.entry.entry_id, beginn, heute, zone, heizer))
     if roh is None:
         _LOGGER.debug("Hochrechnung: Tage nicht lesbar (%s)", db.fehler)
         return

@@ -52,6 +52,10 @@ def test_welche_tage_zaehlen():
     assert not tag_zaehlt(TagRoh(date(2026, 11, 1), 10.0, None, 86400), HEUTE)
     assert not tag_zaehlt(TagRoh(date(2026, 11, 1), 10.0, 3.0, 86400 * (VOLL_ANTEIL - 0.01)), HEUTE)  # Ausfall/Notbetrieb
     assert tag_zaehlt(TagRoh(date(2026, 10, 25), 10.0, 3.0, 25 * 3600 * VOLL_ANTEIL, 25 * 3600), HEUTE)  # Sommerzeit-Ende
+    # 0.8.175: ein Heizkörper offline (unter 95 % erreichbar gemessen) – Tagessumme zu niedrig, Tag zählt nicht
+    assert not tag_zaehlt(TagRoh(date(2026, 11, 1), 10.0, 3.0, 86400, geraete_s=86400 * (VOLL_ANTEIL - 0.01)), HEUTE)
+    assert tag_zaehlt(TagRoh(date(2026, 11, 1), 10.0, 3.0, 86400, geraete_s=86400 * VOLL_ANTEIL), HEUTE)
+    assert tag_zaehlt(TagRoh(date(2026, 11, 1), 10.0, 3.0, 86400, geraete_s=None), HEUTE)   # ohne Heizkörper/unbekannt
 
 
 def test_temperaturen_vorhersage_vor_klima():

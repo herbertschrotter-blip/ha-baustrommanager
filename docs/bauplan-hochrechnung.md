@@ -53,7 +53,9 @@ Modell mit Heizgrenze („3P-Heizen“): **kWh am Tag = Grundlast + kWh je Grad 
 
 Entscheidungen Herbert 10.10.2026: Außentemperatur als **24-h-Mittel** (`tag_bereich.aussen_mittel`, wie die Heizgradtage
 nach ÖNORM); es zählen nur **ganze Tage ohne Ausfall und ohne Notbetrieb** (mindestens 95 % des Tages in
-`bereich_minute` mitgeschrieben, Quelle HA oder übernommen, nicht `notprogramm`).
+`bereich_minute` mitgeschrieben, Quelle HA oder übernommen, nicht `notprogramm`). Seit 0.8.175 außerdem jeder
+Heizkörper des Containers mindestens 95 % des Tages erreichbar gemessen (wie die Baseline-Tage in §6): an einem
+Offline-Tag fehlt Verbrauch, die Tagessumme zöge die Signatur nach unten.
 
 - Rechnen nur in `logik/hochrechnung.py`; `funktionen/heizung/hochrechnung.py` liest die Tage der laufenden Heizperiode
   (`db/tage.hochrechnung_tage`) beim Start und täglich um 03:50 und legt das Ergebnis bei der Heizung ab.

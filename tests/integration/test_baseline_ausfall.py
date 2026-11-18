@@ -60,3 +60,28 @@ async def test_tag_mit_ausfall_zaehlt_nicht(hass: HomeAssistant, freezer, shelly
     l = next(x for x in struktur(hass, entry)["laufzeit"]["baseline"]["laeufe"] if x["id"] == "a8f0d4a7")
     assert l["status"] == "fertig" and l["zaehlt"] == 1 and l["tage"] == 2
     assert l["grund"] == "offline: So 15.11. – zählt nicht"
+
+
+async def test_offline_tag_zaehlt_auch_mit_automatik_nicht(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """0.8.175: Ein Tag, an dem ein Heizkörper offline war, fehlt auch in der Signatur „mit Automatik“ (Summe zu niedrig)."""
+    entry = await baustelle_anlegen(hass, freezer, zeit="2026-11-20 10:00:00+01:00")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    st, bid = entry.runtime_data, entry.entry_id
+    hz = Heizung.von(st)
+    di = MO + timedelta(days=1)
+    tb = [{"bereich_id": C1, "datum": d, "baustelle_id": bid, "kwh": 8.0, "aussen_mittel": 3.0} for d in (MO, di)]
+    bm = [{"bereich_id": C1, "zeit": _null(d) + timedelta(hours=h), "baustelle_id": bid, "dauer_s": 3600, "quelle": "ha"}
+          for d in (MO, di) for h in range(24)]
+    gm = [{"geraet_id": HK1, "zeit": _null(d) + timedelta(hours=h), "baustelle_id": bid, "dauer_s": 3600, "quelle": "ha",
+           "erreichbar": d == MO or h < 6} for d in (MO, di) for h in range(24)]
+
+    def schreiben(v):
+        v.execute(insert(s.tag_bereich), tb)
+        v.execute(insert(s.bereich_minute), bm)
+        v.execute(insert(s.geraet_minute), gm)
+        return True
+    assert await hass.data[DATA_DB].async_ausfuehren(schreiben) is not None
+
+    await async_rechnen(hass, hz)
+    assert next(c for c in hz.hochrechnung["container"] if c["bereich"] == C1)["tage"] == 1   # nur Mo
