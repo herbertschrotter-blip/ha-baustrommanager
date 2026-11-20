@@ -65,7 +65,8 @@ Offline-Tag fehlt Verbrauch, die Tagessumme zöge die Signatur nach unten.
   als Einstellung `heizung.klimamittel` (Eingabe auf der Seite mit .03). **Herbert: Werte mit GeoSphere Austria
   (Klimamittel der nächsten Station) prüfen.**
 - **Spanne** (rund 90 %): wärmerer bzw. kälterer Winter um 1,5 K an allen Tagen ohne Vorhersage, dazu 1,645 · rmse · √Tage.
-  Nur wenn jeder Container eine Signatur hat.
+  Nur wenn jeder Container eine Signatur hat – seit 0.8.177 jeder, der heizt (ein Container ohne Heiztage und ohne Tage,
+  z. B. Modus „aus“, zählt nicht mit).
 - **Container ohne Signatur** (lernt, unsicher): ~~Tagesschnitt der gezählten Tage × Resttage~~ – seit FE-0030
   (Herbert 28.10.2026) **Gradtagverfahren**: kWh je Heizgradtag der bisherigen Heiztage (Σ kWh ÷ Σ HGT 20/12) × HGT
   jedes künftigen Heiztags (Vorhersage, sonst Klimamittel) – kältere Monate mehr, die Linie ist eine Kurve

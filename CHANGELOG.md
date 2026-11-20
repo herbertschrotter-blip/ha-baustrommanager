@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.177] – 2026-11-20
+
+- Hochrechnung: Ein Container im Modus „aus“ (004) hält die Baustelle nicht mehr davon ab, mit der Energiesignatur zu
+  rechnen. Seit 0.8.176 haben alle heizenden Container eine Signatur, trotzdem meldete die Baustelle „Tagesschnitt“ und
+  zeigte keine Spanne (wärmerer/kälterer Winter).
+
 ## [0.8.176] – 2026-11-20
 
 Hochrechnung je Bauart (Herbert: die Container sind gleich gebaut, nur Einzel/Doppel und Ölradiator/Konvektor

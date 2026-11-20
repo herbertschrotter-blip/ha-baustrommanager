@@ -182,7 +182,8 @@ def test_baustelle_summe_und_spanne():
     g = ContainerRest(40.0, None, None, "heizgradtage", Signatur("lernt", 3), None)
     assert baustelle(200.0, {"a": a, "g": g})["methode"] == "heizgradtage"            # FE-0030
     assert baustelle(200.0, {"g": g, "c": c})["methode"] == "tagesschnitt"
-    assert baustelle(200.0, {"a": a, "k": ContainerRest(0.0, None, None, "keine", Signatur("lernt", 0), None)})["methode"] == "tagesschnitt"
+    # 0.8.177: ein Container ohne Heiztage („keine“, Rest 0) hält die Baustelle nicht mehr von der Signatur ab
+    assert baustelle(200.0, {"a": a, "k": ContainerRest(0.0, None, None, "keine", Signatur("lernt", 0), None)})["methode"] == "signatur"
     assert baustelle(None, {"a": a})["mit_kwh"] is None
     assert baustelle(10.0, {})["methode"] == "keine"
 
@@ -384,3 +385,18 @@ def test_gezaehlte_tage_ohne_baseline_tage():
     a = [TagRoh(date(2026, 11, 2), 10.0, 5.0, 86400), TagRoh(date(2026, 11, 3), 6.0, 7.0, 86400)]
     assert gezaehlte_tage(a, HEUTE) == a
     assert gezaehlte_tage(a, HEUTE, ohne_tage={date(2026, 11, 2)}) == [a[1]]
+
+
+def test_container_ohne_heiztage_verhindert_keine_signatur():
+    """Befund 20.11.2026: 004 im Modus „aus“ (Methode „keine“, Rest 0) ließ die Baustelle „Tagesschnitt“ melden und die
+    Spanne fehlen, obwohl jeder heizende Container eine Signatur hatte."""
+    beginn, ende = date(2026, 10, 1), HEUTE + timedelta(days=20)
+    sig = container_rest(roh(), HEUTE, ende, {}, KLIMA, beginn)
+    aus = container_rest([], HEUTE, ende, {}, KLIMA, beginn)
+    assert sig.methode == "signatur" and aus.methode == "keine"
+    b = baustelle(100.0, {"a": sig, "aus": aus})
+    assert b["methode"] == "signatur" and b["unten_kwh"] is not None and b["oben_kwh"] is not None
+    assert b["mit_kwh"] == pytest.approx(100.0 + sig.rest_kwh)
+    r = reihe({"a": roh(), "aus": []}, {"a": sig, "aus": aus}, HEUTE, beginn, ende, None)
+    assert r[-1][3] is not None and r[-1][4] is not None   # Spanne in der Tagesreihe, kein Fehler wegen leerer Reihe
+    assert baustelle(100.0, {"aus": aus})["methode"] == "keine"

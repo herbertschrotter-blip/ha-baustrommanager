@@ -227,14 +227,22 @@ def _skaliert(sig: Signatur, s: float) -> Signatur:
     return replace(sig, kwh_je_grad=mal(sig.kwh_je_grad), grundlast=mal(sig.grundlast), rmse=mal(sig.rmse))
 
 
+def mit_spanne(werte: Sequence[ContainerRest]) -> bool:
+    """Signatur und Spanne für die Baustelle: jeder Container, der heizt, hat eine Signatur. Container ohne Heiztage und
+    ohne Tage („keine“, z. B. Modus aus – Rest 0) zählen nicht mit (Befund 20.11.2026: 004 im Modus aus ließ die
+    Baustelle sonst „Tagesschnitt“ melden, obwohl alle anderen eine Signatur hatten)."""
+    heizen = [r for r in werte if r.methode != "keine"]
+    return bool(heizen) and all(r.methode == "signatur" for r in heizen)
+
+
 def baustelle(bisher_kwh: float | None, reste: Mapping[str, ContainerRest]) -> dict[str, float | str | None]:
-    """Hochrechnung der Baustelle: bisher + Reste; Spanne nur, wenn alle Container eine Signatur haben. Methode: die
+    """Hochrechnung der Baustelle: bisher + Reste; Spanne nur, wenn alle heizenden Container eine Signatur haben (`mit_spanne`). Methode: die
     „signatur“, wenn jeder Container eine hat; sonst „heizgradtage“ (auch „ersatz“), wenn kein Container mit dem Tagesschnitt rechnet;
     sonst „tagesschnitt“ (wie bisher); ohne gezählte Tage „keine“."""
     if bisher_kwh is None:
         return {"mit_kwh": None, "unten_kwh": None, "oben_kwh": None, "methode": "keine", "normjahr_kwh": None}
     werte = list(reste.values())
-    alle = bool(werte) and all(r.methode == "signatur" for r in werte)
+    alle = mit_spanne(werte)
     methoden = {r.methode for r in werte}
     methode = ("signatur" if alle else "heizgradtage" if methoden & {"heizgradtage", "ersatz"} and "tagesschnitt" not in methoden
                else "tagesschnitt" if methoden - {"keine"} else "keine")
@@ -269,7 +277,7 @@ def reihe(
             if beginn <= t.datum <= heute:
                 je_tag[t.datum] = je_tag.get(t.datum, 0.0) + (t.kwh or 0.0)
     werte = list(reste.values())
-    spanne = bool(werte) and all(r.methode == "signatur" for r in werte)
+    spanne = mit_spanne(werte)
     aus: list[tuple[str, float | None, float, float | None, float | None, float | None]] = []
     ist = mit = warm = kalt = 0.0
     k = 0
@@ -283,8 +291,8 @@ def reihe(
             continue
         mit += sum(r.je_tag[k] for r in werte if k < len(r.je_tag))
         if spanne:
-            warm += sum(r.je_tag_warm[k] for r in werte)
-            kalt += sum(r.je_tag_kalt[k] for r in werte)
+            warm += sum(r.je_tag_warm[k] for r in werte if r.je_tag_warm)
+            kalt += sum(r.je_tag_kalt[k] for r in werte if r.je_tag_kalt)
         k += 1
         streu = sum(Z90 * r.rmse * sqrt(k) for r in werte) if spanne else 0.0
         aus.append((d.isoformat(), None, round(mit, 3), round(max(ist, warm - streu), 3) if spanne else None,
@@ -317,7 +325,7 @@ def tageswerte(
 ) -> list[Tageswert]:
     """Je Tag der Heizperiode die Werte (nicht aufsummiert); „ohne“ aus der Tagesreihe (`reihe`, gleiche Rechnung)."""
     werte = list(reste.values())
-    spanne = bool(werte) and all(r.methode == "signatur" for r in werte)
+    spanne = mit_spanne(werte)
     ist: dict[date, float] = {}
     temp: dict[date, list[float]] = {}
     for liste in roh.values():
@@ -344,8 +352,8 @@ def tageswerte(
             aus.append(Tageswert(d, ist.get(d, 0.0), rest, rest if spanne else None, rest if spanne else None, ohne, aussen, quelle))
             continue
         prog = sum(r.je_tag[k] for r in werte if k < len(r.je_tag))
-        unten = sum(r.je_tag_warm[k] for r in werte) if spanne else None
-        oben = sum(r.je_tag_kalt[k] for r in werte) if spanne else None
+        unten = sum(r.je_tag_warm[k] for r in werte if r.je_tag_warm) if spanne else None
+        oben = sum(r.je_tag_kalt[k] for r in werte if r.je_tag_kalt) if spanne else None
         k += 1
         aussen, quelle = (vorhersage[d], "vorhersage") if d in vorhersage else (klima_tag(d, klima), "klima")
         aus.append(Tageswert(d, None, prog, unten, oben, ohne, aussen, quelle))
