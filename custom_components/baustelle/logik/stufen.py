@@ -4,6 +4,8 @@ Vorbild sind zweistufige Thermostate (z. B. Ecobee „Stage 2“, Honeywell): in
 heizt zuerst nur der Hauptheizkörper; der Zusatz kommt dazu, wenn
 
 - **Schnell aufheizen** läuft (alle zugleich, wie bisher),
+- der Container **zuerst voll aufheizt** (0.8.178, Herbert 20.11.2026: immer zuerst voll aufheizen, egal welcher
+  Container oder Heizungstyp – `logik/regelung.aufheizen`), bis das Soll erreicht ist,
 - es **außergewöhnlich kalt** ist (außen unter `kalt_unter`),
 - die gelernte Aufheizzeit sagt, dass **einer allein das Soll nicht rechtzeitig schafft** (`gelernt`, AN-0004) – sagt sie,
   dass einer reicht (`einer_reicht`), bleibt der Zusatz im Vorheizen aus,
@@ -26,6 +28,7 @@ class Grund:
     """Warum der Zusatz läuft (Anzeige und Protokoll)."""
 
     BOOST = "boost"
+    AUFHEIZEN = "aufheizen"
     KALT = "kalt"
     GELERNT = "gelernt"
     WEIT_UNTER = "weit_unter"
@@ -34,6 +37,7 @@ class Grund:
 
 TEXT = {
     Grund.BOOST: "Schnell aufheizen",
+    Grund.AUFHEIZEN: "zuerst voll aufheizen",
     Grund.KALT: "außergewöhnlich kalt",
     Grund.GELERNT: "einer allein schafft das Soll nicht rechtzeitig (gelernt)",
     Grund.WEIT_UNTER: "weit unter dem Soll",
@@ -66,12 +70,15 @@ class StufenLage:
     zusatz_an: bool = False         # lief der Zusatz bis eben
     grund_vorher: str | None = None
     einer_reicht: bool = False      # gelernte Aufheizzeit: einer schafft das Soll rechtzeitig (nur im Vorheizen)
+    aufheizen: bool = False         # 0.8.178: der Container heizt zuerst voll auf
 
 
 def zusatz(r: StufenRegeln, lage: StufenLage) -> tuple[bool, str | None]:
     """Soll der Zusatz-Heizkörper laufen dürfen? Gibt (ja/nein, Grund) zurück."""
     if lage.boost:
         return True, Grund.BOOST
+    if lage.aufheizen:
+        return True, Grund.AUFHEIZEN
     if lage.aussen is not None and lage.aussen < r.kalt_unter:
         return True, Grund.KALT
     if lage.gelernt:

@@ -50,6 +50,7 @@ def _stufen_rechnen(hz: Heizung, bid: str, soll: Soll, temp: float | None, soll_
         innen=temp, soll=ziel, aussen=wetter.aussen, toleranz=float(h["toleranz"]), einer_reicht=im_vorheizen and not gelernt,
         haupt_min=(jetzt - seit).total_seconds() / 60, anstieg=(temp - temp0) if temp is not None and temp0 is not None else 0.0,
         boost=soll.grund == SollGrund.BOOST, gelernt=gelernt, zusatz_an=vorher, grund_vorher=grund_vorher,
+        aufheizen=soll.aufheizen,
     )
     an, grund = stufen.zusatz(hz.stufen_regeln(), lage) if soll.ein else (False, None)
     if an != vorher and soll.ein:
@@ -131,18 +132,27 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
         hz._lern_minute[info.id] = minute
         heizer = [g for g in hz.st.geraete_in(info.id) if g.rolle == ROLLE_HEIZKOERPER]
         regelt = (info.id in hz.tpi_jetzt and hz._lern_grund.get(info.id) in LERN_GRUENDE
+                  and not hz._aufheizen.get(info.id, False)   # 0.8.178: im Aufheizen regelt TPI nicht
                   and not any(g.id in hz.st.lz["hand"] for g in heizer))
         grund_jetzt = hz._lern_grund.get(info.id)
         if any(hz._zieht_strom(g) for g in heizer):   # Grund, der das Heizen bis zuletzt hielt (Minute davor:
             # endet Schnell aufheizen, schaltet dieselbe Auswertung aus – dann steht schon der neue Grund da)
             hz._grund_beim_heizen[info.id] = hz._grund_letzte_minute.get(info.id, grund_jetzt)
+            # Aufheizen irgendwann in diesem Heizlauf (seit dem letzten Aus): das Überschwingen danach kommt vom Aufheizen
+            # (Review: nur die Minute davor reichte nicht, wenn TPI danach noch ein paar Minuten weiterheizt)
+            neu_lauf = not hz._aufheizen_letzte_minute.get(info.id, (False, False))[0]
+            hz._aufheizen_beim_heizen[info.id] = (hz._aufheizen.get(info.id, False)
+                                                  or (not neu_lauf and hz._aufheizen_beim_heizen.get(info.id, False)))
         hz._grund_letzte_minute[info.id] = grund_jetzt
+        hz._aufheizen_letzte_minute[info.id] = (any(hz._zieht_strom(g) for g in heizer), hz._aufheizen.get(info.id, False))
         alt = hz.lern_staende.get(info.id) or lernen.neuer_stand()
         neu = lernen.takt(
             alt, jetzt=jetzt, heizt=any(hz._zieht_strom(g) for g in heizer), anzahl=sum(1 for g in heizer if hz._zieht_strom(g)),
             tuer_offen=hz._tuer_offen(info.id), innen=hz.st.temperatur(info.fuehler),
             hand=any(g.id in hz.st.lz["hand"] for g in heizer),
-            kint_ok=hz._grund_beim_heizen.get(info.id) != SollGrund.BOOST,   # Grund der letzten Heizminute
+            # Grund der letzten Heizminute: nach Schnell aufheizen und nach dem Aufheizen (0.8.178) lernt K innen nicht –
+            # das Überschwingen danach kommt nicht von der Regelung
+            kint_ok=hz._grund_beim_heizen.get(info.id) != SollGrund.BOOST and not hz._aufheizen_beim_heizen.get(info.id, False),
             soll=hz.soll_temperatur(info.id), aussen=wetter.aussen, art=hz._lern_art(info.id), regelt=regelt,
             an=any((z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON for g in heizer),
             # FE-0025: erkannt in _tuer_vermuten (Warnung steht dort); während der Pause bleibt die Vermutung stehen

@@ -120,7 +120,7 @@ const erwarte = (text, bedingung) => { if (!bedingung) fehler.push('erwartet: ' 
 const letzte = typ => aufrufe.filter(a => a.type === typ);
 const neu = () => { aufrufe.length = 0; api.length = 0; };
 const hov = wo => { let t = ''; const alt = panel.tip; panel.tip = (e, h) => { t = h || ''; };
-  for (const svg of panel.shadowRoot.querySelectorAll('svg.chart[data-chart]')) {   // echtes pointermove (happy-dom hat kein Layout: Breite vorgeben)
+  for (const svg of panel.shadowRoot.querySelectorAll('svg.chart[data-chart], svg.c-tag-svg[data-chart]')) {   // echtes pointermove (happy-dom hat kein Layout: Breite vorgeben)
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 120, right: 320, bottom: 120, x: 0, y: 0 });
     const ziel = svg.querySelectorAll('.bar')[2] || svg;
     for (const x of [40, 150, 300]) { ziel.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, composed: true, clientX: x, clientY: 60 }));
@@ -892,13 +892,20 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'cvd', v: 'stunden' }, 30); pruefe('Container Heizzeit'); erwarte('WU-0004: Reiter Heizzeit', ui.innerHTML.includes('data-chart="ch-magazin"'));
   await klick({ act: 'cvd', v: 'heute' });
   /* Tür/Fenster offen im Tagesdiagramm (Mockup tuer-diagramm, Variante A): Öffnungen fertig von baustelle/oeffnungen */
-  { const tagSvg = () => (ui.innerHTML.match(/<svg viewBox="0 0 640 220" class="c-tag-svg">[^]*?<\/svg>/) || [''])[0];
+  { const tagSvg = () => (ui.innerHTML.match(/<svg viewBox="0 0 640 220" class="c-tag-svg"[^>]*>[^]*?<\/svg>/) || [''])[0];
     const legende = () => (ui.innerHTML.match(/<div class="c-legende">[^]*?<\/div>/) || [''])[0];
     const anzahl = re => (tagSvg().match(re) || []).length, tipText = () => (ui.innerHTML.match(/<div class="o-tip"[^]*?<\/b>(?:<div class="leise">[^<]*<\/div>)*/) || [''])[0];
     const tippe = async k => { const e = litEl(`[data-o="${k}"]`); if (!e) return erwarte(`Band ${k}`, false); e.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })); await ruhe(10); };
     const oeAufrufe = () => alleAufrufe.filter(a => a.type === 'baustelle/oeffnungen');
     erwarte('Öffnungen: ohne Öffnungen (Magazin) keine Bänder, keine Legende', anzahl(/class="o-band/g) === 0 && !legende().includes('Tür offen') && !legende().includes('Fenster offen'));
     await klick({ act: 'container', id: 'polier' }, 30); pruefe('Container Tür/Fenster offen');
+    { // Herbert 20.11.2026: Darüberfahren zeigt je Stunde innen, außen, Soll, geheizt, Heizzeit und offene Türen
+      const svg = litEl('svg.c-tag-svg[data-chart]'); let t = ''; const alt = panel.tip; panel.tip = (e, h) => { t = h || ''; };
+      if (svg) { svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 640, height: 220, right: 640, bottom: 220, x: 0, y: 0 });
+        const x = 34 + (640 - 34 - 10) * 7.5 / 24;   // Mitte der Stunde 07:00
+        svg.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, composed: true, clientX: x, clientY: 100 })); }
+      panel.tip = alt;
+      erwarte('Tagesdiagramm: Tooltip zur Stunde (innen, außen, geheizt)', !!svg && t.includes('07:00–08:00') && t.includes('innen') && t.includes('außen') && t.includes('geheizt') && !/NaN|undefined/.test(t)); }
     erwarte('Öffnungen: Aufruf für den angezeigten Tag', oeAufrufe().some(a => a.bereich === 'polier' && a.tag === '2026-09-29' && a.entry_id === panel.d.entry));
     erwarte('Öffnungen: Mannschaft ohne Kontakte fragt nicht', REFERENZ && !oeAufrufe().some(a => a.bereich === 'mannschaft'));
     erwarte('Öffnungen: 4 Tür-Bänder, 3 Fenster-Bänder', anzahl(/class="o-band o-tuer"/g) === 4 && anzahl(/class="o-band o-fenster"/g) === 3 && anzahl(/class="o-hit"/g) === 7);

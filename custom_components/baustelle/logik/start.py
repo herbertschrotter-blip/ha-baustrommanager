@@ -12,8 +12,8 @@ Plan-Chip („morgen ab 03:30 · warm 06:35“) und Dialog „Lernstand“ › �
   stündlichen Wettervorhersage (zwischen den Stunden linear, vor der ersten Stunde vom Wert von jetzt aus); ohne
   Vorhersage gilt der Wert von jetzt, ganz ohne Außenwert wird nicht ausgekühlt (wie bis 0.8.156). Mit Frostschutz
   kühlt er nicht unter die Frostschutzgrenze.
-- **Aufheizen** mit der gelernten Rate (Außenband zum Start, Anzahl Heizkörper; „Zusatz nur bei Bedarf“: reicht
-  einer bis zum Ziel ohne Grenze, sonst alle – AN-0006). Nicht gelernt: Rate aus der Containergröße
+- **Aufheizen** mit der gelernten Rate (Außenband zum Start, Anzahl Heizkörper; seit 0.8.178 laufen beim Aufheizen
+  alle – zuerst voll aufheizen, so spät wie möglich; bis 0.8.177 „einer reicht“, AN-0006). Nicht gelernt: Rate aus der Containergröße
   (`groesse.rate_geschaetzt`), τ = `lernen.TAU_START_H`.
 - **Start** = spätester Zeitpunkt im 5-min-Raster, mit dem es bis zum Ziel warm ist. **Grenze „frühestens“ zählt vom
   Ziel** (`WarmAb.fruehestens`, Herbert 29.10.2026; bis 0.8.156 vom Arbeitsbeginn): reicht sie nicht, startet er an der
@@ -309,13 +309,6 @@ def _suchen(e: Eingabe, kurve: Sequence[tuple[int, float]], aussen: Callable[[fl
                  warm > ziel_m and (not begrenzt or beginn < jetzt_m))
 
 
-def einer_reicht(einer: _Lauf, ziel_m: int) -> bool:
-    """AN-0006: ein Heizkörper reicht, wenn seine Rate gelernt ist, die Grenze nicht greift und er bis zum Ziel warm ist –
-    höchstens `RASTER_MIN` später (eine verspätete Auswertung). Ist der Start überfällig (z. B. Automatik spät an) und
-    käme er später, heizen alle."""
-    return not einer.rate_geschaetzt and not einer.begrenzt and einer.warm <= ziel_m + RASTER_MIN
-
-
 # ---------------------------------------------------------------------------------------------------- Rechnung
 def rechnen(e: Eingabe) -> Start | None:
     """Start eines lernenden Containers (siehe Modul-Docstring); None ohne Innentemperatur."""
@@ -341,19 +334,14 @@ def rechnen(e: Eingabe) -> Start | None:
     kurve = auskuehlen(e.innen, jetzt_m, max(ziel_m, jetzt_m), tau_h, aussen, e.untergrenze)
     alle = max(1, e.anzahl)
     rate_einer = None
-    if e.stufen and alle >= 2:   # AN-0006: reicht einer (gelernt, ohne Grenze)? sonst alle
+    if e.stufen and alle >= 2:   # 0.8.178 (Herbert 20.11.2026): zuerst voll aufheizen – alle laufen, so spät wie möglich
         einer = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, 1)
-        if einer_reicht(einer, ziel_m):
-            lauf, anzahl, zusatz = einer, 1, False
-        else:
-            beide = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle)
-            if not beide.rate_geschaetzt:
-                lauf, anzahl, zusatz = beide, alle, True
-                rate_einer = None if einer.rate_geschaetzt else einer.rate
-            elif not einer.rate_geschaetzt:   # nur für einen gelernt: so rechnen, beide laufen mit
-                lauf, anzahl, zusatz = einer, 1, True
-            else:
-                lauf, anzahl, zusatz = einer, 1, False
+        beide = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle)
+        if not beide.rate_geschaetzt:
+            lauf, anzahl, zusatz = beide, alle, True
+            rate_einer = None if einer.rate_geschaetzt else einer.rate
+        else:   # nur für einen gelernt oder nichts gelernt (Rate aus der Größe): für einen rechnen (früher, sicher), alle laufen mit
+            lauf, anzahl, zusatz = einer, 1, True
     else:
         lauf, anzahl, zusatz = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle), alle, False
     # „früher“ (Regen, Noch früher): der Plan beginnt um so viel früher – der Start auch; ab da wird geheizt, also

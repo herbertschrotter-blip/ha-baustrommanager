@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.178] – 2026-11-20
+
+- Heizung: **Zuerst voll aufheizen** (Herbert): Jeder Container heizt, wenn er mehr als 1 °C unter dem Soll ist, durch,
+  bis das Soll erreicht ist – erst dann beginnt die Regelung. Das gilt für jeden Container und jeden Heizkörper-Typ.
+  Bisher bremste die lernende Regelung schon beim Aufheizen: 003 kam am 20.11. in einer Stunde auf 20 °C und taktete
+  danach 5 min an / 5 min aus, bis 10 Uhr auf 22 °C.
+- Heizung: In Containern mit zwei Heizkörpern laufen beim Aufheizen beide, und der Start ist entsprechend später
+  (bisher heizte einer allein, dafür ab Mitternacht – 001 am 20.11. fast neun Stunden). Nach dem Lüften (mehr als 1 °C
+  kälter) heizen wieder beide voll.
+- Lernende Regelung: Das Überschwingen nach dem Aufheizen zählt nicht mehr für den Wert „K innen“ – er war bei 003
+  deshalb bis auf den Mindestwert gesunken.
+- Container › Tagesdiagramm: Beim Darüberfahren steht je Stunde innen, außen, Soll, geheizte kWh, Heizzeit und wie lange
+  Tür oder Fenster offen waren.
+
 ## [0.8.177] – 2026-11-20
 
 - Hochrechnung: Ein Container im Modus „aus“ (004) hält die Baustelle nicht mehr davon ab, mit der Energiesignatur zu

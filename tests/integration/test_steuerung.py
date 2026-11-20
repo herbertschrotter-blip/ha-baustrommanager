@@ -966,14 +966,17 @@ async def test_zusatz_heizkoerper_nur_bei_bedarf(hass: HomeAssistant, freezer, s
     assert an("switch.hk1") and not an("switch.hk2")
     s = struktur(hass, entry)["laufzeit"]["container"][C1]["stufen"]
     assert s["an"] is True and s["haupt"] == [HK1] and s["zusatz"] == [HK2] and s["zusatz_an"] is False
-    # weit unter dem Soll: beide; fast warm: Zusatz wieder aus
+    # mehr als 1 °C unter dem Soll: zuerst voll aufheizen mit beiden (0.8.178) – bis zum Soll, dann Zusatz wieder aus
     hass.states.async_set("sensor.temp_c1", "18.0")
     await _zu(hass, freezer, "2026-09-29 10:01:00+02:00", st)
     assert an("switch.hk1") and an("switch.hk2")
-    assert struktur(hass, entry)["laufzeit"]["container"][C1]["stufen"]["grund"] == "weit_unter"
+    assert struktur(hass, entry)["laufzeit"]["container"][C1]["stufen"]["grund"] == "aufheizen"
     hass.states.async_set("sensor.temp_c1", "19.6")
     await _zu(hass, freezer, "2026-09-29 10:02:00+02:00", st)
-    assert an("switch.hk1") and not an("switch.hk2")
+    assert an("switch.hk1") and an("switch.hk2")   # noch nicht am Soll: weiter beide
+    hass.states.async_set("sensor.temp_c1", "20.0")
+    await _zu(hass, freezer, "2026-09-29 10:02:30+02:00", st)
+    assert not an("switch.hk2")
     # einer schafft es nicht: 30 min durchgehend und kaum wärmer
     hass.states.async_set("sensor.temp_c1", "19.0")
     await _zu(hass, freezer, "2026-09-29 10:03:00+02:00", st)

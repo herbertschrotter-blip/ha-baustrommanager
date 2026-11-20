@@ -25,6 +25,14 @@ Aus 0.6.3 zurück (Herbert 30.09.2026, Mockup glas.html):
 - Urlaub und freie Feiertage (`frei`): `frei_modus` `frost` (nur Frostschutz), `absenk` (mit Fühler auf `absenk`, ohne
   Fühler nur Frostschutz) oder `aus` (alles aus, auch kein Frostschutz).
 
+Zuerst voll aufheizen (0.8.178, Herbert 20.11.2026: „es soll immer so sein, dass er zuerst voll aufheizt, egal welcher
+Container oder Heizungstyp, und erst wenn die Temperatur erreicht ist, zu regeln beginnen“): Liegt der Raum mehr als
+`AUFHEIZ_AB` °C unter dem Soll, heizt der Container durch (`aufheizen`), bis er das Soll erreicht – mit der lernenden
+Regelung abzüglich des gelernten Nachlaufs (die Wärme, die nach dem Ausschalten noch kommt). Erst dann regelt TPI bzw.
+der Thermostat. `aufheizen_vorher` hält das Aufheizen über die Minuten (auch knapp unter dem Soll); `Soll.aufheizen` sagt
+es dem Aufrufer, der es merkt und den Zusatz-Heizkörper mitlaufen lässt (`logik/stufen`). Gilt in der Heizzeit, bei
+Bedarf, Taste und Absenken.
+
 Aus den Szenarien (Herbert 01.10.2026):
 - Fühler weg (oder beim Start kurz unbekannt): `FUEHLER_HALTEN_MIN` gilt der letzte Wert (`letzter_wert`), danach wie
   ohne Fühler (in der Heizzeit an, der Heizkörperthermostat regelt). Außentemperatur weg: `AUSSEN_HALTEN_MIN`.
@@ -48,6 +56,7 @@ FROST_SPANNE = 2.0
 MODI = ("plan", "thermo", "bedarf", "hand", "aus")   # Modus je Container (neu 0.7.8), wie funktionen/heizung/typen.MODI
 FUEHLER_HALTEN_MIN = 15
 AUSSEN_HALTEN_MIN = 360
+AUFHEIZ_AB = 1.0   # so viel °C unter dem Soll: zuerst voll aufheizen (0.8.178)
 
 
 def modus_von(einstellung: Mapping[str, Any] | None, fuehler: bool) -> str | None:
@@ -151,6 +160,7 @@ class LageContainer:
     frost_aussen: float | None = None   # ohne Fühler: Frostschutz ein unter dieser Außentemperatur (None = aus)
     taste: bool = False                 # BSM-018: Taste am Plug gedrückt – 1 h heizen (wie Bei Bedarf, in jedem Modus)
     baseline: bool = False              # BSM-033.04: Baseline-Lauf – durchgehend an, der Thermostat am Gerät regelt
+    aufheizen_vorher: bool = False      # 0.8.178: heizte zuletzt durch, um das Soll zu erreichen
 
 
 @dataclass(frozen=True)
@@ -159,6 +169,7 @@ class Soll:
 
     ein: bool | None
     grund: str
+    aufheizen: bool = False   # 0.8.178: heizt durch, bis das Soll erreicht ist (alle Heizkörper, auch der Zusatz)
 
 
 def thermostat(temperatur: float, soll: float, toleranz: float, war_ein: bool) -> bool:
@@ -196,19 +207,37 @@ def frostschutz(lage: LageContainer) -> bool:
     return lage.temperatur < lage.frost_grenze
 
 
+def aufheizen(lage: LageContainer, soll: float) -> bool:
+    """Zuerst voll aufheizen (siehe Modul-Docstring): mehr als `AUFHEIZ_AB` unter dem Soll oder schon dabei – bis das
+    Soll (lernend: abzüglich des gelernten Nachlaufs) erreicht ist."""
+    if lage.temperatur is None:
+        return False
+    ziel = round(soll - (max(0.0, lage.tpi.nachlauf) if lage.tpi is not None else 0.0), 3)
+    if lage.temperatur >= ziel:
+        return False
+    return lage.aufheizen_vorher or lage.temperatur < round(soll - AUFHEIZ_AB, 3)
+
+
+def _geregelt(lage: LageContainer, soll: float, grund: str) -> Soll:
+    """Auf `soll` regeln, vorher voll aufheizen."""
+    if aufheizen(lage, soll):
+        return Soll(True, grund, aufheizen=True)
+    return Soll(_regeln(lage, soll), grund)
+
+
+def _geheizt(lage: LageContainer, grund: str) -> Soll:
+    """Wie `_heizen`, mit Aufheizen: ohne Fühler oder im Modus Zeitplan ein, sonst auf das Soll geregelt."""
+    if lage.temperatur is None or lage.modus == "plan":
+        return Soll(True, grund)
+    return _geregelt(lage, lage.soll, grund)
+
+
 def _regeln(lage: LageContainer, soll: float) -> bool:
     """Auf `soll` regeln: lernend nach TPI (logik/lernen), sonst Hysterese wie der Generische Thermostat."""
     assert lage.temperatur is not None
     if lage.tpi is not None:
         return tpi_ein(tpi_anteil(lage.temperatur, soll, lage.tpi), lage.tpi.minute_im_zyklus, lage.heizt_gerade)
     return thermostat(lage.temperatur, soll, lage.toleranz, lage.heizt_gerade)
-
-
-def _heizen(lage: LageContainer) -> bool:
-    """Mit Fühler Thermostat, ohne Fühler (oder im Modus Zeitplan) einfach ein."""
-    if lage.temperatur is None or lage.modus == "plan":
-        return True
-    return _regeln(lage, lage.soll)
 
 
 # nach der Nachricht „seit … h auf Hand“ (bei `hand_h`) so lange auf eine Antwort warten, dann übernimmt die Automatik
@@ -304,7 +333,7 @@ def _ohne_tuer(lage: LageContainer) -> Soll:
             return Soll(False, SollGrund.HAND)   # Frost vorbei: einmal aus, danach schaltet die Automatik nichts (Szenario-Befund)
         return Soll(None, SollGrund.HAND)
     if lage.taste:   # BSM-018: wie das Notprogramm im Plug – vor Modus, frei, Heizgrenze und Plan; mit Fühler bis zum Soll
-        return Soll(_heizen(lage), SollGrund.TASTE)
+        return _geheizt(lage, SollGrund.TASTE)
     if lage.baseline and lage.modus != "aus":   # BSM-033.04: nach Hand, Frost, Tür und Taste; vor frei, Heizgrenze und Plan
         return Soll(True, SollGrund.BASELINE)
     if lage.boost and (lage.temperatur is None or lage.temperatur < lage.soll):
@@ -313,15 +342,15 @@ def _ohne_tuer(lage: LageContainer) -> Soll:
         return Soll(False, SollGrund.AUS)
     if lage.bedarf:
         if lage.bedarf_aktiv:
-            return Soll(_heizen(lage), SollGrund.BEDARF)
+            return _geheizt(lage, SollGrund.BEDARF)
         return Soll(False, SollGrund.BEREIT)
     if lage.frei:
         if lage.frei_modus == "absenk" and lage.temperatur is not None:
-            return Soll(_regeln(lage, lage.absenk), SollGrund.ABSENKEN)
+            return _geregelt(lage, lage.absenk, SollGrund.ABSENKEN)
         return Soll(False, SollGrund.FREI)
     if lage.zu_warm:
         return Soll(False, SollGrund.HEIZGRENZE)
     abschnitt = lage.plan.abschnitt(lage.minute) if lage.plan is not None else None
     if abschnitt is None:
         return Soll(False, SollGrund.AUSSERHALB)
-    return Soll(_heizen(lage), SollGrund(abschnitt.value))
+    return _geheizt(lage, SollGrund(abschnitt.value))

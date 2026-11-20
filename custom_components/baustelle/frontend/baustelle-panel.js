@@ -6516,7 +6516,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.177";
+var SEITE_VERSION = "0.8.178";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -8795,11 +8795,13 @@ var BaustellePanel = class extends i4 {
       return `<rect class="o-hit" data-o="${esc(o6.k)}" x="${(o6.x1 + o6.w / 2 - hit / 2).toFixed(1)}" y="${T2}" width="${hit.toFixed(1)}" height="${unten - T2}" fill="transparent"><title>${esc(o6.text)}</title></rect>`;
     }).join("");
     const sel = O.find((o6) => o6.k === this._otip), mitT = O.some((o6) => o6.art === "tuer"), mitF = O.some((o6) => o6.art === "fenster");
+    const heizzeit = tagNr < 0 ? [] : this.heizzeiten(b3, TAGE[tagNr]), cid = `ctag-${b3.id}-${vs}`;
+    CHARTS[cid] = { art: "ctag", W, L: L2, R: W - Rr, x: x2, y: y3, oben: T2, unten, innen: b3.fuehler ? innen : null, aussen, kw, soll: mitSoll ? soll2 : null, farbe, heizzeit, O, vs, jetztH: +jm[0] };
     const tip = !sel ? "" : `<div class="o-tip" style="left:clamp(90px, ${((sel.x1 + sel.w / 2) / W * 100).toFixed(1)}%, calc(100% - 90px))"><b style="color:${sel.farbe}">${esc(sel.text)}</b>${O.filter((o6) => o6 !== sel && o6.a < sel.e && o6.e > sel.a).map((o6) => `<div class="leise">gleichzeitig: ${esc(o6.text)}</div>`).join("")}</div>`;
-    return `<div class="o-wrap"><svg viewBox="0 0 ${W} ${H2}" class="c-tag-svg">${band}${oeUnter}${raster}
+    return `<div class="o-wrap"><svg viewBox="0 0 ${W} ${H2}" class="c-tag-svg" data-chart="${cid}">${band}${oeUnter}${raster}
       ${mitSoll ? `<line x1="${L2}" x2="${W - Rr}" y1="${y3(soll2).toFixed(1)}" y2="${y3(soll2).toFixed(1)}" stroke="var(--ink)" stroke-dasharray="5 4" opacity=".6"/><text x="${W - Rr}" y="${(y3(soll2) - 5).toFixed(1)}" text-anchor="end" class="c-achse">Soll ${de(soll2)}°</text>` : ""}
       <path d="${pfad(aussen)}" fill="none" stroke="var(--ink2)" stroke-width="1.5" opacity=".7"/>${b3.fuehler ? `<path d="${pfad(innen)}" fill="none" stroke="#ff9f0a" stroke-width="2.6"/>` : ""}
-      ${bars}${vs ? "" : `<line x1="${x2(jetzt).toFixed(1)}" x2="${x2(jetzt).toFixed(1)}" y1="${T2}" y2="${H2 - B2 + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}${oeOben}</svg>${tip}</div>
+      ${bars}${vs ? "" : `<line x1="${x2(jetzt).toFixed(1)}" x2="${x2(jetzt).toFixed(1)}" y1="${T2}" y2="${H2 - B2 + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}<g class="hover"></g>${oeOben}</svg>${tip}</div>
       <div class="c-legende">${b3.fuehler ? '<span><i style="background:#ff9f0a"></i>innen</span>' : ""}<span><i style="background:var(--ink2)"></i>außen</span>${mitSoll ? '<span><i class="gestr"></i>Soll</span>' : ""}<span><i style="background:var(--amber);opacity:.4"></i>Heizzeit</span><span><i style="background:${farbe}"></i>geheizt (kWh je Stunde)</span>${mitT ? '<span class="o-leg"><i style="background:var(--rot);opacity:.45"></i>Tür offen</span>' : ""}${mitF ? '<span class="o-leg"><i style="background:var(--blau);opacity:.45"></i>Fenster offen</span>' : ""}</div>`;
   }
   /* Tür/Fenster offen am angezeigten Tag: fertig von der Integration (baustelle/oeffnungen, Öffnungen unter 10 s schon
@@ -9710,11 +9712,23 @@ var BaustellePanel = class extends i4 {
     return new Date(this.zoneMs(this.z.HEUTE, hhmm, this.z.zone)).toISOString();
   }
   hover(ev) {
-    const svg2 = ev.target && ev.target.closest && ev.target.closest("svg.chart");
+    const svg2 = ev.target && ev.target.closest && ev.target.closest("svg.chart, svg.c-tag-svg");
     if (!svg2) return this.tip(null);
     const c4 = CHARTS[svg2.dataset.chart];
     if (!c4) return this.tip(null);
     const r5 = svg2.getBoundingClientRect(), fx = (ev.clientX - r5.left) / r5.width, p4 = this.d ? this.d.e.preis : 0;
+    if (c4.art === "ctag") {
+      const vx = fx * c4.W, h3 = Math.max(0, Math.min(23, Math.floor((vx - c4.L) / (c4.R - c4.L) * 24))), xm = c4.x(h3 + 0.5), hh = (k2) => String(k2).padStart(2, "0");
+      const innen = c4.innen ? c4.innen[h3] : null, aussen = c4.aussen[h3], kw = c4.kw[h3];
+      const in_h = (a3, e6) => a3 < (h3 + 1) * 60 && e6 > h3 * 60;
+      const heiz = c4.heizzeit.some(([a3, e6]) => in_h(a3, e6)), offen = c4.O.filter((o6) => in_h(o6.a, o6.e)), kommt = !c4.vs && h3 > c4.jetztH;
+      if (!zahl(innen) && !zahl(aussen) && !zahl(kw)) {
+        svg2.querySelector(".hover").innerHTML = "";
+        return this.tip(null);
+      }
+      svg2.querySelector(".hover").innerHTML = `<line x1="${xm.toFixed(1)}" x2="${xm.toFixed(1)}" y1="${c4.oben}" y2="${c4.unten}" class="kreuz" stroke="var(--ink2)" stroke-dasharray="2 3"/>` + (zahl(innen) ? `<circle cx="${xm.toFixed(1)}" cy="${c4.y(innen).toFixed(1)}" r="4.5" fill="#ff9f0a" stroke="var(--sheet)" stroke-width="2"/>` : "") + (zahl(aussen) ? `<circle cx="${xm.toFixed(1)}" cy="${c4.y(aussen).toFixed(1)}" r="4" fill="var(--ink2)" stroke="var(--sheet)" stroke-width="2"/>` : "");
+      return this.tip(ev, `<b>${hh(h3)}:00–${hh((h3 + 1) % 24)}:00</b>` + (zahl(innen) ? `<div><i style="background:#ff9f0a"></i>innen <b>${de(innen)} °C</b></div>` : "") + (zahl(aussen) ? `<div><i style="background:var(--ink2)"></i>außen <b>${de(aussen)} °C</b></div>` : "") + (zahl(c4.soll) ? `<div class="leise">Soll ${de(c4.soll)} °C</div>` : "") + (zahl(kw) && !kommt ? `<div><i style="background:${c4.farbe}"></i>geheizt <b>${de(kw, 2)} kWh</b></div>` : "") + (heiz ? `<div class="leise">in der Heizzeit</div>` : "") + offen.map((o6) => `<div><i style="background:${o6.farbe}"></i>${esc(o6.text)}</div>`).join(""));
+    }
     if (c4.art === "streu") {
       const vx = (ev.clientX - r5.left) / r5.width * 320, vy = ((ev.clientY ?? 0) - (r5.top ?? 0)) / r5.width * 320;
       let best = 0, bd = 1e9;
@@ -9792,7 +9806,7 @@ var BaustellePanel = class extends i4 {
     if (!t5) return;
     if (!ev || !html) {
       t5.classList.remove("an");
-      this.root.querySelectorAll(".chart .hover").forEach((h3) => {
+      this.root.querySelectorAll(".chart .hover, .c-tag-svg .hover").forEach((h3) => {
         h3.innerHTML = "";
       });
       this.root.querySelectorAll(".bar.matt").forEach((x3) => x3.classList.remove("matt"));

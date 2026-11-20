@@ -134,7 +134,7 @@ def test_thermostat_mit_hysterese():
     assert soll(temperatur=20.2, heizt_gerade=True) == Soll(True, SollGrund.ARBEITSZEIT)
     assert soll(temperatur=20.3, heizt_gerade=True) == Soll(False, SollGrund.ARBEITSZEIT)
     assert soll(temperatur=19.8, toleranz=0.1) == Soll(True, SollGrund.ARBEITSZEIT)
-    assert soll(temperatur=19.4, soll=22.0, minute=t(17)) == Soll(True, SollGrund.TROCKNEN)
+    assert soll(temperatur=19.4, soll=22.0, minute=t(17)) == Soll(True, SollGrund.TROCKNEN, aufheizen=True)   # 0.8.178
 
 
 def test_thermostat_rundung_der_schwellen():
@@ -346,3 +346,26 @@ def test_notsoll_nur_frostschutz():
         Soll(False, SollGrund.STOERUNG)
     assert notsoll(replace(GRUND, temperatur=12.0, auto=False)) == Soll(None, SollGrund.HAND)   # Hand bleibt
     assert notsoll(replace(GRUND, temperatur=3.0, auto=False)) == Soll(True, SollGrund.FROST)
+
+
+def test_zuerst_voll_aufheizen_dann_regeln():
+    """0.8.178 (Herbert 20.11.2026): immer zuerst voll aufheizen, erst am Soll regeln. 003 am 20.11.: der Konvektor kam
+    in einer Stunde auf 20,2 °C und taktete danach 5 min an / 5 min aus (K innen 0,1) – bis 10 Uhr auf 22 °C."""
+    from logik.lernen import Tpi
+    tpi = Tpi(kint=0.1, kext=0.02, nachlauf=0.3, aussen=0.0, minute_im_zyklus=9)   # TPI wäre am Zyklusende aus
+    kalt = soll(temperatur=20.2, soll=22.3, tpi=tpi)
+    assert kalt.ein is True and kalt.aufheizen and kalt.grund == SollGrund.ARBEITSZEIT
+    # knapp unter dem Soll: weiter voll, solange es schon aufheizt – bis Soll − Nachlauf
+    assert soll(temperatur=21.8, soll=22.3, tpi=tpi, aufheizen_vorher=True).aufheizen
+    am_ziel = soll(temperatur=22.0, soll=22.3, tpi=tpi, aufheizen_vorher=True)
+    assert not am_ziel.aufheizen and am_ziel.ein is False            # dann regelt TPI (hier: am Zyklusende aus)
+    # ohne Aufheizen vorher und weniger als 1 °C unter dem Soll: gleich regeln
+    assert not soll(temperatur=21.8, soll=22.3, tpi=tpi).aufheizen
+    # nach dem Lüften wieder mehr als 1 °C darunter: wieder voll
+    assert soll(temperatur=19.9, soll=22.3, tpi=tpi).aufheizen
+    # Hysterese-Thermostat (ohne Lernen): bis zum Soll voll, ohne Nachlauf
+    assert soll(temperatur=18.9, soll=20.0).aufheizen and not soll(temperatur=19.0, soll=20.0).aufheizen and not soll(temperatur=20.0, soll=20.0, aufheizen_vorher=True).aufheizen
+    # Absenken, Bedarf und Taste ebenso; ohne Fühler und im Modus Zeitplan kein Aufheizen-Merker
+    assert soll(temperatur=8.0, frei=True, frei_modus="absenk", absenk=10.0).aufheizen
+    assert soll(temperatur=15.0, bedarf=True, bedarf_aktiv=True).aufheizen
+    assert not soll(temperatur=None).aufheizen and not soll(temperatur=15.0, modus="plan").aufheizen

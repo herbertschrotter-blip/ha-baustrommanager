@@ -173,9 +173,13 @@ def test_noch_nicht_gelernt_tau_und_rate_geschaetzt():
     assert S.rechnen(_eingabe(tau=[20, 1])).tau_geschaetzt and not S.rechnen(_eingabe(tau=[20, lernen.TAU_N])).tau_geschaetzt
 
 
-def test_zusatz_einer_reicht_sonst_beide():
-    einer = S.rechnen(_eingabe(raten={"kalt|1": [2.6, 5], "kalt|2": [5.0, 5]}, anzahl=2, stufen=True))
-    assert einer.anzahl == 1 and not einer.zusatz
+def test_zuerst_voll_aufheizen_alle_spaet():
+    """0.8.178 (Herbert 20.11.2026): zuerst voll aufheizen – auch wenn einer reichte, laufen alle und der Start ist
+    entsprechend später (bis 0.8.177: „einer reicht“, früh mit einem)."""
+    raten = {"kalt|1": [2.6, 5], "kalt|2": [5.0, 5]}
+    einer = S.rechnen(_eingabe(raten=raten, anzahl=1))
+    alle = S.rechnen(_eingabe(raten=raten, anzahl=2, stufen=True))
+    assert alle.anzahl == 2 and alle.zusatz and alle.rate == 5.0 and alle.beginn_m > einer.beginn_m
     beide = S.rechnen(_eingabe(innen=12.0, raten={"kalt|1": [1.0, 5], "mild|1": [1.0, 5],
                                                                  "kalt|2": [3.0, 5], "mild|2": [3.0, 5]}, anzahl=2, stufen=True))
     assert beide.anzahl == 2 and beide.zusatz and beide.rate_einer == 1.0
@@ -243,15 +247,15 @@ def test_frueher_regen_und_noch_frueher_verschieben_den_start_wie_den_plan():
 
 
 def test_zusatz_ueberfaellig_heizen_beide():
-    """Code-Review: Automatik erst um 05:00 an, Start war fällig – einer (2,6 °C/h) käme erst nach dem Ziel, beide
-    (5 °C/h) rechtzeitig: dann beide. Eine Minute zu spät (Auswertung) reicht einer weiter (Toleranz 5 min)."""
+    """Code-Review: Automatik erst um 05:00 an, Start war fällig – beide (5 °C/h) rechtzeitig. Seit 0.8.178 laufen
+    beim Aufheizen immer alle (bis 0.8.177 reichte eine Minute zu spät noch einer)."""
     raten = {"kalt|1": [2.6, 5], "mild|1": [2.6, 5], "kalt|2": [5.0, 5], "mild|2": [5.0, 5]}
     spaet = S.rechnen(_eingabe(jetzt=datetime(2026, 10, 29, 5, 0, tzinfo=TZ), innen=14.0, aussen=4.7, vorhersage=(),
                                raten=raten, anzahl=2, stufen=True))
     assert spaet.anzahl == 2 and spaet.zusatz and spaet.warm_m <= spaet.ziel_m
     knapp = S.rechnen(_eingabe(jetzt=datetime(2026, 10, 29, 3, 31, tzinfo=TZ), innen=13.9, aussen=4.7, vorhersage=(),
                                raten=raten, anzahl=2, stufen=True))
-    assert knapp.anzahl == 1 and not knapp.zusatz
+    assert knapp.anzahl == 2 and knapp.zusatz
 
 
 def test_fest_beginn_plan_beginn_oder_jetzt():

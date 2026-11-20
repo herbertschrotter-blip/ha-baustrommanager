@@ -2317,11 +2317,14 @@ class BaustellePanel extends LitElement {
     const oeOben = O.map(o => { const hit = Math.max(12, o.w);   // Tippfläche mindestens 12 px
       return `<rect class="o-hit" data-o="${esc(o.k)}" x="${(o.x1 + o.w / 2 - hit / 2).toFixed(1)}" y="${T}" width="${hit.toFixed(1)}" height="${unten - T}" fill="transparent"><title>${esc(o.text)}</title></rect>`; }).join('');
     const sel = O.find(o => o.k === this._otip), mitT = O.some(o => o.art === 'tuer'), mitF = O.some(o => o.art === 'fenster');
+    // Darüberfahren: je Stunde innen, außen, Soll, geheizt, Heizzeit und Tür/Fenster offen (Herbert 20.11.2026) – nur Anzeige
+    const heizzeit = tagNr < 0 ? [] : this.heizzeiten(b, TAGE[tagNr]), cid = `ctag-${b.id}-${vs}`;
+    CHARTS[cid] = { art: 'ctag', W, L, R: W - Rr, x, y, oben: T, unten, innen: b.fuehler ? innen : null, aussen, kw, soll: mitSoll ? soll : null, farbe, heizzeit, O, vs, jetztH: +jm[0] };
     const tip = !sel ? '' : `<div class="o-tip" style="left:clamp(90px, ${((sel.x1 + sel.w / 2) / W * 100).toFixed(1)}%, calc(100% - 90px))"><b style="color:${sel.farbe}">${esc(sel.text)}</b>${O.filter(o => o !== sel && o.a < sel.e && o.e > sel.a).map(o => `<div class="leise">gleichzeitig: ${esc(o.text)}</div>`).join('')}</div>`;
-    return `<div class="o-wrap"><svg viewBox="0 0 ${W} ${H}" class="c-tag-svg">${band}${oeUnter}${raster}
+    return `<div class="o-wrap"><svg viewBox="0 0 ${W} ${H}" class="c-tag-svg" data-chart="${cid}">${band}${oeUnter}${raster}
       ${mitSoll ? `<line x1="${L}" x2="${W - Rr}" y1="${y(soll).toFixed(1)}" y2="${y(soll).toFixed(1)}" stroke="var(--ink)" stroke-dasharray="5 4" opacity=".6"/><text x="${W - Rr}" y="${(y(soll) - 5).toFixed(1)}" text-anchor="end" class="c-achse">Soll ${de(soll)}°</text>` : ''}
       <path d="${pfad(aussen)}" fill="none" stroke="var(--ink2)" stroke-width="1.5" opacity=".7"/>${b.fuehler ? `<path d="${pfad(innen)}" fill="none" stroke="#ff9f0a" stroke-width="2.6"/>` : ''}
-      ${bars}${vs ? '' : `<line x1="${x(jetzt).toFixed(1)}" x2="${x(jetzt).toFixed(1)}" y1="${T}" y2="${H - B + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}${oeOben}</svg>${tip}</div>
+      ${bars}${vs ? '' : `<line x1="${x(jetzt).toFixed(1)}" x2="${x(jetzt).toFixed(1)}" y1="${T}" y2="${H - B + 28}" stroke="var(--ink)" opacity=".5"/>`}${stunden}<g class="hover"></g>${oeOben}</svg>${tip}</div>
       <div class="c-legende">${b.fuehler ? '<span><i style="background:#ff9f0a"></i>innen</span>' : ''}<span><i style="background:var(--ink2)"></i>außen</span>${mitSoll ? '<span><i class="gestr"></i>Soll</span>' : ''}<span><i style="background:var(--amber);opacity:.4"></i>Heizzeit</span><span><i style="background:${farbe}"></i>geheizt (kWh je Stunde)</span>${mitT ? '<span class="o-leg"><i style="background:var(--rot);opacity:.45"></i>Tür offen</span>' : ''}${mitF ? '<span class="o-leg"><i style="background:var(--blau);opacity:.45"></i>Fenster offen</span>' : ''}</div>`;
   }
   /* Tür/Fenster offen am angezeigten Tag: fertig von der Integration (baustelle/oeffnungen, Öffnungen unter 10 s schon
@@ -2792,9 +2795,26 @@ class BaustellePanel extends LitElement {
   isoHeute(hhmm) { return new Date(this.zoneMs(this.z.HEUTE, hhmm, this.z.zone)).toISOString(); }
 
   hover(ev) {
-    const svg = ev.target && ev.target.closest && ev.target.closest('svg.chart'); if (!svg) return this.tip(null);
+    const svg = ev.target && ev.target.closest && ev.target.closest('svg.chart, svg.c-tag-svg'); if (!svg) return this.tip(null);
     const c = CHARTS[svg.dataset.chart]; if (!c) return this.tip(null);
     const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width, p = this.d ? this.d.e.preis : 0;
+    if (c.art === 'ctag') {   // Tagesdiagramm des Containers: die Stunde unter dem Zeiger
+      const vx = fx * c.W, h = Math.max(0, Math.min(23, Math.floor((vx - c.L) / (c.R - c.L) * 24))), xm = c.x(h + .5), hh = k => String(k).padStart(2, '0');
+      const innen = c.innen ? c.innen[h] : null, aussen = c.aussen[h], kw = c.kw[h];
+      const in_h = (a, e) => a < (h + 1) * 60 && e > h * 60;   // nur Auswahl, was in diese Stunde fällt (keine Rechnung)
+      const heiz = c.heizzeit.some(([a, e]) => in_h(a, e)), offen = c.O.filter(o => in_h(o.a, o.e)), kommt = !c.vs && h > c.jetztH;
+      if (!zahl(innen) && !zahl(aussen) && !zahl(kw)) { svg.querySelector('.hover').innerHTML = ''; return this.tip(null); }
+      svg.querySelector('.hover').innerHTML = `<line x1="${xm.toFixed(1)}" x2="${xm.toFixed(1)}" y1="${c.oben}" y2="${c.unten}" class="kreuz" stroke="var(--ink2)" stroke-dasharray="2 3"/>`
+        + (zahl(innen) ? `<circle cx="${xm.toFixed(1)}" cy="${c.y(innen).toFixed(1)}" r="4.5" fill="#ff9f0a" stroke="var(--sheet)" stroke-width="2"/>` : '')
+        + (zahl(aussen) ? `<circle cx="${xm.toFixed(1)}" cy="${c.y(aussen).toFixed(1)}" r="4" fill="var(--ink2)" stroke="var(--sheet)" stroke-width="2"/>` : '');
+      return this.tip(ev, `<b>${hh(h)}:00–${hh((h + 1) % 24)}:00</b>`
+        + (zahl(innen) ? `<div><i style="background:#ff9f0a"></i>innen <b>${de(innen)} °C</b></div>` : '')
+        + (zahl(aussen) ? `<div><i style="background:var(--ink2)"></i>außen <b>${de(aussen)} °C</b></div>` : '')
+        + (zahl(c.soll) ? `<div class="leise">Soll ${de(c.soll)} °C</div>` : '')
+        + (zahl(kw) && !kommt ? `<div><i style="background:${c.farbe}"></i>geheizt <b>${de(kw, 2)} kWh</b></div>` : '')
+        + (heiz ? `<div class="leise">in der Heizzeit</div>` : '')
+        + offen.map(o => `<div><i style="background:${o.farbe}"></i>${esc(o.text)}</div>`).join(''));
+    }
     if (c.art === 'streu') {
       const vx = (ev.clientX - r.left) / r.width * 320, vy = ((ev.clientY ?? 0) - (r.top ?? 0)) / r.width * 320;
       let best = 0, bd = 1e9; c.pkt.forEach((q, i) => { const dd = (c.x(q[0]) - vx) ** 2 + (c.y(q[1]) - vy) ** 2; if (dd < bd) { bd = dd; best = i; } });
@@ -2847,7 +2867,7 @@ class BaustellePanel extends LitElement {
   }
   tip(ev, html) {
     const t = this.root && this.root.querySelector('.tip'); if (!t) return;
-    if (!ev || !html) { t.classList.remove('an'); this.root.querySelectorAll('.chart .hover').forEach(h => { h.innerHTML = ''; }); this.root.querySelectorAll('.bar.matt').forEach(x => x.classList.remove('matt')); return; }
+    if (!ev || !html) { t.classList.remove('an'); this.root.querySelectorAll('.chart .hover, .c-tag-svg .hover').forEach(h => { h.innerHTML = ''; }); this.root.querySelectorAll('.bar.matt').forEach(x => x.classList.remove('matt')); return; }
     const r = this.root.getBoundingClientRect(); t.innerHTML = html; t.classList.add('an');
     const x = Math.min(ev.clientX - r.left + 12, r.width - t.offsetWidth - 8); t.style.left = x + 'px'; t.style.top = (ev.clientY - r.top - t.offsetHeight - 12) + 'px';
   }

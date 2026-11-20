@@ -314,6 +314,11 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   `stufen_min` (min Laufzeit des ersten), `stufen_anstieg` (°C), `stufen_kalt` (°C außen). `laufzeit.container.<id>.stufen`
   (ab zwei Heizkörpern, sonst `null`): `{an, haupt: [ids], zusatz: [ids], zusatz_an, grund, text, auto: [id]}` (`auto`: primär ohne Wahl, AN-0015); `laufzeit.geraete.<id>.zusatz`.
   Aufheizen lernt je Anzahl laufender Heizkörper: `lernen.aufheizen` mit Schlüsseln `kalt|1`, `mild|2` …; `lernen.warm.anzahl`.
+  Seit 0.8.178 (Herbert 20.11.2026) **zuerst voll aufheizen**: mehr als 1 °C unter dem Soll heizt der Container durch,
+  bis das Soll (lernend: abzüglich Nachlauf) erreicht ist (`logik/regelung.aufheizen`), mit allen Heizkörpern
+  (`stufen.grund` `aufheizen`); erst dann regelt TPI bzw. der Thermostat. Der Start rechnet mit allen Heizkörpern
+  (so spät wie möglich); „einer reicht“ gilt nur noch beim Halten. K innen lernt nicht aus dem Überschwingen nach dem
+  Aufheizen.
 - Ölradiator oder Konvektor (AN-0008): `baustelle/auswertung` → `typ = {oelradiator|konvektor: {kwh_gradh, kwh_gradh_m2,
   auf, auf_je_kw, ab, anzahl, kw, m2, container: [Namen], ids}, weniger, vergleichbar, nur_einer, seit,
   ausgeschlossen: [{name, grund}], ersparnis: {faktor, oel, konvektor, oel_kwh, konvektor_kwh, erspart_kwh,

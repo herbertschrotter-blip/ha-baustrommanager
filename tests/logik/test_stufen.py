@@ -63,3 +63,9 @@ def test_einer_reicht_im_vorheizen():
     assert zusatz(R, lage(innen=15.0, einer_reicht=True)) == (False, None)
     assert zusatz(R, lage(innen=15.0, einer_reicht=True, aussen=-8.0)) == (True, Grund.KALT)
     assert zusatz(R, lage(innen=15.0, einer_reicht=True, boost=True)) == (True, Grund.BOOST)
+
+
+def test_zuerst_voll_aufheizen_mit_zusatz():
+    """0.8.178: im Aufheizen läuft der Zusatz immer mit – auch wenn gelernt einer reichte."""
+    assert zusatz(R, lage(innen=15.0, einer_reicht=True, aufheizen=True)) == (True, Grund.AUFHEIZEN)
+    assert zusatz(R, lage(innen=19.0, aufheizen=True)) == (True, Grund.AUFHEIZEN)

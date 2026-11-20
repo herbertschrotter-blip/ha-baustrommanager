@@ -538,7 +538,7 @@ async def test_tuer_mit_zwei_heizkoerpern_und_zusatz(hass: HomeAssistant, freeze
     hass.states.async_set("sensor.temp_c1", "18.0")
     await _start(hass, freezer, st)
     assert _an(hass, "switch.hk1") and _an(hass, "switch.hk2")
-    assert _c(hass, entry)["stufen"]["grund"] == "weit_unter"
+    assert _c(hass, entry)["stufen"]["grund"] == "aufheizen"   # 0.8.178: zuerst voll aufheizen
     await _tuer(hass, TUER1, "on")
     await _zu(hass, freezer, "10:03:00", st)
     assert not _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")

@@ -444,12 +444,12 @@ async def test_zusatz_nicht_gebraucht_wartet_nicht(hass: HomeAssistant, freezer,
 
 async def test_zusatz_gebraucht_am_vollen_anschluss_wartet(hass: HomeAssistant, freezer, shellys) -> None:
     entry, st = await _start(hass, freezer, shellys, hk2_bereich=C1, bereiche={C1: {"stufen": True}})
-    hass.states.async_set("sensor.temp_c1", "18.0")                   # weit unter dem Soll
+    hass.states.async_set("sensor.temp_c1", "18.0")                   # weit unter dem Soll: zuerst voll aufheizen
     await _minuten(hass, freezer, st, 1)
     assert _lz(hass, entry)["container"][C1]["stufen"]["zusatz_an"] is True
     assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2")
     assert _warte(hass, entry, HK2)["grund"] == "anschluss_voll"   # kein Rundlauf gegen den eigenen Hauptheizkörper
-    assert "Zusatz-Heizkörper dazu – weit unter dem Soll" in _texte(st, "schalten")
+    assert "Zusatz-Heizkörper dazu – zuerst voll aufheizen" in _texte(st, "schalten")   # 0.8.178
 
 
 async def test_zusatz_bekommt_platz_am_grossen_anschluss(hass: HomeAssistant, freezer, shellys) -> None:

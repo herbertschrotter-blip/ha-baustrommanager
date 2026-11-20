@@ -236,10 +236,13 @@ def soll(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> SollJeBereich:
                 tuer_vorher=hz._tuer_pause.get(bid, False),
                 taste=hz.bis("taste_bis", bid, jetzt) is not None,   # BSM-018: Taste am Plug
                 baseline=h_baseline.laeuft(hz, bid, jetzt),   # BSM-033.04: Baseline-Lauf
+                aufheizen_vorher=hz._aufheizen.get(bid, False),   # 0.8.178: zuerst voll aufheizen
             )
             soll = soll_container(lage, int(h["tuer_pause_min"]))
             hz._lern_grund[bid] = soll.grund
             hz._frost[bid] = soll.grund == SollGrund.FROST
+            # bei offener Tür bleibt das Aufheizen gemerkt (nach dem Schließen geht es weiter bis zum Soll)
+            hz._aufheizen[bid] = soll.aufheizen if soll.grund != SollGrund.TUER_OFFEN else hz._aufheizen.get(bid, False)
             hz._tuer_pause[bid] = soll.grund == SollGrund.TUER_OFFEN
             hz._stufen_rechnen(bid, soll, temp, soll_t, wetter, jetzt, plan, minute, warm_ab)
             ergebnis[bid] = (soll, lage)

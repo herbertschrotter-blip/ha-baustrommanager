@@ -78,6 +78,10 @@ class Heizung(Funktion):
         self.tuer_trotzdem: set[str] = set()   # wird bei der ersten Auswertung aus dem Store geladen
         self._trotzdem_geladen = False
         self._frost: dict[str, bool] = {}
+        self._aufheizen: dict[str, bool] = {}   # 0.8.178: heizt durch bis zum Soll (logik/regelung.aufheizen)
+        self._aufheizen_letzte_minute: dict[str, tuple[bool, bool]] = {}   # (heizte, im Aufheizen) der Minute davor
+        self._aufheizen_beim_heizen: dict[str, bool] = {}   # dieser Heizlauf hatte Aufheizen (K innen lernt dann nicht)
+        # nur im Speicher: nach einem Neustart knapp unter dem Soll regelt gleich TPI (mehr als 1 °C darunter heizt er neu auf)
         self._tuer_pause: dict[str, bool] = {}   # war zuletzt wegen offener Tür pausiert
         # FE-0025: „Tür vermutlich offen“ auch ohne Lernen – Verlauf der letzten Minuten, Vermutung, Pause bis
         self._tuer_verlauf: dict[str, list[list[Any]]] = {}
