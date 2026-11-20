@@ -12,6 +12,7 @@ function beispielHochrechnung(b, preis) {
   const C = b.bereiche.filter(c => c.art !== 'pumpenschacht'), P = [[15.5, 1.9, 2.1, 0.12], [14.0, 2.4, 1.6, 0.17], [16.0, 2.1, 2.4, 0.24], [13.0, 0.9, 0.8, 0.27]];
   const sig = C.map((c, i) => { const [g, k, d0, cv] = P[i % 4];
     return { bereich: c.id, methode: 'signatur', stand: cv <= 0.2 ? 'gut' : 'brauchbar', grund: null, tage: 30 + i, grenze: g, kwh_je_grad: k, grundlast: d0, cv_rmse: cv,
+      bauart: { typ: i % 2 ? 'konvektor' : 'oelradiator', doppel: i === 0, einheiten: i === 0 ? 2 : 1, container: C.filter((_, j) => j % 2 === i % 2 && (j === 0) === (i === 0)).map(x => x.id), quelle: 'bauart', faktor: i === 1 ? 1.12 : 1, abweichung: null, hinweis: false },
       punkte: Array.from({ length: 24 }, (_, n) => { const t = -4 + (n * 7 + i * 3) % 22; return [t, +(d0 + k * Math.max(0, g - t) + Math.sin(n * 2.3 + i) * cv * 4).toFixed(2)]; }) }; });
   const tagKwh = t => sig.reduce((s, c) => s + c.grundlast + c.kwh_je_grad * Math.max(0, c.grenze - t), 0);
   const reihe = [], start = Date.UTC(2025, 9, 1), n = 212, heute = 106;
@@ -40,7 +41,7 @@ function beispielHochrechnung(b, preis) {
       return z; }); };
   return { bisher_kwh: bisher, bisher_eur: bisher * preis, mit_kwh: z[2], mit_eur: z[2] * preis, ohne_kwh: z[5], ohne_eur: z[5] * preis, gespart_eur: (z[5] - z[2]) * preis,
     methode: 'signatur', ohne_methode: 'schaetzung', ohne_hinweis: 'grobe Obergrenze, nicht belastbar', unten_kwh: z[3], unten_eur: z[3] * preis, oben_kwh: z[4], oben_eur: z[4] * preis, normjahr_kwh: z[2] * 1.03, normjahr_eur: z[2] * 1.03 * preis,
-    hgt_rest: 1860, vorhersage_tage: 6, herkunft_lernt: false, herkunft: 'aus der Energiesignatur je Container · nächste 6 Tage aus der Vorhersage, danach Klimamittel · noch 1\u00a0860 Heizgradtage', container: sig.map(c => ({ ...c, rest_kwh: 400, rest_eur: 400 * preis })), reihe,
+    hgt_rest: 1860, vorhersage_tage: 6, herkunft_lernt: false, herkunft: 'aus der Energiesignatur je Bauart (gleich gebaute Container lernen gemeinsam) · nächste 6 Tage aus der Vorhersage, danach Klimamittel · noch 1\u00a0860 Heizgradtage', container: sig.map(c => ({ ...c, rest_kwh: 400, rest_eur: 400 * preis })), reihe,
     klima: KLIMA_BSP, klima_vorgabe: true, vorhersage: [['2026-01-16', 1.5], ['2026-01-17', -0.5], ['2026-01-18', -2.0], ['2026-01-19', 0.5], ['2026-01-20', 2.5], ['2026-01-21', 3.0]],
     beginn: '2025-10-01', ende: '2026-04-30', perioden: { tag: perioden('tag'), woche: perioden('woche'), monat: perioden('monat') } };
 }

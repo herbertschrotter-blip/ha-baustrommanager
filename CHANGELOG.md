@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.176] – 2026-11-20
+
+Hochrechnung je Bauart (Herbert: die Container sind gleich gebaut, nur Einzel/Doppel und Ölradiator/Konvektor
+unterscheiden sich):
+
+- Gleich gebaute Container lernen eine gemeinsame Energiesignatur; ein Doppelcontainer zählt doppelt. 002 und 003 (beide
+  Einzel mit Konvektor) verbrauchen fast gleich viel – 003 war bisher allein „unsicher“ und rechnete nur grob, jetzt
+  rechnet er mit der Signatur beider. Ein neuer Container hat ab dem ersten Tag eine Prognose statt nach 10 Heiztagen.
+- Die ersten zwei Heiztage eines Containers zählen nicht für die Signatur (erstes Aufheizen eines ausgekühlten
+  Containers, bei 003 18 statt 8 kWh).
+- Braucht ein Container deutlich mehr oder weniger als gleich gebaute (ab 20 %, mindestens 7 Tage), steht das unter
+  „Was fällt auf“ – oft eine offene Tür, eine undichte Stelle oder eine falsch eingetragene Leistung.
+- Im Reiter Signatur steht je Container seine Bauart und mit welchen Containern er lernt.
+
 ## [0.8.175] – 2026-11-18
 
 - Hochrechnung: Auch mit Automatik zählt ein Tag nur noch, wenn jeder Heizkörper des Containers mindestens 95 % des

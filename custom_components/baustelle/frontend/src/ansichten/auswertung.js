@@ -79,6 +79,7 @@ function erkenntnisse(p, A, z) {
     wetter: ['🌡', `Je Grad kälter +${de(x.kwh_je_grad, 1)} kWh am Tag`, [zahl(x.eur_je_grad) ? `≈ ${de(x.eur_je_grad, 2)} € je Grad` : '', zahl(x.null0) ? `unter ${de(x.null0, 0)} °C außen wird geheizt` : ''].filter(Boolean).join(' · '), 'wetter'],
     mehr: ['📈', `${x.prozent} % mehr als ${awVgl(p, z)}`, 'Verbrauch im Vergleich zum Zeitraum davor.', 'verlauf'],
     weniger: ['📉', `${x.prozent} % weniger als ${awVgl(p, z)}`, 'Verbrauch im Vergleich zum Zeitraum davor.', 'verlauf'],
+    bauart: ['🔎', `${x.name} braucht ${Math.abs(x.prozent)} % ${x.prozent > 0 ? 'mehr' : 'weniger'} als gleich gebaute`, x.prozent > 0 ? 'Gleicher Aufbau, gleicher Heizkörper – oft eine offene Tür, eine undichte Stelle oder eine falsch eingetragene Leistung.' : 'Gleicher Aufbau, gleicher Heizkörper – weniger geheizt (z. B. öfter leer oder kühler eingestellt).', 'wetter'],
     typ: ['⚖', x.weniger > 0 ? `Ölradiator ${de(x.weniger, 0)} % sparsamer` : `Konvektor ${de(-x.weniger, 0)} % sparsamer`, 'aus eigenen Messungen je Heizstunde.', 'vergleich'],
   })[x.art]).filter(Boolean);
 }

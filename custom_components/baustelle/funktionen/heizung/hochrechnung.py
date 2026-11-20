@@ -29,7 +29,7 @@ from ...kern.staffelung import nenn_kw
 from ...db.tage import hochrechnung_tage, stunden
 from ...kern.kalender import async_frei_tage
 from ..basis import mitternacht
-from ...logik import hochrechnung as h, tagesverlauf as tv
+from ...logik import bauart as ba, hochrechnung as h, tagesverlauf as tv
 from ...logik.arbeitszeit import WetterTag, tagesplan
 from ...logik.signatur import Tag, berechnen
 from ...logik.auswertung import heizperiode_bis, heizperiode_ende
@@ -121,11 +121,22 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     aussen = aussen_heute(st, heute, roh)
     # Typ nach allen Heizkörpern (auch inaktiven – der Verbrauch der Heizperiode stammt von ihnen)
     typen = {bid: h_baseline.typ_alle(hz, bid) for bid in ids}
-    # Container ohne eigene gezählte Heiztage: kWh je Heizgradtag der anderen desselben Typs statt 0 (logik/hochrechnung)
-    gezaehlt = {bid: h.gezaehlte_tage(roh[bid], heute, lauf_tage.get(bid, set()), plan.get(bid)) for bid in ids}
+    # 0.8.176: je Bauart (Einzel/Doppel × Heizkörper-Typ) gemeinsam lernen, je Einheit; Anlauftage zählen nicht
+    # (logik/bauart); ein Container rechnet mit dem Modell seiner Bauart × Einheiten × seinem Faktor
+    anlauf = {bid: ba.anlauf(roh[bid], plan.get(bid)) for bid in ids}
+    gezaehlt = {bid: [t for t in h.gezaehlte_tage(roh[bid], heute, lauf_tage.get(bid, set()), plan.get(bid))
+                      if t.datum not in anlauf[bid]] for bid in ids}
+    gr = {bid: ba.groesse(bool(((e := st.einstellungen.bereich(bid)).get("symbol") or {}).get("doppel")), e.get("groesse_m2"))
+          for bid in ids}
+    arten = {bid: ba.bauart(typen[bid], gr[bid], bid) for bid in ids}
+    einh = {bid: ba.einheiten(gr[bid]) for bid in ids}
+    modelle = ba.modelle(gezaehlt, arten, typen, einh)
+    faktor = {bid: ba.faktor(gezaehlt[bid], modelle[arten[bid]], einh[bid]) for bid in ids}
+    abw = {bid: ba.abweichung(gezaehlt[bid], [(gezaehlt[b], einh[b]) for b in ids if b != bid and arten[b] == arten[bid]],
+                              einh[bid]) for bid in ids}
     reste = {bid: h.container_rest(roh[bid], heute, ende, vor, klima, beginn, lauf_tage.get(bid, set()),
                                    rest_heute=anteil_heute, aussen_heute=aussen, heiztage=plan.get(bid),
-                                   ersatz_kwh_je_hgt=None if gezaehlt[bid] else h.ersatz_kwh_je_hgt(gezaehlt, typen, bid))
+                                   modell=modelle[arten[bid]], skala=einh[bid] * faktor[bid].wert)
              for bid in ids}
     # Ersparnis nach IPMVP: Signatur „ohne“ je Container, Heizperiode damit; andere über das Verhältnis je Heizkörper-Typ
     ohne = {bid: h.ohne_container(roh[bid], ohne_tage.get(bid, set()), heute, beginn, ende, vor, klima) for bid in ids}
@@ -140,8 +151,12 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
         "bereich": bid, "methode": r.methode, "rest_kwh": r.rest_kwh, "unten_kwh": r.unten_kwh, "oben_kwh": r.oben_kwh,
         "normjahr_kwh": r.normjahr_kwh, "stand": r.signatur.stand, "grund": r.signatur.grund, "tage": r.signatur.tage,
         "grenze": r.signatur.grenze, "kwh_je_grad": r.signatur.kwh_je_grad, "grundlast": r.signatur.grundlast,
-        "cv_rmse": r.signatur.cv_rmse,
-        "punkte": [[t.aussen, round(t.kwh or 0.0, 2)] for t in roh[bid] if h.tag_zaehlt(t, heute) and h.heiztag(t.datum, plan.get(bid))],
+        "cv_rmse": r.signatur.cv_rmse, "eigene_tage": len(gezaehlt[bid]),
+        "bauart": {"typ": typen[bid], "doppel": gr[bid] == ba.DOPPEL, "groesse": gr[bid], "einheiten": einh[bid],
+                   "container": list(modelle[arten[bid]].container), "quelle": modelle[arten[bid]].quelle,
+                   "faktor": round(faktor[bid].wert, 3), "faktor_prozent": ba.faktor_prozent(faktor[bid].wert), "abweichung": None if (w := abw[bid]) is None else round(w, 3),
+                   "hinweis": ba.hinweis(abw[bid])},
+        "punkte": [[t.aussen, round(t.kwh or 0.0, 2)] for t in gezaehlt[bid]],   # dieselben Tage wie die Signatur
     } for bid, r in reste.items()]
     rest_temps = [t for t, _ in h.temperaturen(h.tage(heute, ende), vor, klima)]
     reihe = h.reihe(roh, reste, heute, beginn, ende,

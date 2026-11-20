@@ -12,6 +12,7 @@ from sqlalchemy import delete, insert
 
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 
+from custom_components.baustelle.logik.bauart import ANLAUF_TAGE
 from custom_components.baustelle.db import DATA_DB, schema as s
 from custom_components.baustelle.funktionen.heizung import Heizung
 from custom_components.baustelle.funktionen.heizung.hochrechnung import async_rechnen, werte, zeitraum
@@ -71,9 +72,9 @@ async def test_hochrechnung_aus_der_datenbank(hass: HomeAssistant, baustelle_nov
     # Rest von heute (10:00, noch 14 h) anteilig bei der Vorhersage für heute
     assert erg["reste"][C1].heute_kwh == pytest.approx(14 / 24 * modell(5.0))
     je = {c["bereich"]: c for c in erg["container"]}
-    assert je[C1]["methode"] == "signatur" and je[C1]["tage"] == 30
+    assert je[C1]["methode"] == "signatur" and je[C1]["tage"] == 30 - ANLAUF_TAGE   # 0.8.176: ohne die zwei Anlauftage
     assert je[C1]["grenze"] == pytest.approx(15.0) and je[C1]["kwh_je_grad"] == pytest.approx(2.0)
-    assert je[C2]["tage"] == 29                                     # Tag im Notbetrieb zählt nicht
+    assert je[C2]["tage"] == 29 - ANLAUF_TAGE                       # Tag im Notbetrieb zählt nicht
     # Sensor und Auswertung: bisher (Tage der Heizperiode aus der Datenbank) + Rest beider Container, Spanne um die Mitte
     b = erg["bisher_kwh"]
     assert b == pytest.approx(2 * sum(modell(-3 + i % 22) for i in range(30)), rel=0.01)
@@ -86,7 +87,7 @@ async def test_hochrechnung_aus_der_datenbank(hass: HomeAssistant, baustelle_nov
     R = erg["reihe"]
     assert R[0][0] == "2026-10-01" and R[-1][0] == "2027-04-30"
     assert R[-1][2] == pytest.approx(w["mit_kwh"], rel=1e-4) and R[-1][3] == pytest.approx(w["unten_kwh"], rel=1e-4)
-    assert len(je[C1]["punkte"]) == 30 and erg["klima_vorgabe"] is True and len(erg["klima"]) == 12
+    assert len(je[C1]["punkte"]) == 30 - ANLAUF_TAGE and erg["klima_vorgabe"] is True and len(erg["klima"]) == 12
     assert erg["vorhersage"] == [[(HEUTE + timedelta(days=1)).isoformat(), -8.0]]
     # BSM-033.04: Tag/Woche/Monat – Summe der Monate = Hochrechnung, heute mit Rest des Tages
     P = erg["perioden"]
@@ -139,8 +140,8 @@ async def test_nur_heiztage_nach_heizplan(hass: HomeAssistant, freezer, shellys,
     await async_rechnen(hass, hz)
     erg = hz.hochrechnung
     je = {c["bereich"]: c for c in erg["container"]}
-    assert je[C1]["methode"] == "signatur" and je[C1]["tage"] == 30 - len(frei) == 21 and je[C1]["stand"] == "gut"
-    assert je[C1]["kwh_je_grad"] == pytest.approx(2.0) and len(je[C1]["punkte"]) == 21
+    assert je[C1]["methode"] == "signatur" and je[C1]["tage"] == 30 - len(frei) - ANLAUF_TAGE == 19 and je[C1]["stand"] == "gut"
+    assert je[C1]["kwh_je_grad"] == pytest.approx(2.0) and len(je[C1]["punkte"]) == 19   # Punkte = Tage der Signatur
     assert all(p[1] > 0 for p in je[C1]["punkte"]) and erg["signatur"]["tage"] == 21
     tag = {z["von"]: z for z in erg["perioden"]["tag"]}
     assert tag["2026-11-21"]["prog"] == 0.0 and tag["2026-11-22"]["prog"] == 0.0           # Wochenende
@@ -162,7 +163,7 @@ async def test_lernt_nach_heizgradtagen(hass: HomeAssistant, freezer, shellys, n
     await _tage_eintragen(hass, C2, n=7, frei={date(2026, 11, 14), date(2026, 11, 15)})
     await async_rechnen(hass, hz)
     erg = hz.hochrechnung
-    assert {c["methode"] for c in erg["container"]} == {"heizgradtage"} and {c["tage"] for c in erg["container"]} == {5}
+    assert {c["methode"] for c in erg["container"]} == {"heizgradtage"} and {c["tage"] for c in erg["container"]} == {5 - ANLAUF_TAGE}
     woche = {z["von"]: z for z in erg["perioden"]["woche"]}
     nov, jaen, apr = woche["2026-11-23"]["prog"], woche["2027-01-11"]["prog"], woche["2027-04-12"]["prog"]
     assert jaen > 1.15 * nov and 0 < apr < nov / 1.5                     # Kurve: Jänner am meisten, April am wenigsten
@@ -268,3 +269,25 @@ async def test_tagesverlauf_24h(hass: HomeAssistant, baustelle_november, hass_ws
     assert sum(x[2] for x in m["stunden"]) == pytest.approx(tag[morgen.isoformat()]["prog"], rel=1e-3)
     await ws.send_json({"id": 3, "type": "baustelle/tagesverlauf", "entry_id": baustelle_november.entry_id, "datum": "2030-01-01"})
     assert (await ws.receive_json())["result"]["stunden"] == []
+
+
+async def test_bauart_doppelcontainer_je_einheit(hass: HomeAssistant, baustelle_november) -> None:
+    """0.8.176: Ein Doppelcontainer (Symbol „doppel“) lernt je Einheit und rechnet doppelt – die angezeigte Signatur passt
+    zu seinen eigenen Punkten; die Bauart steht dabei (Typ, Einheiten, Container, Faktor)."""
+    st = baustelle_november.runtime_data
+    hz = Heizung.von(st)
+    await _tage_eintragen(hass, C1)
+    await async_rechnen(hass, hz)
+    einzeln = {c["bereich"]: c for c in hz.hochrechnung["container"]}[C1]
+    st.einstellungen.bereich(C1)["symbol"] = {**(st.einstellungen.bereich(C1).get("symbol") or {}), "doppel": True}
+    await async_rechnen(hass, hz)
+    doppel = {c["bereich"]: c for c in hz.hochrechnung["container"]}[C1]
+    assert einzeln["bauart"] == {"typ": "oelradiator", "doppel": False, "groesse": "einzel", "einheiten": 1, "container": [C1],
+                                 "quelle": "bauart", "faktor": pytest.approx(1.0), "faktor_prozent": None, "abweichung": None,
+                                 "hinweis": False}
+    assert doppel["bauart"]["doppel"] is True and doppel["bauart"]["einheiten"] == 2
+    assert doppel["kwh_je_grad"] == pytest.approx(einzeln["kwh_je_grad"]) and doppel["rest_kwh"] == pytest.approx(einzeln["rest_kwh"])
+    st.einstellungen.bereich(C1)["symbol"] = {**st.einstellungen.bereich(C1)["symbol"], "doppel": False}
+    st.einstellungen.bereich(C1)["groesse_m2"] = 28.0   # Doppel über die Fläche (AN-0014), Symbol nicht gesetzt
+    await async_rechnen(hass, hz)
+    assert {c["bereich"]: c for c in hz.hochrechnung["container"]}[C1]["bauart"]["einheiten"] == 2

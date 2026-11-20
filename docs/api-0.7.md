@@ -414,11 +414,12 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
                     "gespart_kwh": [3.8, 1.7, null], "gespart_eur": [1.06, 0.48, null],
                     "summe": {"mit_kwh": 4.6, "mit_eur": 1.29, "ohne_kwh": 10.1, "ohne_eur": 2.83, "gespart_kwh": 5.5, "gespart_eur": 1.54}},
  "rangliste": [{"bereich": "<bid>", "name": "Polier", "baustelle": "…", "kwh": 60, "heizzeit": 25, "eur": 16.8, "kwh_h": 2.4, "anteil": 60}],
- "erkenntnisse": [{"art": "gespart|groesster|sparsamster|wetter|mehr|weniger|typ", "…": "Werte je Art"}]}
+ "erkenntnisse": [{"art": "gespart|groesster|sparsamster|bauart|wetter|mehr|weniger|typ", "…": "Werte je Art"}]}
 ```
 
 - `rangliste` (Container über `scope`, absteigend nach kWh; `kwh_h` ohne Heizzeit `null`) und `erkenntnisse` (höchstens 5,
-  Regeln in `logik/auswertung.erkenntnisse`; nur Daten, den Text macht die Seite) – WU-0005.
+  Regeln in `logik/auswertung.erkenntnisse`; nur Daten, den Text macht die Seite) – WU-0005. `bauart` (0.8.176):
+  `{bereich, name, prozent}` – der Container braucht `prozent` % mehr (+) bzw. weniger (−) als gleich gebaute.
 - `summen` über `scope`; `heizzeit` nur Container, `pumpzeit` nur Pumpen; `veraenderung` in ganzen % zum Zeitraum davor
   (`null` ohne Wert davor); `ohne_automatik` `null`, solange „ohne Automatik“ 0 ist, sonst mit `ohne_eur` (Kosten im
   Dauerbetrieb, 0.7.24).
@@ -437,7 +438,11 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
 - `hochrechnung` (Karte „Heizperiode“, Bauplan Hochrechnung §4/§5) dazu: `methode` `signatur|heizgradtage|tagesschnitt|keine`
   (FE-0030: `heizgradtage`, solange eine Signatur lernt – kWh je Heizgradtag der bisherigen Heiztage × Heizgradtage jedes
   künftigen Heiztags; `tagesschnitt` nur, wenn die bisherigen Heiztage keine Heizgradtage hatten), je Container
-  `container[].methode` ebenso; `herkunft` (Text unter dem Diagramm, von der Integration) und `herkunft_lernt` (Seite
+  `container[].methode` ebenso (`ersatz`: die Bauart hat noch keine Tage); seit 0.8.176 lernen gleich gebaute Container
+  gemeinsam (Bauplan §4a): `container[].tage`, `stand`, `grenze`, `kwh_je_grad`, `grundlast`, `cv_rmse` sind die der
+  Bauart, auf den Container umgerechnet (× Einheiten × Faktor), `eigene_tage` seine eigenen gezählten Tage (ohne die
+  zwei Anlauftage), `bauart` = `{typ, doppel, einheiten, container: [<bid>], quelle: bauart|typ|alle|keine, faktor,
+  abweichung, hinweis}`; `herkunft` (Text unter dem Diagramm, von der Integration) und `herkunft_lernt` (Seite
   setzt davor fett „lernt noch“). Signatur, `punkte` und Rest zählen nur **Heiztage** nach Heizplan (Arbeitszeit,
   Ausnahmen, Feiertag/Urlaub der ganzen Heizperiode, Container nicht „aus“); Tage ohne Heizplan haben im Rest 0 kWh.
 - **Baseline-Läufe (J4b, FE-0033, Mockup `baseline.html` Variante B; Regeln in `logik/baseline.py`):** `laufzeit.baseline`

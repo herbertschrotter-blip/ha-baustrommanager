@@ -196,6 +196,16 @@ function hochrechnung(p, h) {
 }
 
 /* ---------- Signatur ---------- */
+const TYP = { oelradiator: 'Ölradiator', konvektor: 'Konvektor', gemischt: 'gemischt' };
+/* 0.8.176: Bauart (Einzel/Doppel × Heizkörper-Typ) – gleich gebaute Container lernen gemeinsam (logik/bauart) */
+function bauartText(x, name) {
+  const b = x.bauart;
+  if (!b || !b.typ) return '';
+  const mit = (b.container || []).filter(id => id !== x.bereich).map(id => name({ bereich: id }));
+  const f = zahl(b.faktor_prozent) ? ` · ${b.faktor_prozent > 0 ? '+' : '−'}${Math.abs(b.faktor_prozent)} % gegenüber der Bauart` : '';
+  const q = b.quelle === 'typ' || b.quelle === 'alle' ? ' · noch ohne eigene Tage, rechnet wie andere Container' : mit.length ? ` · lernt gemeinsam mit ${mit.join(', ')}` : '';
+  return `${b.doppel ? 'Doppel' : 'Einzel'} · ${TYP[b.typ] || b.typ}${q}${f}`;
+}
 function streu(c) {
   const P = c.punkte || [], W = 320, H = 150, tx = t => 28 + (t + 6) / 30 * (W - 36);
   const ymax = Math.max(10, ...P.map(q => q[1])), ty = v => H - 18 - v / ymax * (H - 28);
@@ -214,12 +224,14 @@ function signatur(p, h) {
     : nothing;
   return html`<label class="feld hp-wahl">Container<select @change=${e => { p.s.hpC = +e.target.value; p.neuZeichnen(); }}>${C.map((x, j) => html`<option value=${j} ?selected=${j === i}>${name(x)}</option>`)}</select></label>
     ${leer}${(c.punkte || []).length ? streu(c) : nothing}
-    ${c.stand === 'lernt' ? html`<div class="leise">${name(c)} lernt noch: ${c.tage} von 10 ganzen Tagen. Danach zeigt sich, ab welcher Außentemperatur geheizt wird.</div>` : nothing}
+    ${c.stand === 'lernt' ? html`<div class="leise">${name(c)} lernt noch: ${c.tage} von 10 ganzen Tagen (mit gleich gebauten Containern). Danach zeigt sich, ab welcher Außentemperatur geheizt wird.</div>` : nothing}
     <div class="hpz-zeilen">${C.map(x => html`<div class="hpz-zeile"><b>${name(x)}</b>
       <span>${zahl(x.grenze) ? html`ab <b>${de(x.grenze, 1)} °C</b>` : zahl(x.kwh_je_grad) ? 'Heizgrenze noch offen' : '–'}</span>
       <span>${zahl(x.kwh_je_grad) ? `+${de(x.kwh_je_grad, 1)} kWh je Grad · Grundlast ${de(x.grundlast, 1)} kWh/Tag` : ''}</span>
-      <span>${stand(x)}${zahl(x.cv_rmse) ? html`<span class="leise"> · ${de(x.cv_rmse * 100, 0)} %</span>` : nothing}</span></div>`)}</div>
-    <div class="leise">Je Tag Verbrauch gegen mittlere Außentemperatur (ganze Tage ohne Ausfall). Unter der Heizgrenze steigt der
+      <span>${stand(x)}${zahl(x.cv_rmse) ? html`<span class="leise"> · ${de(x.cv_rmse * 100, 0)} %</span>` : nothing}</span>
+      ${bauartText(x, name) ? html`<span class="leise hp-bauart">${bauartText(x, name)}</span>` : nothing}</div>`)}</div>
+    <div class="leise">Je Tag Verbrauch gegen mittlere Außentemperatur (ganze Tage ohne Ausfall, ohne die ersten zwei Heiztage).
+      Gleich gebaute Container (Einzel oder Doppel, gleicher Heizkörper) lernen eine gemeinsame Signatur, ein Doppelcontainer zählt doppelt. Unter der Heizgrenze steigt der
       Verbrauch je Grad kälter; die Güte ist die mittlere Abweichung (bis 20 % gut, bis 30 % brauchbar).</div>`;
 }
 

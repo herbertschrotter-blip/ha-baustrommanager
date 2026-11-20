@@ -391,7 +391,7 @@ def test_hochrechnung_signatur():
 def test_hochrechnung_herkunft():
     """FE-0030: der Hinweis unter dem Diagramm kommt von der Integration – Signatur, Heizgradtage oder Tagesschnitt."""
     lernt, text = a.hochrechnung_herkunft("signatur", [{"methode": "signatur"}], 6, 2345.4)
-    assert lernt is False and text.startswith("aus der Energiesignatur je Container · nächste 6 Tage aus der Vorhersage, danach Klimamittel")
+    assert lernt is False and text.startswith("aus der Energiesignatur je Bauart (gleich gebaute Container lernen gemeinsam) · nächste 6 Tage aus der Vorhersage, danach Klimamittel")
     assert "Heizgradtage" in text and "2" in text
     assert a.hochrechnung_herkunft("signatur", [{"methode": "signatur"}], None, 0.0)[1].endswith("noch 0 Heizgradtage")   # 0 ist ein Wert
     assert "Heizgradtage" not in a.hochrechnung_herkunft("signatur", [{"methode": "signatur"}], None, None)[1]
@@ -401,8 +401,11 @@ def test_hochrechnung_herkunft():
     assert "kältere Monate mehr, Tage ohne Heizplan 0" in text and "Tagesschnitt" not in text
     lernt, text = a.hochrechnung_herkunft("tagesschnitt", [{"methode": "tagesschnitt"}, {"methode": "heizgradtage"}], 0, None)
     assert lernt is True and "1 von 2 Containern rechnen mit dem Tagesschnitt" in text and "1 von 2 Containern verteilen" in text
-    lernt, text = a.hochrechnung_herkunft("heizgradtage", [{"methode": "ersatz"}, {"methode": "signatur"}], 0, None)
-    assert lernt is True and text.startswith("1 von 2 Containern noch ohne eigene Heiztage rechnen je Heizgradtag")
+    lernt, text = a.hochrechnung_herkunft("heizgradtage", [{"methode": "ersatz", "bauart": {"quelle": "typ"}}, {"methode": "signatur"}], 0, None)
+    assert lernt is True and text.startswith("1 von 2 Containern, deren Bauart noch keine Heiztage hat, rechnen je Heizgradtag wie die "
+                                             "Container desselben Heizkörper-Typs")
+    _, text = a.hochrechnung_herkunft("heizgradtage", [{"methode": "ersatz", "bauart": {"quelle": "alle"}}], 0, None)
+    assert "wie die anderen Container," in text   # Review: Ersatz von allen Typen
     h = a.hochrechnung_signatur(a.hochrechnung_werte(1.0, 2.0, None, 0.25), {"methode": "heizgradtage"},
                                 {"container": C, "vorhersage_tage": 6}, 0.25)
     assert h["herkunft_lernt"] is True and h["herkunft"].startswith("3 von 4")
@@ -550,3 +553,13 @@ def test_vergleich_je_m2_kw_und_geraete():
     ohne_kw = typ_vergleich_fair([{**x, "kw": None} for x in [
         {"id": "a", "name": "A", "typen": ["oelradiator"], "fuehler": True, "modus": "thermo", "kwh": 1.0, "gradh": 30.0, "auf": 2.0}]])
     assert ohne_kw["oelradiator"]["kw"] is None and ohne_kw["oelradiator"]["auf_je_kw"] is None and not ohne_kw["nur_einer"]
+
+
+def test_erkenntnis_abweichung_von_gleich_gebauten():
+    """0.8.176: Container mit Hinweis der Bauart (≥ 20 % Abweichung) – nur der größte Unterschied, vor dem Wetter."""
+    c = [{"bereich": "a", "name": "003", "bauart": {"hinweis": True, "abweichung": 0.31}},
+         {"bereich": "b", "name": "002", "bauart": {"hinweis": False, "abweichung": 0.05}},
+         {"bereich": "c", "name": "005", "bauart": {"hinweis": True, "abweichung": -0.4}},
+         {"bereich": "d", "name": "ohne", "bauart": None}]
+    e = erkenntnisse([], ohne=None, gerade={"k": -2.0}, veraenderung_kwh=None, typ_weniger=None, bauart=c)
+    assert [(x["art"], x.get("name"), x.get("prozent")) for x in e] == [("bauart", "005", -40), ("wetter", None, None)]

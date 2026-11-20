@@ -525,7 +525,10 @@ async def async_auswertung(
         # Rangliste der Container und „Was fällt auf“ (WU-0005, logik/auswertung) – über `scope`
         "rangliste": rang,
         "erkenntnisse": a.erkenntnisse(rang, ohne=oa, gerade=gerade, veraenderung_kwh=a.veraenderung(summen["kwh"], davor["kwh"], vorher_ganz),
-                                       typ_weniger=typ.get("weniger") if isinstance(typ, dict) else None),
+                                       typ_weniger=typ.get("weniger") if isinstance(typ, dict) else None,
+                                       # Hinweis der Bauart: Heizperiode dieser Baustelle – nur im laufenden Zeitraum dieser Baustelle
+                                       bauart=[{**c, "name": next((b["name"] for b in q.bereiche if b["id"] == c["bereich"]), c["bereich"])}
+                                               for c in (hr_erg or {}).get("container", [])] if scope == "diese" and versatz == 0 else ()),
         "je_geraet": [{**z, "eur": a.geld(z["kwh"], preis)}
                       for z in a.je_geraet(q.geraete, q.zaehler, roh_g, eigene["pumpzeit_je"])],
         "wetter": wetter,

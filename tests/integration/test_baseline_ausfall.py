@@ -70,11 +70,12 @@ async def test_offline_tag_zaehlt_auch_mit_automatik_nicht(hass: HomeAssistant, 
     st, bid = entry.runtime_data, entry.entry_id
     hz = Heizung.von(st)
     di = MO + timedelta(days=1)
-    tb = [{"bereich_id": C1, "datum": d, "baustelle_id": bid, "kwh": 8.0, "aussen_mittel": 3.0} for d in (MO, di)]
+    alle = [MO - timedelta(days=4), MO - timedelta(days=3), MO, di]   # Do, Fr (Anlauftage, zählen nicht), Mo, Di
+    tb = [{"bereich_id": C1, "datum": d, "baustelle_id": bid, "kwh": 8.0, "aussen_mittel": 3.0} for d in alle]
     bm = [{"bereich_id": C1, "zeit": _null(d) + timedelta(hours=h), "baustelle_id": bid, "dauer_s": 3600, "quelle": "ha"}
-          for d in (MO, di) for h in range(24)]
+          for d in alle for h in range(24)]
     gm = [{"geraet_id": HK1, "zeit": _null(d) + timedelta(hours=h), "baustelle_id": bid, "dauer_s": 3600, "quelle": "ha",
-           "erreichbar": d == MO or h < 6} for d in (MO, di) for h in range(24)]
+           "erreichbar": d != di or h < 6} for d in alle for h in range(24)]
 
     def schreiben(v):
         v.execute(insert(s.tag_bereich), tb)
@@ -84,4 +85,4 @@ async def test_offline_tag_zaehlt_auch_mit_automatik_nicht(hass: HomeAssistant, 
     assert await hass.data[DATA_DB].async_ausfuehren(schreiben) is not None
 
     await async_rechnen(hass, hz)
-    assert next(c for c in hz.hochrechnung["container"] if c["bereich"] == C1)["tage"] == 1   # nur Mo
+    assert next(c for c in hz.hochrechnung["container"] if c["bereich"] == C1)["eigene_tage"] == 1   # nur Mo (Di offline)

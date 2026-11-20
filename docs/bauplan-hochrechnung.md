@@ -103,6 +103,32 @@ Offline-Tag fehlt Verbrauch, die Tagessumme zöge die Signatur nach unten.
   Tage davor fallen weg) noch Rest – −1.200 kWh; der Frostschutz (bis 3 kWh am kalten Tag) fehlt im Rest (offen).
   (4) Wechsel Signatur ↔ Heizgradtage an CV(RMSE) 30 % verschiebt einen Container um rund 20 % (offen: Übergang).
 
+## 4a. Je Bauart gemeinsam lernen (0.8.176, Herbert 20.11.2026)
+
+Herbert: „Eigentlich sollte jeder Container gleich sein vom Aufbau her. Unterschied ist nur bei einzelnen oder doppelt
+Container oder der Heizung Radiator oder Konvektor.“ Die Messung bestätigt das (Heiztage seit Oktober): 002 und 003
+(beide Einzel, Konvektor) 7,6 und 7,5 kWh je Heiztag, Tag für Tag meist innerhalb von 1 kWh; der Doppelcontainer 001
+(Ölradiator) bei Kälte das 1,9-fache (Fläche 28 gegenüber rund 13,5 m²). Trotzdem galt 003 als „unsicher“ (CV 47 %),
+fast nur wegen der zwei Anlauftage (18 und 14 kWh bei 11 °C).
+
+- **Bauart** = Heizkörper-Typ (`heizung/baseline.typ_alle`) × Einzel/Doppel (Doppel, wenn das Symbol `symbol.doppel`
+  zeigt oder die Fläche `groesse_m2` die eines Doppelcontainers ist; eine freie Fläche ist eine Bauart für sich);
+  ohne Heizkörper je Container eine eigene. Regeln in `logik/bauart`.
+- **Je Einheit**: Doppel = 2 Einheiten. Die gezählten Tage aller Container einer Bauart gehen als kWh ÷ Einheiten in eine
+  Signatur (bzw. kWh je Heizgradtag, Tagesschnitt). Ein neuer Container rechnet so ab dem ersten Tag mit der Signatur
+  seiner Bauart. Hat die Bauart noch keine Tage: kWh je Heizgradtag je Einheit der anderen Bauarten desselben Typs,
+  sonst aller mit Heizkörper („ersatz“, ersetzt die Regel vom 17.11. aus §4).
+- **Faktor je Container**: eigener Verbrauch ÷ (Modell × Einheiten) an seinen Tagen, gedämpft mit 5 Tagen „Faktor 1“.
+  Allein in der Bauart = genau die eigene Signatur. Rest = Modell × Einheiten × Faktor.
+- **Anlauftage**: die ersten 2 Heiztage mit Verbrauch eines Containers in der Heizperiode zählen nicht (vor allen anderen
+  Filtern bestimmt); die Punkte der Karte sind dieselben Tage wie die Signatur.
+- **Hinweis** unter „Was fällt auf“: ein Container mit mindestens 7 eigenen Tagen weicht um mindestens 20 % von den
+  anderen seiner Bauart ab (offene Tür, Dichtung, falsche Leistung) – nur, wenn die anderen zusammen auch 7 Tage haben;
+  höchstens ein Hinweis (der größte), nur im laufenden Zeitraum der eigenen Baustelle.
+- „Ohne Automatik“ (§6) bleibt: ein Baseline-Container je Heizkörper-Typ, Verhältnis ohne ÷ mit.
+- Offen: Ob Ölradiator und Konvektor sich bei gleicher Größe wirklich unterscheiden, zeigt erst ein Einzelcontainer mit
+  Ölradiator (004, seit 12.11. im Modus „aus“).
+
 ## 5. Anzeige (.03) – abgenommen 10.10.2026
 
 Mockup `mockups/hochrechnung.html`, Variante 2 (Herbert 10.10.2026): In der Auswertung ersetzt eine Karte **„Heizperiode“**

@@ -4636,6 +4636,15 @@ function hochrechnung(p4, h3) {
   }}>${t5}</button>`)}</div>`;
   return b2`${zahlZeile(h3)}${seg}${a3 === "hp" ? b2`${diagramm(h3)}${legende(p4, h3)}<div class="leise hp-her">${herkunft(h3)}</div>` : zeitraeume(p4, h3, a3)}`;
 }
+var TYP2 = { oelradiator: "Ölradiator", konvektor: "Konvektor", gemischt: "gemischt" };
+function bauartText(x2, name3) {
+  const b3 = x2.bauart;
+  if (!b3 || !b3.typ) return "";
+  const mit = (b3.container || []).filter((id) => id !== x2.bereich).map((id) => name3({ bereich: id }));
+  const f3 = zahl(b3.faktor_prozent) ? ` · ${b3.faktor_prozent > 0 ? "+" : "−"}${Math.abs(b3.faktor_prozent)} % gegenüber der Bauart` : "";
+  const q = b3.quelle === "typ" || b3.quelle === "alle" ? " · noch ohne eigene Tage, rechnet wie andere Container" : mit.length ? ` · lernt gemeinsam mit ${mit.join(", ")}` : "";
+  return `${b3.doppel ? "Doppel" : "Einzel"} · ${TYP2[b3.typ] || b3.typ}${q}${f3}`;
+}
 function streu2(c4) {
   const P2 = c4.punkte || [], W = 320, H2 = 150, tx = (t5) => 28 + (t5 + 6) / 30 * (W - 36);
   const ymax = Math.max(10, ...P2.map((q) => q[1])), ty = (v2) => H2 - 18 - v2 / ymax * (H2 - 28);
@@ -4655,12 +4664,14 @@ function signatur(p4, h3) {
     p4.neuZeichnen();
   }}>${C2.map((x2, j2) => b2`<option value=${j2} ?selected=${j2 === i7}>${name3(x2)}</option>`)}</select></label>
     ${leer2}${(c4.punkte || []).length ? streu2(c4) : A}
-    ${c4.stand === "lernt" ? b2`<div class="leise">${name3(c4)} lernt noch: ${c4.tage} von 10 ganzen Tagen. Danach zeigt sich, ab welcher Außentemperatur geheizt wird.</div>` : A}
+    ${c4.stand === "lernt" ? b2`<div class="leise">${name3(c4)} lernt noch: ${c4.tage} von 10 ganzen Tagen (mit gleich gebauten Containern). Danach zeigt sich, ab welcher Außentemperatur geheizt wird.</div>` : A}
     <div class="hpz-zeilen">${C2.map((x2) => b2`<div class="hpz-zeile"><b>${name3(x2)}</b>
       <span>${zahl(x2.grenze) ? b2`ab <b>${de(x2.grenze, 1)} °C</b>` : zahl(x2.kwh_je_grad) ? "Heizgrenze noch offen" : "–"}</span>
       <span>${zahl(x2.kwh_je_grad) ? `+${de(x2.kwh_je_grad, 1)} kWh je Grad · Grundlast ${de(x2.grundlast, 1)} kWh/Tag` : ""}</span>
-      <span>${stand(x2)}${zahl(x2.cv_rmse) ? b2`<span class="leise"> · ${de(x2.cv_rmse * 100, 0)} %</span>` : A}</span></div>`)}</div>
-    <div class="leise">Je Tag Verbrauch gegen mittlere Außentemperatur (ganze Tage ohne Ausfall). Unter der Heizgrenze steigt der
+      <span>${stand(x2)}${zahl(x2.cv_rmse) ? b2`<span class="leise"> · ${de(x2.cv_rmse * 100, 0)} %</span>` : A}</span>
+      ${bauartText(x2, name3) ? b2`<span class="leise hp-bauart">${bauartText(x2, name3)}</span>` : A}</div>`)}</div>
+    <div class="leise">Je Tag Verbrauch gegen mittlere Außentemperatur (ganze Tage ohne Ausfall, ohne die ersten zwei Heiztage).
+      Gleich gebaute Container (Einzel oder Doppel, gleicher Heizkörper) lernen eine gemeinsame Signatur, ein Doppelcontainer zählt doppelt. Unter der Heizgrenze steigt der
       Verbrauch je Grad kälter; die Güte ist die mittlere Abweichung (bis 20 % gut, bis 30 % brauchbar).</div>`;
 }
 function klima(p4, h3) {
@@ -5204,6 +5215,7 @@ function erkenntnisse(p4, A2, z2) {
     wetter: ["🌡", `Je Grad kälter +${de(x2.kwh_je_grad, 1)} kWh am Tag`, [zahl(x2.eur_je_grad) ? `≈ ${de(x2.eur_je_grad, 2)} € je Grad` : "", zahl(x2.null0) ? `unter ${de(x2.null0, 0)} °C außen wird geheizt` : ""].filter(Boolean).join(" · "), "wetter"],
     mehr: ["📈", `${x2.prozent} % mehr als ${awVgl(p4, z2)}`, "Verbrauch im Vergleich zum Zeitraum davor.", "verlauf"],
     weniger: ["📉", `${x2.prozent} % weniger als ${awVgl(p4, z2)}`, "Verbrauch im Vergleich zum Zeitraum davor.", "verlauf"],
+    bauart: ["🔎", `${x2.name} braucht ${Math.abs(x2.prozent)} % ${x2.prozent > 0 ? "mehr" : "weniger"} als gleich gebaute`, x2.prozent > 0 ? "Gleicher Aufbau, gleicher Heizkörper – oft eine offene Tür, eine undichte Stelle oder eine falsch eingetragene Leistung." : "Gleicher Aufbau, gleicher Heizkörper – weniger geheizt (z. B. öfter leer oder kühler eingestellt).", "wetter"],
     typ: ["⚖", x2.weniger > 0 ? `Ölradiator ${de(x2.weniger, 0)} % sparsamer` : `Konvektor ${de(-x2.weniger, 0)} % sparsamer`, "aus eigenen Messungen je Heizstunde.", "vergleich"]
   })[x2.art]).filter(Boolean);
 }
@@ -6504,7 +6516,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.175";
+var SEITE_VERSION = "0.8.176";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];

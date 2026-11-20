@@ -494,7 +494,7 @@ def hochrechnung_herkunft(methode: str | None, container: Sequence[Mapping[str, 
     if methode == "signatur":
         vor = f"nächste {vorhersage_tage} Tage aus der Vorhersage, danach " if vorhersage_tage else ""
         rest = f" · noch {de(hgt_rest, 0)} Heizgradtage" if hgt_rest is not None else ""
-        return False, f"aus der Energiesignatur je Container · {vor}Klimamittel{rest}"
+        return False, f"aus der Energiesignatur je Bauart (gleich gebaute Container lernen gemeinsam) · {vor}Klimamittel{rest}"
     n = len(container)
     hgt_n = sum(1 for c in container if c.get("methode") == "heizgradtage")
     schnitt_n = sum(1 for c in container if c.get("methode") == "tagesschnitt")
@@ -505,8 +505,9 @@ def hochrechnung_herkunft(methode: str | None, container: Sequence[Mapping[str, 
     if schnitt_n:
         teile.append(f"{schnitt_n} von {n} Containern rechnen mit dem Tagesschnitt der Heiztage (bisher keine Heizgradtage)")
     if ersatz_n := sum(1 for c in container if c.get("methode") == "ersatz"):
-        teile.append(f"{ersatz_n} von {n} Containern noch ohne eigene Heiztage rechnen je Heizgradtag wie die anderen "
-                     "Container desselben Heizkörper-Typs")
+        typ = all((c.get("bauart") or {}).get("quelle") == "typ" for c in container if c.get("methode") == "ersatz")
+        teile.append(f"{ersatz_n} von {n} Containern, deren Bauart noch keine Heiztage hat, rechnen je Heizgradtag wie "
+                     + ("die Container desselben Heizkörper-Typs" if typ else "die anderen Container"))
     if not teile:
         teile.append(f"{sum(1 for c in container if c.get('methode') != 'signatur')} von {n} Containern noch ohne Heiztage")
     return True, " · ".join(teile) + ", bis die Signatur steht (10 ganze Heiztage, 4 K Spanne)."
@@ -925,12 +926,13 @@ def rangliste(container: Iterable[Mapping[str, Any]], preis: float) -> list[dict
 
 def erkenntnisse(
     rang: Sequence[Mapping[str, Any]], *, ohne: Mapping[str, float] | None, gerade: Mapping[str, Any] | None,
-    veraenderung_kwh: int | None, typ_weniger: float | None,
+    veraenderung_kwh: int | None, typ_weniger: float | None, bauart: Sequence[Mapping[str, Any]] = (),
 ) -> list[dict[str, Any]]:
     """Was fällt auf – höchstens `ERKENNTNISSE_MAX`, in dieser Reihenfolge: gespart gegenüber Dauerbetrieb, größter
     Verbraucher (ab zwei Containern mit Verbrauch), sparsamster Container (kWh je Heizstunde, ab zwei Containern mit
     mindestens `SPARSAM_AB_H` h, nicht der größte), Wetter je Grad kälter, deutlich mehr/weniger als davor, Ölradiator
-    gegen Konvektor. Nur Daten – den Text macht die Seite."""
+    gegen Konvektor. Davor (0.8.176) je Container, der deutlich von gleich gebauten abweicht (`bauart`: Container der
+    Hochrechnung mit `bauart.hinweis`, `name`) der mit dem größten Unterschied – nur einer. Nur Daten – den Text macht die Seite."""
     liste: list[dict[str, Any]] = []
     if ohne and ohne.get("gespart_eur", 0) > 0:
         liste.append({"art": "gespart", "eur": ohne["gespart_eur"], "prozent": ohne.get("prozent"), "hinweis": ohne.get("hinweis")})
@@ -943,6 +945,10 @@ def erkenntnisse(
             s = min(vgl, key=lambda c: c["kwh_h"])
             if s is not g:
                 liste.append({"art": "sparsamster", "bereich": s.get("bereich"), "name": s.get("name"), "kwh_h": s["kwh_h"]})
+    if auff := sorted((c for c in bauart if (c.get("bauart") or {}).get("hinweis")), key=lambda c: -abs(c["bauart"]["abweichung"])):
+        c = auff[0]   # nur der größte Unterschied – die anderen Erkenntnisse bleiben
+        liste.append({"art": "bauart", "bereich": c.get("bereich"), "name": c.get("name"),
+                      "prozent": round(c["bauart"]["abweichung"] * 100)})
     if gerade and gerade.get("k") is not None and gerade["k"] < 0:
         liste.append({"art": "wetter", "kwh_je_grad": -gerade["k"], "eur_je_grad": gerade.get("eur_je_grad"), "null0": gerade.get("null0")})
     if veraenderung_kwh is not None and abs(veraenderung_kwh) >= ERKENNTNIS_AB_PROZENT:
