@@ -140,8 +140,10 @@ def freier_block(ab: date, frei: Callable[[date], bool], suche: int = SUCHE_TAGE
 def messung_je_bauart(kandidaten: Iterable[Kandidat]) -> dict[str, Kandidat]:
     """Je Bauart der eine Container, der misst: ein fertiger, sonst der mit den meisten eigenen Baseline-Tagen (so bleibt
     die Messung beim selben Container), bei Gleichstand der erste nach Name. Ohne Heizkörper zählt keiner."""
+    def eigen(k: Kandidat) -> int:
+        return k.baseline_tage if k.eigene_tage is None else k.eigene_tage
+
     aus: dict[str, Kandidat] = {}
-    eigen = lambda k: k.baseline_tage if k.eigene_tage is None else k.eigene_tage   # noqa: E731
     for k in sorted(kandidaten, key=lambda k: (not k.fertig, -eigen(k), k.name)):
         if k.typ and k.nenn_kw > 0:
             aus.setdefault(k.gruppe, k)
