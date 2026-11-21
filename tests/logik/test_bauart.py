@@ -137,3 +137,23 @@ def test_ersatz_vom_gleichen_typ_sonst_von_allen():
     assert g.methode == "heizgradtage" and g.rest_kwh == pytest.approx(2 * 16 / 28 * sum(hgt(klima_tag(d, KLIMA)) for d in rest if d in plan))
     assert baustelle(100.0, {"e": r, "g": g})["methode"] == "heizgradtage"
     assert Signatur("lernt", 0).stand == "lernt"
+
+
+def test_ohne_automatik_je_bauart_gemeinsam():
+    """0.8.180: Baseline-Tage gleich gebauter Container je Einheit in einer Signatur „ohne“; ein Container ohne eigene
+    Baseline-Tage rechnet damit × Einheiten × Faktor."""
+    from logik.bauart import ohne_modelle
+    from logik.hochrechnung import ohne_container
+    a, b = reihe(6, f=1.5), reihe(6, f=1.5, start=date(2026, 10, 26))
+    d = reihe(12, f=3.0)                                   # Doppel: je Einheit wie a/b
+    m = ohne_modelle({"a": a, "b": b, "d": d, "c": []}, {"a": "k:einzel", "b": "k:einzel", "c": "k:einzel", "d": "k:doppel"},
+                     {"a": 1, "b": 1, "c": 1, "d": 2})
+    assert m["k:einzel"][1] == 12 and m["k:einzel"][0].stand != "lernt"
+    assert m["k:doppel"][1] == 12
+    ende = HEUTE + timedelta(days=30)
+    c = ohne_container([], set(), HEUTE, BEGINN, ende, {}, KLIMA, modell=m["k:einzel"], skala=1.0)
+    c2 = ohne_container([], set(), HEUTE, BEGINN, ende, {}, KLIMA, modell=m["k:einzel"], skala=2.0)
+    assert c.tage == 12 and c.heizperiode_kwh and c2.heizperiode_kwh == pytest.approx(2 * c.heizperiode_kwh)
+    assert erwartet(m["k:doppel"][0], 0.0) == pytest.approx(erwartet(m["k:einzel"][0], 0.0), rel=0.05)
+    leer = ohne_modelle({"x": []}, {"x": "o:einzel"}, {"x": 1})["o:einzel"]
+    assert leer[1] == 0 and ohne_container([], set(), HEUTE, BEGINN, ende, {}, KLIMA, modell=leer).heizperiode_kwh is None

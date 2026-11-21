@@ -291,3 +291,32 @@ async def test_bauart_doppelcontainer_je_einheit(hass: HomeAssistant, baustelle_
     st.einstellungen.bereich(C1)["groesse_m2"] = 28.0   # Doppel über die Fläche (AN-0014), Symbol nicht gesetzt
     await async_rechnen(hass, hz)
     assert {c["bereich"]: c for c in hz.hochrechnung["container"]}[C1]["bauart"]["einheiten"] == 2
+
+
+async def test_ohne_automatik_je_bauart_ohne_eigenen_lauf(hass: HomeAssistant, baustelle_november) -> None:
+    """0.8.180 (Herbert 21.11.2026: nicht jeden Container einzeln messen): Zwei gleich gebaute Container, nur C1 hat
+    Baseline-Läufe – C2 rechnet „ohne Automatik“ mit der gemeinsamen Signatur seiner Bauart (dieselben Tage, eigene
+    Heizperiode), ohne eigenen Lauf; die Baseline-Planung sieht die Tage der Bauart und plant für C2 keinen Lauf."""
+    from homeassistant.util import dt as dt_util
+
+    from custom_components.baustelle.funktionen.heizung import baseline as hb
+    from custom_components.baustelle.logik.baseline import Lauf
+    st = baustelle_november.runtime_data
+    hz = Heizung.von(st)
+    for g in st.geraete_in(C2):
+        if g.rolle == "heizkoerper":
+            g.typ = "oelradiator"   # C2 wie C1: Einzel mit Ölradiator
+    await _tage_eintragen(hass, C1)
+    await _tage_eintragen(hass, C2)
+    # Baseline-Läufe von C1 über 12 der 30 Tage (Fr–So, jeweils fertig)
+    laeufe = [Lauf(f"l{i}", C1, HEUTE - timedelta(days=d + 3), HEUTE - timedelta(days=d), "fertig", 5.0, kwh=1.0)
+              for i, d in enumerate((1, 8, 15, 22))]
+    hb._speichern(hz, laeufe)
+    await async_rechnen(hass, hz)
+    ohne = {c["bereich"]: c for c in hz.hochrechnung["ohne"]["container"]}
+    assert ohne[C1]["tage"] == ohne[C2]["tage"] == 12
+    assert ohne[C1]["heizperiode_kwh"] and ohne[C2]["heizperiode_kwh"] and ohne[C2]["quelle"] == "eigen"
+    st.e["heizung"]["baseline"] = True
+    k = {x.bereich: x for x in hb.kandidaten(hz, HEUTE)}
+    assert k[C1].baseline_tage == k[C2].baseline_tage == 12 and k[C1].bauart == k[C2].bauart == "oelradiator:einzel"
+    assert {c["bereich"]: c for c in hb.anzeige(hz, dt_util.now())["container"]}[C2]["misst"] is False

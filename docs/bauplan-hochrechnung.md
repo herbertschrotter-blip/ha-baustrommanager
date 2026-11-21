@@ -172,8 +172,9 @@ freie Tage** (keine Arbeitszeit, keine Ausnahme mit Arbeit, kein Termin, kein Be
 **Regeln (logik/baseline.py, mit Test):**
 - **Startet aus:** Einstellung `heizung.baseline` (Vorgabe aus); Läufe nur bei eingeschalteter Automatik.
 - **Lauf** = ein freier Block aus 1–2 ganzen Tagen (00:00–24:00, Samstag+Sonntag = 48 h), frühestens morgen.
-- **Welcher Container:** ~~je Typ der mit den wenigsten Tagen~~ – seit 0.8.172 (Herbert 02.11.2026) **ein Container je
-  Heizkörper-Typ** (`messung_je_typ`; „gemischt“ zählt als eigener Typ, wie in `quelle_ohne`): der schon fertige, sonst der mit
+- **Welcher Container:** ~~je Typ der mit den wenigsten Tagen~~ – seit 0.8.172 (Herbert 02.11.2026) ein Container je
+  Heizkörper-Typ, **seit 0.8.180 (Herbert 21.11.2026) ein Container je Bauart** (Einzel/Doppel × Typ, `messung_je_bauart`; die
+  Tage der Bauart zählen zusammen, unten gilt „Typ“ sinngemäß als Bauart; „gemischt“ zählt als eigener Typ, wie in `quelle_ohne`): der schon fertige, sonst der mit
   den meisten Baseline-Tagen, bei Gleichstand der erste nach Name; so bleibt die Messung beim selben Container. Die Typen wechseln sich ab
   (Container mit nur einem Heizkörper-Typ zuerst). Ein Container ist fertig, sobald seine Signatur „ohne“ gut ist; danach bekommt
   sein Typ keinen Lauf mehr. Die anderen des Typs übernehmen (`quellen`), die Seite zeigt „übernimmt von …“ statt „x/10“
@@ -238,7 +239,7 @@ Signatur „ohne“ im Reiter Signatur, Ersparnis im Diagramm.
 Gebaut 0.8.127 (J4a): `logik/baseline.py` (Block, Container, Kosten, Rahmen, Abbruch, zählende Tage),
 `logik/hochrechnung.ohne_container/ohne_baustelle` (IPMVP), `funktionen/heizung/baseline.py` (Takt je Minute aus
 `nach_schalten`), Soll-Grund `BASELINE` in `logik/regelung` nach „Taste“, `geraet_ein` schaltet im Lauf alle Heizkörper,
-Nachrichtenknopf `baseline_absagen`, Einstellungen `heizung.baseline` (aus) und `heizung.baseline_eur_monat` (60). Von Hand (0.8.179, Herbert 21.11.2026: alle Container einmalig am selben Tag): Aktion `baseline_einplanen` (`logik/baseline.einplanen`) – ohne „ein Container je Typ“ und „höchstens ein Lauf“, mit ganzen freien Tagen ab morgen, einem offenen Lauf je Container, Terminen und Kostenrahmen.
+Nachrichtenknopf `baseline_absagen`, Einstellungen `heizung.baseline` (aus) und `heizung.baseline_eur_monat` (60). **Je Bauart (0.8.180, Herbert 21.11.2026: „nicht jeden Container einzeln messen“):** die Baseline-Tage aller Container einer Bauart (Einzel/Doppel × Heizkörper-Typ, §4a) gehen je Einheit in eine Signatur „ohne“ (`logik/bauart.ohne_modelle`); jeder Container rechnet damit × Einheiten × Faktor (`hochrechnung.ohne_container` mit `modell`); es misst ein Container je Bauart (`baseline.messung_je_bauart`). Von Hand (0.8.179, Herbert 21.11.2026: alle Container einmalig am selben Tag): Aktion `baseline_einplanen` (`logik/baseline.einplanen`) – ohne „ein Container je Typ“ und „höchstens ein Lauf“, mit ganzen freien Tagen ab morgen, einem offenen Lauf je Container, Terminen und Kostenrahmen.
 `baustelle/auswertung` › `hochrechnung` liefert `baseline` (an, Läufe) und `ohne_methode` (baseline/schaetzung); der
 Sensor „Heizperiode ohne Automatik“ nimmt die Baseline, sobald es sie gibt. Kosten eines beendeten Laufs = Verbrauch der
 Lauftage × Preis (stündlich nachgetragen). Einschalten erst mit J4b (Seite).

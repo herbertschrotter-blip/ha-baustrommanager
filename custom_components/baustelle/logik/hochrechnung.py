@@ -421,16 +421,28 @@ class Ohne:
     heizperiode_kwh: float | None   # ganze Heizperiode „ohne Automatik“ (nur mit guter/brauchbarer Signatur)
 
 
+def ohne_gemessen(roh: Sequence[TagRoh], ohne_tage: Collection[date], heute: date) -> list[TagRoh]:
+    """Die Baseline-Tage eines Containers, die zählen (ganz mitgeschrieben, `tag_zaehlt`)."""
+    return [t for t in roh if t.datum in ohne_tage and tag_zaehlt(t, heute)]
+
+
 def ohne_container(
     roh: Sequence[TagRoh], ohne_tage: Collection[date], heute: date, beginn: date, ende: date,
-    vorhersage: Mapping[date, float], klima: Sequence[float],
+    vorhersage: Mapping[date, float], klima: Sequence[float], modell: tuple[Signatur, int] | None = None,
+    skala: float = 1.0,
 ) -> Ohne:
     """Signatur „ohne Automatik“ aus den Baseline-Tagen und die Heizperiode damit gerechnet: jeder Tag bis heute bei
-    seiner gemessenen Außentemperatur (Baseline-Tage mit ihrem Verbrauch), danach Vorhersage bzw. Klimamittel."""
-    gemessen = [t for t in roh if t.datum in ohne_tage and tag_zaehlt(t, heute)]
-    sig = berechnen(Tag(t.aussen, t.kwh, automatik=False) for t in gemessen)   # type: ignore[arg-type]
+    seiner gemessenen Außentemperatur (Baseline-Tage mit ihrem Verbrauch), danach Vorhersage bzw. Klimamittel.
+    0.8.180 (Herbert 21.11.2026): mit `modell` = (Signatur „ohne“ je Einheit seiner Bauart, deren Tage) rechnet der
+    Container mit der gemeinsamen Signatur × `skala` (Einheiten × Faktor, `logik/bauart.ohne_modelle`) statt mit eigenen
+    Tagen – gleich gebaute Container werden nicht einzeln gemessen."""
+    if modell is not None:
+        sig, n = _skaliert(modell[0], skala), modell[1]
+    else:
+        gemessen = ohne_gemessen(roh, ohne_tage, heute)
+        sig, n = berechnen(Tag(t.aussen, t.kwh, automatik=False) for t in gemessen), len(gemessen)   # type: ignore[arg-type]
     if erwartet(sig, 0.0) is None:
-        return Ohne(sig, len(gemessen), None)
+        return Ohne(sig, n, None)
     je_tag = {t.datum: t for t in roh}
     summe = 0.0
     for d in tage(beginn, ende):
@@ -442,7 +454,7 @@ def ohne_container(
             summe += erwartet(sig, aussen) or 0.0
         else:
             summe += erwartet(sig, vorhersage.get(d, klima_tag(d, klima))) or 0.0
-    return Ohne(sig, len(gemessen), summe)
+    return Ohne(sig, n, summe)
 
 
 GLEICH = "gleich"   # Container ohne Heizkörper: die Automatik schaltet dort nichts, „ohne“ = „mit“

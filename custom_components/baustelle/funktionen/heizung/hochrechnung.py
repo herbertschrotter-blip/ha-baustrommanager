@@ -126,10 +126,10 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
     anlauf = {bid: ba.anlauf(roh[bid], plan.get(bid)) for bid in ids}
     gezaehlt = {bid: [t for t in h.gezaehlte_tage(roh[bid], heute, lauf_tage.get(bid, set()), plan.get(bid))
                       if t.datum not in anlauf[bid]] for bid in ids}
-    gr = {bid: ba.groesse(bool(((e := st.einstellungen.bereich(bid)).get("symbol") or {}).get("doppel")), e.get("groesse_m2"))
-          for bid in ids}
-    arten = {bid: ba.bauart(typen[bid], gr[bid], bid) for bid in ids}
-    einh = {bid: ba.einheiten(gr[bid]) for bid in ids}
+    bauarten = {bid: h_baseline.bauart_von(hz, bid) for bid in ids}
+    arten = {bid: x[0] for bid, x in bauarten.items()}
+    gr = {bid: x[1] for bid, x in bauarten.items()}
+    einh = {bid: x[2] for bid, x in bauarten.items()}
     modelle = ba.modelle(gezaehlt, arten, typen, einh)
     faktor = {bid: ba.faktor(gezaehlt[bid], modelle[arten[bid]], einh[bid]) for bid in ids}
     abw = {bid: ba.abweichung(gezaehlt[bid], [(gezaehlt[b], einh[b]) for b in ids if b != bid and arten[b] == arten[bid]],
@@ -138,8 +138,11 @@ def ergebnis(hz: Heizung, roh: dict[str, list[h.TagRoh]], heute: date, anteil_he
                                    rest_heute=anteil_heute, aussen_heute=aussen, heiztage=plan.get(bid),
                                    modell=modelle[arten[bid]], skala=einh[bid] * faktor[bid].wert)
              for bid in ids}
-    # Ersparnis nach IPMVP: Signatur „ohne“ je Container, Heizperiode damit; andere über das Verhältnis je Heizkörper-Typ
-    ohne = {bid: h.ohne_container(roh[bid], ohne_tage.get(bid, set()), heute, beginn, ende, vor, klima) for bid in ids}
+    # Ersparnis nach IPMVP: Signatur „ohne“ je Bauart (0.8.180: Baseline-Tage aller gleich gebauten Container je Einheit
+    # zusammen), je Container × Einheiten × Faktor; eine Bauart ohne Messung über das Verhältnis je Heizkörper-Typ
+    ohne_mod = ba.ohne_modelle({bid: h.ohne_gemessen(roh[bid], ohne_tage.get(bid, set()), heute) for bid in ids}, arten, einh)
+    ohne = {bid: h.ohne_container(roh[bid], ohne_tage.get(bid, set()), heute, beginn, ende, vor, klima,
+                                  modell=ohne_mod[arten[bid]], skala=einh[bid] * faktor[bid].wert) for bid in ids}
     mit = {bid: sum(t.kwh or 0.0 for t in roh[bid] if beginn <= t.datum <= heute) + reste[bid].rest_kwh for bid in ids}
     # J4b: ohne Heizkörper „ohne“ = „mit“; Container, die keinen Lauf bekommen (Planen kennt nur aktive Heizkörper),
     # nehmen das Verhältnis der gemessenen

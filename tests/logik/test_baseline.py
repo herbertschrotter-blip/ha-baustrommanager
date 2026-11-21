@@ -7,7 +7,7 @@ import pytest
 
 from logik.baseline import (
     ANTEIL, HINWEIS, MAX_TAGE, STELLUNG_ANGENOMMEN, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, einplanen, freier_block, kein_lauf, kopf_anzeige,
-    messung_je_typ, uebernimmt,
+    messung_je_bauart, uebernimmt,
     laeuft_am, lauf_anzeige, monat_rest, offener, plant_am, planen, rahmen, schaetzung_eur, stand_anzeige, stand_text,
     starten, tag_t, volllastanteil, vorschau, zaehlende_tage, zeit_t,
 )
@@ -42,20 +42,20 @@ def test_container_waehlen():
 def test_ein_container_je_typ():
     """Herbert 02.11.2026: je Typ misst einer, bei dem bleibt es; ist er fertig, bekommt dieser Typ keinen Lauf mehr."""
     K = [k("a", "konvektor"), k("b", "konvektor"), k("c", "oelradiator")]
-    assert {t: m.bereich for t, m in messung_je_typ(K).items()} == {"konvektor": "a", "oelradiator": "c"}
+    assert {t: m.bereich for t, m in messung_je_bauart(K).items()} == {"konvektor": "a", "oelradiator": "c"}
     K = [k("a", "konvektor", tage=2), k("b", "konvektor", tage=4)]
-    assert messung_je_typ(K)["konvektor"].bereich == "b"                 # bleibt bei dem, der schon misst
+    assert messung_je_bauart(K)["konvektor"].bereich == "b"                 # bleibt bei dem, der schon misst
     K = [k("a", "konvektor", tage=10, fertig=True), k("b", "konvektor", tage=12), k("c", "oelradiator", tage=2)]
     assert container_waehlen(K, None, [SA]).bereich == "c"               # Typ fertig: b läuft nicht mehr
     assert container_waehlen(K[:2], None, [SA]) is None
     K = [k("a", "konvektor", tage=2, gesperrt=frozenset({SA})), k("b", "konvektor")]
     assert container_waehlen(K, None, [SA]) is None                      # gesperrt: kein anderer springt ein
     assert container_waehlen(K, None, [SO]).bereich == "a"
-    assert messung_je_typ([k("x", "", kw=0), k("y", "konvektor", kw=0)]) == {}
+    assert messung_je_bauart([k("x", "", kw=0), k("y", "konvektor", kw=0)]) == {}
 
 
 def test_uebernimmt():
-    je_typ = messung_je_typ([k("a", "konvektor", tage=3), k("b", "konvektor")])
+    je_typ = messung_je_bauart([k("a", "konvektor", tage=3), k("b", "konvektor")])
     assert uebernimmt("b", "konvektor", None, je_typ) == ("a",)          # misst noch: künftige Quelle
     assert uebernimmt("a", "konvektor", None, je_typ) == ()              # misst selbst
     assert uebernimmt("b", "konvektor", ["x", "y"], je_typ) == ("x", "y")   # Quelle der Rechnung geht vor
@@ -271,3 +271,19 @@ def test_einplanen_von_hand_auch_mehrere_am_selben_tag():
     C = [{"misst": True, "fertig": False}]
     assert stand_text(an=True, automatik=True, container=C, offen=Lauf("1", "b", SO, MO, "geplant"), vor=None, namen=namen,
                       weitere=[l]).endswith("· nächster Lauf So 15.11. (002, 001).")
+
+
+def test_messung_je_bauart_nicht_je_container():
+    """Herbert 21.11.2026: gleich gebaute Container messen nicht einzeln – je Bauart (Einzel/Doppel × Typ) misst einer,
+    die Tage der Bauart zählen zusammen; Einzel und Doppel desselben Typs sind verschiedene Bauarten."""
+    K = [Kandidat("002", "002", "konvektor", 2.0, 3, bauart="konvektor:einzel", eigene_tage=2),
+         Kandidat("003", "003", "konvektor", 2.0, 3, bauart="konvektor:einzel", eigene_tage=1),
+         Kandidat("001", "001", "oelradiator", 4.0, 5, bauart="oelradiator:doppel", eigene_tage=5),
+         Kandidat("004", "004", "oelradiator", 2.0, 0, bauart="oelradiator:einzel", eigene_tage=0)]
+    je = messung_je_bauart(K)
+    assert {a: m.bereich for a, m in je.items()} == {"konvektor:einzel": "002", "oelradiator:doppel": "001",
+                                                     "oelradiator:einzel": "004"}
+    assert uebernimmt("003", "konvektor:einzel", None, je) == ("002",)       # misst gemeinsam mit 002, kein eigener Lauf
+    assert container_waehlen(K, None, [SA]).bereich == "004"                 # die Bauart mit den wenigsten Tagen zuerst
+    fertig = [replace(x, fertig=True) if x.bauart == "konvektor:einzel" else x for x in K]
+    assert "konvektor:einzel" not in {m.gruppe for m in [container_waehlen(fertig, "oelradiator", [SA])]}

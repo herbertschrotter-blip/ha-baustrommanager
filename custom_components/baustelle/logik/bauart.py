@@ -20,6 +20,10 @@ der Doppelcontainer 001 bei Kälte das 1,9-fache). Darum lernt die Hochrechnung 
   `HINWEIS_ANTEIL` von den anderen seiner Bauart ab (offene Tür, Dichtung, falsche Leistung), steht das unter „Was fällt
   auf“ – nur, wenn die anderen zusammen ebenfalls mindestens `HINWEIS_MIN_TAGE` Tage haben.
 - **Faktor in %** (`faktor_prozent`) für die Anzeige: erst ab `FAKTOR_ZEIGEN_AB` Abweichung.
+- **„Ohne Automatik“ je Bauart** (`ohne_modelle`, 0.8.180, Herbert 21.11.2026: „nicht jeden Container einzeln messen“):
+  die Baseline-Tage aller Container einer Bauart gehen je Einheit in **eine** Signatur „ohne“. Jeder Container der
+  Bauart rechnet damit × Einheiten × seinem Faktor (aus „mit Automatik“ – derselbe Container verliert mit und ohne
+  Automatik gleich viel Wärme). Gemessen wird je Bauart, nicht je Container (`logik/baseline`).
 """
 
 from __future__ import annotations
@@ -152,3 +156,15 @@ def hinweis(wert: float | None) -> bool:
 def faktor_prozent(f: float) -> int | None:
     """Faktor als ganze % über (+) bzw. unter (−) der Bauart; None unter `FAKTOR_ZEIGEN_AB`."""
     return round((f - 1) * 100) if abs(f - 1) >= FAKTOR_ZEIGEN_AB else None
+
+
+def ohne_modelle(
+    gemessen: Mapping[str, Sequence[TagRoh]], arten: Mapping[str, str], einh: Mapping[str, int],
+) -> dict[str, tuple[Signatur, int]]:
+    """Je Bauart die gemeinsame Signatur „ohne Automatik“ je Einheit aus den gezählten Baseline-Tagen ihrer Container
+    und die Zahl dieser Tage (Container-Tage: zwei Container am selben Tag sind zwei Tage)."""
+    pool: dict[str, list[TagRoh]] = {art: [] for art in set(arten.values())}
+    for bid, ts in gemessen.items():
+        pool[arten[bid]].extend(je_einheit(ts, einh[bid]))
+    return {art: (berechnen(Tag(t.aussen, t.kwh, automatik=False) for t in ts), len(ts))   # type: ignore[arg-type]
+            for art, ts in pool.items()}

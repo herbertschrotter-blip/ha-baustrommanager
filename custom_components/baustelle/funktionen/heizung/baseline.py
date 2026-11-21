@@ -19,6 +19,7 @@ from homeassistant.util import dt as dt_util
 
 from ...const import ROLLE_HEIZKOERPER
 from ...kern.staffelung import nenn_kw
+from ...logik import bauart as ba
 from ...logik import baseline as b
 from ...logik.signatur import MIN_TAGE
 from ...logik.arbeitszeit import ausnahme_am, frei_gilt
@@ -100,6 +101,22 @@ def typ_alle(hz: Heizung, bid: str) -> str:
     return _typ({g.typ for g in hz.st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER})
 
 
+def bauart_von(hz: Heizung, bid: str) -> tuple[str, str, int]:
+    """Bauart (`logik/bauart`), Größe und Einheiten des Containers – dieselbe für Hochrechnung und Baseline."""
+    e = hz.st.einstellungen.bereich(bid)
+    gr = ba.groesse(bool((e.get("symbol") or {}).get("doppel")), e.get("groesse_m2"))
+    return ba.bauart(typ_alle(hz, bid), gr, bid), gr, ba.einheiten(gr)
+
+
+def tage_je_bauart(hz: Heizung, tage: dict[str, set[date]]) -> dict[str, int]:
+    """Gezählte Baseline-Tage je Container, zusammengezählt über seine Bauart (0.8.180: je Bauart gemessen)."""
+    arten = {i.id: bauart_von(hz, i.id)[0] for i in hz.bereiche()}
+    summe: dict[str, int] = {}
+    for bid, art in arten.items():
+        summe[art] = summe.get(art, 0) + len(tage.get(bid, ()))
+    return {bid: summe[art] for bid, art in arten.items()}
+
+
 def kein_lauf_von(hz: Heizung, bid: str, typ: str | None = None) -> str | None:
     """Warum der Container keinen Lauf bekommt (logik/baseline.kein_lauf)."""
     e = hz.st.einstellungen.bereich(bid)
@@ -110,6 +127,7 @@ def kein_lauf_von(hz: Heizung, bid: str, typ: str | None = None) -> str | None:
 def kandidaten(hz: Heizung, heute: date) -> list[b.Kandidat]:
     st, aus = hz.st, []
     tage = zaehlende(hz)
+    je_bauart = tage_je_bauart(hz, tage)
     ohne = {c["bereich"]: c for c in ((hz.hochrechnung or {}).get("ohne") or {}).get("container", [])}
     for info in hz.bereiche():
         heizer = hz.heizer_von(info.id)
@@ -120,7 +138,8 @@ def kandidaten(hz: Heizung, heute: date) -> list[b.Kandidat]:
         gesperrt = frozenset(d for von, bis, _ in hz.termin_fenster(info.id)
                              for d in (von.date() + timedelta(days=i) for i in range((bis.date() - von.date()).days + 1)))
         aus.append(b.Kandidat(info.id, info.name, typ_alle(hz, info.id), sum(nenn_kw(st, g) for g in heizer),
-                              len(tage.get(info.id, ())), fertig, o.get("kwh_je_tag"), gesperrt))
+                              je_bauart.get(info.id, 0), fertig, o.get("kwh_je_tag"), gesperrt,
+                              bauart_von(hz, info.id)[0], len(tage.get(info.id, ()))))
     return aus
 
 
@@ -286,14 +305,14 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
         vor = b.vorschau(lauf, namen.get(lauf.bereich, lauf.bereich), jetzt) if lauf else None
     hr = hz.hochrechnung or {}
     ohne = {c["bereich"]: c for c in (hr.get("ohne") or {}).get("container", [])}
-    tage = zaehlende(hz, liste)
-    je_typ = b.messung_je_typ(alle)
+    tage = tage_je_bauart(hz, zaehlende(hz, liste))
+    je_typ = b.messung_je_bauart(alle)
     container = []
     for bid, name in namen.items():
         o = ohne.get(bid) or {}
-        ta = typ_alle(hz, bid)
+        ta = bauart_von(hz, bid)[0]
         # o["quelle"]: logik/hochrechnung.quellen – dieselbe Regel wie die Rechnung „ohne“
-        container.append(b.stand_anzeige(b.Stand(bid, name, typen[bid], len(tage.get(bid, ())), o.get("stand"),
+        container.append(b.stand_anzeige(b.Stand(bid, name, typen[bid], tage.get(bid, 0), o.get("stand"),
                                                  kein_lauf_von(hz, bid, typen[bid]),
                                                  b.uebernimmt(bid, ta, o.get("quelle"), je_typ),
                                                  ta in je_typ and je_typ[ta].bereich == bid), MIN_TAGE))

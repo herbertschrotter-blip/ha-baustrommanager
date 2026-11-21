@@ -6,9 +6,11 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
 
 - **Block** (`freier_block`): erster freier Tag ab einem Datum, mit dem nächsten freien Tag zusammen höchstens
   `MAX_TAGE` Tage (Samstag + Sonntag = 48 h).
-- **Ein Container je Typ** (`messung_je_typ`, Herbert 02.11.2026): je Heizkörper-Typ misst genau ein Container bis zur
-  guten Signatur, die anderen dieses Typs bekommen keinen Lauf und übernehmen (`uebernimmt`, `hochrechnung.quellen`).
-  Gesperrt = dieser Typ setzt aus, kein anderer Container springt ein.
+- **Ein Container je Bauart** (`messung_je_bauart`; Herbert 02.11.2026 je Typ, 21.11.2026 je Bauart = Einzel/Doppel ×
+  Heizkörper-Typ, `logik/bauart`): je Bauart misst genau ein Container, bis die gemeinsame Signatur „ohne“ der Bauart gut
+  ist; die Baseline-Tage aller Container der Bauart zählen zusammen (`bauart.ohne_modelle`), die anderen bekommen keinen
+  Lauf. Eine Bauart ohne Messung übernimmt das Verhältnis ohne ÷ mit desselben Heizkörper-Typs (`hochrechnung.quellen`).
+  Gesperrt = diese Bauart setzt aus, kein anderer Container springt ein.
 - **Container** (`container_waehlen`): der Messcontainer eines Typs, der nicht fertig ist (Signatur „ohne“ noch nicht
   gut); Container mit nur einem Heizkörper-Typ zuerst, abwechselnd Ölradiator und Konvektor, dann die wenigsten Tage.
 - **Kosten** (`schaetzung_eur`, Herbert 17.11.2026: „ohne Automatik“ heißt Thermostat am Heizkörper voll aufgedreht):
@@ -115,6 +117,12 @@ class Kandidat:
     fertig: bool = False            # Signatur „ohne“ ist gut
     erwartet_kwh_tag: float | None = None   # aus der Signatur „ohne“, wenn es sie schon gibt
     gesperrt: frozenset[date] = field(default_factory=frozenset)   # Tage mit Termin oder Bedarf
+    bauart: str = ""                # `logik/bauart.bauart`; leer = nach Typ (baseline_tage/fertig gelten je Bauart)
+    eigene_tage: int | None = None  # eigene Baseline-Tage des Containers (None = baseline_tage)
+
+    @property
+    def gruppe(self) -> str:
+        return self.bauart or self.typ
 
 
 def freier_block(ab: date, frei: Callable[[date], bool], suche: int = SUCHE_TAGE) -> tuple[date, date] | None:
@@ -129,17 +137,18 @@ def freier_block(ab: date, frei: Callable[[date], bool], suche: int = SUCHE_TAGE
     return None
 
 
-def messung_je_typ(kandidaten: Iterable[Kandidat]) -> dict[str, Kandidat]:
-    """Je Heizkörper-Typ der eine Container, der misst: ein fertiger, sonst der mit den meisten Baseline-Tagen (so bleibt
+def messung_je_bauart(kandidaten: Iterable[Kandidat]) -> dict[str, Kandidat]:
+    """Je Bauart der eine Container, der misst: ein fertiger, sonst der mit den meisten eigenen Baseline-Tagen (so bleibt
     die Messung beim selben Container), bei Gleichstand der erste nach Name. Ohne Heizkörper zählt keiner."""
     aus: dict[str, Kandidat] = {}
-    for k in sorted(kandidaten, key=lambda k: (not k.fertig, -k.baseline_tage, k.name)):
+    eigen = lambda k: k.baseline_tage if k.eigene_tage is None else k.eigene_tage   # noqa: E731
+    for k in sorted(kandidaten, key=lambda k: (not k.fertig, -eigen(k), k.name)):
         if k.typ and k.nenn_kw > 0:
-            aus.setdefault(k.typ, k)
+            aus.setdefault(k.gruppe, k)
     return aus
 
 
-def uebernimmt(bereich: str, typ: str, quelle: object, je_typ: Mapping[str, Kandidat]) -> tuple[str, ...]:
+def uebernimmt(bereich: str, typ: str, quelle: object, je_typ: Mapping[str, Kandidat]) -> tuple[str, ...]:   # typ = Gruppe
     """Von wem ein Container „ohne Automatik“ übernimmt: `quelle` nach `logik/hochrechnung.quellen`, solange dort noch
     nichts gemessen ist der Messcontainer seines Typs; eigene Signatur oder selbst Messcontainer: niemand."""
     m = je_typ.get(typ)
@@ -152,7 +161,7 @@ def uebernimmt(bereich: str, typ: str, quelle: object, je_typ: Mapping[str, Kand
 
 def container_waehlen(kandidaten: Iterable[Kandidat], letzter_typ: str | None, tage: Sequence[date]) -> Kandidat | None:
     """Nächster Container (siehe Modul-Docstring): nur Messcontainer, die nicht fertig und an den Tagen nicht gesperrt sind."""
-    frei = [k for k in messung_je_typ(kandidaten).values() if not k.fertig and not k.gesperrt.intersection(tage)]
+    frei = [k for k in messung_je_bauart(kandidaten).values() if not k.fertig and not k.gesperrt.intersection(tage)]
     if not frei:
         return None
     return min(frei, key=lambda k: (k.typ == "gemischt", k.typ == letzter_typ, k.baseline_tage, k.name))
@@ -451,7 +460,7 @@ class Stand:
     stand: str | None               # Stand der Signatur „ohne“ (lernt|gut|brauchbar|unsicher)
     kein_lauf: str | None = None
     uebernimmt: tuple[str, ...] = ()   # gemessene Container, deren Verhältnis gilt (ohne eigene Messung)
-    misst: bool = False             # Messcontainer seines Typs (`messung_je_typ`)
+    misst: bool = False             # Messcontainer seiner Bauart (`messung_je_bauart`)
 
 
 def stand_anzeige(c: Stand, noetig: int) -> dict[str, object]:

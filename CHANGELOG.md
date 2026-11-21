@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.180] – 2026-11-21
+
+- Baseline „ohne Automatik“ **je Bauart statt je Container** (Herbert: es gibt nur Einzel- und Doppelcontainer, jeweils
+  mit Konvektor oder Ölradiator; nicht jeden Container einzeln messen): Die Baseline-Tage aller gleich gebauten Container
+  zählen zusammen (je Einheit, ein Doppelcontainer zählt doppelt) und ergeben **eine** Signatur „ohne Automatik“ je
+  Bauart. Jeder Container der Bauart rechnet damit, mit seiner Größe und seinem Faktor aus „mit Automatik“.
+- Planung: je Bauart misst ein Container, bis die Signatur der Bauart gut ist; die anderen gleich gebauten bekommen keinen
+  Lauf mehr. Eine Bauart ohne eigene Messung übernimmt wie bisher das Verhältnis ohne ÷ mit desselben Heizkörper-Typs.
+- Anzeige: Die Tage beim Stand eines Containers sind die Tage seiner Bauart.
+
 ## [0.8.179] – 2026-11-21
 
 - Baseline: **Lauf von Hand einplanen** (Herbert 21.11.2026: alle Container messen, einmalig): Aktion
