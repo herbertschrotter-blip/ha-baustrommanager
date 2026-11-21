@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.179] – 2026-11-21
+
+- Baseline: **Lauf von Hand einplanen** (Herbert 21.11.2026: alle Container messen, einmalig): Aktion
+  `baseline_einplanen` mit Container, erstem Tag und 1–2 Tagen. Vorbei an „ein Container je Typ“ und an „höchstens ein
+  Lauf“ – so messen mehrere Container am selben Tag. Es bleiben ganze freie Tage ab morgen, ein offener Lauf je
+  Container, Termine und der Kostenrahmen; angekündigt wird wie sonst mit „Absagen“. Die automatische Planung bleibt
+  unverändert.
+- Baseline: Der Stand unter der Hochrechnung nennt alle Container, die am selben Tag messen.
+- Tests: Die CI-Tests scheiterten zeitweise mit „Cannot register a resource into frozen router“ (72 Tests rot): Zwei
+  Plugins bringen eine Fixture `aiohttp_client` mit, und je nach Ladereihenfolge gewann die von `pytest-aiohttp`, die
+  den Router sperrt. Jetzt gilt fest die von Home Assistant.
+
 ## [0.8.178] – 2026-11-20
 
 - Heizung: **Zuerst voll aufheizen** (Herbert): Jeder Container heizt, wenn er mehr als 1 °C unter dem Soll ist, durch,

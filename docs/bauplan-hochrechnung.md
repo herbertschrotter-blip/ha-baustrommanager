@@ -238,7 +238,7 @@ Signatur „ohne“ im Reiter Signatur, Ersparnis im Diagramm.
 Gebaut 0.8.127 (J4a): `logik/baseline.py` (Block, Container, Kosten, Rahmen, Abbruch, zählende Tage),
 `logik/hochrechnung.ohne_container/ohne_baustelle` (IPMVP), `funktionen/heizung/baseline.py` (Takt je Minute aus
 `nach_schalten`), Soll-Grund `BASELINE` in `logik/regelung` nach „Taste“, `geraet_ein` schaltet im Lauf alle Heizkörper,
-Nachrichtenknopf `baseline_absagen`, Einstellungen `heizung.baseline` (aus) und `heizung.baseline_eur_monat` (60).
+Nachrichtenknopf `baseline_absagen`, Einstellungen `heizung.baseline` (aus) und `heizung.baseline_eur_monat` (60). Von Hand (0.8.179, Herbert 21.11.2026: alle Container einmalig am selben Tag): Aktion `baseline_einplanen` (`logik/baseline.einplanen`) – ohne „ein Container je Typ“ und „höchstens ein Lauf“, mit ganzen freien Tagen ab morgen, einem offenen Lauf je Container, Terminen und Kostenrahmen.
 `baustelle/auswertung` › `hochrechnung` liefert `baseline` (an, Läufe) und `ohne_methode` (baseline/schaetzung); der
 Sensor „Heizperiode ohne Automatik“ nimmt die Baseline, sobald es sie gibt. Kosten eines beendeten Laufs = Verbrauch der
 Lauftage × Preis (stündlich nachgetragen). Einschalten erst mit J4b (Seite).

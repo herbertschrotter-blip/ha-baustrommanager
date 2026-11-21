@@ -312,7 +312,7 @@ def _benutzer(connection: websocket_api.ActiveConnection) -> str | None:
 
 def _aktion_merken(hass: HomeAssistant, connection: websocket_api.ActiveConnection, st: Steuerung, msg: dict[str, Any]) -> None:
     """Eigene Datenbank (BSM-007, §6): Bedienung vor Ort als Ereignis ohne Person, alles andere als Einstellung mit Benutzer."""
-    felder = {k: msg[k] for k in ("bereich", "geraet", "minuten", "bis", "boost", "an", "key", "art", "wert", "d", "kwh", "eur", "lauf_id")
+    felder = {k: msg[k] for k in ("bereich", "geraet", "minuten", "bis", "boost", "an", "key", "art", "wert", "d", "kwh", "eur", "lauf_id", "von", "tage")
               if k in msg}
     if msg["aktion"] in AKTIONEN_ALLE:
         ereignis_merken(hass, st.entry.entry_id, msg["aktion"], felder, "seite", bereich_id=msg.get("bereich"), geraet_id=msg.get("geraet"))
@@ -668,7 +668,7 @@ def ws_liste(hass: HomeAssistant, connection: websocket_api.ActiveConnection, ms
     vol.Required("aktion"): vol.In(
         ["bedarf", "bedarf_aus", "boost", "jetzt_heizen", "schalten", "automatik", "warnung_stumm", "bericht_senden",
          "test_meldung", "lern_reset", "aktiv", "gefuehl", "soll_versch", "soll_versch_weg", "gefuehl_vergessen",
-         "zuruecksetzen", "energie_korrektur", "baseline_absagen"]
+         "zuruecksetzen", "energie_korrektur", "baseline_absagen", "baseline_einplanen"]
     ),
     vol.Optional("bereich"): str,
     vol.Optional("geraet"): str,
@@ -683,6 +683,8 @@ def ws_liste(hass: HomeAssistant, connection: websocket_api.ActiveConnection, ms
     vol.Optional("kwh"): vol.All(vol.Coerce(float), vol.Range(0, 1000)),   # FE-0016: falsch gezählte Energie
     vol.Optional("eur"): vol.All(vol.Coerce(float), vol.Range(0, 1000)),   # … bzw. nur Kosten
     vol.Optional("lauf_id"): str,                                    # J4b: Baseline-Lauf absagen bzw. abbrechen
+    vol.Optional("von"): DATUM,                                      # Baseline von Hand: erster Tag …
+    vol.Optional("tage"): vol.All(vol.Coerce(int), vol.Range(1, 2)),   # … und Anzahl Tage
 })
 @websocket_api.async_response
 async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -692,6 +694,7 @@ async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     aktion = msg["aktion"]
     jetzt = dt_util.now()
     lz = st.lz
+    antwort: dict[str, Any] = {"ok": True}
     try:
         bis = ZEIT_ISO(msg["bis"]) if msg.get("bis") else None
     except vol.Invalid as err:
@@ -810,6 +813,18 @@ async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnect
         if not absagen(Heizung.von(st), msg.get("lauf_id") or "", f"über die Seite{f' ({wer})' if wer else ''}"):
             connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Kein geplanter oder laufender Baseline-Lauf mit dieser ID")
             return
+    elif aktion == "baseline_einplanen":   # 0.8.179: einmalig von Hand (Herbert 21.11.2026: alle Container messen)
+        from .funktionen.heizung.baseline import von_hand   # noqa: PLC0415
+
+        bid = msg.get("bereich")
+        if bid not in st.bereiche or not msg.get("von"):
+            _fehler(connection, msg, "baseline_einplanen braucht bereich und von")
+            return
+        lauf = von_hand(Heizung.von(st), bid, date.fromisoformat(msg["von"]), int(msg.get("tage") or 1))
+        if isinstance(lauf, str):
+            _fehler(connection, msg, lauf)
+            return
+        antwort = {"ok": True, "lauf_id": lauf.id, "schaetzung_eur": round(lauf.schaetzung_eur, 2)}
     elif aktion == "gefuehl_vergessen":
         lz["gefuehl"] = []
         st.protokoll("einstellung", None, "Soll gleitend: gelerntes Gefühl vergessen")
@@ -842,7 +857,7 @@ async def ws_aktion(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     st.einstellungen.speichern()
     st.auswerten()
     _aktion_merken(hass, connection, st, msg)
-    connection.send_result(msg["id"], {"ok": True})
+    connection.send_result(msg["id"], antwort)
 
 
 # ---------------------------------------------------------------------- bericht (Vorschau)

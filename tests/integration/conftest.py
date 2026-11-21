@@ -14,6 +14,9 @@ from homeassistant.config_entries import ConfigSubentryDataWithId
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.plugins import aiohttp_client  # noqa: F401
+# ↑ fest die Fixture von HA (Router bleibt nach dem Start offen): pytest-aiohttp bringt eine gleichnamige mit, die den
+#   Router sperrt; welche gewinnt, hing von der Ladereihenfolge der Plugins ab (CI: „frozen router“, 72 Tests rot)
 
 from custom_components.baustelle.const import DOMAIN
 

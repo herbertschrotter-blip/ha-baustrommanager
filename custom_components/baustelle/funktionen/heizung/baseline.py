@@ -143,6 +143,29 @@ def absagen(hz: Heizung, lauf_id: str, grund: str) -> bool:
     return False
 
 
+def von_hand(hz: Heizung, bid: str, von: date, tage: int) -> b.Lauf | str:
+    """Einmaliger Lauf von Hand für einen Container (logik/baseline.einplanen), angekündigt wie ein geplanter."""
+    st, jetzt = hz.st, dt_util.now()
+    if not eingeschaltet(hz) or not st.automatik:
+        return "Baseline messen bzw. Automatik ist aus"
+    liste = laeufe(hz)
+    k = next((k for k in kandidaten(hz, jetzt.date()) if k.bereich == bid), None)
+    lauf = b.einplanen(k, von, tage, jetzt.date(), lambda d: frei(hz, d), liste,
+                       float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR)), st.preis_am(von), uuid.uuid4().hex[:8])
+    if isinstance(lauf, str):
+        return lauf
+    lauf = replace(lauf, angekuendigt=jetzt)
+    _speichern(hz, [*liste, lauf])
+    name, letzter = (k.name if k else bid), lauf.bis - timedelta(days=1)
+    zeit = f"{lauf.von:%d.%m.}" if lauf.von == letzter else f"{lauf.von:%d.%m.}–{letzter:%d.%m.}"
+    st.protokoll("einstellung", bid, f"Baseline von Hand eingeplant: {zeit}, etwa {lauf.schaetzung_eur:.2f} €")
+    st.nachrichten.melden(
+        "Baseline-Messung eingeplant",
+        f"{name}: {zeit} alle Heizkörper ohne Automatik (der Thermostat am Gerät regelt), etwa {lauf.schaetzung_eur:.0f} €.",
+        aktionen=[st.nachrichten._aktion("baseline_absagen", lauf.id, "Absagen")], tag="baseline", bereich=bid)
+    return lauf
+
+
 def _konfiguration(hz: Heizung, bid: str) -> str | None:
     """Konfigurations-ID für die Metadaten – ein Fehler dabei darf den Lauf nicht aufhalten (dann None)."""
     try:
@@ -252,6 +275,7 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
     typen = {bid: typ_von(hz, bid) for bid in namen}
     budget = float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR))
     offen = b.offener(liste)
+    weitere = [l for l in liste if l.status in b.OFFEN and l is not offen and offen is not None and l.von == offen.von]
     alle = kandidaten(hz, heute) if an else []
     vor = None
     if an and st.automatik and offen is None:
@@ -280,4 +304,5 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
     return {"an": an, "rahmen": b.rahmen(liste, heute, budget), "vorschau": vor, "container": container,
             "laeufe": list(anz.values()), "offen": anz.get(offen.id) if offen is not None else None,
             "hinweis": b.HINWEIS if methode != "baseline" else None,
-            "stand_t": b.stand_text(an=an, automatik=st.automatik, container=container, offen=offen, vor=vor, namen=namen)}
+            "stand_t": b.stand_text(an=an, automatik=st.automatik, container=container, offen=offen, vor=vor, namen=namen,
+                                         weitere=weitere)}

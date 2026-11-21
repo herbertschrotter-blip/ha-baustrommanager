@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta, timezone
 import pytest
 
 from logik.baseline import (
-    ANTEIL, HINWEIS, MAX_TAGE, STELLUNG_ANGENOMMEN, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, freier_block, kein_lauf, kopf_anzeige,
+    ANTEIL, HINWEIS, MAX_TAGE, STELLUNG_ANGENOMMEN, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, einplanen, freier_block, kein_lauf, kopf_anzeige,
     messung_je_typ, uebernimmt,
     laeuft_am, lauf_anzeige, monat_rest, offener, plant_am, planen, rahmen, schaetzung_eur, stand_anzeige, stand_text,
     starten, tag_t, volllastanteil, vorschau, zaehlende_tage, zeit_t,
@@ -248,3 +248,26 @@ def test_stand_und_text():
     assert stand_text(an=True, automatik=False, container=C, offen=None, vor=None, namen=namen).endswith("· Läufe nur mit eingeschalteter Automatik.")
     assert offener([Lauf("1", "s", SA, MO, "fertig"), offen]) is offen and offener([]) is None
     assert HINWEIS.startswith("Prognose ohne Automatik: Schätzung 24/7")
+
+
+def test_einplanen_von_hand_auch_mehrere_am_selben_tag():
+    """Herbert 21.11.2026: alle Container am Sonntag messen, während 002 schon läuft – einmalig von Hand, vorbei an „ein
+    Container je Typ“; es bleiben ganze freie Tage ab morgen, ein offener Lauf je Container, Termin und Kostenrahmen."""
+    laeuft = Lauf("l2", "b", SA, MO, "laeuft", 13.0)
+    a, c = k("a", "oelradiator", kw=1.0), k("c", "konvektor", kw=1.0)
+    l = einplanen(a, SO, 1, SA, wochenende, [laeuft], 150.0, 0.25, "n1")
+    assert isinstance(l, Lauf) and (l.bereich, l.von, l.bis, l.status) == ("a", SO, MO, "geplant")
+    assert l.schaetzung_eur == pytest.approx(1.0 * 24 * ANTEIL * 0.25)
+    assert isinstance(einplanen(c, SO, 1, SA, wochenende, [laeuft, l], 150.0, 0.25, "n2"), Lauf)   # zweiter am selben Tag
+    assert "schon" in einplanen(a, SO, 1, SA, wochenende, [laeuft, l], 150.0, 0.25, "n3")        # aber nur einer je Container
+    assert "morgen" in einplanen(a, SA, 1, SA, wochenende, [], 150.0, 0.25, "x")                 # angebrochener Tag zählt nicht
+    assert "freien" in einplanen(a, MO, 1, SA, wochenende, [], 150.0, 0.25, "x")
+    assert "Tage" in einplanen(a, SO, 3, SA, lambda d: True, [], 150.0, 0.25, "x")
+    assert "Termin" in einplanen(k("t", "konvektor", gesperrt=frozenset({SO})), SO, 1, SA, wochenende, [], 150.0, 0.25, "x")
+    assert "Kostenrahmen" in einplanen(a, SO, 1, SA, wochenende, [laeuft], 15.0, 0.25, "x")
+    assert "ohne Lauf" in einplanen(None, SO, 1, SA, wochenende, [], 150.0, 0.25, "x")
+    assert "ohne Lauf" in einplanen(k("x", "", kw=0), SO, 1, SA, wochenende, [], 150.0, 0.25, "x")
+    namen = {"a": "001", "b": "002"}
+    C = [{"misst": True, "fertig": False}]
+    assert stand_text(an=True, automatik=True, container=C, offen=Lauf("1", "b", SO, MO, "geplant"), vor=None, namen=namen,
+                      weitere=[l]).endswith("· nächster Lauf So 15.11. (002, 001).")

@@ -201,6 +201,34 @@ def planen(
     return Lauf(neue_id, k.bereich, von, bis, "geplant", eur)
 
 
+def einplanen(
+    k: Kandidat | None, von: date, tage: int, heute: date, frei: Callable[[date], bool], laeufe: Sequence[Lauf],
+    budget: float, preis: float, neue_id: str,
+) -> Lauf | str:
+    """Ein Lauf von Hand, einmalig (Herbert 21.11.2026: alle Container am selben Tag messen): vorbei an „ein Container je
+    Typ“ und an „höchstens ein offener Lauf“. Es bleiben: ganze freie Tage ab morgen, höchstens `MAX_TAGE`, ein Container
+    mit Heizkörpern und Lauf (`kein_lauf`), kein zweiter offener Lauf dieses Containers, kein Termin, der Kostenrahmen.
+    Ergebnis: der geplante Lauf oder der Grund, warum nicht."""
+    if k is None or not k.typ or k.nenn_kw <= 0:
+        return "Container ohne Lauf (ohne Heizkörper, ohne Automatik, bei Bedarf oder aus)"
+    if von <= heute:
+        return "frühestens ab morgen (es zählen nur ganze Tage)"
+    if not 1 <= tage <= MAX_TAGE:
+        return f"1 bis {MAX_TAGE} Tage"
+    liste = [von + timedelta(days=i) for i in range(tage)]
+    if not all(frei(d) for d in liste):
+        return "nur an freien Tagen"
+    if k.gesperrt.intersection(liste):
+        return "Termin an diesen Tagen"
+    if any(l.bereich == k.bereich and l.status in OFFEN for l in laeufe):
+        return "der Container hat schon einen geplanten oder laufenden Lauf"
+    eur = schaetzung_eur(k, tage, preis, laeufe)
+    rest = monat_rest(laeufe, von.year, von.month, budget)
+    if eur > rest:
+        return f"Kostenrahmen reicht nicht (etwa {eur:.2f} €, Rest {rest:.2f} €)"
+    return Lauf(neue_id, k.bereich, von, von + timedelta(days=tage), "geplant", eur)
+
+
 def tuer_vermuten(*, baseline: bool) -> bool:
     """Gilt die vermutete Tür (FE-0025) für diesen Container? Im Baseline-Lauf nicht: Der Thermostat am Heizkörper steht
     meist voll auf (Herbert 17.11.2026) und schaltet das Gerät bei Höchststellung selbst ab, das Relais bleibt an und der
@@ -434,12 +462,12 @@ def stand_anzeige(c: Stand, noetig: int) -> dict[str, object]:
 
 
 def offener(laeufe: Iterable[Lauf]) -> Lauf | None:
-    """Der geplante bzw. laufende Lauf (es gibt höchstens einen)."""
+    """Der erste geplante bzw. laufende Lauf (automatisch höchstens einer, von Hand `einplanen` auch mehrere)."""
     return next((l for l in laeufe if l.status in OFFEN), None)
 
 
 def stand_text(*, an: bool, automatik: bool, container: Sequence[dict[str, object]], offen: Lauf | None,
-               vor: dict[str, object] | None, namen: dict[str, str]) -> str:
+               vor: dict[str, object] | None, namen: dict[str, str], weitere: Sequence[Lauf] = ()) -> str:
     """Stand unter dem Hinweis der Hochrechnung: „1 von 4 Containern gemessen · nächster Lauf Sa 31.10. (003_C_MAN).“"""
     if not an:
         return "Baseline messen ist aus."
@@ -447,7 +475,8 @@ def stand_text(*, an: bool, automatik: bool, container: Sequence[dict[str, objec
     text = f"{sum(1 for c in mit if c['fertig'])} von {len(mit)} {'Container' if len(mit) == 1 else 'Containern'} gemessen"
     if offen is not None:
         art = "Lauf läuft" if offen.status == "laeuft" else "nächster Lauf"
-        text += f" · {art} {tag_t(offen.von)} ({namen.get(offen.bereich, offen.bereich)})"
+        wer = ", ".join(namen.get(l.bereich, l.bereich) for l in (*(offen,), *weitere))
+        text += f" · {art} {tag_t(offen.von)} ({wer})"
     elif not automatik:
         text += " · Läufe nur mit eingeschalteter Automatik"
     elif vor is not None:

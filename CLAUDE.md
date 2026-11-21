@@ -44,7 +44,7 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 - Branch-Policy: current
 
 ### Checks
-- logik: python3 -m pytest -q -p no:cacheprovider tests/logik [custom_components/baustelle/logik/**; tests/logik/**]
+- logik: uv run --no-project --python 3.14 --with pytest python -m pytest -q -p no:cacheprovider tests/logik [custom_components/baustelle/logik/**; tests/logik/**]
 - integration: uv run --no-project --python 3.14 --index-strategy unsafe-best-match --with pytest-homeassistant-custom-component --with home-assistant-frontend==20260826.7 --with pytest-xdist==3.8.0 python -m pytest -q -p no:cacheprovider -n auto tests/integration [custom_components/**; tests/integration/**]
 - integration-pg: BAUSTELLE_TEST_PG=$(tools/pg-test.sh) uv run --offline --no-project --python 3.14 --index-strategy unsafe-best-match --with pytest-homeassistant-custom-component --with home-assistant-frontend==20260826.7 --with "psycopg[binary]==3.3.6" --with pytest-xdist==3.8.0 python -m pytest -q -p no:cacheprovider -n auto tests/integration [custom_components/baustelle/db/**; custom_components/baustelle/__init__.py; tests/integration/conftest.py; tests/integration/test_datenbank*.py; tools/pg-test.sh]
 - panel: node --check custom_components/baustelle/frontend/baustelle-panel.js; node tests/panel/test_panel.js custom_components/baustelle/frontend/baustelle-panel.js tests/panel/struktur-0.7.json [custom_components/baustelle/frontend/**; tests/panel/**]

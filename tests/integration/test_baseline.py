@@ -235,3 +235,33 @@ async def test_kosten_und_kwh_erst_nach_dem_letzten_tag(hass: HomeAssistant, fre
     _kosten_nachtragen(hz, roh, MONTAG)
     l = hb.laeufe(hz)[0]
     assert l.kwh == 29.0 and l.kosten_eur == round(29.0 * st.preis_am(SAMSTAG), 2)
+
+
+async def test_von_hand_einplanen_mehrere_container(hass: HomeAssistant, freezer, shellys, nachrichten, hass_ws_client) -> None:
+    """0.8.179 (Herbert 21.11.2026): WS baustelle/aktion `baseline_einplanen` {bereich, von, tage} – einmalig von Hand,
+    auch für mehrere Container am selben Tag; angekündigt mit „Absagen“, beide starten am Sonntag; zweimal derselbe
+    Container oder ein angebrochener Tag → Fehler."""
+    ws = await hass_ws_client(hass)
+    st, hz = await _baustelle(hass, freezer, zeit="2026-11-21 08:00:00+01:00")
+    eid = st.entry.entry_id
+
+    async def planen(nr: int, bid: str, von: str) -> dict:
+        await ws.send_json({"id": nr, "type": "baustelle/aktion", "entry_id": eid, "aktion": "baseline_einplanen",
+                            "bereich": bid, "von": von, "tage": 1})
+        return await ws.receive_json()
+
+    r1, r2 = await planen(1, C1, "2026-11-22"), await planen(2, C2, "2026-11-22")
+    assert r1["success"] and r2["success"] and r1["result"]["lauf_id"] != r2["result"]["lauf_id"]
+    L = hb.laeufe(hz)
+    assert {(l.bereich, l.von, l.bis, l.status) for l in L} == {(C1, SAMSTAG + timedelta(days=1), MONTAG, "geplant"),
+                                                                (C2, SAMSTAG + timedelta(days=1), MONTAG, "geplant")}
+    assert all(l.angekuendigt is not None for l in L)
+    await hass.async_block_till_done()
+    assert sum("Baseline" in str(c.data.get("title")) for c in nachrichten) == 2
+    doppelt, heute = await planen(3, C1, "2026-11-22"), await planen(4, C2, "2026-11-21")
+    assert not doppelt["success"] and "schon" in doppelt["error"]["message"]
+    assert not heute["success"] and "morgen" in heute["error"]["message"]
+    freezer.move_to("2026-11-22 00:05:00+01:00")
+    st.auswerten()
+    await hass.async_block_till_done()
+    assert {l.status for l in hb.laeufe(hz)} == {"laeuft"}
