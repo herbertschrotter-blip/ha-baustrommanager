@@ -28,6 +28,7 @@ from .einstellungen import ART_TEXT, EIGEN, TICKET_OFFEN, TICKET_STATUS, Meldung
 from .funktionen.heizung import Heizung
 from .funktionen.heizung import hochrechnung as hochrechnung_heizung, prognose_schatten, prognose_v2 as prognose_v2_heizung
 from .logik.prognose_typen import MODELL_VERSION
+from .assistent import BEFEHLE as ASSISTENT_BEFEHLE
 from .geraete import BEFEHLE as GERAETE_BEFEHLE
 from .inventar import BEFEHLE as INVENTAR_BEFEHLE, async_namen_gemerkt, namen_verwerfen
 from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
@@ -286,7 +287,7 @@ async def async_panel_anmelden(hass: HomeAssistant, version: str) -> None:
     hass.async_create_task(hass.data[DATA_MELDUNGEN].async_laden(), "baustelle_meldungen_laden")  # lesbare Kopie beim Start
     for befehl in (ws_struktur, ws_setzen, ws_liste, ws_aktion, ws_bericht, ws_protokoll, ws_meldungen, ws_meldung,
                    ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_zaehler_korrigieren, ws_verlauf, ws_oeffnungen, ws_notprogramm_pruefen, ws_notprogramm_probe,
-                   *INVENTAR_BEFEHLE, *UMBENENNEN_BEFEHLE, *GERAETE_BEFEHLE):
+                   *INVENTAR_BEFEHLE, *UMBENENNEN_BEFEHLE, *GERAETE_BEFEHLE, *ASSISTENT_BEFEHLE):
         websocket_api.async_register_command(hass, befehl)
 
 

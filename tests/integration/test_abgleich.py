@@ -567,8 +567,9 @@ async def test_seite_gegen_echte_struktur(hass: HomeAssistant, echte_baustelle) 
     assert "Lager Ost" in titel and "Magazin Nord" in titel and "Magazin" not in titel  # neu angelegt, umbenannt
     assert titel["Magazin Nord"].data.get("fuehler") == "sensor.magazin_temperatur"  # Fühler bleibt beim Umbenennen
     schalter = {x.data.get("schalter"): x for x in entry.subentries.values() if x.subentry_type == "geraet"}
-    assert schalter["switch.reserve_1"].data["bereich"] == titel["Lager Ost"].subentry_id
-    assert schalter["switch.reserve_2"].data["bereich"] == MAGAZIN and "switch.magazin_t1" not in schalter  # hinzugefügt, entfernt
+    # M12: „+ Container“ legt nur Container (und Inventar) an, Geräte kommen über den Assistenten (baustelle/geraet_hinzufuegen)
+    assert titel["Lager Ost"].data["art"] == "container" and not any(x.data.get("bereich") == titel["Lager Ost"].subentry_id for x in schalter.values())
+    assert "switch.magazin_t1" not in schalter  # entfernt
     assert schalter["switch.magazin_r1"].data["typ"] == "konvektor"  # Typ geändert
     assert entry.options["wetter"] == "weather.kalsdorf" and entry.runtime_data is not None
     st = entry.runtime_data

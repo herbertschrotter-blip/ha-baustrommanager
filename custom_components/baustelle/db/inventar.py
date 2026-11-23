@@ -37,10 +37,12 @@ def lesen(v: Connection) -> dict[str, Any]:
 
 
 def container_anlegen(v: Connection, *, art: str, baustelle_id: str, instanz_id: str | None, jetzt: datetime,
-                      firma_kuerzel: str | None = None, bereich_id: str | None = None, nr: int | None = None) -> dict[str, Any]:
+                      firma_kuerzel: str | None = None, bereich_id: str | None = None, nr: int | None = None,
+                      bereich_name: str | None = None) -> dict[str, Any]:
     """Neuer Container mit erstem Einsatz auf `baustelle_id`. Eigen: nächste Nummer der ganzen Datenbank oder `nr`
     (Bestand: nur eine nie vergebene); fremd (`firma_kuerzel`): nächste Nummer dieser Firma auf dieser Baustelle. Mit
-    `bereich_id` wird der Bereich verknüpft."""
+    `bereich_id` wird der Bereich verknüpft; mit `bereich_name` (M12 „+ Container“: Bereich gerade erst angelegt, noch
+    nicht gespiegelt) steht er danach auch dann in der Tabelle, wenn das Spiegeln noch aussteht."""
     cid = uuid.uuid4().hex
     werte: dict[str, Any]
     if firma_kuerzel:
@@ -55,8 +57,10 @@ def container_anlegen(v: Connection, *, art: str, baustelle_id: str, instanz_id:
     v.execute(insert(s.container).values(id=cid, art=art, status="aktiv", angelegt=jetzt, **werte))
     v.execute(insert(s.container_einsatz).values(container_id=cid, von=jetzt, baustelle_id=baustelle_id,
                                                  bereich_id=bereich_id, instanz_id=instanz_id))
-    if bereich_id:
-        v.execute(update(s.bereich).where(s.bereich.c.id == bereich_id).values(container_id=cid))
+    if bereich_id and not v.execute(update(s.bereich).where(s.bereich.c.id == bereich_id).values(container_id=cid)).rowcount \
+            and bereich_name:
+        v.execute(insert(s.bereich).values(id=bereich_id, baustelle_id=baustelle_id, name=bereich_name, art="container",
+                                           container_id=cid, angelegt=jetzt))
     return {"id": cid, "art": art, **werte}
 
 

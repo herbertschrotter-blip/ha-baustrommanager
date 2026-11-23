@@ -460,7 +460,7 @@ def zurueck_eintragen(schritte: Iterable[Mapping[str, Any]], umkehr: Iterable[Ma
 MIT_GG = ("PLUG", "PUMP", "BTR")   # bekommen eine Gerätenummer im Container
 HAENGT: dict[str, tuple[str, str]] = {   # „Was hängt an diesem Plug?“ → (Rolle, Typ) des Unter-Eintrags
     "konvektor": ("heizkoerper", "konvektor"), "radiator": ("heizkoerper", "oelradiator"),
-    "bautrockner": ("bautrockner", "konvektor"), "nichts": ("steckdose", "konvektor"),
+    "bautrockner": ("bautrockner", "konvektor"), "nichts": ("steckdose", "konvektor"), "pumpe": ("pumpe", "konvektor"),
 }
 
 
@@ -501,3 +501,96 @@ def abgleich(ha: Iterable[str], im_container: Mapping[str, str]) -> tuple[list[s
     nachtragen = [k for k in ha_set if k not in im_container]
     nicht_in_ha = [aid for k, aid in im_container.items() if k not in ha_set]
     return nachtragen, nicht_in_ha
+
+
+# ---------------------------------------------------------------------- Assistent „+ Gerät hinzufügen“ (UI-Bericht M12)
+# Die eine Typenliste für alle Wege (Seite, Inventar, HA-Unter-Eintrag), Mockup ordnung.html as-3: Schlüssel → (Gruppe,
+# Text, Inventar-Typ, passt zu den Gerätetypen aus `typ_vorschlag`, „Was hängt an diesem Plug?“ (`HAENGT`), wo erlaubt
+# („container“, „schacht“ oder beide), Nennleistung fragen, Primär/Zusatz fragen)
+ASSISTENT_TYPEN: dict[str, tuple[str, str, str | None, tuple[str, ...], str | None, tuple[str, ...], bool, bool]] = {
+    "radiator": ("Am Plug", "🔥 Ölradiator", "PLUG", ("PLUG",), "radiator", ("container",), True, True),
+    "konvektor": ("Am Plug", "🔥 Konvektor", "PLUG", ("PLUG",), "konvektor", ("container",), True, True),
+    "bautrockner": ("Am Plug", "💨 Bautrockner", "PLUG", ("PLUG",), "bautrockner", ("container",), True, False),
+    "pumpe": ("Am Plug", "💧 Pumpe (nur Schacht)", "PLUG", ("PLUG",), "pumpe", ("schacht",), False, False),
+    "steckdose": ("Am Plug", "🔌 Steckdose / sonstiges", "PLUG", ("PLUG",), "nichts", ("container", "schacht"), False, False),
+    "fuehler": ("Sensor", "🌡 Temperaturfühler", "TEMP", ("TEMP",), None, ("container",), False, False),
+    "tuer": ("Sensor", "🚪 Tür", "DOOR", ("DOOR", "FEN"), None, ("container",), False, False),
+    "fenster": ("Sensor", "🪟 Fenster", "FEN", ("DOOR", "FEN"), None, ("container",), False, False),
+    "licht": ("Sensor", "💡 Licht", None, (), None, ("container",), False, False),
+}
+
+
+def assistent_typen(geraet_typ: str | None, *, schacht: bool, geraet: str = "diesem Gerät") -> list[dict[str, Any]]:
+    """Schritt 3 „Was hängt dran?“: alle Typen der einen Liste, nicht passende mit Grund (ausgegraut auf der Seite).
+
+    Passt, wenn der Gerätetyp des HA-Geräts (PLUG, TEMP, DOOR, FEN aus `typ_vorschlag`) dazugehört und der Ort stimmt
+    (Pumpe nur im Schacht, Heizungen und Sensoren nur im Container – wie `logik.geraete.pruefen`). Licht wählt man unter
+    🏠 Aussehen, nicht hier."""
+    aus = []
+    for k, (gruppe, text, _typ, passt_zu, _haengt, orte, nenn, rolle) in ASSISTENT_TYPEN.items():
+        if k == "licht":
+            grund: str | None = "Licht im Symbol wählt man unter 🏠 Aussehen"
+        elif geraet_typ not in passt_zu:
+            grund = f"passt nicht zu {geraet}"
+        elif ("schacht" if schacht else "container") not in orte:
+            grund = "nur im Pumpenschacht" if orte == ("schacht",) else "nicht im Pumpenschacht"
+        else:
+            grund = None
+        aus.append({"k": k, "gruppe": gruppe, "text": text, "passt": grund is None, "grund": grund, "nenn": nenn, "rolle": rolle})
+    return aus
+
+
+def assistent_vorschlag(typen: Iterable[Mapping[str, Any]]) -> str | None:
+    """Vorbelegung in Schritt 3: der erste passende Typ (am Plug der Ölradiator, im Schacht die Pumpe)."""
+    return next((t["k"] for t in typen if t["passt"]), None)
+
+
+def assistent_zuordnung(k: str) -> tuple[str, str | None]:
+    """Typ der einen Liste → (Inventar-Typ, „Was hängt an diesem Plug?“); `InventarFehler` bei unbekanntem/Licht."""
+    if k not in ASSISTENT_TYPEN or ASSISTENT_TYPEN[k][2] is None:
+        raise InventarFehler(f"Typ {k!r} lässt sich nicht hinzufügen")
+    return str(ASSISTENT_TYPEN[k][2]), ASSISTENT_TYPEN[k][4]
+
+
+def frei_setzen(schritte: Iterable[Mapping[str, Any]], device_id: str, name: str | None) -> list[dict[str, Any]]:
+    """Eigener Name statt Schema (Herberts Entscheidung 3): gilt nur für den Gerätenamen des neuen HA-Geräts, die
+    Entity-IDs folgen weiter dem Schema. Der Schritt bekommt `frei` und wird als „⚠ weicht ab“ gezeigt, nicht gesperrt."""
+    frei = (name or "").strip()
+    aus = []
+    for s in schritte:
+        x = dict(s)
+        if frei and x["ziel"] == "geraet" and x["ref"] == device_id:
+            x.update(neu=frei, frei=True, zustand="gleich" if x.get("alt") == frei else "aendern")
+        aus.append(x)
+    return aus
+
+
+# ---------------------------------------------------------------------- „+ Container“ (UI-Bericht M12, Entscheidung 2)
+def container_vorschau(*, schacht: bool, eigen: bool, art: str | None, nr: int | None = None, firma: str | None = None,
+                       nummern: Iterable[int | None] = (), fremd_nummern: Iterable[int | None] = ()) -> dict[str, Any]:
+    """Name und Nummer eines neuen Containers vor dem Anlegen (Mockup ordnung.html cn-eigen/cn-fremd/cn-belegt).
+
+    Eigen: Nummer frei wählbar, vorbelegt die nächste (`naechste`); jede je vergebene ist gesperrt (eine Nummer gilt für
+    immer, `nummer_frei`). Fremd: die nächste Nummer dieser Firma auf der Baustelle, wie das Anlegen sie vergibt.
+    Pumpenschächte stehen nicht im Inventar (die Kürzeltabelle kennt nur Container) – nur der Bereich in HA."""
+    if schacht:
+        return {"im_inventar": False, "inventar": None, "nummer": None, "naechste": None, "belegt": False, "grund": None,
+                "geraete": None, "hinweis": "Pumpenschächte stehen nicht im Inventar – angelegt wird der Bereich in HA"}
+    art_ = _art(art or "")
+    if eigen:
+        vorhanden = [n for n in nummern if n]
+        naechste_ = naechste(vorhanden)
+        nummer = nr or naechste_
+        try:
+            nummer_frei(nummer, vorhanden)
+            grund = None
+        except InventarFehler as err:
+            grund = str(err)
+        p = praefix(nr=nummer)
+    else:
+        kuerzel = firmenkuerzel_pruefen(firma)
+        naechste_ = nummer = naechste(fremd_nummern)
+        grund = None
+        p = praefix(firma=kuerzel, fremd_nr=nummer)
+    return {"im_inventar": True, "inventar": f"{p}_C_{art_}", "nummer": nummer, "naechste": naechste_,
+            "belegt": grund is not None, "grund": grund, "geraete": geraet_name(p, art_, "PLUG", 1), "hinweis": None}

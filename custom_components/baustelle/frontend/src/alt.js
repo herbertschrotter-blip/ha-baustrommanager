@@ -34,6 +34,7 @@ import { BAUSTELLE_EINBLENDUNGEN } from './ansichten/einblendungen-baustelle.js'
 import { EINRICHTUNG_EINBLENDUNGEN } from './ansichten/einblendungen-einrichtung.js';
 import { npPlugEinblendung } from './ansichten/notprogramm.js';
 import { INVENTAR_EINBLENDUNGEN, INV_BREIT, INV_CSS } from './ansichten/inventar.js';
+import { ASSISTENT_BREIT, ASSISTENT_CSS, ASSISTENT_EINBLENDUNGEN } from './ansichten/assistent.js';
 import { GERAETE_CSS, GERAETE_EINBLENDUNGEN } from './ansichten/geraete.js';
 import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN, hochrechnungSvg } from './ansichten/heizperiode.js';
 import { BASELINE_CSS } from './ansichten/baseline.js';
@@ -1035,9 +1036,9 @@ function einblendungen(s) {
 /* ---------- Seite ---------- */
 const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
-const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
+const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -1666,7 +1667,8 @@ class BaustellePanel extends LitElement {
     const S = this.s, d = this.d, b = this.b, el = { dataset: { s: art, ...ds } }, neu = () => this.neuZeichnen();
     if (art === 'termin') { S.sheet = { art: 'termin', form: { b: el.dataset.id || S.cid, titel: '', datum: plusTage(this.z.HEUTE, 7), von: '09:00', bis: '10:00', wieder: 'einmal', boost: false } }; return neu(); }
     if (art === 'urlaub') { S.sheet = { art: 'urlaub', form: { name: '', von: plusTage(this.z.HEUTE, 14), bis: plusTage(this.z.HEUTE, 18) } }; return neu(); }
-    if (art === 'container-neu') { S.sheet = { art, form: { name: '', art: 'Container', fuehler: '', schalter: '', typ: 'Ölradiator' } }; return neu(); }
+    if (art === 'container-neu') { S.sheet = { art, form: this.containerForm() }; return neu(); }   // UI-Bericht M12: „+ Container“ mit Inventar
+    if (art === 'geraet-neu') return this.assistentAuf();   // UI-Bericht M12: „+ Gerät“ öffnet den Assistenten
     if (art === 'wetterquelle') { const o = d.optionen; S.sheet = { art, form: { wetter: o.wetter || '', temp_sensor: o.temp_sensor || '', regen_sensor: o.regen_sensor || '', urlaub_kalender: o.urlaub_kalender || '', feiertag_kalender: o.feiertag_kalender || '', termine_kalender: d.termineKal || '' } }; return neu(); }
     if (art === 'bs-loeschen') { S.sheet = { art, id: el.dataset.id }; return neu(); }
     if (art === 'zeitraum-bs') { S.sheet = { art, form: { beginn: d.beginnAuto ? '' : d.beginn || '', ende: d.ende || '', hp: [...d.hp] } }; return neu(); }
@@ -1770,6 +1772,74 @@ class BaustellePanel extends LitElement {
   invKandidaten() { const r = this._holen('invk', () => this._hass.callWS({ type: 'baustelle/inventar_kandidaten' }), 30000); return r && r.geraete; }
   invNeu() { for (const k of Object.keys(this.cache)) if (k === 'inv' || k === 'invk' || k.startsWith('invv:') || k.startsWith('invr:') || k.startsWith('invz:')) delete this.cache[k]; }
   invAuf(sheet) { this.s.sheet = sheet; return this.neuZeichnen(); }
+  /* Assistent „+ Gerät hinzufügen“ und „+ Container“ (src/ansichten/assistent.js, UI-Bericht M12): Typen, Vorschau, Namen und
+     Nummern kommen von der Integration (baustelle/geraet_*, baustelle/container_*); hier nur Zustand des Dialogs und Befehle */
+  assistentAuf(o = {}) {
+    const S = this.s, zurueck = 'zurueck' in o ? o.zurueck : S.sheet && ['bereich', 'inv-container'].includes(S.sheet.art) ? S.sheet : null;
+    this.invNeu();
+    S.sheet = { art: 'geraet-assistent', schritt: 1, bid: null, vorgabe: false, dev: null, typ: null, nenn: null, rolle: 'zusatz', frei: false, freiName: '', q: '', ...o, zurueck };
+    return this.neuZeichnen();
+  }
+  assistentSchritt(s, n) { s.schritt = n; return this.neuZeichnen(); }
+  assistentSchluessel(k, s) { return `${k}:${s.bid}:${s.dev}${k === 'gav' ? `:${s.typ}:${s.frei ? (s.freiName || '').trim() : ''}` : ''}`; }
+  assistentTypen(s) { return this._holen(this.assistentSchluessel('gat', s), () => this._hass.callWS({ type: 'baustelle/geraet_typen', entry_id: this.d.entry, bereich_id: s.bid, device_id: s.dev }), 30000); }
+  assistentVorschau(s) {
+    const frei = s.frei ? (s.freiName || '').trim() : '';
+    return this._holen(this.assistentSchluessel('gav', s), () => this._hass.callWS({ type: 'baustelle/geraet_vorschau', entry_id: this.d.entry, bereich_id: s.bid, device_id: s.dev, typ: s.typ, ...(frei ? { name: frei } : {}) }), 15000);
+  }
+  assistentNenn(s, dd) { const v = s.nenn ? Math.round((s.nenn + dd) * 10) / 10 : dd > 0 ? 2 : null; s.nenn = v && v >= 0.1 ? Math.min(10, v) : null; return this.neuZeichnen(); }
+  async assistentAnlegen(s) {
+    if (s.laeuft) return undefined;
+    const T = this.assistentTypen(s), t = T && T.typen.find(x => x.k === s.typ), frei = s.frei ? (s.freiName || '').trim() : '';
+    s.laeuft = 'Wird angelegt und umbenannt … das Schalten des Containers pausiert kurz'; this.neuZeichnen();   // sofort sperren (Doppelklick)
+    try {
+      const r = await this._hass.callWS({ type: 'baustelle/geraet_hinzufuegen', entry_id: this.d.entry, bereich_id: s.bid, device_id: s.dev, typ: s.typ,
+        ...(frei ? { name: frei } : {}), ...(t && t.nenn && s.nenn ? { nenn_kw: s.nenn } : {}), ...(t && t.rolle ? { rolle: s.rolle || 'zusatz' } : {}) });
+      this.idsTauschen(s.zurueck, r.umbenannt && r.umbenannt.getauscht);   // offener Entwurf (Bearbeiten) bekommt die neuen Entity-IDs
+      Object.assign(s, { erg: r, schritt: 5, laeuft: null, zurueckGenommen: false });
+      this.toast(r.umbenannt && r.umbenannt.fehler ? r.umbenannt.fehler : `${r.name} hinzugefügt`);
+      this.invNeu(); this._laden();
+    } catch (e) { s.laeuft = null; this.toast(this.fehlerText(e)); }
+    return this.neuZeichnen();
+  }
+  async assistentRueck(s) {
+    if (s.laeuft || !s.erg || !s.erg.rueck) return undefined;
+    s.laeuft = 'Wird zurückgenommen …'; this.neuZeichnen();
+    try {
+      const r = await this._hass.callWS({ type: 'baustelle/geraet_hinzufuegen_rueckgaengig', rueck: s.erg.rueck });
+      this.idsTauschen(s.zurueck, Object.fromEntries(Object.entries((s.erg.umbenannt && s.erg.umbenannt.getauscht) || {}).map(([a, b]) => [b, a])));
+      Object.assign(s, { laeuft: null, zurueckGenommen: true }); this.toast(r.ok ? 'Zurückgenommen' : `Teilweise zurückgenommen: ${r.fehler.join('; ')}`);
+      this.invNeu(); this._laden();
+    } catch (e) { s.laeuft = null; this.toast(this.fehlerText(e)); }
+    return this.neuZeichnen();
+  }
+  assistentZumContainer(s) { this.s.sheet = null; return this.bereichEinst(s.bid); }
+  containerForm() { return { schacht: false, eigen: true, art: 'MAN', nr: null, firma_id: '', kuerzel: '', name: '' }; }
+  containerNeuAuf(zurueck) { this.s.sheet = { art: 'container-neu', form: this.containerForm(), zurueck }; return this.neuZeichnen(); }
+  containerFelder(f) {
+    return { schacht: !!f.schacht, eigen: !!f.eigen, ...(f.schacht ? {} : { art: f.art }), ...(!f.schacht && f.eigen && f.nr ? { nr: f.nr } : {}),
+      ...(!f.schacht && !f.eigen && f.firma_id ? { firma_id: f.firma_id } : {}), ...(!f.schacht && !f.eigen && (f.kuerzel || '').trim() ? { kuerzel: f.kuerzel.trim() } : {}) };
+  }
+  containerSchluessel(f) { return 'cnv:' + JSON.stringify(this.containerFelder(f)); }
+  containerVorschau(f) {
+    if (!f.schacht && !f.eigen && !f.firma_id) return { fehler: 'Bitte eine Firma wählen', belegt: true };
+    return this._holen(this.containerSchluessel(f), () => this._hass.callWS({ type: 'baustelle/container_vorschau', entry_id: this.d.entry, ...this.containerFelder(f) }), 10000);
+  }
+  async containerAnlegen(s, weiter) {
+    const f = s.form; if (s.laeuft) return undefined;
+    if (!f.name.trim()) return this.toast('Bitte einen Namen eingeben');
+    s.laeuft = `${f.name.trim()} wird angelegt …`; this.neuZeichnen();
+    try {
+      const r = await this._hass.callWS({ type: 'baustelle/container_neu', entry_id: this.d.entry, ...this.containerFelder(f), name: f.name.trim() });
+      for (const k of Object.keys(this.cache)) if (k.startsWith('cnv:')) delete this.cache[k];
+      this.invNeu(); await this._laden();
+      this.toast(r.fehler || `${r.name} angelegt${r.inventar ? ` · ${r.inventar}` : ''}`);
+      const z = s.zurueck;
+      if (z && z.art === 'geraet-assistent') { Object.assign(z, { bid: r.bereich_id, typ: null, schritt: z.dev ? 3 : 1 }); this.s.sheet = z; return this.neuZeichnen(); }
+      if (weiter) return this.assistentAuf({ bid: r.bereich_id, vorgabe: true, zurueck: null });
+      this.s.sheet = null; return this.neuZeichnen();
+    } catch (e) { s.laeuft = null; this.toast(this.fehlerText(e)); return this.neuZeichnen(); }
+  }
   async invSenden(felder, text, schliessen = false) {
     try {
       const r = await this._hass.callWS({ type: 'baustelle/inventar_aendern', ...felder });
@@ -1859,17 +1929,6 @@ class BaustellePanel extends LitElement {
     const S = this.s, d = this.d, b = this.b, neu = () => this.neuZeichnen();
     const id = S.sheet.form.id, rest = d.anschluesse.find(x => x.id !== id); S.sheet = null; neu();
     return this.liste('anschluesse', 'loeschen', { id }, `Gelöscht – Container hängen jetzt an ${rest ? rest.name : 'keinem Anschluss'}`);
-  }
-  containerAnlegen() {
-    const S = this.s, d = this.d, b = this.b, neu = () => this.neuZeichnen();
-    const f = S.sheet.form, name = f.name.trim() || 'Neuer Container', schacht = f.art === 'Pumpenschacht';
-    S.sheet = null; neu();
-    return this.einrichten(async () => {
-      const r = await this.dialog('config/config_entries/subentries/flow', { handler: [d.entry, 'bereich'] }, this.bereichDaten(name, schacht ? 'pumpenschacht' : 'container', f.fuehler));
-      if (this.flowFehler(r) || !f.schalter) return r;
-      const [bid] = await this.neueIds([name]); if (!bid) return r;
-      return this.geraeteSpeichern([{ aktion: 'anlegen', ...this.geraetDaten(bid, { n: schacht ? 'Pumpe 1' : '', typ: f.typ, schalter: f.schalter }) }]);
-    }, `${name} angelegt`).then(() => this._laden());
   }
   bereichSpeichern() {
     const S = this.s, d = this.d, b = this.b, neu = () => this.neuZeichnen();
@@ -2007,9 +2066,7 @@ class BaustellePanel extends LitElement {
   einstGruppeWahl(k) { this.s.evGruppe = k; this.s.evDev = null; return this.neuZeichnen(true); }
   bereichEinst(id) { this.s.cid = id; this.s.sheet = { art: 'bereich' }; return this.neuZeichnen(); }
   /* „+ Gerät“ (Einstellungen › Container & Geräte): Container gewählt → „Bearbeiten“ mit einer neuen Gerätezeile */
-  geraetNeuIn(id) { const b = this.d.bereiche.find(x => x.id === id); if (!b) return undefined;
-    this.s.cid = id; const s = { art: 'bereich' }, e = this.bereichEntwurf(b, s);
-    e.geraete.push({ neu: true, schalter: '', n: '', typ: b.pumpe ? 'Pumpe' : 'Ölradiator' }); this.s.sheet = s; return this.neuZeichnen(); }
+  geraetNeuIn(id) { return this.d.bereiche.some(x => x.id === id) ? this.assistentAuf({ bid: id, vorgabe: true }) : undefined; }   // UI-Bericht M12: in den Assistenten
   firmaAuf(id) { const d = this.d, f = id ? this.firma(id) : null;
     this.s.sheet = { art: 'firma', form: { id: f && f.id, name: (f && f.name) || '', neu: [], container: f ? d.bereiche.filter(x => (x.firma || 'eigen') === f.id).map(x => x.id) : [] } }; return this.neuZeichnen(); }
   anschlussAuf(id) { const d = this.d, x = id ? this.anschluss(id) : null;
@@ -2239,6 +2296,7 @@ class BaustellePanel extends LitElement {
     else if (S.sheet && EINRICHTUNG_EINBLENDUNGEN[S.sheet.art]) sheet = EINRICHTUNG_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
     else if (S.sheet && S.sheet.art === 'np-plug') sheet = npPlugEinblendung(this, S.sheet);
     else if (S.sheet && INVENTAR_EINBLENDUNGEN[S.sheet.art]) sheet = INVENTAR_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
+    else if (S.sheet && ASSISTENT_EINBLENDUNGEN[S.sheet.art]) sheet = ASSISTENT_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
     else if (S.sheet && GERAETE_EINBLENDUNGEN[S.sheet.art]) sheet = GERAETE_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
     else if (S.sheet && HEIZPERIODE_EINBLENDUNGEN[S.sheet.art]) sheet = HEIZPERIODE_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
     else if (S.sheet && S.sheet.art === 'kk-katalog') sheet = katalogEinblendung(this, S.sheet);
@@ -2251,7 +2309,7 @@ class BaustellePanel extends LitElement {
         ? html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''} nav-ic" aria-label="Einstellungen" title="Einstellungen" @click=${() => this.navEinst(aktivTab === 'einst')}>${unsafeHTML(ICON_COG)}<span class="nav-t">Einstellungen</span></button>`
         : html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''}" @click=${() => this.gehe(k)}>${t}</button>`)}</nav>
       <div class="schleier ${S.sheet ? 'an' : ''}" @click=${() => this.schliessen()}></div>
-      <div class="sheet glas-panel ${S.sheet ? 'an' : ''}${S.sheet && INV_BREIT.includes(S.sheet.art) ? ' breit' : ''}">${melden && this.roh && S.sheet && S.sheet.art !== 'melden' ? meldenKnopf('im-sheet', () => this.meldenAuf()) : nothing}${sheet}</div>
+      <div class="sheet glas-panel ${S.sheet ? 'an' : ''}${S.sheet && (INV_BREIT.includes(S.sheet.art) || ASSISTENT_BREIT.includes(S.sheet.art)) ? ' breit' : ''}">${melden && this.roh && S.sheet && S.sheet.art !== 'melden' ? meldenKnopf('im-sheet', () => this.meldenAuf()) : nothing}${sheet}</div>
       <div class="tip"></div><div class="toast glas-panel"></div>
       ${melden && this.roh && !S.sheet ? meldenKnopf('glas-panel', () => this.meldenAuf()) : nothing}`;
   }

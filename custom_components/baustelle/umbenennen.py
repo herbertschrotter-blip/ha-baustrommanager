@@ -154,9 +154,10 @@ async def _merken(db: Any, container_id: str, benutzer: str | None, letzte: dict
 
 
 async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benutzer: str | None, *,
-                           nur_plug: bool = False) -> dict[str, Any]:
+                           nur_plug: bool = False, neu_laden: bool = True) -> dict[str, Any]:
     """Umbenennung eines Containers ausführen oder nachholen; wirft `LookupError` (nicht gefunden) bzw. `ValueError`
-    (Konflikt). `nur_plug` (selbst nachholen): nur Plug-Namen, nichts in HA."""
+    (Konflikt). `nur_plug` (selbst nachholen): nur Plug-Namen, nichts in HA. `neu_laden` False (Assistent, M12): die
+    Baustelle bleibt angehalten, der Aufrufer lädt sie danach selbst neu (`async_reload`)."""
     if (ergebnis := await async_vorschau(hass, db, container_id)) is None:
         raise LookupError("Container ohne Bereich auf einer geladenen Baustelle")
     eingabe, v = ergebnis
@@ -209,7 +210,7 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
         return {"id": nr, "status": stand, "schritte": schritte, "geaendert": geaendert, "nachgeholt": nachholen,
                 "getauscht": ids_getauscht(jetzt_erledigt)}
     finally:
-        if plan:   # Audit 0.8.165: auch wenn ein Schritt scheitert – sonst bliebe die Steuerung angehalten
+        if plan and neu_laden:   # Audit 0.8.165: auch wenn ein Schritt scheitert – sonst bliebe die Steuerung angehalten
             hass.config_entries.async_schedule_reload(entry.entry_id)
 
 
@@ -225,7 +226,7 @@ def _plug_ziele(hass: HomeAssistant, st: Steuerung, plugs: list[dict[str, Any]])
 
 
 async def async_rueckgaengig(hass: HomeAssistant, db: Any, container_id: str, benutzer: str | None, *,
-                             nur_vorschau: bool = False) -> dict[str, Any]:
+                             nur_vorschau: bool = False, neu_laden: bool = True) -> dict[str, Any]:
     """Jüngste Umbenennung eines Containers zurückspielen (§6.6) – mit `nur_vorschau` nur die Schritte zeigen. Wirft
     `LookupError` (nichts zurückzunehmen) bzw. `ValueError` (alte Entity-ID inzwischen vergeben)."""
     if (ergebnis := await async_vorschau(hass, db, container_id)) is None:
@@ -272,7 +273,7 @@ async def async_rueckgaengig(hass: HomeAssistant, db: Any, container_id: str, be
                  f"Umbenennung zurückgenommen ({eingabe['praefix']}_C_{eingabe['art']}): "
                  f"{sum(1 for u in erledigt if u['ergebnis'] == 'ok')} Schritte"
                  + (f", {offen} offen ({', '.join(sorted(set(fehler.values())))})" if offen else ""))
-    if plan:
+    if plan and neu_laden:   # sonst lädt der Aufrufer neu (Assistent, M12)
         hass.config_entries.async_schedule_reload(entry.entry_id)
     return {"id": letzte["id"], "status": stand, "schritte": erledigt, "getauscht": ids_getauscht(erledigt)}
 

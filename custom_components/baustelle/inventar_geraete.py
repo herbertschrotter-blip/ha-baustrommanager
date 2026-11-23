@@ -31,8 +31,9 @@ if TYPE_CHECKING:
     from .steuerung import Steuerung
 
 _LOGGER = logging.getLogger(__name__)
-KLASSE_FUER = {"TEMP": ("sensor", ("temperature",)), "DOOR": ("binary_sensor", ("door", "opening", "garage_door")),
-               "FEN": ("binary_sensor", ("window",))}
+# M12: ein Kontakt kann Tür oder Fenster sein (die eine Typenliste des Assistenten) – gesucht wird zuerst die passende Klasse
+KLASSE_FUER = {"TEMP": ("sensor", ("temperature",)), "DOOR": ("binary_sensor", ("door", "opening", "garage_door", "window")),
+               "FEN": ("binary_sensor", ("window", "door", "opening"))}
 
 
 def _kennung(geraet: dr.DeviceEntry) -> str:
@@ -57,7 +58,8 @@ def _schalter(ents: list[er.RegistryEntry]) -> str | None:
 
 def _messwert(ents: list[er.RegistryEntry], typ: str) -> str | None:
     domain, klassen = KLASSE_FUER[typ]
-    return next((e.entity_id for e in ents if e.domain == domain and _klasse(e) in klassen), None)
+    passend = sorted((e for e in ents if e.domain == domain and _klasse(e) in klassen), key=lambda e: klassen.index(_klasse(e)))
+    return passend[0].entity_id if passend else None
 
 
 def _baustellen(hass: HomeAssistant) -> list[Steuerung]:
@@ -95,7 +97,8 @@ def kandidaten(hass: HomeAssistant, roh: dict[str, Any]) -> list[dict[str, Any]]
         haupt = _schalter(ents) if typ == "PLUG" else _messwert(ents, typ)
         aus.append({"device_id": geraet.id, "name": geraet.name_by_user or geraet.name, "modell": geraet.model, "typ": typ,
                     "ausruestung_id": a["id"] if a else None, "status": a["status"] if a else None,
-                    "entity_id": haupt, "verwendet": belegt.get(haupt or "")})
+                    "entity_id": haupt, "verwendet": belegt.get(haupt or ""),
+                    "seit": geraet.created_at.isoformat() if getattr(geraet, "created_at", None) else None})   # M12: „neu seit …“
     return sorted(aus, key=lambda k: (k["typ"], str(k["name"])))
 
 

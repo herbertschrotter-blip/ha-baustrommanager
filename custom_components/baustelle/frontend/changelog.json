@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.8.192",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Change (UI-Bericht M12, Mockup `ordnung.html`, abgenommen 23.11.2026): **Assistent „+ Gerät hinzufügen“** in fünf Schritten – HA-Gerät aus „neu in Home Assistant, noch nicht zugeordnet“ (mit Suche) → Container → was hängt dran (eine Typenliste; was nicht passt, ist ausgegraut mit Grund, z. B. „nur im Pumpenschacht“; Nennleistung, Primär/Zusatz) → Namensvorschau alt → neu, bevor etwas geschrieben wird (eigener Name statt Schema möglich: gilt für den Gerätenamen, die Entity-IDs folgen dem Schema, markiert als „⚠ weicht ab“) → „Anlegen und umbenennen“ in einem Schritt, danach „↺ Rückgängig“. Einstiege: ⚙ › Container & Geräte „+ Gerät“, „+ Gerät hinzufügen“ in „Bearbeiten“ (Container vorbelegt) und „+ Gerät zuordnen“ im Inventar-Container dieser Baustelle.",
+      "Change: **„+ Container“** mit Container/Pumpenschacht, eigen/fremd (fremd mit Firma und Kürzel), Nummer (belegte gesperrt), Verwendung, Name auf der Seite und Namensvorschau (z. B. `006_C_MAN`, `STRA-02_C_MAN`); legt immer auch den Inventar-Container an (Entscheidung 2), fremde Container gehören in der Abrechnung ab jetzt der Firma. Schächte stehen weiter nicht im Inventar. „Anlegen und Gerät hinzufügen ›“ geht gleich in den Assistenten.",
+      "Integration: neue Befehle `baustelle/geraet_typen`, `…/geraet_vorschau`, `…/geraet_hinzufuegen`, `…/geraet_hinzufuegen_rueckgaengig`, `…/container_vorschau`, `…/container_neu` (docs/api-0.7.md §13; schreiben nur Admins). Die Typenliste, der freie Name und die Containernummer sind Regeln in `logik/inventar.py`. Kandidaten tragen `seit` (seit wann HA das Gerät kennt); ein Kontakt kann Tür oder Fenster sein."
+    ]
+  },
+  {
     "version": "0.8.191",
     "datum": "2026-11-23",
     "punkte": [

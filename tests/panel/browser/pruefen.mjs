@@ -687,6 +687,32 @@ await fall('B11 Wochenplan Spuren', browser, async (page, erwarte) => {
   await bild(page, 'b11-wochenplan');
 });
 
+/* B12 Assistent „+ Gerät hinzufügen“ und „+ Container“ am Handy (UI-Bericht M12, Mockup ordnung.html): in jedem Schritt ragt
+   nichts aus der Einblendung, die Knöpfe sind sichtbar; nicht passende Typen ausgegraut, freier Name markiert */
+await fall('B12 Assistent am Handy', browser, async (page, erwarte) => {
+  await page.setViewport({ width: 390, height: 844 });
+  const raus = () => panel(page, T, () => { const sc = sr.querySelector('.sheet'), re = sc.getBoundingClientRect().right;
+    return [...sc.querySelectorAll('*')].filter(x => x.getBoundingClientRect().width > 0 && x.getBoundingClientRect().right > re + 1 && !x.closest('svg'))
+      .slice(0, 3).map(x => `${x.tagName.toLowerCase()}.${String(x.className).trim()} +${Math.round(x.getBoundingClientRect().right - re)}px`); });
+  const knoepfe = () => panel(page, T, () => [...sr.querySelectorAll('.sheet .ga-knoepfe .knopf')].map(k => k.getBoundingClientRect()).every(r => r.width > 40 && r.height >= 30));
+  const SCHRITTE = [
+    ['1 Gerät', () => p.assistentAuf({ zurueck: null })],
+    ['3 Was hängt dran', () => { const b = p.d.bereiche.find(x => x.namen && x.namen.container_id); Object.assign(p.s.sheet, { dev: 'd9', bid: b.id, schritt: 3 }); return p.neuZeichnen(); }],
+    ['4 Namen frei', () => { Object.assign(p.s.sheet, { typ: 'konvektor', schritt: 4, frei: true, freiName: 'Konvektor Polier' }); return p.neuZeichnen(); }],
+    ['+ Container', () => p.einblenden('container-neu')],
+  ];
+  for (const [name, fn] of SCHRITTE) {
+    await panel(page, T, fn); await warte(900);
+    const r = await raus(), k = await knoepfe();
+    erwarte(`${name}: nichts ragt hinaus, Knöpfe bedienbar`, !r.length && k, r.join(', '));
+  }
+  await panel(page, T, () => { Object.assign(p.s.sheet = { art: 'geraet-assistent', schritt: 3, bid: p.d.bereiche.find(x => x.namen && x.namen.container_id).id, dev: 'd9', vorgabe: false, typ: null, nenn: null, rolle: 'zusatz', frei: false, freiName: '', q: '', zurueck: null }); return p.neuZeichnen(); });
+  await warte(900);
+  const aus = await panel(page, T, () => { const x = sr.querySelector('.sheet .ga-wahl.ga-aus[data-v="fuehler"]'); return x && { disabled: x.disabled, grund: (x.querySelector('.ga-grund') || {}).textContent }; });
+  erwarte('Schritt 3: Fühler ausgegraut mit Grund', aus && aus.disabled && /passt nicht/.test(aus.grund), JSON.stringify(aus));
+  await panel(page, T, () => { p.s.sheet = null; return p.neuZeichnen(); });
+});
+
 server.close();
 const gesamt = Date.now() - t0;
 let rot = 0; const bekannteTreffer = [];

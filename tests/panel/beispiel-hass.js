@@ -309,10 +309,60 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
   }
   function invKandidaten() {
     const belegt = new Set(inventar().container.flatMap(c => c.ausruestung.map(a => a.id)));
-    return [{ device_id: 'd9', name: 'Plug Lager 09', modell: 'Shelly Plug S Gen3', typ: 'PLUG', ausruestung_id: null, status: null, entity_id: 'switch.plug_lager_09', verwendet: null },
-      { device_id: 'd8', name: 'Shelly H&T Gen3', modell: 'Shelly H&T Gen3', typ: 'TEMP', ausruestung_id: null, status: null, entity_id: 'sensor.shelly_h_t_gen3_temperatur', verwendet: null },
-      { device_id: 'd7', name: 'Shelly BLU Door/Window', modell: 'Shelly BLU Door/Window', typ: 'DOOR', ausruestung_id: 'a9', status: 'defekt', entity_id: 'binary_sensor.tuer_lager', verwendet: null }]
+    return [{ device_id: 'd9', name: 'Plug Lager 09', modell: 'Shelly Plug S Gen3', typ: 'PLUG', ausruestung_id: null, status: null, entity_id: 'switch.plug_lager_09', verwendet: null, seit: '2026-09-29T08:42:00+00:00' },
+      { device_id: 'd8', name: 'Shelly H&T Gen3', modell: 'Shelly H&T Gen3', typ: 'TEMP', ausruestung_id: null, status: null, entity_id: 'sensor.shelly_h_t_gen3_temperatur', verwendet: null, seit: '2026-09-28T12:10:00+00:00' },
+      { device_id: 'd7', name: 'Shelly BLU Door/Window', modell: 'Shelly BLU Door/Window', typ: 'DOOR', ausruestung_id: 'a9', status: 'defekt', entity_id: 'binary_sensor.tuer_lager', verwendet: null, seit: null }]
       .filter(k => !belegt.has('z' + k.device_id));
+  }
+  /* UI-Bericht M12: Assistent „+ Gerät hinzufügen“ und „+ Container“ wie assistent.py mit logik/inventar (Typenliste, Vorschau,
+     Nummern) – Beispiel über der ersten Baustelle; Anlegen ändert Inventar und Struktur wie echt */
+  const TYPEN = [['radiator', 'Am Plug', '🔥 Ölradiator', ['PLUG'], ['container'], true, true], ['konvektor', 'Am Plug', '🔥 Konvektor', ['PLUG'], ['container'], true, true],
+    ['bautrockner', 'Am Plug', '💨 Bautrockner', ['PLUG'], ['container'], true, false], ['pumpe', 'Am Plug', '💧 Pumpe (nur Schacht)', ['PLUG'], ['schacht'], false, false],
+    ['steckdose', 'Am Plug', '🔌 Steckdose / sonstiges', ['PLUG'], ['container', 'schacht'], false, false], ['fuehler', 'Sensor', '🌡 Temperaturfühler', ['TEMP'], ['container'], false, false],
+    ['tuer', 'Sensor', '🚪 Tür', ['DOOR', 'FEN'], ['container'], false, false], ['fenster', 'Sensor', '🪟 Fenster', ['DOOR', 'FEN'], ['container'], false, false], ['licht', 'Sensor', '💡 Licht', [], ['container'], false, false]];
+  const bereichVon = m => welt().flatMap(x => x.bereiche).find(x => x.id === m.bereich_id) || nichtGefunden('Container nicht gefunden');
+  function gaTypen(m) {
+    const b = bereichVon(m), k = invKandidaten().find(x => x.device_id === m.device_id) || nichtGefunden('HA-Gerät nicht gefunden'), ort = b.art === 'pumpenschacht' ? 'schacht' : 'container';
+    const typen = TYPEN.map(([kk, gruppe, text, zu, orte, nenn, rolle]) => { const grund = kk === 'licht' ? 'Licht im Symbol wählt man unter 🏠 Aussehen' : !zu.includes(k.typ) ? `passt nicht zu ${k.name}` : !orte.includes(ort) ? (orte.length === 1 && orte[0] === 'schacht' ? 'nur im Pumpenschacht' : 'nicht im Pumpenschacht') : null;
+      return { k: kk, gruppe, text, passt: !grund, grund, nenn, rolle }; });
+    return { typen, vorschlag: (typen.find(t => t.passt) || {}).k || null, geraet: { name: k.name, typ: k.typ } };
+  }
+  const gaContainer = m => inventar().container.find(c => c.status === 'aktiv' && c.einsatz && c.einsatz.bereich_id === m.bereich_id);
+  function gaVorschau(m) {
+    const T = gaTypen(m), t = T.typen.find(x => x.k === m.typ); if (!t || !t.passt) throw { code: 'invalid_format', message: t ? t.grund : 'Typ unbekannt' };
+    const c = gaContainer(m);
+    if (!c) return { im_inventar: false, container: null, schritte: [], konflikte: {}, zaehler: {}, verweise: [], eingetragen: true, abweichend: 0,
+      hinweis: bereichVon(m).art === 'pumpenschacht' ? 'Pumpenschächte stehen nicht im Inventar – die Namen bleiben, wie sie sind' : 'Der Container steht nicht im Inventar – die Namen bleiben; erst aufnehmen, dann einheitlich benennen' };
+    const v = invZuordnenVorschau({ container_id: c.id, device_id: m.device_id }), frei = (m.name || '').trim();
+    const schritte = v.schritte.map(x => frei && x.ziel === 'geraet' && x.ref === m.device_id ? { ...x, neu: frei, frei: true } : x);
+    return { im_inventar: true, container: c.name, schritte, konflikte: {}, zaehler: v.zaehler, verweise: v.verweise, eingetragen: true, hinweis: null, frei: !!frei,
+      abweichend: schritte.filter(x => x.zustand !== 'gleich').length };
+  }
+  function gaHinzufuegen(m) {
+    const v = gaVorschau(m), c = gaContainer(m), k = invKandidaten().find(x => x.device_id === m.device_id), t = gaTypen(m).typen.find(x => x.k === m.typ);
+    if (c) invAendern({ aktion: 'ausruestung_zuordnen', container_id: c.id, device_id: m.device_id });
+    const frei = (m.name || '').trim() || null, n = v.schritte.filter(x => x.zustand !== 'gleich').length;
+    return { ok: true, name: frei || k.name, typ: t.text, container: bereichVon(m).name, frei, rueck: 'r-' + m.device_id,
+      umbenannt: c ? { status: 'ausgefuehrt', anzahl: n, offen: 0, getauscht: { [k.entity_id]: k.entity_id.split('.')[0] + '.neu' } } : { status: 'ohne_inventar' } };
+  }
+  function cnPlan(m) {
+    const I = inventar(), pad = (x, n) => String(x).padStart(n, '0');
+    if (m.schacht) return { im_inventar: false, inventar: null, nummer: null, naechste: null, belegt: false, grund: null, geraete: null, hinweis: 'Pumpenschächte stehen nicht im Inventar – angelegt wird der Bereich in HA' };
+    if (m.eigen !== false) { const alle = I.container.map(c => c.nr).filter(Boolean), naechste = Math.max(0, ...alle) + 1, nr = m.nr || naechste, belegt = alle.includes(nr);
+      return { im_inventar: true, inventar: `${pad(nr, 3)}_C_${m.art}`, nummer: nr, naechste, belegt, grund: belegt ? `Nummer ${pad(nr, 3)} ist schon vergeben – eine Nummer gilt für immer` : null, geraete: `${pad(nr, 3)}-01_C_PLUG_${m.art}`, hinweis: null }; }
+    const f = I.firmen.find(x => x.id === m.firma_id); if (!f) return { fehler: 'Bitte eine fremde Firma wählen (⚙ › Firmen)', belegt: true };
+    const kz = f.kuerzel || String(m.kuerzel || '').toUpperCase(); if (!/^[A-Z]{2,5}$/.test(kz)) return { fehler: 'Firmenkürzel: 2 bis 5 Buchstaben (A–Z)', belegt: true };
+    const nr = 1 + I.container.filter(c => c.firma_kuerzel === kz).length;
+    return { im_inventar: true, inventar: `${kz}-${pad(nr, 2)}_C_${m.art}`, nummer: nr, naechste: nr, belegt: false, grund: null, geraete: `${kz}-${pad(nr, 2)}-01_C_PLUG_${m.art}`, hinweis: null, firma: { name: f.name, kuerzel: kz } };
+  }
+  function cnNeu(m) {
+    const v = cnPlan(m); if (v.fehler || v.belegt) throw { code: 'invalid_format', message: v.fehler || v.grund };
+    const b = welt()[0]; if (b.bereiche.some(x => x.name === m.name)) throw { code: 'invalid_format', message: 'Diesen Namen gibt es auf der Baustelle schon' };
+    const id = 'neu-' + b.bereiche.length; b.bereiche.push({ id, name: m.name, art: m.schacht ? 'pumpenschacht' : 'container', fuehler: null, nr: b.bereiche.length });
+    let c = null;
+    if (!m.schacht) { const f = m.eigen === false ? inventar().firmen.find(x => x.id === m.firma_id) : null; if (f && !f.kuerzel) f.kuerzel = String(m.kuerzel).toUpperCase();
+      c = invAendern({ aktion: 'container_anlegen', entry_id: b.baustelle.entry_id, art: m.art, bereich_id: id, ...(f ? { firma_kuerzel: f.kuerzel } : {}), ...(m.eigen !== false && m.nr ? { nr: m.nr } : {}) }); }
+    return { ok: true, bereich_id: id, name: m.name, inventar: c ? v.inventar : null, container_id: c ? c.id : null };
   }
   const hass = {
     states, themes: { darkMode: true }, config: { version: '2026.9.4' }, language: 'de',
@@ -364,6 +414,13 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         case 'baustelle/inventar_rueckgaengig': return kopie(invRueck(m));
         case 'baustelle/inventar_kandidaten': return { geraete: kopie(invKandidaten()) };
         case 'baustelle/inventar_aendern': return kopie(invAendern(m));
+        case 'baustelle/geraet_typen': return kopie(gaTypen(m));
+        case 'baustelle/geraet_vorschau': return kopie(gaVorschau(m));
+        case 'baustelle/geraet_hinzufuegen': return kopie(gaHinzufuegen(m));
+        case 'baustelle/geraet_hinzufuegen_rueckgaengig': { const z = 'z' + String(m.rueck).slice(2);   // wie die Integration: wieder frei
+          for (const c of inventar().container) c.ausruestung = c.ausruestung.filter(x => x.id !== z); return { ok: true, fehler: [] }; }
+        case 'baustelle/container_vorschau': { const v = cnPlan(m); return kopie(v.fehler ? { fehler: v.fehler, belegt: true } : v); }
+        case 'baustelle/container_neu': return kopie(cnNeu(m));
         default: return { ok: true };
       }
     },

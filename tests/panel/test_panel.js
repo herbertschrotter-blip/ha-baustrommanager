@@ -119,6 +119,48 @@ const clAuf = async i => { const b = panel.shadowRoot.querySelectorAll('button.c
 const erwarte = (text, bedingung) => { if (!bedingung) fehler.push('erwartet: ' + text); };
 const letzte = typ => aufrufe.filter(a => a.type === typ);
 const neu = () => { aufrufe.length = 0; api.length = 0; };
+
+/* UI-Bericht M12: Assistent „+ Gerät hinzufügen“ in 5 Schritten (Mockup ordnung.html as-1 … as-5) und Rückgängig */
+async function assistentPruefen() {
+  neu(); panel.assistentAuf({ zurueck: null }); await ruhe(30);
+  const s = () => panel.s.sheet;
+  erwarte('M12 as-1: Kandidaten „neu in HA, noch nicht zugeordnet“ mit Suche', !!litEl('.sheet .ga-suche') && !!litEl('.sheet .ga-wahl[data-id="d9"]') && /noch nicht zugeordnet/.test(ui.innerHTML));
+  erwarte('M12 as-1: ohne Gerät kein Weiter', !!litEl('.sheet [data-k="weiter"][disabled]'));
+  eingabe('.sheet .ga-suche', 'H&T'); await ruhe(5); erwarte('M12 as-1: Suche filtert', !litEl('.sheet .ga-wahl[data-id="d9"]') && !!litEl('.sheet .ga-wahl[data-id="d8"]'));
+  eingabe('.sheet .ga-suche', ''); await ruhe(5);
+  await klick('.sheet .ga-wahl[data-id="d9"]', 5); await klick('.sheet [data-k="weiter"]', 10);
+  erwarte('M12 as-2: Container wählen', s().schritt === 2 && !!litEl('.sheet [data-k="cn-neu"]'));
+  const b = panel.d.bereiche.find(x => x.namen && x.namen.container_id); if (!b) return erwarte('M12: Container mit Inventar im Beispiel', false);
+  await klick(`.sheet .ga-wahl[data-id="${b.id}"]`, 5); await klick('.sheet [data-k="weiter"]', 30);
+  erwarte('M12 as-3: eine Typenliste, nicht passende ausgegraut mit Grund', s().schritt === 3 && !!litEl('.sheet .ga-wahl.ga-aus[data-v="fuehler"][disabled]') && /passt nicht zu Plug Lager 09/.test(ui.innerHTML)
+    && /nur im Pumpenschacht/.test(ui.innerHTML) && s().typ === 'radiator');
+  await klick('.sheet .ga-wahl[data-v="konvektor"]', 5); await klick('.sheet [data-zeile="nenn"] [data-d="0.1"]', 5); await klick('.sheet [data-zeile="rolle"] [data-v="primaer"]', 5);
+  erwarte('M12 as-3: Nennleistung und Primär/Zusatz', s().nenn === 2 && s().rolle === 'primaer' && /2,0 kW/.test(ui.innerHTML));
+  await klick('.sheet [data-k="weiter"]', 30);
+  erwarte('M12 as-4: Namensvorschau alt → neu vor dem Schreiben', s().schritt === 4 && /Noch ist nichts geschrieben/.test(ui.innerHTML) && /_C_PLUG_/.test(ui.innerHTML) && !letzte('baustelle/geraet_hinzufuegen').length
+    && letzte('baustelle/geraet_vorschau').some(m => m.typ === 'konvektor' && m.device_id === 'd9' && m.bereich_id === b.id && !m.name));
+  await klick('.sheet [data-zeile="frei"] .sw', 5); eingabe('.sheet .ga-frei', 'Konvektor Polier'); { const e = litEl('.sheet .ga-frei'); e.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } await ruhe(30);
+  erwarte('M12 as-4-frei: eigener Name „⚠ weicht ab“, Vorschau von der Integration', /⚠ weicht ab/.test(ui.innerHTML) && letzte('baustelle/geraet_vorschau').some(m => m.name === 'Konvektor Polier') && /Anlegen \(freier Name\)/.test(ui.innerHTML));
+  pruefe('Assistent Namen');
+  await klick('.sheet [data-k="anlegen"]', 40);
+  const h = letzte('baustelle/geraet_hinzufuegen')[0];
+  erwarte('M12 as-5: anlegen und umbenennen in einem Befehl', h && h.typ === 'konvektor' && h.nenn_kw === 2 && h.rolle === 'primaer' && h.name === 'Konvektor Polier' && h.bereich_id === b.id && s().schritt === 5);
+  erwarte('M12 as-5: Ergebnis mit Rückgängig', /hängt an/.test(ui.innerHTML) && !!litEl('.sheet [data-k="rueck"]')); pruefe('Assistent fertig');
+  await klick('.sheet [data-k="rueck"]', 30);
+  erwarte('M12: Rückgängig mit der Marke der Integration', letzte('baustelle/geraet_hinzufuegen_rueckgaengig').some(m => m.rueck === 'r-d9') && /wieder entfernt/.test(ui.innerHTML));
+  await klick('.sheet [data-k="zum-container"]', 10); erwarte('M12: „Zum Container ›“ öffnet „Bearbeiten“', s() && s().art === 'bereich' && panel.s.cid === b.id);
+  await klick({ act: 'zu' }, 5);
+  // „+ Container“ mit Nummer: belegte Nummer gesperrt (Regel der Integration), danach weiter in den Assistenten
+  neu(); await klick({ act: 'sheet', s: 'container-neu' }, 20); await ruhe(20);
+  erwarte('M12 cn-eigen: nächste freie Nummer und Vorschau', /nächste freie: \d{3}/.test(ui.innerHTML) && /\d{3}_C_MAN/.test(ui.innerHTML));
+  panel.s.sheet.form.nr = 1; panel.neuZeichnen(); await ruhe(20);
+  erwarte('M12 cn-belegt: belegte Nummer gesperrt', /schon vergeben/.test(ui.innerHTML) && !!litEl('.sheet [data-k="anlegen-weiter"][disabled]'));
+  panel.s.sheet.form.nr = null; panel.s.sheet.form.name = 'Mannschaft 2'; panel.neuZeichnen(); await ruhe(20);
+  await klick('.sheet [data-k="anlegen-weiter"]', 40);
+  const cn = letzte('baustelle/container_neu')[0];
+  erwarte('M12: „Anlegen und Gerät hinzufügen ›“ legt an und öffnet den Assistenten mit dem neuen Container', cn && cn.name === 'Mannschaft 2' && s() && s().art === 'geraet-assistent' && s().bid === 'neu-' + (panel.d.bereiche.length - 1) && s().vorgabe);
+  await klick({ act: 'zu' }, 5);
+}
 const hov = wo => { let t = ''; const alt = panel.tip; panel.tip = (e, h) => { t = h || ''; };
   for (const svg of panel.shadowRoot.querySelectorAll('svg.chart[data-chart], svg.c-tag-svg[data-chart]')) {   // echtes pointermove (happy-dom hat kein Layout: Breite vorgeben)
     svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 320, height: 120, right: 320, bottom: 120, x: 0, y: 0 });
@@ -224,7 +266,7 @@ async function allgemein() {
   await klick({ act: 'bedarf-auf', id: bedarf().id }); pruefe('Bedarf');
   await klick({ act: 'melden' }); pruefe('Melden'); await klick(ML.fehler); pruefe('Melden Fehler');
   for (const b of d().bereiche) { await klick({ act: 'bereich-einst', id: b.id }); pruefe(`Bearbeiten ${b.id}`); }
-  await klick({ act: 'sheet', s: 'container-neu' }); await klick('.sheet .seg [data-v=\"Pumpenschacht\"]'); pruefe('Neuer Schacht');
+  await klick({ act: 'sheet', s: 'container-neu' }); await klick('.sheet .seg [data-v=\"schacht\"]'); pruefe('Neuer Schacht');
   for (const art of ['monat', 'woche']) { await klick({ act: 'e-wert', k: 'bericht', v: art }, 30); await klick({ act: 'sheet', s: 'bericht' }, 40); pruefe(`Bericht ${art}`);
     erwarte(`Bericht ${art} von der Integration`, letzte('baustelle/bericht').some(a => a.art === art && a.entry_id === entry)); }
   await klick({ act: 'zu' });
@@ -307,15 +349,12 @@ async function allgemein() {
   // Freie Schalter (Shellys, die noch keinem Gerät gehören) für neue Geräte
   const belegt = new Set(STRUKTUR.flatMap(b => [...b.geraete.map(g => g.schalter), ...Object.values(b.entitaeten)]));
   const frei = Object.keys(states).filter(e => e.startsWith('switch.') && !belegt.has(e)).sort();
-  if (frei.length) {
-    neu(); await klick({ act: 'sheet', s: 'container-neu' }); eingabe({ f: 'name' }, 'Lager Ost');
-    erwarte('WU-0008: ohne Shelly keine Frage nach der Heizung', !ui.innerHTML.includes('data-f="typ"') && ui.innerHTML.includes('kommen später unter „Bearbeiten“'));
-    eingabe({ f: 'schalter' }, frei[0]); await ruhe();
-    erwarte('WU-0008: mit Shelly fragt der Dialog, welche Heizung daran hängt', ui.innerHTML.includes('Welche Heizung hängt an diesem Shelly?') && ui.innerHTML.includes('data-f="typ"'));
-    eingabe({ f: 'typ' }, 'Konvektor');
+  {   // UI-Bericht M12: „+ Container“ legt Bereich und Inventar über die Integration an (kein Subentry-Dialog, kein Shelly mehr)
+    neu(); await klick({ act: 'sheet', s: 'container-neu' }, 20); eingabe({ f: 'name' }, 'Lager Ost'); ereignis.feld({ f: 'name' }, 'Lager Ost', 'change'); await ruhe(20);
+    erwarte('M12: „+ Container“ fragt nicht mehr nach Shelly und Fühler', !litEl('.sheet [data-f="schalter"]') && !litEl('.sheet [data-f="fuehler"]'));
     await klick({ act: 'neu-anlegen' }, 40);
-    erwarte('Neuer Container: Bereich über den Subentry-Dialog, Shelly über baustelle/geraet', api.filter(a => a[1] === 'config/config_entries/subentries/flow').length === 1
-      && letzte('baustelle/geraet').some(m => m.aktion === 'speichern' && m.schritte[0].aktion === 'anlegen' && m.schritte[0].schalter === frei[0]));
+    erwarte('M12: „+ Container“ über baustelle/container_neu', letzte('baustelle/container_neu').some(m => m.name === 'Lager Ost' && m.art === 'MAN' && m.eigen === true)
+      && !api.some(a => a[1] === 'config/config_entries/subentries/flow'));
   }
   const x = C().find(b => b.tuer) || C()[0], an = d().anschluesse.find(a => a.id !== x.anschluss) || d().anschluesse[0], fi = d().firmen.find(f => f.id !== x.firma);
   await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
@@ -323,13 +362,12 @@ async function allgemein() {
   const hk = x.geraete.findIndex(g => g.heizer && g.rolle === 'heizung');
   if (hk >= 0) eingabe({ f: 'typ', i: String(hk) }, x.geraete[hk].gtyp === 'konvektor' ? 'Ölradiator' : 'Konvektor');
   if (x.geraete.length > 1) await klick(`.sheet .ge-zeile[data-i=\"${String(x.geraete.length - 1)}\"] .x`);
-  if (frei[1]) { await klick('.sheet > button.zeile'); eingabe({ f: 'schalter', i: String(x.geraete.length) }, frei[1]); eingabe({ f: 'n', i: String(x.geraete.length) }, 'Heizung neu'); }
   await klick({ act: 'b-speichern' }, 60);
   const schritte = letzte('baustelle/geraet').flatMap(m => m.schritte || []);
   if (hk >= 0 && !x.geraete[hk].leistungEigen) erwarte('BSM-034.01: Speichern schreibt automatisch gefundene Sensoren nicht fest',
     !schritte.some(s => s.schalter === x.geraete[hk].schalter && (s.leistung || s.energie)));
   erwarte('Bearbeiten: Name über Subentry-Dialog, Geräte ändern/hinzufügen über baustelle/geraet (BSM-034.02)', api.some(a => a[2] && a[2].subentry_id === x.id)
-    && (hk < 0 || schritte.some(s => s.aktion === 'aendern' && s.geraet === x.geraete[hk].id)) && (!frei[1] || schritte.some(s => s.aktion === 'anlegen' && s.schalter === frei[1])));
+    && (hk < 0 || schritte.some(s => s.aktion === 'aendern' && s.geraet === x.geraete[hk].id)));
   erwarte('Bearbeiten: Tür und Modus über baustelle/setzen', ['tuer', 'modus'].every(k => letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, k]))));
   if (an.id !== x.anschluss) erwarte('Bearbeiten: Anschluss', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, 'anschluss'])));
   if (x.groesse) {   // AN-0014: Größe – Doppel speichert die Fläche der Integration, m² frei den eingetragenen Wert
@@ -621,7 +659,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'bedarf-auf', id: 'besprechung' }); pruefe('Bedarf');
   await klick({ act: 'melden' }); pruefe('Melden'); await klick(ML.fehler); pruefe('Melden Fehler');
   for (const b of panel.d.bereiche) { await klick({ act: 'bereich-einst', id: b.id }); pruefe(`Bearbeiten ${b.id}`); }
-  await klick({ act: 'sheet', s: 'container-neu' }); await klick('.sheet .seg [data-v=\"Pumpenschacht\"]'); pruefe('Neuer Schacht');
+  await klick({ act: 'sheet', s: 'container-neu' }); await klick('.sheet .seg [data-v=\"schacht\"]'); pruefe('Neuer Schacht');
   await klick({ act: 'e-wert', k: 'bericht', v: 'monat' }, 30); await klick({ act: 'sheet', s: 'bericht' }, 40); const bm = pruefe('Bericht Monat'); erwarte('Bericht für den Vormonat', /August 2026/.test(bm) && /zum Juli/.test(bm));
   erwarte('Bericht-Beispiel kommt von der Integration (baustelle/bericht)', (a => a && a.art === 'monat' && a.entry_id)(letzte('baustelle/bericht').at(-1)) && /abrechnung-2026-08\.csv/.test(bm) && /Keine Wettervorhersage/.test(bm));
   await klick({ act: 'e-wert', k: 'bericht', v: 'woche' }, 30);
@@ -741,14 +779,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   erwarte('CSV Abrechnung', csvF && csvF[0] === 'Zeitraum;Firma;Baustelle;Container;kWh;Preis €/kWh;Betrag €' && csvF.length > 3 && !csvF.join().includes('NaN'));
   erwarte('CSV Verbrauch', csvV && csvV[0].startsWith('Zeit;Baustelle;Firma') && csvV.length > 20 && !csvV.join().includes('NaN'));
   // Einrichtungs-Dialoge von HA
-  neu(); await klick({ act: 'sheet', s: 'container-neu' }); eingabe({ f: 'name' }, 'Lager Ost'); eingabe({ f: 'schalter' }, 'switch.heizung_03'); await ruhe(); eingabe({ f: 'typ' }, 'Konvektor'); eingabe({ f: 'fuehler' }, 'sensor.polier_temperatur');
-  await klick({ act: 'neu-anlegen' }, 40);
-  const bFlow = api.find(a => a[1].endsWith('subentries/flow/F1')), gDaten = letzte('baustelle/geraet').flatMap(m => m.schritte || []).find(s => s.aktion === 'anlegen');
-  erwarte('Neuer Container: Bereich-Dialog', bFlow && bFlow[2].name === 'Lager Ost' && bFlow[2].art === 'container' && bFlow[2].fuehler === 'sensor.polier_temperatur');
-  erwarte('Neuer Container: Shelly über baustelle/geraet', gDaten && gDaten.schalter === 'switch.heizung_03' && gDaten.rolle === 'heizkoerper' && gDaten.typ === 'konvektor' && /^neu-/.test(gDaten.bereich));
+  await assistentPruefen();
   await klick({ act: 'container', id: 'mannschaft' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
   eingabe({ f: 'name' }, 'Mannschaft 1'); eingabe({ f: 'tuer' }, 'binary_sensor.tuer_mannschaft'); eingabe({ f: 'firma' }, 'huber'); eingabe({ f: 'anschluss' }, 'sued');
-  await klick(`.sheet .ge-zeile[data-i=\"${'2'}\"] .x`); await klick('.sheet > button.zeile'); eingabe({ f: 'schalter', i: '3' }, 'switch.heizung_04'); eingabe({ f: 'n', i: '3' }, 'Heizung 04');
+  await klick(`.sheet .ge-zeile[data-i=\"${'2'}\"] .x`);
   eingabe({ f: 'typ', i: '1' }, 'Ölradiator'); erwarte('UI-Bericht Maßnahme 4: kein Schalter „Nur bei Bedarf“, Modus im Dialog', !litEl('.sheet [data-zeile="bedarf"]') && !!litEl('.sheet [data-zeile="modus"] select'));
   eingabe({ f: 'modus' }, 'bedarf');
   await klick({ act: 'b-speichern' }, 60);
@@ -759,7 +793,6 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { const sr = letzte('baustelle/geraet').flatMap(m => m.schritte || []);
     erwarte('Bearbeiten: Gerät entfernen über baustelle/geraet', sr.some(s => s.aktion === 'entfernen' && s.geraet === 'mannschaft_t') && !letzte('config_entries/subentries/delete').length);
     erwarte('Bearbeiten: Gerät ändern über baustelle/geraet', sr.some(s => s.aktion === 'aendern' && s.geraet === 'mannschaft_k' && s.typ === 'oelradiator'));
-    erwarte('Bearbeiten: Gerät hinzufügen über baustelle/geraet', sr.some(s => s.aktion === 'anlegen' && s.schalter === 'switch.heizung_04' && s.bereich === 'mannschaft'));
     erwarte('Bearbeiten: alle Geräte in einem Aufruf', letzte('baustelle/geraet').length === 1); }
   await klick({ act: 'container', id: 'lager' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' }); await klick({ act: 'b-weg' }, 40);
   erwarte('Container entfernen: Geräte über baustelle/geraet (Inventar), Container über den Subentry',
@@ -1907,9 +1940,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await gruppe('geraete'); await klick('.ev-inhalt .glas-panel.liste[data-kurz="container"] .rk-zeile', 20);
       erwarte('Maßnahme 3: Je Container springt in den Reiter Heizung', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.k === 'container');
       await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 10);
-      await gruppe('geraete'); await klick('[data-k="geraet-neu"]', 10); erwarte('Maßnahme 5: „+ Gerät“ fragt nach dem Container', panel.s.sheet && panel.s.sheet.art === 'geraet-neu'); pruefe('Gerät hinzufügen');
-      { const b0 = panel.d.bereiche[0]; await klick(`.sheet button.zeile[data-id="${b0.id}"]`, 10);
-        erwarte('Maßnahme 5: danach „Bearbeiten“ mit neuer Gerätezeile', panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.cid === b0.id && panel.s.sheet.edit.geraete.at(-1).neu === true && !!litEl(`.sheet .ge-zeile[data-i="${b0.geraete.length}"] select`)); }
+      await gruppe('geraete'); await klick('[data-k="geraet-neu"]', 10); erwarte('M12: „+ Gerät“ öffnet den Assistenten bei Schritt 1', panel.s.sheet && panel.s.sheet.art === 'geraet-assistent' && panel.s.sheet.schritt === 1 && !panel.s.sheet.bid); pruefe('Gerät hinzufügen');
+      { const b0 = panel.d.bereiche[0]; panel.bereichEinst(b0.id); await ruhe(10); await klick('.sheet [data-k="assistent"]', 10);
+        erwarte('M12: „+ Gerät hinzufügen“ in „Bearbeiten“ öffnet den Assistenten mit dem Container', panel.s.sheet && panel.s.sheet.art === 'geraet-assistent' && panel.s.sheet.bid === b0.id && panel.s.sheet.vorgabe === true && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'bereich');
+        await klick({ act: 'zu' }, 5); erwarte('M12: Abbrechen führt zurück zu „Bearbeiten“', panel.s.sheet && panel.s.sheet.art === 'bereich'); await klick({ act: 'zu' }, 5); }
       await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 10); }
     { panel.s.gerReiter = 'uebersicht'; const h = await gruppe('geraete'), L = (panel.d.r && panel.d.r.geraete_links) || {};   // WU-0010
       if (REFERENZ) {
@@ -1987,6 +2021,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         await klick('.sheet [data-k="ausfuehren"]', 30);
         erwarte('BSM-031.06d: Zurückgenommen', aufrufe.some(m => m.type === 'baustelle/inventar_rueckgaengig' && !m.vorschau) && ui.innerHTML.includes('Zurückgenommen'));
         await klick('.inv-c[data-id="c1"]', 20); await klick('.sheet [data-k="zuordnen-auf"]', 30);
+        erwarte('M12: „+ Gerät zuordnen“ am Container dieser Baustelle führt in den Assistenten', panel.s.sheet.art === 'geraet-assistent' && panel.s.sheet.vorgabe && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'inv-container');
+        panel.invAuf({ art: 'inv-zuordnen', id: 'c1', haengt: 'konvektor' }); await ruhe(30);   // der bisherige Dialog bleibt (Container ohne Bereich hier)
         erwarte('BSM-031.07: Zuordnen zeigt Geräte aus HA', aufrufe.some(m => m.type === 'baustelle/inventar_kandidaten') && ui.innerHTML.includes('Plug Lager 09') && ui.innerHTML.includes('defekt – nicht zuordenbar'));
         await klick('.sheet .zeile[data-id="d9"]', 10); await klick('.sheet .inv-seg button[data-v="radiator"]', 10); neu(); await klick('.sheet [data-k="zuordnen"]', 30);
         v = ui.innerHTML;
@@ -2238,8 +2274,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'sheet', s: 'wetter' }, 20); await klick('.sheet > .seg button[data-v="tag"]', 20);
   erwarte('Tagesverlauf um 16:20: Morgen und Mittag vorbei, Nachmittag nicht', (ui.innerHTML.match(/class="vorbei"/g) || []).length === 2);
   for (const s of ['name', 'baustelle-neu', 'wetterquelle']) { await klick({ act: 'sheet', s }, 20); erwarte(`Einblendung ${s}: nur „Speichern“ wie im Mockup`, !/data-act="zu">Abbrechen/.test(ui.innerHTML)); }
-  await klick({ act: 'sheet', s: 'container-neu' }, 20); eingabe({ f: 'schalter' }, (panel.freieSchalter()[0] || ['switch.x'])[0]); await ruhe();   // WU-0008: Art erst mit Shelly
-  erwarte('Neuer Container: Heizkörper Ölradiator/Konvektor wie im Mockup', !/<option value="Steckdose"/.test(ui.innerHTML) && /<option value="Konvektor"/.test(ui.innerHTML));
+  await klick({ act: 'sheet', s: 'container-neu' }, 20); await ruhe(20);   // M12: Vorschau der Integration im Formular
+  erwarte('M12: „+ Container“ mit Namensvorschau und Verwendung wie im Mockup', /_C_MAN/.test(ui.innerHTML) && !!litEl('.sheet [data-f="art"]') && /Alternative in Home Assistant/.test(ui.innerHTML));
   await klick({ act: 'zu' }); struktur = vorher; await panel._laden(); await ruhe(20);
 
   /* Adresse aus einer Handy-Nachricht */

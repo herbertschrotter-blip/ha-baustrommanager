@@ -79,20 +79,11 @@ export function geraeteGruppeVorlage(p, containerInhalt) {
   const C = d.bereiche.filter(b => !b.pumpe).length, P = d.bereiche.length - C;
   const reiter = html`<div class="g-kopf"><div class="seg glas-panel g-reiter">${[['container', 'Container'], ['uebersicht', 'Geräte'], ['inventar', '📦 Inventar']].map(([k, t]) =>
     html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s.gerReiter = k; p.neuZeichnen(); }}>${t}</button>`)}</div>
-    ${d.bereiche.length ? html`<button class="chip glas-panel nur-admin" data-k="geraet-neu" @click=${p.nurAdmin(() => p.einblenden('geraet-neu'))}>+ Gerät</button>` : nothing}</div>`;
+    ${d.bereiche.length ? html`<button class="chip glas-panel nur-admin" data-k="geraet-neu" title=${p.nurLesen() ? 'Hinzufügen dürfen nur Admins' : 'Assistent: Gerät · Container · was hängt dran · Namen'} @click=${p.nurAdmin(() => p.assistentAuf())}>+ Gerät</button>` : nothing}</div>`;
   const kurz = r === 'inventar' ? inv.kurz : r === 'uebersicht' ? `${Z.n} Geräte · ${Z.weg ? `${Z.weg} nicht erreichbar` : 'alle erreichbar'}${Z.warn ? ` · ${Z.warn} mit Warnung` : ''}`
     : `${C} Container · ${P} ${P === 1 ? 'Schacht' : 'Schächte'} · ${Z.n} Geräte${Z.weg ? ` · ${Z.weg} nicht erreichbar` : ''}`;
   return { k: 'geraete', ic: '🏠', t: 'Container & Geräte', kurz,
     inhalt: () => html`${reiter}${r === 'inventar' ? inv.inhalt() : r === 'uebersicht' ? uebersicht(p) : containerInhalt(p)}` };
-}
-
-/* „+ Gerät“: erst den Container wählen, dann der bestehende Weg „+ Gerät hinzufügen“ in „Bearbeiten“ (bis zum Assistenten, Stufe 3) */
-function geraetNeu(p) {
-  const d = p.d;
-  return html`${GRIFF}<h3>Gerät hinzufügen</h3><div class="leise">In welchen Container oder Schacht kommt das Gerät?</div>
-      <div class="glas-panel liste">${d.bereiche.map(b => html`<button class="zeile" data-id=${b.id} @click=${p.nurAdmin(() => p.geraetNeuIn(b.id))}><span>${b.pumpe ? '💧' : '🏠'} ${b.name}</span><span class="leise">${b.geraete.length} ${b.pumpe ? 'Pumpen' : 'Geräte'} ›</span></button>`)}</div>
-      <div class="leise">Danach im Dialog „Bearbeiten“ den Shelly wählen und speichern.</div>
-      <button class="knopf leise-k" @click=${() => p.schliessen()}>Abbrechen</button>`;
 }
 
 /* ---------- Geräte im Container (AN-0018, Mockup container-unten.html, Variante B, Herbert 29.10.2026) ----------
@@ -208,7 +199,7 @@ function sensor(p, s) {
     ${inventarVorlage(p, x)}
     <button class="knopf leise-k" @click=${() => p.schliessen()}>Schließen</button>`;
 }
-export const GERAETE_EINBLENDUNGEN = { sensor, 'geraet-neu': geraetNeu };
+export const GERAETE_EINBLENDUNGEN = { sensor };   // „+ Gerät“: Assistent in assistent.js (M12)
 
 export const GERAETE_CSS = `
 .g-zahlen { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; } .g-zahlen .chip { font-size: 12px; padding: 5px 10px; }

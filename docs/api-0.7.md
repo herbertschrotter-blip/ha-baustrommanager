@@ -697,3 +697,19 @@ ins Aussehen ein). Batterie-Stufe `logik/sensoren.batterie_stufe` (Grenzen `BATT
   `wetter_tage[].regen_az`.
 - **Urlaubskalender (AN-0022):** Die Seite bietet für Urlaub nur Kalender mit `supported_features` & 1 (CREATE_EVENT) an;
   ohne einen zeigt sie den Hinweis auf „Lokaler Kalender“.
+
+## 13. Assistent „+ Gerät hinzufügen“ und „+ Container“ (0.8.192, UI-Bericht M12, Mockup `ordnung.html`)
+
+Lesen dürfen alle (`logik/rechte.LESEN`), schreiben nur Admins (sonst `unauthorized`). Regeln in `logik/inventar.py`:
+`assistent_typen` (die eine Typenliste), `assistent_zuordnung`, `frei_setzen`, `container_vorschau`. Kandidaten für
+Schritt 1 liefert `baustelle/inventar_kandidaten` (§10), jetzt mit `seit` (ISO, seit wann HA das Gerät kennt); die Seite
+zeigt nur die ohne `verwendet`.
+
+| Befehl | Felder | Antwort |
+|---|---|---|
+| `baustelle/geraet_typen` | `entry_id, bereich_id, device_id` | `{typen: [{k, gruppe, text, passt, grund, nenn, rolle}], vorschlag, geraet: {name, typ}}` – `k`: radiator, konvektor, bautrockner, pumpe, steckdose, fuehler, tuer, fenster, licht; `grund` z. B. „passt nicht zu <Gerät>“, „nur im Pumpenschacht“, „nicht im Pumpenschacht“; `nenn`/`rolle`: Nennleistung bzw. Primär/Zusatz fragen |
+| `baustelle/geraet_vorschau` | dazu `typ`, `name?` (eigener Name statt Schema) | `{im_inventar, container, schritte, konflikte, zaehler, abweichend, verweise, eingetragen, hinweis, frei}` – `schritte` wie §10 (ganzer Container, als wäre das Gerät schon drin); der Gerätename-Schritt des neuen Geräts trägt mit `name` `frei: true`. Ohne Inventar-Container (Schacht, nicht aufgenommen): `im_inventar: false`, leere Schritte, `hinweis` |
+| `baustelle/geraet_hinzufuegen` | dazu `typ`, `name?`, `nenn_kw?` (0,1–10), `rolle?` (primaer/zusatz) | `{ok, name, typ, container, frei, umbenannt, rueck}` – erst alles prüfen (Typ passt, Zuordnen möglich), dann: einhängen (Unter-Eintrag bzw. Fühler/Tür/Fenster am Container) und ins Inventar, einmal neu laden, Nennleistung und Primär, umbenennen nach dem Schema (ganzer Container), eigener Name als `name_by_user`, wieder neu laden. `umbenannt`: `{status: ausgefuehrt/teilweise, anzahl, offen, getauscht}`, `{status: ohne_inventar \| nur_inventar}` oder `{fehler}` (eingehängt ist es dann schon – Nachholen unter 🏷 Namen in HA). Falscher Typ → `invalid_format` mit dem Grund, nichts geschrieben |
+| `baustelle/geraet_hinzufuegen_rueckgaengig` | `rueck` (Marke aus der Antwort) | `{ok, fehler: []}` – Umbenennung zurück (nur, wenn sie noch die jüngste des Containers ist), Unter-Eintrag entfernt bzw. wie vorher, Fühler/Tür/Fenster wie vorher, Inventar-Einsatz beendet, Gerätename und Primär wie vorher, einmal neu laden. Die Marke gilt nur bis zum Neustart (`not_found` danach) |
+| `baustelle/container_vorschau` | `entry_id, schacht?, eigen?, art?` (Kürzel aus `CONTAINER_ARTEN`), `nr?` (eigen), `firma_id?, kuerzel?` (fremd) | `{im_inventar, inventar, nummer, naechste, belegt, grund, geraete, hinweis, firma}` – eigen: Nummer frei wählbar, vorbelegt die nächste, jede je vergebene gesperrt (`belegt`, `grund`); fremd: die nächste der Firma auf der Baustelle; Schacht: `im_inventar: false`. Falsche Angabe → `{fehler, belegt: true}` |
+| `baustelle/container_neu` | wie oben, dazu `name` (Name auf der Seite) | `{ok, bereich_id, name, inventar, container_id, fehler?}` – prüft Name (frei auf der Baustelle), Nummer, Firma/Kürzel; legt den Bereich (Unter-Eintrag) und – außer beim Schacht – den Inventar-Container mit dieser Nummer an (Entscheidung 2); fremd: setzt ggf. das Firmenkürzel und ordnet den Verbrauch ab jetzt der Firma zu; danach einmal neu laden |

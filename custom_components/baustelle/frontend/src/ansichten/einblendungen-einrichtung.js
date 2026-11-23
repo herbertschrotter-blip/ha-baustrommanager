@@ -56,20 +56,6 @@ function anschluss(p, s) {
         ${knopf('Speichern', p.nurAdmin(() => p.anschlussSpeichern()), 'amber nur-admin')}${!neu && d.anschluesse.length > 1 ? knopf('Anschluss löschen', p.nurAdmin(() => p.anschlussWeg()), 'rot nur-admin') : nothing}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
 }
 
-/* Neuer Container oder Pumpenschacht, optional gleich mit Fühler und Shelly (WU-0008: Heizungsart erst mit Shelly) */
-function containerNeu(p, s) {
-  const f = s.form, schacht = f.art === 'Pumpenschacht', z = () => p.neuZeichnen();
-  const fuehler = p.entitaeten(x => (x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'temperature') || x.entity_id.startsWith('climate.'));
-  return html`${GRIFF}<h3>Neuer Container</h3>
-      <label class="feld">Name${text(f, 'name', 'z. B. Lager Nord')}</label>
-      <div class="feld">Art<div class="seg klein">${['Container', 'Pumpenschacht'].map(v => html`<button data-v=${v} class=${f.art === v ? 'on' : ''} @click=${() => { f.art = v; f.typ = v === 'Pumpenschacht' ? 'Pumpe' : 'Ölradiator'; z(); }}>${v}</button>`)}</div></div>
-      <label class="feld">Temperaturfühler${auswahl(f, 'fuehler', optionenVorlage(fuehler, f.fuehler, '– keiner –'))}</label>
-      <label class="feld">Shelly${auswahl(f, 'schalter', optionenVorlage(p.freieSchalter().map(([v, n]) => [v, `${n} (${v})`]), f.schalter, '– später –'), z)}</label>
-      ${f.schalter ? html`<label class="feld">${schacht ? 'Welches Gerät hängt an diesem Shelly?' : 'Welche Heizung hängt an diesem Shelly?'}${auswahl(f, 'typ', optionenVorlage((schacht ? ['Pumpe'] : ['Ölradiator', 'Konvektor']).map(t => [t, t]), f.typ))}</label>`
-        : html`<div class="leise">Ohne Shelly wird nur der ${schacht ? 'Schacht' : 'Container'} angelegt – ${schacht ? 'Pumpen' : 'Heizungen'} kommen später unter „Bearbeiten“ dazu.</div>`}
-      ${knopf('Anlegen', p.nurAdmin(() => p.containerAnlegen()), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
-}
-
 /* AN-0014: Größe – Einzel, Doppel oder m² frei; Werte und Schätzung von der Integration */
 function groesse(p, b, e) {
   const G = b.groesse, T = G.typen, art = e.groesseArt, typ = k => `${k === 'einzel' ? 'Einzel' : 'Doppel'}container innen ${de(T[k].laenge, 2)} × ${de(T[k].breite, 2)} m ≈ ${de(T[k].m2, 1)} m² · ${de(G.hoehe, 2)} m hoch ≈ ${de(T[k].m3, 0)} m³`;
@@ -128,7 +114,7 @@ function bereich(p, s) {
         <label class="feld">Firma · für die Abrechnung${auswahl(e, 'firma', d.firmen.map(f => html`<option value=${f.id} ?selected=${e.firma === f.id}>${f.name}</option>`))}</label>
         <div class="gruppe-t">${b.pumpe ? 'Pumpen' : 'Geräte'} · ${e.geraete.filter(g => !g.weg).length}</div>
         ${e.geraete.map(geraet)}
-        <button class="zeile" @click=${() => { e.geraete.push({ neu: true, schalter: '', n: '', typ: b.pumpe ? 'Pumpe' : 'Ölradiator' }); z(); }}><span class="blau">+ Gerät hinzufügen</span></button>
+        <button class="zeile nur-admin" data-k="assistent" @click=${p.nurAdmin(() => p.assistentAuf({ bid: b.id, vorgabe: true }))}><span class="blau">+ Gerät hinzufügen</span><span class="leise">Assistent: Gerät · was hängt dran · Namen</span></button>
         <div class="leise">Der Heizkörpertyp gilt nur für den Vergleich Ölradiator/Konvektor. Entfernte Geräte behalten ihre Werte im Verlauf.</div>
         ${knopf('Speichern', p.nurAdmin(() => p.bereichSpeichern()), 'amber nur-admin')}${knopf('Container entfernen', p.nurAdmin(() => p.bereichWeg()), 'rot nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
 }
@@ -190,4 +176,4 @@ function geraetEdit(p, s) {
 }
 
 /** Dialoge für Container und Geräte (Art → Vorlage) */
-export const EINRICHTUNG_EINBLENDUNGEN = { firma, anschluss, 'container-neu': containerNeu, bereich, aussehen, 'geraet-edit': geraetEdit };
+export const EINRICHTUNG_EINBLENDUNGEN = { firma, anschluss, bereich, aussehen, 'geraet-edit': geraetEdit };   // „+ Container“: assistent.js (M12)

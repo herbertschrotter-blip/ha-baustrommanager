@@ -45,7 +45,7 @@ function aktion(p, roh) {
       case 'firma-weg': return p.firmaWeg();
       case 'an-speichern': return p.anschlussSpeichern();
       case 'an-weg': return p.anschlussWeg();
-      case 'neu-anlegen': return p.containerAnlegen();
+      case 'neu-anlegen': return p.containerAnlegen(p.s.sheet, false);
       case 'b-speichern': return p.bereichSpeichern();
       case 'b-weg': return p.bereichWeg();
       case 'gf-speichern': return p.geraetSpeichern();
