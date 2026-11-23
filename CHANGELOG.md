@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.194] – 2026-11-23
+
+- Fix: **Typprüfung (`mypy --strict`) wieder grün**, keine Änderung im Verhalten. Zwei Stellen prüfen jetzt ausdrücklich,
+  was vorher nur eine andere Prüfung davor sicherstellte: Container anlegen mit Inventar ohne Datenbank meldet „Datenbank
+  nicht erreichbar“, die Namensvorschau beim Zuordnen ohne geladene Baustelle einen Fehler statt eines Absturzes – beides
+  kommt im Betrieb nicht vor.
+
 ## [0.8.193] – 2026-11-23
 
 - Fix (Gutachten zu 0.8.192, Herberts Entscheidung A): **Der Assistent benennt nur das neue Gerät um** – seinen

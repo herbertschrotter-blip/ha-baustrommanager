@@ -295,7 +295,8 @@ async def async_namen_gemerkt(hass: HomeAssistant, db: Any) -> dict[str, dict[st
     m = hass.data.setdefault(DATA_NAMEN, {"stand": 0})
     jetzt, stand = time.monotonic(), m.get("stand", 0)
     if "zeit" in m and jetzt - m["zeit"] < NAMEN_GUELTIG:
-        return m["namen"]
+        gemerkt: dict[str, dict[str, Any]] | None = m["namen"]
+        return gemerkt
     try:
         namen = await async_namen(hass, db)
     except Exception:   # noqa: BLE001 – der Chip darf die Struktur nie mitreißen
@@ -386,11 +387,13 @@ def zuordnen_vorschau(hass: HomeAssistant, roh: dict[str, Any], container_id: st
     info, entitaeten, labels_ = _geraet(hass, eid)
     if info is None:
         raise LookupError("HA-Gerät ohne Entität")
-    schalter = next((e for e in entitaeten if e["entity_id"] == eid), None) if typ == "PLUG" else None
+    kanal = next((e for e in entitaeten if e["entity_id"] == eid), None) if typ == "PLUG" else None
     # dieselbe Regel wie das Zuordnen (`sensor_plan`): ein zweiter Fühler etc. kommt nur ins Inventar, nicht an den Container
-    st = hass.config_entries.async_get_entry(eingabe["baustelle_id"]).runtime_data
+    if (entry := hass.config_entries.async_get_entry(eingabe["baustelle_id"])) is None:   # `vorschau_eingabe` prüft das schon
+        raise LookupError("Container ohne Bereich auf einer geladenen Baustelle")
+    st = entry.runtime_data
     eingetragen = typ not in AM_CONTAINER or sensor_plan(st, eingabe["bereich_id"], typ, ents) is not None
-    neu = mit_zuordnung(eingabe, typ=typ, geraet=info, entitaeten=entitaeten, labels_=labels_, schalter=schalter,
+    neu = mit_zuordnung(eingabe, typ=typ, geraet=info, entitaeten=entitaeten, labels_=labels_, schalter=kanal,
                         haengt=haengt, verdrahtet=eingetragen, shelly=shelly)
     return vorschau(neu, _belegt(hass)), {"device_id": geraet.id, "typ": typ, "name": info["name"], "eingetragen": eingetragen,
                                           **({} if eingetragen else {"hinweis": nicht_eingetragen(typ)})}

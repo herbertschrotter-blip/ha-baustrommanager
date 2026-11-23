@@ -486,7 +486,7 @@ def _schnell_kaelter(verlauf: list[list[Any]], jetzt: datetime) -> bool:
     fenster = [v[1] for v in verlauf if v[1] is not None and 0 <= (jetzt - _zeit(v[0])).total_seconds() / 60 <= OFFEN_SCHNELL_MIN]
     if len(fenster) < 2 or verlauf[-1][1] is None:
         return False
-    return round(max(fenster[:-1]) - verlauf[-1][1], 3) >= OFFEN_SCHNELL_ABFALL
+    return bool(round(max(fenster[:-1]) - verlauf[-1][1], 3) >= OFFEN_SCHNELL_ABFALL)
 
 
 def _kaelter_beim_heizen(verlauf: list[list[Any]], jetzt: datetime, minuten: int, abfall: float, aussen_max: float) -> bool:

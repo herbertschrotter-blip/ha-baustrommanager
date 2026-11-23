@@ -267,8 +267,10 @@ class BereichSubentryFlow(ConfigSubentryFlow):
 
     def _fuehler_fehlt(self, user_input: dict[str, Any], alt: str | None) -> bool:
         """Ein neu gewählter Fühler muss in HA existieren (z. B. kein alter Entwurf nach dem Umbenennen)."""
-        f = user_input.get(CONF_FUEHLER)
-        return bool(f) and f != alt and not entitaet_vorhanden(self.hass, f)
+        f: str | None = user_input.get(CONF_FUEHLER)
+        if not f or f == alt:
+            return False
+        return not entitaet_vorhanden(self.hass, f)
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         if user_input is not None:

@@ -173,7 +173,7 @@ def _plan(hass: HomeAssistant, st: Steuerung, bid: str, w: dict[str, Any], inv_t
     zuordnen; `eingetragen`: am Container eingehängt (Unter-Eintrag bzw. Fühler/Tür/Fenster); `umbenennen`: die Schritte
     des neuen Geräts (nur sie, Entscheidung A) ausführen."""
     cid = _container_id(roh, bid)
-    leer = {"cid": cid, "im_inventar": False, "inventar": False, "umbenennen": False, "frei_moeglich": False, "container": None,
+    leer: dict[str, Any] = {"cid": cid, "im_inventar": False, "inventar": False, "umbenennen": False, "frei_moeglich": False, "container": None,
             "schritte": [], "konflikte": {}, "zaehler": {}}
     if cid is None or roh is None:
         eingetragen = inv_typ == "PLUG" or sensor_plan(st, bid, inv_typ, _entitaeten(hass, w["geraet"].id)) is not None
@@ -184,7 +184,7 @@ def _plan(hass: HomeAssistant, st: Steuerung, bid: str, w: dict[str, Any], inv_t
         if not eingetragen:   # Gutachten 0.8.192: dieselbe Regel wie beim Hinzufügen (`sensor_verdrahtung`)
             hinweis = nicht_eingetragen(inv_typ).split(" – ", 1)[0] + " – ohne Inventar gibt es nichts einzutragen"
         return {**leer, "eingetragen": eingetragen, "moeglich": eingetragen, "hinweis": hinweis}
-    container = next((c for c in roh.get("container") or [] if c["id"] == cid), {})
+    container: dict[str, Any] = next((c for c in roh.get("container") or [] if c["id"] == cid), {})
     try:
         cname: str | None = container_name(container["art"], nr=container.get("nr"), firma=container.get("firma_kuerzel"),
                                            fremd_nr=container.get("fremd_nr"))
@@ -204,7 +204,7 @@ def _plan(hass: HomeAssistant, st: Steuerung, bid: str, w: dict[str, Any], inv_t
             "eingetragen": zu["eingetragen"], "moeglich": True, "frei_moeglich": frei_moeglich, "hinweis": zu.get("hinweis")}
 
 
-SCHEMA_GERAET = {vol.Required("entry_id"): str, vol.Required("bereich_id"): str, vol.Required("device_id"): str,
+SCHEMA_GERAET: dict[str | vol.Marker, Any] = {vol.Required("entry_id"): str, vol.Required("bereich_id"): str, vol.Required("device_id"): str,
                  vol.Optional("schalter"): vol.Any(None, str)}
 
 
@@ -423,7 +423,7 @@ async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.A
 
 def _unveraendert(jetzt: Any, gesetzt: Any, getauscht: dict[str, str]) -> bool:
     """Steht noch, was das Hinzufügen gesetzt hat (auch mit den Entity-IDs nach dem Umbenennen)?"""
-    return jetzt == gesetzt or jetzt == verweise_tauschen(copy.deepcopy(gesetzt), getauscht)
+    return bool(jetzt == gesetzt or jetzt == verweise_tauschen(copy.deepcopy(gesetzt), getauscht))
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/geraet_hinzufuegen_rueckgaengig", vol.Required("rueck"): str})
@@ -514,7 +514,7 @@ async def ws_geraet_hinzufuegen_rueckgaengig(hass: HomeAssistant, connection: we
 
 
 # ---------------------------------------------------------------------- „+ Container“
-SCHEMA_CONTAINER = {vol.Required("entry_id"): str, vol.Optional("schacht", default=False): bool,
+SCHEMA_CONTAINER: dict[str | vol.Marker, Any] = {vol.Required("entry_id"): str, vol.Optional("schacht", default=False): bool,
                     vol.Optional("eigen", default=True): bool, vol.Optional("art"): vol.Any(None, vol.In(list(CONTAINER_ARTEN))),
                     vol.Optional("nr"): vol.Any(None, vol.All(int, vol.Range(min=1, max=999))),
                     vol.Optional("firma_id"): vol.Any(None, str), vol.Optional("kuerzel"): vol.Any(None, str),
@@ -592,11 +592,14 @@ async def ws_container_neu(hass: HomeAssistant, connection: websocket_api.Active
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, "Diesen Namen gibt es auf der Baustelle schon" if name else "Bitte einen Namen eingeben")
         return
     inventar = not msg["schacht"] and not msg["ohne_inventar"]
+    db: Any   # die Datenbank (ohne Typangaben, wie `_roh`); None nur ohne Inventar – geprüft vor dem ersten Zugriff
     db, roh = await _roh(hass) if inventar else (None, None)
     try:
         v, firma = _container_plan(st, roh, msg)
         if v["belegt"]:
             raise InventarFehler(v["grund"])
+        if inventar and db is None:   # kommt nicht vor: ohne Datenbank ist `roh` None und `_container_plan` meldet es
+            raise InventarFehler("Datenbank nicht erreichbar – ohne sie gibt es kein Inventar")
     except InventarFehler as err:
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
         return

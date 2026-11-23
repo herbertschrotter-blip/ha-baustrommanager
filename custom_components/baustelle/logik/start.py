@@ -42,7 +42,7 @@ from bisect import bisect_left
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from math import ceil, exp, floor, log
-from typing import Any
+from typing import Any, Protocol
 
 from . import groesse, lernen
 from .arbeitszeit import Plan, WarmAb, uhrzeit
@@ -327,8 +327,13 @@ class _Lauf:
     modell_kw: float = 0.0
 
 
-def _weg(e: Eingabe, aussen: Callable[[float], float] | None, jetzt_m: int, anzahl: int, tau_h: float
-         ) -> Callable[[float, float, float], tuple[int, str, float, int, bool, float | None]]:
+class _Weg(Protocol):
+    """Typ der Funktion aus `_weg` (`bis` ist optional)."""
+
+    def __call__(self, m: float, t0: float, bis: float = ..., /) -> tuple[int, str, float, int, bool, float | None]: ...
+
+
+def _weg(e: Eingabe, aussen: Callable[[float], float] | None, jetzt_m: int, anzahl: int, tau_h: float) -> _Weg:
     """Aufheizen ab Minute m bei t0 °C (höchstens `bis` Minuten vorausgerechnet) → (Minuten im 5-min-Raster, Band,
     Rate °C/h, Anzahl Messungen, geschätzt, a des Raummodells oder None). Reihenfolge siehe Modul-Docstring."""
     kw = lernen.kw_fuer(e.kw_nenn, anzahl)

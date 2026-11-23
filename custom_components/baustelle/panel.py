@@ -336,8 +336,9 @@ async def ws_struktur(hass: HomeAssistant, connection: websocket_api.ActiveConne
     version = hass.data.get(DATA_VERSION, "")
     r = rechte(bool(connection.user and connection.user.is_admin))   # Bauplan 0.7 §8: für den angemeldeten Benutzer
     aus = [{**struktur(hass, entry, version), "rechte": r} for entry in hass.config_entries.async_entries(DOMAIN)]
-    for b in (b for x in aus for b in x["bereiche"] if namen is not None and b["art"] == ART_CONTAINER):
-        b["namen"] = namen.get(b["id"], {"container_id": None, "container": None, "abweichend": None})
+    if namen is not None:
+        for b in (b for x in aus for b in x["bereiche"] if b["art"] == ART_CONTAINER):
+            b["namen"] = namen.get(b["id"], {"container_id": None, "container": None, "abweichend": None})
     connection.send_result(msg["id"], aus)
 
 

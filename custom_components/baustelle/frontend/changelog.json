@@ -1,5 +1,12 @@
 [
   {
+    "version": "0.8.194",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Fix: **Typprüfung (`mypy --strict`) wieder grün**, keine Änderung im Verhalten. Zwei Stellen prüfen jetzt ausdrücklich, was vorher nur eine andere Prüfung davor sicherstellte: Container anlegen mit Inventar ohne Datenbank meldet „Datenbank nicht erreichbar“, die Namensvorschau beim Zuordnen ohne geladene Baustelle einen Fehler statt eines Absturzes – beides kommt im Betrieb nicht vor."
+    ]
+  },
+  {
     "version": "0.8.193",
     "datum": "2026-11-23",
     "punkte": [
