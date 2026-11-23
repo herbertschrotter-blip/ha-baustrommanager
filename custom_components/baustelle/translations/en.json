@@ -105,7 +105,8 @@
         }
       },
       "error": {
-        "name_vergeben": "Name already in use."
+        "name_vergeben": "Name already in use.",
+        "fuehler_fehlt": "This sensor does not exist in Home Assistant (any more), e.g. renamed. Please choose again."
       },
       "abort": {
         "reconfigure_successful": "Saved."
@@ -154,6 +155,7 @@
       },
       "error": {
         "schalter_vergeben": "This Shelly is already assigned here.",
+        "schalter_fehlt": "This switch does not exist in Home Assistant (any more), e.g. renamed. Please choose again.",
         "schalter_andere_baustelle": "This Shelly belongs to another active site.",
         "kein_bereich": "Add a container or area first.",
         "kein_name": "Please enter a name.",

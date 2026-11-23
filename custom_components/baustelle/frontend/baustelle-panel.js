@@ -6643,7 +6643,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.190";
+var SEITE_VERSION = "0.8.191";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -8003,6 +8003,7 @@ var BaustellePanel = class extends i4 {
   async invAusfuehren(s4) {
     try {
       const r5 = await this._hass.callWS(s4.rueck ? { type: "baustelle/inventar_rueckgaengig", container_id: s4.id } : { type: "baustelle/inventar_umbenennen", container_id: s4.id });
+      this.idsTauschen(s4.zurueck, r5.getauscht);
       this.invNeu();
       this._laden();
       if (r5.status === "nichts") {
@@ -8013,6 +8014,20 @@ var BaustellePanel = class extends i4 {
       return this.invAuf({ ...s4, ergebnis: r5 });
     } catch (e6) {
       this.toast(this.fehlerText(e6));
+    }
+  }
+  idsTauschen(sheet, ids) {
+    if (!ids || !Object.keys(ids).length) return;
+    const tausch = (o6) => {
+      for (const k2 of Object.keys(o6)) {
+        const v2 = o6[k2];
+        if (typeof v2 === "string" && Object.hasOwn(ids, v2)) o6[k2] = ids[v2];
+        else if (v2 && typeof v2 === "object") tausch(v2);
+      }
+    };
+    for (let x2 = sheet, n4 = 0; x2 && typeof x2 === "object" && n4 < 10; x2 = x2.zurueck, n4++) {
+      if (x2.edit) tausch(x2.edit);
+      if (x2.form) tausch(x2.form);
     }
   }
   npProbe(id, m3) {
@@ -8086,9 +8101,9 @@ var BaustellePanel = class extends i4 {
       if (e6.name.trim() && (e6.name.trim() !== x2.name || (e6.fuehler || "") !== (x2.fuehler || ""))) {
         const r5 = await this.dialog("config/config_entries/subentries/flow", { handler: [d3.entry, "bereich"], subentry_id: x2.id }, this.bereichDaten(e6.name.trim(), x2.art || "container", e6.fuehler));
         if (this.flowFehler(r5)) return r5;
+        if ((e6.fuehler || "") !== (x2.fuehler || "")) await this.fuehlerAbwarten(x2.id, e6.fuehler || null);
       }
       const call = (k2, w2) => this._hass.callWS({ type: "baustelle/setzen", entry_id: d3.entry, pfad: pfad(k2), wert: w2 });
-      if (e6.modus && e6.modus !== x2.modus) await call("modus", e6.modus);
       if (x2.groesse) {
         const m22 = e6.groesseArt === "einzel" ? null : e6.groesseArt === "doppel" ? x2.groesse.typen.doppel.m2 : zahl(e6.m2) && Number(e6.m2) >= 4 ? Number(e6.m2) : void 0;
         if (m22 !== void 0 && (m22 ?? x2.groesse.typen.einzel.m2) !== x2.groesse.m2) await call("groesse_m2", m22);
@@ -8101,6 +8116,13 @@ var BaustellePanel = class extends i4 {
       if (e6.trocknen !== !!x2.trocknen) await call("trocknen", e6.trocknen);
       if ((e6.primaer || null) !== (x2.primaer || null)) await call("primaer", e6.primaer || null);
       if (e6.anschluss && e6.anschluss !== x2.anschluss) await call("anschluss", e6.anschluss);
+      if (!x2.pumpe && e6.modus && e6.modus !== x2.modus) {
+        try {
+          await call("modus", e6.modus);
+        } catch (err) {
+          throw new Error(`Gespeichert bis auf den Modus – ${this.fehlerText(err)}. Bitte den Modus nochmal wählen.`);
+        }
+      }
       if (e6.firma !== x2.firma) {
         if (x2.firma !== "eigen") await this._hass.callWS({ type: "baustelle/liste", entry_id: d3.entry, liste: "firmen", aktion: "speichern", eintrag: { id: x2.firma, name: this.firma(x2.firma).name, container: d3.bereiche.filter((y3) => y3.firma === x2.firma && y3.id !== x2.id).map((y3) => y3.id) } });
         if (e6.firma !== "eigen") await this._hass.callWS({ type: "baustelle/liste", entry_id: d3.entry, liste: "firmen", aktion: "speichern", eintrag: { id: e6.firma, name: this.firma(e6.firma).name, container: [...d3.bereiche.filter((y3) => y3.firma === e6.firma).map((y3) => y3.id), x2.id] } });
@@ -8175,7 +8197,7 @@ var BaustellePanel = class extends i4 {
   bereichEntwurf(x2, s4) {
     const d3 = this.d;
     return s4.edit ||= {
-      modus: x2.modus || "plan",
+      modus: x2.modus ?? null,
       name: x2.name,
       anschluss: x2.anschluss || d3.anschluesse[0] && d3.anschluesse[0].id || "",
       tuer: x2.tuer && x2.tuer.eid || "",
@@ -9570,8 +9592,8 @@ var BaustellePanel = class extends i4 {
         return this.gehe("auswertung");
       // Auswertung mit dem simulierten Preis
       case "b-geraete":
-        S3.evGruppe = "geraete";
-        return this.gehe("einst");
+        return this.einstGruppe("geraete", "uebersicht");
+      // Reiter Geräte, nicht die Container-Liste
       case "c-leistung":
         return blatt("leistung", { zeitraum: "Tag", v: 0 });
       case "c-verbrauch":
@@ -9901,6 +9923,15 @@ var BaustellePanel = class extends i4 {
     const f3 = this.flowFehler(r5);
     if (f3) throw new Error(f3);
     return r5;
+  }
+  async fuehlerAbwarten(id, fuehler) {
+    for (let i7 = 0; i7 < 20; i7++) {
+      await this._laden();
+      const b3 = this.d && this.d.bereiche.find((y3) => y3.id === id);
+      if (!b3 || (b3.fuehler || null) === fuehler) return true;
+      await new Promise((f3) => setTimeout(f3, 750));
+    }
+    return false;
   }
   async neueIds(namen) {
     await this._laden();

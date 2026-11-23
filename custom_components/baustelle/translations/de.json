@@ -105,7 +105,8 @@
         }
       },
       "error": {
-        "name_vergeben": "Diesen Namen gibt es schon."
+        "name_vergeben": "Diesen Namen gibt es schon.",
+        "fuehler_fehlt": "Diesen Fühler gibt es in Home Assistant nicht (mehr) – z. B. umbenannt. Bitte neu wählen."
       },
       "abort": {
         "reconfigure_successful": "Gespeichert."
@@ -154,6 +155,7 @@
       },
       "error": {
         "schalter_vergeben": "Dieser Shelly ist in dieser Baustelle schon zugeordnet.",
+        "schalter_fehlt": "Diesen Schalter gibt es in Home Assistant nicht (mehr) – z. B. umbenannt. Bitte neu wählen.",
         "schalter_andere_baustelle": "Dieser Shelly gehört einer anderen aktiven Baustelle. Die erst abschließen.",
         "kein_bereich": "Zuerst einen Container oder Bereich anlegen.",
         "kein_name": "Bitte einen Namen eingeben.",

@@ -177,9 +177,9 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
     nachholen = letzte is not None and letzte["status"] == "teilweise"
     if not plan and not plugs:
         if not nachholen:
-            return {"id": None, "status": "nichts", "schritte": v["schritte"], "geaendert": []}
+            return {"id": None, "status": "nichts", "schritte": v["schritte"], "geaendert": [], "getauscht": {}}
         nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, _ergebnisse(v["schritte"], {}, entfaellt))
-        return {"id": nr, "status": stand, "schritte": schritte, "geaendert": [], "nachgeholt": True}
+        return {"id": nr, "status": stand, "schritte": schritte, "geaendert": [], "nachgeholt": True, "getauscht": {}}
     try:
         fehler: dict[tuple[str, str], str] = {}
         geaendert: list[str] = []
@@ -205,7 +205,9 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
                      f"{'Umbenennung nachgeholt' if nachholen else 'Umbenannt nach Schema'} "
                      f"({eingabe['praefix']}_C_{eingabe['art']}): {ok} Schritte"
                      + (f", {offen} offen ({', '.join(sorted(set(fehler.values())))})" if offen else ""))
-        return {"id": nr, "status": stand, "schritte": schritte, "geaendert": geaendert, "nachgeholt": nachholen}
+        # getauscht: {alte Entity-ID: neue} dieses Laufs – die Seite bringt offene Entwürfe (Bearbeiten) darauf
+        return {"id": nr, "status": stand, "schritte": schritte, "geaendert": geaendert, "nachgeholt": nachholen,
+                "getauscht": ids_getauscht(jetzt_erledigt)}
     finally:
         if plan:   # Audit 0.8.165: auch wenn ein Schritt scheitert – sonst bliebe die Steuerung angehalten
             hass.config_entries.async_schedule_reload(entry.entry_id)
@@ -272,7 +274,7 @@ async def async_rueckgaengig(hass: HomeAssistant, db: Any, container_id: str, be
                  + (f", {offen} offen ({', '.join(sorted(set(fehler.values())))})" if offen else ""))
     if plan:
         hass.config_entries.async_schedule_reload(entry.entry_id)
-    return {"id": letzte["id"], "status": stand, "schritte": erledigt}
+    return {"id": letzte["id"], "status": stand, "schritte": erledigt, "getauscht": ids_getauscht(erledigt)}
 
 
 @callback

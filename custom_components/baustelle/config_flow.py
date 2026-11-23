@@ -94,12 +94,19 @@ def _empfaenger(hass: HomeAssistant) -> list[str]:
     return empfaenger_dienste(hass)
 
 
+def entitaet_vorhanden(hass: HomeAssistant, entity_id: str) -> bool:
+    """Kennt HA die Entität (Registry oder Zustand)? Auch ein gerade nicht erreichbarer Shelly steht in der Registry."""
+    return er.async_get(hass).async_get(entity_id) is not None or hass.states.get(entity_id) is not None
+
+
 def geraet_pruefen(hass: HomeAssistant, entry: ConfigEntry, schalter: str, rolle: str, bereich_id: str,
                    eigene_id: str | None, name: str = "x") -> str | None:
     """Fehlerschlüssel für einen Shelly in einem Bereich dieser Baustelle (logik/geraete.pruefen) oder None."""
     bereich = entry.subentries.get(bereich_id)
+    eigen = entry.subentries.get(eigene_id) if eigene_id else None
     return geraete_logik.pruefen(
         schalter=schalter, rolle=rolle, name=name,
+        schalter_fehlt=(eigen is None or eigen.data.get(CONF_SCHALTER) != schalter) and not entitaet_vorhanden(hass, schalter),
         bereich_art=bereich.data[CONF_ART] if bereich is not None and bereich.subentry_type == SUB_BEREICH else None,
         vergeben_hier=any(s.subentry_type == SUB_GERAET and s.data.get(CONF_SCHALTER) == schalter and s.subentry_id != eigene_id
                           for s in entry.subentries.values()),
@@ -258,17 +265,28 @@ class BereichSubentryFlow(ConfigSubentryFlow):
             }
         )
 
+    def _fuehler_fehlt(self, user_input: dict[str, Any], alt: str | None) -> bool:
+        """Ein neu gewählter Fühler muss in HA existieren (z. B. kein alter Entwurf nach dem Umbenennen)."""
+        f = user_input.get(CONF_FUEHLER)
+        return bool(f) and f != alt and not entitaet_vorhanden(self.hass, f)
+
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         if user_input is not None:
             name = user_input[CONF_NAME].strip()
             if any(s.title == name for s in self._get_entry().subentries.values() if s.subentry_type == SUB_BEREICH):
                 return self.async_show_form(step_id="user", data_schema=self._schema(), errors={"base": "name_vergeben"})
+            if self._fuehler_fehlt(user_input, None):
+                return self.async_show_form(step_id="user", data_schema=self._schema(), errors={"base": "fuehler_fehlt"})
             return self.async_create_entry(title=name, data={**user_input, CONF_NAME: name})
         return self.async_show_form(step_id="user", data_schema=self._schema())
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         sub = self._get_reconfigure_subentry()
         if user_input is not None:
+            if self._fuehler_fehlt(user_input, sub.data.get(CONF_FUEHLER)):
+                return self.async_show_form(
+                    step_id="reconfigure", data_schema=self.add_suggested_values_to_schema(self._schema(), dict(sub.data)),
+                    errors={"base": "fuehler_fehlt"})
             name = user_input[CONF_NAME].strip()
             data = {**user_input, CONF_NAME: name}
             return self.async_update_and_abort(self._get_entry(), sub, title=name, data=data)

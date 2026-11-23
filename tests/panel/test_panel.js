@@ -1872,6 +1872,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick({ act: 'zu' }, 5); Object.keys(c).forEach(k => delete c[k]); Object.assign(c, alt); nachPanel(); await klick({ act: 'tab', v: 'einst' }, 30); }
   /* WU-0007: alle Einstellungen in Gruppen mit Seitenleiste (Handy: Chips) */
   { const gruppe = async g => { await klick({ act: 'ev-gruppe', v: g }, 20); pruefe(`Einstellungen ${g}`); return ui.innerHTML; };
+    panel.s.gerReiter = null;   // die Kachel „Geräte“ (Kachel-Test) öffnet den Reiter Geräte; hier ab dem Standard (Container)
     /* UI-Bericht Maßnahme 5: Abschnitte; am Handy eine senkrechte Liste statt der Chip-Leiste, „‹ Alle Einstellungen“ zurück */
     { await klick({ act: 'ev-gruppe', v: '' }, 10); const h = ui.innerHTML, L = litEls('.ev-liste .ev-lz').map(x => x.dataset.v);
       erwarte('Maßnahme 5: Handy – Liste aller Gruppen nach Abschnitten', !litEl('.ev-chips') && JSON.stringify(L) === JSON.stringify(['baustelle', 'heizung', 'notprogramm', 'geraete', 'pumpen', 'strom', 'firmen', 'meldungen', 'bericht', 'app', 'dev', 'ueber'])
@@ -2038,7 +2039,57 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
           erwarte('UI-1: zurück in „Bearbeiten“', panel.s.sheet && panel.s.sheet.art === 'bereich'); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
           const g = mitC.geraete[0];
           if (g) { panel.geraetOeffnen(mitC.id, g.id); await ruhe(20); erwarte('UI-1: Chip im Dialog „Gerät bearbeiten“', !!litEl('.sheet .g-liste .nm-chip')); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5); }
+          { /* Gutachten 0.8.190 (Befund 1): Chip in „Bearbeiten“ → Übernehmen → Schließen → Speichern schreibt keine alten IDs zurück */
+            const ws = hass.callWS, altF = mitC.fuehler, altS = g && g.schalter, neuF = 'sensor.test_neu_fuehler', neuS = 'switch.test_neu_schalter';
+            const getauscht = { ...(altF ? { [altF]: neuF } : {}), ...(altS ? { [altS]: neuS } : {}) };
+            const tauschen = r => { let t = JSON.stringify(r); for (const [a, n] of Object.entries(getauscht)) t = t.split(JSON.stringify(a)).join(JSON.stringify(n)); return JSON.parse(t); };
+            hass.callWS = async m => m.type === 'baustelle/inventar_umbenennen' ? { id: 9, status: 'ausgefuehrt', schritte: [], geaendert: [], getauscht }
+              : m.type === 'baustelle/struktur' ? tauschen(await ws.call(hass, m)) : ws.call(hass, m);
+            panel.einblenden('bereich'); await ruhe(20);
+            const e = panel.s.sheet.edit;
+            await klick('.sheet [data-zeile="namen"] .nm-chip', 20);
+            if (g) { panel.s.sheet.zurueck = { art: 'geraet-edit', i: 0, form: { n: g.n, schalter: g.schalter, typ: g.typ, bereich: mitC.id, leistung: '', energie: '', status: g.status, nennKw: null, zusatz: !!g.zusatz }, zurueck: panel.s.sheet.zurueck }; }
+            const geSheet = g ? panel.s.sheet.zurueck : null;
+            await panel.invAusfuehren(panel.s.sheet); await ruhe(30);
+            erwarte('Gutachten 0.8.190: Gerät bearbeiten (Formular) bekommt den neuen Schalter', !g || geSheet.form.schalter === neuS);
+            panel.schliessen(); await ruhe(10); if (g) { panel.schliessen(); await ruhe(10); }
+            erwarte('Gutachten 0.8.190: zurück in „Bearbeiten“ mit den neuen Entity-IDs im Entwurf', panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit === e
+              && (!altF || e.fuehler === neuF) && (!altS || e.geraete[0].schalter === neuS));
+            neu(); await klick({ act: 'b-speichern' }, 60);
+            const alteRaus = [...aufrufe, ...api.map(a => a[2])].some(m => m && Object.values(getauscht).length && Object.keys(getauscht).some(k => JSON.stringify(m).includes(JSON.stringify(k))));
+            erwarte('Gutachten 0.8.190: Speichern schreibt keine alten Entity-IDs zurück und ändert nichts', !alteRaus && !letzte('baustelle/geraet').length
+              && !api.some(a => a[1].includes('subentries/flow')) && !letzte('baustelle/setzen').length);
+            hass.callWS = ws; panel.cache = {}; await panel._laden(); await ruhe(20); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
+          }
         }
+        { /* Gutachten 0.8.190 (Befund 2): Pumpenschacht – Speichern in „Bearbeiten“ setzt keinen Modus (Automatik bliebe sonst still an) */
+          const P = panel.d.bereiche.find(b => b.pumpe);
+          if (P) { await klick({ act: 'container', id: P.id }, 20); panel.einblenden('bereich'); await ruhe(20);
+            erwarte('Gutachten 0.8.190: Entwurf des Pumpenschachts ohne Modus', panel.s.sheet.edit.modus === null);
+            neu(); await klick({ act: 'b-speichern' }, 60);
+            erwarte('Gutachten 0.8.190: Pumpenschacht speichern sendet keinen Modus', !letzte('baustelle/setzen').some(a => a.pfad[2] === 'modus')); } }
+        { /* Gutachten 0.8.190 (Befund 3): Fühler und Thermostat im selben Dialog – Modus erst, wenn die Integration den Fühler kennt, zuletzt */
+          const K = panel.d.bereiche.find(b => !b.pumpe && !b.fuehler), F = (panel.d.bereiche.find(b => b.fuehler) || {}).fuehler;
+          if (K && F) {
+            const roh = () => struktur.flatMap(x => x.bereiche).find(b => b.id === K.id);
+            await klick({ act: 'container', id: K.id }, 20); panel.einblenden('bereich'); await ruhe(20);
+            let e = panel.s.sheet.edit; e.fuehler = F; e.modus = 'thermo'; e.trocknen = !K.trocknen;
+            neu(); await panel.bereichSpeichern(); await ruhe(30);
+            const sp = letzte('baustelle/setzen');
+            erwarte('Gutachten 0.8.190: Fühler über den Dialog, danach Trocknen und zuletzt Modus Thermostat', api.some(a => a[2] && a[2].fuehler === F)
+              && sp.some(a => a.pfad[2] === 'trocknen') && sp.length && sp[sp.length - 1].pfad[2] === 'modus' && sp[sp.length - 1].wert === 'thermo'
+              && aufrufe.some(m => m.type === 'baustelle/struktur') && panel.letzterToast === 'Gespeichert');
+            const ws = hass.callWS; hass.callWS = m => m.type === 'baustelle/setzen' && m.pfad[2] === 'modus' ? Promise.reject({ message: 'Thermostat braucht einen Temperaturfühler' }) : ws.call(hass, m);
+            panel.einblenden('bereich'); await ruhe(20); e = panel.s.sheet.edit; e.modus = e.modus === 'bedarf' ? 'plan' : 'bedarf'; e.trocknen = !e.trocknen;
+            neu(); await panel.bereichSpeichern(); await ruhe(30); hass.callWS = ws;
+            erwarte('Gutachten 0.8.190: Modus abgelehnt – die übrigen Felder sind gespeichert, die Meldung sagt es', letzte('baustelle/setzen').some(a => a.pfad[2] === 'trocknen')
+              && /Gespeichert bis auf den Modus – Thermostat braucht einen Temperaturfühler/.test(panel.letzterToast || ''));
+            panel.letzterToast = ''; roh().fuehler = null; panel.cache = {}; await panel._laden(); await ruhe(20); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
+          } }
+        { /* Gutachten 0.8.190 (Befund 4): Kachel „Geräte · erreichbar & Signal“ öffnet den Reiter Geräte */
+          const reiter = panel.s.gerReiter; panel.s.gerReiter = 'container'; panel.kkAuf({ k: 'b-geraete' }, 'ue'); await ruhe(20);
+          erwarte('Gutachten 0.8.190: Kachel Geräte öffnet ⚙ › Container & Geräte › Geräte', panel.s.view === 'einst' && panel.s.evGruppe === 'geraete' && panel.s.gerReiter === 'uebersicht');
+          panel.s.gerReiter = reiter; await klick({ act: 'tab', v: 'uebersicht' }, 10); }
         await klick({ act: 'tab', v: 'einst' }, 20); await gruppe('geraete'); await klick('.g-reiter button[data-v="uebersicht"]', 10);
         erwarte('UI-1: Chip in ⚙ › Geräte je Container', litEls('.g-gruppe .nm-chip').length >= 1);
         if (ohneC) { const nicht = litEls('.nm-chip.nm-ohne'); erwarte('UI-1: Container ohne Inventar: „Nicht im Inventar – aufnehmen ›“', nicht.some(e => e.textContent.includes('Nicht im Inventar – aufnehmen ›')));

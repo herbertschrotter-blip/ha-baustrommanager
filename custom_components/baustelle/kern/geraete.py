@@ -96,7 +96,7 @@ def _daten(alt: dict[str, Any], schritt: dict[str, Any]) -> dict[str, Any]:
 def plan(hass: HomeAssistant, st: Steuerung, schritte: list[dict[str, Any]]) -> list[tuple[str, str, dict[str, Any] | None]]:
     """Schritte prüfen, ohne etwas zu ändern: [(aktion, unter_eintrag, neue Daten)]; `GeraetFehler` beim ersten Verstoß.
     Spätere Schritte sehen die früheren (z. B. Shelly bei einem Gerät entfernen und beim anderen eintragen)."""
-    from ..config_flow import geraete_anderer_baustellen  # noqa: PLC0415  (config_flow lädt die Integration)
+    from ..config_flow import entitaet_vorhanden, geraete_anderer_baustellen  # noqa: PLC0415  (config_flow lädt die Integration)
 
     entry = st.entry
     geraete = {sid: dict(x.data) for sid, x in entry.subentries.items() if x.subentry_type == SUB_GERAET}
@@ -120,7 +120,9 @@ def plan(hass: HomeAssistant, st: Steuerung, schritte: list[dict[str, Any]]) -> 
                 schalter=str(daten.get(CONF_SCHALTER) or ""), rolle=str(daten.get(CONF_ROLLE) or ""), name=daten["name"],
                 bereich_art=bereich.data[CONF_ART] if bereich is not None and bereich.subentry_type == SUB_BEREICH else None,
                 vergeben_hier=any(d.get(CONF_SCHALTER) == daten.get(CONF_SCHALTER) for x, d in geraete.items() if x != sid),
-                andere_baustelle=daten.get(CONF_SCHALTER) in andere):
+                andere_baustelle=daten.get(CONF_SCHALTER) in andere,
+                schalter_fehlt=(sid not in entry.subentries or entry.subentries[sid].data.get(CONF_SCHALTER) != daten.get(CONF_SCHALTER))
+                and not entitaet_vorhanden(hass, str(daten.get(CONF_SCHALTER) or ""))):
             raise GeraetFehler(fehler, i)
         geraete[sid] = daten
         aus.append((str(aktion), sid, daten))

@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from .abgleich import async_abgleich
 from . import auswertung
-from .const import ART_CONTAINER, DOMAIN, EVENT_PROTOKOLL
+from .const import ART_CONTAINER, CONF_FUEHLER, DOMAIN, EVENT_PROTOKOLL
 from .daten import struktur
 from .db import DATA_DB, async_spiegeln, einstellung_merken, ereignis_merken
 from .einstellungen import ART_TEXT, EIGEN, TICKET_OFFEN, TICKET_STATUS, Meldungen
@@ -29,7 +29,7 @@ from .funktionen.heizung import Heizung
 from .funktionen.heizung import hochrechnung as hochrechnung_heizung, prognose_schatten, prognose_v2 as prognose_v2_heizung
 from .logik.prognose_typen import MODELL_VERSION
 from .geraete import BEFEHLE as GERAETE_BEFEHLE
-from .inventar import BEFEHLE as INVENTAR_BEFEHLE, async_namen_gemerkt
+from .inventar import BEFEHLE as INVENTAR_BEFEHLE, async_namen_gemerkt, namen_verwerfen
 from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
 from .logik import preise as preise_logik, ruecksprung
 from .logik.arbeitszeit import arbeitszeit_loeschen, arbeitszeiten_speichern
@@ -350,11 +350,17 @@ def pruefe_setzen(st: Any, pfad: list[str], wert: Any) -> Any:
         if pfad[2] not in SETZEN_BEREICH:
             raise vol.Invalid(f"Pfad {'.'.join(pfad)} ist nicht erlaubt")
         wert = SETZEN_BEREICH[pfad[2]](wert)
+        if pfad[2] == "tuer" and wert is not None and wert != st.einstellungen.bereich(pfad[1]).get("tuer"):
+            from .config_flow import entitaet_vorhanden  # noqa: PLC0415
+
+            if not entitaet_vorhanden(st.hass, wert):   # z. B. alter Entwurf nach dem Umbenennen (Gutachten 0.8.190)
+                raise vol.Invalid(f"Den Türkontakt {wert} gibt es in Home Assistant nicht (mehr)")
         if pfad[2] == "anschluss" and wert not in {a["id"] for a in st.e["anschluesse"]}:
             raise vol.Invalid(f"Unbekannter Anschluss {wert}")
         if pfad[2] == "lernen" and wert and not st.bereiche[pfad[1]].fuehler:
             raise vol.Invalid("Die lernende Regelung braucht einen Temperaturfühler")   # Szenarien
-        if pfad[2] == "modus" and wert == "thermo" and not st.bereiche[pfad[1]].fuehler:
+        sub = st.entry.subentries.get(pfad[1])   # Fühler gerade im Dialog gesetzt: steht schon im Unter-Eintrag, geladen wird danach
+        if pfad[2] == "modus" and wert == "thermo" and not (st.bereiche[pfad[1]].fuehler or (sub is not None and sub.data.get(CONF_FUEHLER))):
             raise vol.Invalid("Thermostat braucht einen Temperaturfühler")
         return wert
     if len(pfad) == 3 and pfad[0] == "geraete":
@@ -464,6 +470,7 @@ def ws_setzen(hass: HomeAssistant, connection: websocket_api.ActiveConnection, m
         from .funktionen.heizung.hochrechnung import async_rechnen   # noqa: PLC0415
         st.entry.async_create_background_task(hass, async_rechnen(hass, Heizung.von(st)), "baustelle_hochrechnung")
     if pfad[0] == "bereiche" and pfad[-1] in ("tuer", "symbol"):   # Sensoren geändert: Inventar nachziehen (BSM-034.04)
+        namen_verwerfen(hass)   # und der Chip „Namen ✓“ zählt neu
         st.entry.async_create_background_task(hass, async_abgleich(hass, st), "baustelle_abgleich")
     connection.send_result(msg["id"], {"ok": True})
 

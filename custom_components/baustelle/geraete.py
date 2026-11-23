@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import CONF_BEREICH, CONF_ENERGIE, CONF_LEISTUNG, CONF_ROLLE, CONF_SCHALTER, CONF_TYP, DOMAIN, ROLLEN, TYPEN
 from .db import einstellung_merken
+from .inventar import verwirft_namen
 from .kern.geraete import GeraetFehler, async_speichern
 from .logik.geraete import FEHLER_TEXT, STATUS
 from .logik.rechte import darf
@@ -55,6 +56,7 @@ async def _geladen(hass: HomeAssistant, entry_id: str, sekunden: float = 15) -> 
     vol.Optional("schritte"): [SCHRITT],
 })
 @websocket_api.async_response
+@verwirft_namen   # Anlegen, Ändern, Entfernen und Status ändern, was der Chip „Namen ✓“ zählt
 async def ws_geraet(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     if not darf(bool(connection.user and connection.user.is_admin), "geraet"):
         connection.send_error(msg["id"], websocket_api.ERR_UNAUTHORIZED, "Nur Admins dürfen ändern")

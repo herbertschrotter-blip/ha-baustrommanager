@@ -22,6 +22,7 @@ from .daten import struktur
 from .db import async_datenbank_starten, async_rueckweg, async_entfernen as async_db_entfernen, async_spiegeln, mitschreiber_starten, uebernahme_planen
 from .einstellungen import STATUS_TEXT, TICKET_STATUS, Einstellungen
 from .entity import HERSTELLER, MODELL
+from .inventar import namen_verwerfen
 from .notprogramm import DATA_NOTPROGRAMM, Notprogramm
 from .panel import DATA_MELDUNGEN, async_panel_anmelden
 from .steuerung import Steuerung
@@ -212,6 +213,7 @@ async def async_remove_config_entry_device(
 
 
 async def _neu_laden(hass: HomeAssistant, entry: BaustelleConfigEntry) -> None:
+    namen_verwerfen(hass)   # Unter-Einträge (Container, Geräte, Fühler) geändert: der Chip „Namen ✓“ zählt neu
     if getattr(entry, "runtime_data", None) is not None and entry.runtime_data.neu_laden_folgt:
         return   # Umbenennen (umbenennen.py) ändert mehrere Unter-Einträge und lädt danach selbst einmal neu
     hass.config_entries.async_schedule_reload(entry.entry_id)

@@ -89,3 +89,49 @@ async def test_inventar_zuordnen_mit_denselben_regeln(hass: HomeAssistant, baust
     with pytest.raises(ValueError, match="Pumpen gehören in einen Pumpenschacht"):
         _verdrahten(hass, entry.runtime_data, C1, geraet, "PLUG", None)
     assert entry.subentries[next(s for s, x in entry.subentries.items() if x.data.get("schalter") == "switch.p1")].data["bereich"] == SCHACHT
+
+
+async def test_fehlende_entitaet_und_namen_verwerfen(hass: HomeAssistant, baustelle_register, hass_ws_client) -> None:
+    """Gutachten 0.8.190: ein Entwurf mit alter Entity-ID (nach dem Umbenennen) schreibt sie nicht zurück – neuer Schalter
+    oder Türkontakt muss in HA existieren; Geräte, Tür, Symbol und Unter-Einträge verwerfen den Namen-Zwischenspeicher."""
+    from custom_components.baustelle.inventar import DATA_NAMEN   # noqa: PLC0415
+
+    entry = baustelle_register
+    ws = await hass_ws_client(hass)
+    nr = iter(range(1, 100))
+
+    def merken() -> None:
+        hass.data[DATA_NAMEN] = {"stand": 0, "zeit": 0.0, "namen": {}}
+
+    def verworfen() -> bool:
+        return "zeit" not in hass.data[DATA_NAMEN]
+
+    async def speichern(*schritte):
+        return await _senden(ws, next(nr), type="baustelle/geraet", entry_id=entry.entry_id, aktion="speichern",
+                             schritte=list(schritte))
+
+    async def setzen(pfad, wert):
+        return await _senden(ws, next(nr), type="baustelle/setzen", entry_id=entry.entry_id, pfad=pfad, wert=wert)
+
+    merken()
+    r = await speichern({"aktion": "aendern", "geraet": HK2, "schalter": "switch.gibt_es_nicht"})
+    assert not r["success"] and r["error"]["code"] == "schalter_fehlt" and verworfen()
+    assert "gibt es in Home Assistant nicht" in r["error"]["message"]
+    merken()
+    r = await speichern({"aktion": "aendern", "geraet": HK2, "name": "Heizkörper zwei"})   # Schalter bleibt: keine Prüfung
+    assert r["success"], r
+    assert verworfen()
+
+    merken()
+    r = await setzen(["bereiche", C1, "tuer"], "binary_sensor.gibt_es_nicht")
+    assert not r["success"] and "gibt es in Home Assistant nicht" in r["error"]["message"]
+    hass.states.async_set("binary_sensor.tuer_neu", "off")
+    r = await setzen(["bereiche", C1, "tuer"], "binary_sensor.tuer_neu")
+    assert r["success"], r
+    assert verworfen()
+    await hass.async_block_till_done()
+
+    merken()
+    hass.config_entries.async_update_subentry(entry, entry.subentries[C2], title="Container zwei")
+    await hass.async_block_till_done()
+    assert verworfen()   # Unter-Eintrag geändert (z. B. HA-Dialog)

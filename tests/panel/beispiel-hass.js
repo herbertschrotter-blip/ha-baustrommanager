@@ -374,6 +374,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     },
     callService: async () => { throw new Error('Die Seite soll Dienste nicht direkt aufrufen'); },
   };
+  const umFlow = {};   // Dialog-ID → Unter-Eintrag (reconfigure)
   async function callApiFake(methode, pfad, daten) {
     {
       api.push([methode, pfad, daten]);
@@ -382,7 +383,9 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         .map(([t, n], i) => ({ summary: n, start: { date: t }, end: { date: t }, uid: 'f' + i }));
       if (methode === 'GET') return [{ summary: 'Weihnachten', start: { date: '2026-12-23' }, end: { date: '2027-01-07' }, uid: 'urlaub-1' }];
       if (methode === 'DELETE') return {};
-      if (/flow$/.test(pfad)) return { type: 'form', flow_id: 'F' + api.length };
+      if (/flow$/.test(pfad)) { if (daten && daten.subentry_id) umFlow['F' + api.length] = daten.subentry_id; return { type: 'form', flow_id: 'F' + api.length }; }
+      const umB = pfad.includes('subentries') && daten && umFlow[pfad.split('/').pop()] && welt().flatMap(x => x.bereiche).find(x => x.id === umFlow[pfad.split('/').pop()]);
+      if (umB) umB.fuehler = daten.fuehler || null;   // Container ändern: der Fühler steht nach dem Neu-Laden in der Struktur
       if (pfad.includes('subentries') && daten && daten.art) {   // neuer Bereich → erscheint in der Struktur
         const b = welt()[0]; if (!b.bereiche.some(x => x.name === daten.name)) b.bereiche.push({ id: 'neu-' + b.bereiche.length, name: daten.name, art: daten.art, fuehler: daten.fuehler || null, nr: b.bereiche.length });
         return { type: 'create_entry' };

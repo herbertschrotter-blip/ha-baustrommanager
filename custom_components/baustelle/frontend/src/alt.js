@@ -1820,11 +1820,17 @@ class BaustellePanel extends LitElement {
   async invAusfuehren(s) {
     try {
       const r = await this._hass.callWS(s.rueck ? { type: 'baustelle/inventar_rueckgaengig', container_id: s.id } : { type: 'baustelle/inventar_umbenennen', container_id: s.id });
+      this.idsTauschen(s.zurueck, r.getauscht);   // Gutachten 0.8.190: offener Entwurf (Bearbeiten) bekommt die neuen Entity-IDs
       this.invNeu(); this._laden();
       if (r.status === 'nichts') { this.toast('Schon alles nach Schema'); return this.invAuf({ art: 'inv-container', id: s.id }); }
       this.toast({ ausgefuehrt: 'Umbenannt', teilweise: 'Teilweise umbenannt – Rest folgt', zurueck: 'Zurückgenommen', zurueck_teilweise: 'Teilweise zurückgenommen' }[r.status] || r.status);
       return this.invAuf({ ...s, ergebnis: r });
     } catch (e) { this.toast(this.fehlerText(e)); }
+  }
+  idsTauschen(sheet, ids) {   // {alt: neu} der Integration (baustelle/inventar_umbenennen, …_rueckgaengig) in Entwurf und Formular jedes Dialogs darunter
+    if (!ids || !Object.keys(ids).length) return;
+    const tausch = o => { for (const k of Object.keys(o)) { const v = o[k]; if (typeof v === 'string' && Object.hasOwn(ids, v)) o[k] = ids[v]; else if (v && typeof v === 'object') tausch(v); } };
+    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) { if (x.edit) tausch(x.edit); if (x.form) tausch(x.form); }
   }
   npProbe(id, m) { return this.ws({ type: 'baustelle/notprogramm_probe', entry_id: this.d.entry, geraet: id, minuten: m }, m ? `Ausfall-Probe ${m} min gestartet` : 'Ausfall-Probe beendet'); }
   /* Dialoge für Container und Geräte (src/ansichten/einblendungen-einrichtung.js, BSM-022 3e); Rümpfe wie bisher in klick() */
@@ -1877,9 +1883,9 @@ class BaustellePanel extends LitElement {
       if (schritte.length) await this.geraeteSpeichern(schritte);
       if (e.name.trim() && (e.name.trim() !== x.name || (e.fuehler || '') !== (x.fuehler || ''))) {
         const r = await this.dialog('config/config_entries/subentries/flow', { handler: [d.entry, 'bereich'], subentry_id: x.id }, this.bereichDaten(e.name.trim(), x.art || 'container', e.fuehler));
-        if (this.flowFehler(r)) return r; }
+        if (this.flowFehler(r)) return r;
+        if ((e.fuehler || '') !== (x.fuehler || '')) await this.fuehlerAbwarten(x.id, e.fuehler || null); }   // neuer Fühler: erst wenn die Integration ihn kennt, weiter (Modus Thermostat, Gutachten 0.8.190)
       const call = (k, w) => this._hass.callWS({ type: 'baustelle/setzen', entry_id: d.entry, pfad: pfad(k), wert: w });
-      if (e.modus && e.modus !== x.modus) await call('modus', e.modus);   // UI-Bericht Maßnahme 4: Modus statt Schalter „Nur bei Bedarf“
       if (x.groesse) { const m2 = e.groesseArt === 'einzel' ? null : e.groesseArt === 'doppel' ? x.groesse.typen.doppel.m2 : (zahl(e.m2) && Number(e.m2) >= 4 ? Number(e.m2) : undefined);   // AN-0014
         if (m2 !== undefined && (m2 ?? x.groesse.typen.einzel.m2) !== x.groesse.m2) await call('groesse_m2', m2); }   // nur bei anderer Fläche (ohne Angabe = Einzel)
       if ((e.tuer || null) !== (eb.tuer || null)) await call('tuer', e.tuer || null);
@@ -1890,6 +1896,8 @@ class BaustellePanel extends LitElement {
       if (e.trocknen !== !!x.trocknen) await call('trocknen', e.trocknen);
       if ((e.primaer || null) !== (x.primaer || null)) await call('primaer', e.primaer || null);   // AN-0015
       if (e.anschluss && e.anschluss !== x.anschluss) await call('anschluss', e.anschluss);
+      if (!x.pumpe && e.modus && e.modus !== x.modus) {   // UI-Bericht Maßnahme 4: Modus statt Schalter „Nur bei Bedarf“; zuletzt, der Rest ist dann schon gespeichert
+        try { await call('modus', e.modus); } catch (err) { throw new Error(`Gespeichert bis auf den Modus – ${this.fehlerText(err)}. Bitte den Modus nochmal wählen.`); } }
       if (e.firma !== x.firma) {
         if (x.firma !== 'eigen') await this._hass.callWS({ type: 'baustelle/liste', entry_id: d.entry, liste: 'firmen', aktion: 'speichern', eintrag: { id: x.firma, name: this.firma(x.firma).name, container: d.bereiche.filter(y => y.firma === x.firma && y.id !== x.id).map(y => y.id) } });
         if (e.firma !== 'eigen') await this._hass.callWS({ type: 'baustelle/liste', entry_id: d.entry, liste: 'firmen', aktion: 'speichern', eintrag: { id: e.firma, name: this.firma(e.firma).name, container: [...d.bereiche.filter(y => y.firma === e.firma).map(y => y.id), x.id] } });
@@ -1930,7 +1938,7 @@ class BaustellePanel extends LitElement {
   aussehenAuf(x) { return this.unterDialog({ art: 'aussehen', id: x.id }); }   // BSM-032
   bereichEntwurf(x, s) {   // Entwurf für „Container bearbeiten“: einmal aus den Daten, danach bleibt er beim Neuzeichnen stehen
     const d = this.d;
-    return s.edit ||= { modus: x.modus || 'plan', name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
+    return s.edit ||= { modus: x.modus ?? null, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
       groesseArt: (x.groesse && x.groesse.art) || 'einzel', m2: x.groesse ? x.groesse.m2 : null,
       warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn, primaer: x.primaer || '',   // AN-0015
       lernen: !!(x.lern && x.lern.an), trocknen: !!x.trocknen,   // AN-0018: Lernen und Trocknen stehen in „Bearbeiten“, gespeichert mit „Speichern“
@@ -2669,7 +2677,7 @@ class BaustellePanel extends LitElement {
       case 'b-wer': return detail('rangliste');
       case 'b-strom': S.sheet = { art: 'strom' }; return this.neuZeichnen();
       case 'b-preis': S.awSim = true; return this.gehe('auswertung');   // Auswertung mit dem simulierten Preis
-      case 'b-geraete': S.evGruppe = 'geraete'; return this.gehe('einst');
+      case 'b-geraete': return this.einstGruppe('geraete', 'uebersicht');   // Reiter Geräte, nicht die Container-Liste
       case 'c-leistung': return blatt('leistung', { zeitraum: 'Tag', v: 0 });
       case 'c-verbrauch': case 'c-ohne': return blatt('verbrauch');
       case 'c-kosten': return blatt('verbrauch', { t: 'eur' });
@@ -2848,6 +2856,14 @@ class BaustellePanel extends LitElement {
     const r = await this.dialog('config/config_entries/subentries/flow', { handler: [this.d.entry, 'bereich'] }, this.bereichDaten(name, schacht ? 'pumpenschacht' : 'container'));
     const f = this.flowFehler(r); if (f) throw new Error(f);
     return r;
+  }
+  async fuehlerAbwarten(id, fuehler) {   // nach dem HA-Dialog lädt die Baustelle neu: warten, bis die Integration den Fühler kennt (höchstens ~15 s)
+    for (let i = 0; i < 20; i++) {
+      await this._laden(); const b = this.d && this.d.bereiche.find(y => y.id === id);
+      if (!b || (b.fuehler || null) === fuehler) return true;
+      await new Promise(f => setTimeout(f, 750));
+    }
+    return false;
   }
   async neueIds(namen) { await this._laden(); return namen.map(n => (this.d.bereiche.find(b => b.name === n) || {}).id).filter(Boolean); }
   morgenFrueh() { return new Date(this.zoneMs(plusTage(this.z.HEUTE, 1), '07:00', this.z.zone)).toISOString(); }   // „bis morgen stumm“ = morgen 07:00

@@ -52,5 +52,7 @@ def test_pruefen_wie_der_ha_dialog() -> None:
     assert pruefen(**{**ok, "bereich_art": "pumpenschacht"}) == "rolle_passt_nicht"
     assert pruefen(**{**ok, "bereich_art": "pumpenschacht", "rolle": "pumpe"}) is None
     assert pruefen(**{**ok, "name": "  "}) == "kein_name"
-    assert {"kein_schalter", "schalter_andere_baustelle", "schalter_vergeben", "kein_bereich", "rolle_passt_nicht",
+    assert pruefen(**{**ok, "schalter_fehlt": True}) == "schalter_fehlt"   # Gutachten 0.8.190: alter Entwurf nach Umbenennen
+    assert pruefen(**{**ok, "schalter": "light.a", "schalter_fehlt": True}) == "kein_schalter"
+    assert {"schalter_fehlt", "kein_schalter", "schalter_andere_baustelle", "schalter_vergeben", "kein_bereich", "rolle_passt_nicht",
             "kein_name"} <= set(FEHLER_TEXT)

@@ -72,6 +72,9 @@ async def test_umbenennen_in_ha(hass: HomeAssistant, baustelle_register, hass_ws
     assert erg["status"] == "ausgefuehrt"   # ohne Shelly-Adresse entfällt der Plug-Name
     assert {s["ergebnis"] for s in erg["schritte"] if s["ziel"] == "plug"} == {"entfaellt"}
     assert not [s for s in erg["schritte"] if s["ergebnis"] == "fehler"], erg["schritte"]
+    # Gutachten 0.8.190: alt → neu für offene Entwürfe der Seite (Bearbeiten)
+    assert erg["getauscht"]["switch.hk1"] == "switch.001_01_c_plug_man"
+    assert erg["getauscht"]["sensor.temp_c1"] == "sensor.001_c_temp_man_temperatur"
 
     ents, geraete, labels = er.async_get(hass), dr.async_get(hass), lr.async_get(hass)
     schalter = ents.async_get("switch.001_01_c_plug_man")
@@ -104,6 +107,7 @@ async def test_umbenennen_in_ha(hass: HomeAssistant, baustelle_register, hass_ws
 
     nochmal = await _senden(ws, 3, type="baustelle/inventar_umbenennen", container_id=cid)
     assert nochmal["success"] and nochmal["result"]["status"] == "nichts"   # in HA schon alles nach Schema
+    assert nochmal["result"]["getauscht"] == {}
     assert len(zeilen_db(hass, "umbenennung")) == 1
 
 
@@ -237,6 +241,7 @@ async def test_rueckgaengig(hass: HomeAssistant, baustelle_shelly, hass_ws_clien
     zurueck = await _senden(ws, 5, type="baustelle/inventar_rueckgaengig", container_id=cid)
     await hass.async_block_till_done()
     assert zurueck["success"] and zurueck["result"]["status"] == "zurueck", zurueck
+    assert zurueck["result"]["getauscht"]["switch.001_01_c_plug_man"] == "switch.hk1"   # Entwürfe zurück auf die alten IDs
     ents, geraete, labels = er.async_get(hass), dr.async_get(hass), lr.async_get(hass)
     schalter = ents.async_get("switch.hk1")
     assert schalter is not None and schalter.name is None and ents.async_get("switch.001_01_c_plug_man") is None

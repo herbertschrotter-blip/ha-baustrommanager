@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.191] – 2026-11-23
+
+- Fix (Gutachten zu 0.8.189/0.8.190): **Umbenennen aus „Bearbeiten“ schreibt keine alten Entity-IDs mehr zurück.** Wer im
+  Dialog „Bearbeiten“ (oder „Gerät bearbeiten“) über den Chip „⚠ n weichen ab“ umbenennt und danach schließt, findet im
+  Entwurf jetzt die neuen IDs für Fühler, Tür und Schalter; „Speichern“ ändert dann nichts. Die Integration liefert dazu
+  `getauscht` ({alt: neu}) bei `baustelle/inventar_umbenennen` und `…_rueckgaengig`. Zur Absicherung lehnt sie einen neu
+  gewählten Schalter (`schalter_fehlt`), Fühler (`fuehler_fehlt`) oder Türkontakt ab, den es in Home Assistant nicht gibt.
+- Fix: **Pumpenschacht:** „Speichern“ in „Bearbeiten“ setzt keinen Modus mehr – bisher schaltete das still die Automatik
+  des Schachts ein.
+- Fix: **Fühler und Thermostat im selben Dialog:** Die Seite wartet, bis die Integration den neuen Fühler kennt, und setzt
+  den Modus zuletzt. Lehnt die Integration ihn trotzdem ab, sind die übrigen Felder gespeichert und die Meldung sagt es
+  („Gespeichert bis auf den Modus – …“).
+- Fix: Die Kachel **„Geräte · erreichbar & Signal“** öffnet ⚙ › Container & Geräte › Geräte statt der Container-Liste.
+- Fix: Der Chip „Namen ✓“ zählt sofort neu nach Änderungen an Geräten (`baustelle/geraet`), Unter-Einträgen (auch über
+  den HA-Dialog), Tür und Symbol – nicht erst nach 60 s.
+- Mockups: Der Rahmen der Vorschläge (`mockups/quelle/rahmen.js`) kennt die Abschnitte der Einstellungen seit 0.8.190
+  (Seitenleiste und Liste am Handy); `geraete.html`, `inventar.html` und `ordnung.html` neu gebaut.
+
 ## [0.8.190] – 2026-11-23
 
 - Change: **Jede Einstellung hat einen Ort** (UI-Bericht, Stufe 1, Maßnahme 3; Herbert 23.11.2026, Entscheidung 1): Die

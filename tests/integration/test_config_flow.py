@@ -1,5 +1,7 @@
 """Einrichtung: Baustelle anlegen, Bereiche und Shellys zuordnen, Optionen."""
 
+import pytest
+
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -8,6 +10,13 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.baustelle.const import DOMAIN, SUB_BEREICH, SUB_GERAET
 from custom_components.baustelle.daten import struktur
+
+
+@pytest.fixture(autouse=True)
+async def _shellys_da(hass: HomeAssistant) -> None:
+    """Die Schalter der Dialoge gibt es in HA (ein neu gewählter muss existieren, Gutachten 0.8.190)."""
+    for eid in ("switch.plug_1", "switch.plug_2"):
+        hass.states.async_set(eid, "off")
 
 
 async def test_baustelle_anlegen_und_ersten_container(hass: HomeAssistant) -> None:
@@ -220,4 +229,26 @@ async def test_shelly_neu_einrichten(hass: HomeAssistant) -> None:
     r = await hass.config_entries.subentries.async_configure(r["flow_id"], {**daten, "name": " HK Magazin "})
     assert r["type"] is FlowResultType.ABORT and r["reason"] == "reconfigure_successful"
     assert entry.subentries[sid].title == "HK Magazin"
+    await hass.async_block_till_done()
+
+
+async def test_fehlende_entitaet_abgelehnt(hass: HomeAssistant) -> None:
+    """Gutachten 0.8.190: ein neu gewählter Fühler oder Schalter muss in HA existieren (z. B. kein alter Entwurf nach dem
+    Umbenennen); ein unveränderter bleibt erlaubt."""
+    entry = _entry(hass)
+    c = await _bereich(hass, entry)
+    r = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUB_BEREICH), context={"source": "reconfigure", "subentry_id": c.subentry_id})
+    r = await hass.config_entries.subentries.async_configure(
+        r["flow_id"], {"name": "Container 1", "art": "container", "fuehler": "sensor.gibt_es_nicht"})
+    assert r["errors"] == {"base": "fuehler_fehlt"}
+    hass.states.async_set("sensor.temp_neu", "20", {"device_class": "temperature"})
+    r = await hass.config_entries.subentries.async_configure(
+        r["flow_id"], {"name": "Container 1", "art": "container", "fuehler": "sensor.temp_neu"})
+    assert r["type"] is FlowResultType.ABORT
+    r = await hass.config_entries.subentries.async_init((entry.entry_id, SUB_GERAET), context={"source": "user"})
+    r = await hass.config_entries.subentries.async_configure(
+        r["flow_id"], {"bereich": c.subentry_id, "schalter": "switch.gibt_es_nicht", "name": "HK", "rolle": "heizkoerper",
+                       "typ": "konvektor"})
+    assert r["errors"] == {"base": "schalter_fehlt"}
     await hass.async_block_till_done()

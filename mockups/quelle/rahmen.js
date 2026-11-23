@@ -19,8 +19,9 @@
 //
 // Browser (R in browser(R)):
 //   R.html`…`, R.nothing        Vorlagen in derselben Form wie Lit (die Seite bündelt Lit; @click, .value, ?selected gehen)
-//   R.gruppe({ k, ic, t, kurz(p), inhalt(p), nach: 'container', marke: true, wann(p) })   Einstellungen-Gruppe (Seitenleiste + Chips)
-//   R.gruppeWeg({ k, wann(p) })  Gruppe der Seite ausblenden (Seitenleiste + Chips), z. B. wenn ein Vorschlag sie ersetzt (BSM-034.05)
+//   R.gruppe({ k, ic, t, kurz(p), inhalt(p), nach: 'geraete', marke: true, wann(p) })     Einstellungen-Gruppe (Seitenleiste, am Handy Liste;
+//       im Abschnitt hinter der Gruppe `nach`, ohne sie hinter Container & Geräte)
+//   R.gruppeWeg({ k, wann(p) })  Gruppe der Seite ausblenden (Seitenleiste + Liste), z. B. wenn ein Vorschlag sie ersetzt (BSM-034.05)
 //   R.reiter({ k, t, tKurz, inhalt(p), nach: 'verlauf', wann(p) })                       Reiter oben mit eigener Ansicht (p.gehe(k))
 //   R.abschnitt({ ansicht: 'container', vor(p), nach(p), statt(p, orig), wann(p) })       vor/nach den Inhalt einer Ansicht der Seite;
 //       statt: Inhalt der Ansicht ganz ersetzen (orig = bisheriger Inhalt, z. B. für den Vergleich „heute“) (ordnung.html)
@@ -59,21 +60,30 @@ function laufzeit() {
   const seiteErsetzen = (t, fn) => suche(t, enthaelt('<div class="seite '), x => { const i = x.values.length - 1; x.values[i] = fn(x.values[i]); });
 
   proto._ui = function () {
-    const S = this.s, p = this, t = alt.ui.call(this);
-    // Einstellungen: eigene Gruppen in Seitenleiste und Chips; Inhalt, wenn gewählt
-    // (einstellungen.js: Seitenleiste-Eintrag = [trenn, k, class, click, ic, t, kurz], Chip = [class, k, click, ic, t])
+    const S = this.s, p = this;
+    // Einstellungen (einstellungen.js seit 0.8.190): Gruppen in Abschnitten – Seitenleiste <nav class="ev-nav"> mit Abschnitten
+    // [erster, Überschrift, Knöpfe], Knopf = [k, class, click, ic, t, kurz]; am Handy ohne Gruppe die Liste <div class="ev-liste">
+    // mit Abschnitten [Überschrift, Zeilen], Zeile = [k, click, ic, t, kurz]. Eine eigene Gruppe kennt die Seite nicht (sie deutet
+    // z. B. „inventar“ in einen Reiter um): gebaut wird mit einer echten Gruppe, deren Kopf und Inhalt danach ersetzt werden.
+    const G = S.view === 'einst' ? GRUPPEN.filter(g => gilt(g, p)) : [], aktiv = G.find(g => g.k === S.evGruppe);
+    let t; if (aktiv) S.evGruppe = 'baustelle';
+    try { t = alt.ui.call(this); } finally { if (aktiv) S.evGruppe = aktiv.k; }
     if (S.view === 'einst') {
-      const G = GRUPPEN.filter(g => gilt(g, p)), aktiv = G.find(g => g.k === S.evGruppe), weg = new Set(WEG.filter(w => gilt(w, p)).map(w => w.k));
-      if (weg.size) for (const s of ['<nav class="ev-nav', '<div class="ev-chips">'])   // Seitenleiste-Eintrag und Chip: values[1] = k
-        suche(t, enthaelt(s), x => { const L = x.values[0]; if (Array.isArray(L)) x.values[0] = L.filter(it => !weg.has(it.values[1])); });
+      const weg = new Set(WEG.filter(w => gilt(w, p)).map(w => w.k));
+      const einfuegen = (L, g, n) => {   // L = [[Abschnitt, Index der Liste]]: nach g.nach (sonst nach Container & Geräte), sonst ans Ende des ersten
+        for (const k of [g.nach || 'container', 'geraete']) for (const [A, j] of L) { const i = A.values[j].findIndex(it => it.values[0] === k); if (i >= 0) return A.values[j].splice(i + 1, 0, n(A.values[j][i])); }
+        const [A, j] = L[0] || []; if (A && A.values[j].length) A.values[j].push(n(A.values[j][A.values[j].length - 1])); };
+      const abschnitte = (merkmal, j) => { const L = []; suche(t, enthaelt(merkmal), x => { for (const A of Array.isArray(x.values[0]) ? x.values[0] : []) if (A && Array.isArray(A.values) && Array.isArray(A.values[j])) L.push([A, j]); }); return L; };
+      const nav = abschnitte('<nav class="ev-nav', 2), liste = abschnitte('<div class="ev-liste">', 1);
+      for (const [A, j] of [...nav, ...liste]) A.values[j] = A.values[j].filter(it => !weg.has(it.values[0]));
+      if (aktiv) for (const [A, j] of nav) for (const it of A.values[j]) it.values[1] = '';
+      for (const g of G) {
+        const t2 = g.marke ? html`${g.t}${marke}` : g.t, kurz = g.kurz ? g.kurz(p) : '';
+        einfuegen(nav, g, v => { const n = kopie(v); n.values.splice(0, 6, g.k, g === aktiv ? 'on' : '', () => p.einstGruppeWahl(g.k), g.ic, t2, kurz); return n; });
+        einfuegen(liste, g, v => { const n = kopie(v); n.values.splice(0, 5, g.k, () => p.einstGruppeWahl(g.k), g.ic, t2, kurz); return n; });
+      }
       if (aktiv) suche(t, enthaelt('class="ev-inhalt"'), x => { const j = x.strings.findIndex(s => s.includes('class="ev-ic">'));
         x.values[j] = aktiv.ic; x.values[j + 1] = aktiv.marke ? html`${aktiv.t}${marke}` : aktiv.t; x.values[j + 2] = aktiv.kurz ? aktiv.kurz(p) : ''; x.values[j + 3] = aktiv.inhalt(p); });
-      suche(t, enthaelt('<nav class="ev-nav'), x => { const L = x.values[0]; if (aktiv) for (const it of L) it.values[2] = '';
-        for (const g of G) { const i = Math.max(0, L.findIndex(it => it.values[1] === (g.nach || 'container'))), n = kopie(L[i]);
-          n.values.splice(1, 6, g.k, g === aktiv ? 'on' : '', () => p.einstGruppeWahl(g.k), g.ic, g.marke ? html`${g.t}${marke}` : g.t, g.kurz ? g.kurz(p) : ''); L.splice(i + 1, 0, n); } });
-      suche(t, enthaelt('<div class="ev-chips">'), x => { const L = x.values[0]; if (aktiv) for (const it of L) it.values[0] = '';
-        for (const g of G) { const i = Math.max(0, L.findIndex(it => it.values[1] === (g.nach || 'container'))), n = kopie(L[i]);
-          n.values.splice(0, 5, g === aktiv ? 'amber' : '', g.k, () => p.einstGruppeWahl(g.k), g.ic, g.t); L.splice(i + 1, 0, n); } });
     }
     // Reiter oben (alt.js _ui: Reiter = [k, class, click, text]); eigene Ansicht über s.view = k
     const R = REITER.filter(r => gilt(r, p)), j = t.strings.findIndex(s => s.includes('<nav class="glas-nav')), L = j >= 0 && t.values[j + 1];
