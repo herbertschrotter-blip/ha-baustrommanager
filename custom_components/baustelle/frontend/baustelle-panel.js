@@ -6516,7 +6516,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.181";
+var SEITE_VERSION = "0.8.182";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -7275,7 +7275,7 @@ var BaustellePanel = class extends i4 {
     const anz = [.../* @__PURE__ */ new Set([1, ...Object.keys(a3).map((k2) => +k2.split("|")[1] || 1)])].sort((x2, y3) => x2 - y3);
     return `<div class="gruppe-t">Aufheizen</div><div class="wa-tab"><b></b><b>kalt &lt; 5 °C</b><b>mild</b>${anz.map((n4) => `<span>${n4 === 1 ? "ein Heizkörper" : `${n4} Heizkörper`}</span>${z2(a3[`kalt|${n4}`])}${z2(a3[`mild|${n4}`])}`).join("")}</div>
       ${b3.start ? '<div class="leise">Wann der Container startet, steht oben unter „So rechnet der Start“.</div>' : w2 && w2.gelernt && w2.plan ? `<div class="wa-heute">⏰<div>Heute ab <b>${uhr(w2.plan.start)}</b> – ${w2.aufheiz_min} min für ${zahl(w2.innen) ? de(w2.innen) : "–"} → ${de(w2.soll)} °C, warm um <b>${uhr(w2.plan.ziel)}</b> (${w2.vor ? `${w2.vor} min vor Arbeitsbeginn` : "bei Arbeitsbeginn"})${w2.plan.begrenzt ? " · begrenzt durch „Frühestens“" : ""}</div></div>` : w2 ? `<div class="leise">Ab ${n0} Aufheizungen je Wetter rechnet der Container den Beginn selbst; bis dahin gelten Vorheizen und Kälte-Frühstart.</div>` : '<div class="leise">Der gelernte Beginn wirkt im Modus Thermostat.</div>'}
-      <div class="leise">Gemessen wird jedes Aufheizen von mindestens 1 °C unter dem Soll, solange der Heizkörper durchgehend läuft. Kälte draußen steckt in der Rate – darum braucht es keinen eigenen Kälte-Frühstart.</div>`;
+      <div class="leise">Gemessen wird jedes Aufheizen von mindestens 1 °C unter dem Soll, solange ein Heizkörper eingeschaltet ist – gelernt je kW der gemessenen Heizleistung, die Raten je Anzahl Heizkörper folgen aus deren Leistung. Kälte draußen steckt in der Rate – darum braucht es keinen eigenen Kälte-Frühstart.</div>`;
   }
   /* AN-0004: „Warm ab“ eines lernenden Containers – alle Zahlen von der Integration (laufzeit.container.<id>.lernen.warm) */
   warmText(b3, kurz = false) {

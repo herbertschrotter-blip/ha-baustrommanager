@@ -551,9 +551,10 @@ async def test_warm_ab_zusatz_einer_reicht(hass: HomeAssistant, freezer, shellys
 
 
 async def test_warm_ab_zusatz_reicht_nicht(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
-    """Einer bräuchte 160 min (> 120): Beginn nach der Rate mit beiden (60 min, 06:00), im Vorheizen beide – seit
+    """Einer bräuchte 120 min, beide 60 min (0.8.182: je kW gelernt, gleich starke Heizkörper): Beginn nach der Rate
+    mit beiden (60 min, 06:00), im Vorheizen beide – seit
     0.8.178 mit Grund „aufheizen“ (zuerst voll aufheizen); am Soll der Zusatz aus, nach dem Lüften wieder beide."""
-    entry, st = await _stufen(hass, freezer, shellys, "2026-09-30 04:00:00+02:00", _gelernt(1.5, n2=4.0))
+    entry, st = await _stufen(hass, freezer, shellys, "2026-09-30 04:00:00+02:00", _gelernt(2.0, n2=4.0))
     warm = _c(hass, entry)["lernen"]["warm"]
     assert warm["anzahl"] == 2 and warm["aufheiz_min"] == 60 and warm["plan"]["start"] == 360
     await _zu(hass, freezer, "2026-09-30 05:59:00+02:00", st)
@@ -824,10 +825,10 @@ async def test_start_regelung_startet_zur_gerechneten_zeit(hass: HomeAssistant, 
 
 
 # ====================================================================== D. Aufheizen lernen, Tür offen
-async def test_aufheizen_lernt_je_anzahl_heizkoerper(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
-    """Erst heizt nur der Haupt (mild|1 – der Zusatz ist inaktiv, sonst liefe er seit 0.8.178 beim Aufheizen mit), dann
-    kommt der Zusatz dazu (wieder aktiv, kalt): die erste Messung wird abgeschlossen, eine neue mit zwei
-    Heizkörpern (kalt|2) beginnt."""
+async def test_aufheizen_lernt_je_kw_ueber_stufenwechsel(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """0.8.182: Erst heizt nur der Haupt (der Zusatz ist inaktiv), dann kommt der Zusatz dazu (wieder aktiv, kalt): die
+    Messung läuft weiter (bis 0.8.181 begann sie neu) und lernt am Ende eine Rate je kW im Band vom Beginn (mild);
+    die Seite zeigt daraus die Rate mit einem und mit zwei Heizkörpern."""
     entry, st = await _einrichten(hass, freezer, shellys, hk2_bereich=C1)
     st.einstellung_setzen(("bereiche", C1, "stufen"), True)
     st.lz["lernen"][C1] = {"kext": 0.05}       # K außen hoch: TPI bleibt bis knapp unter dem Soll ganz ein
@@ -842,21 +843,21 @@ async def test_aufheizen_lernt_je_anzahl_heizkoerper(hass: HomeAssistant, freeze
     for i in range(25):                          # 18,5 → 19,0 in 25 min mit einem Heizkörper
         await uhr.minute(round(18.5 + 0.02 * i, 2))
         assert _an(hass, "switch.hk1") and not _an(hass, "switch.hk2"), i
-    assert st.lz["lernen"][C1]["auf"]["n"] == 1
+    assert st.lz["lernen"][C1]["auf"]["band"] == "mild"
     st.geraet_aktiv_setzen(g2, True)                 # wieder aktiv: beim Aufheizen läuft der Zusatz mit
     hass.states.async_set("sensor.aussen", "-6.0")
     await uhr.minute(19.0)
     await uhr.minute(19.0)
     assert _an(hass, "switch.hk2")
     stand = st.lz["lernen"][C1]
-    assert "mild|1" in stand["aufheizen"] and stand["aufheizen"]["mild|1"][1] == 1
-    assert stand["auf"] is not None and stand["auf"]["n"] == 2 and stand["auf"]["band"] == "kalt"
+    assert stand["auf"] is not None and stand["auf"]["band"] == "mild" and stand["auf_kw"] == {}   # läuft weiter
     for i in range(1, 21):                        # 19,0 → 19,8 in 20 min mit zweien
         await uhr.minute(round(19.0 + 0.04 * i, 2))
     stand = st.lz["lernen"][C1]
-    assert "kalt|2" in stand["aufheizen"], stand["aufheizen"]
+    assert stand["auf"] is None and stand["auf_kw"]["mild"][1] == 1, stand["auf_kw"]
     lern = _c(hass, entry)["lernen"]
-    assert set(lern["aufheizen"]) == {"mild|1", "kalt|2"} and lern["auf_n"] == 3
+    assert set(lern["aufheizen"]) == {"mild|1", "mild|2"} and lern["auf_n"] == 3
+    assert lern["aufheizen"]["mild|2"]["rate"] > lern["aufheizen"]["mild|1"]["rate"]
 
 
 async def test_tuer_vermutet_offen_dann_weiter_lernen(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
@@ -876,7 +877,7 @@ async def test_tuer_vermutet_offen_dann_weiter_lernen(hass: HomeAssistant, freez
     for i in range(12):
         await uhr.minute(round(16.2 - 0.04 * i, 2))
     stand = st.lz["lernen"][C1]
-    assert stand["offen"]["art"] == "vermutet" and stand["auf"] is None and stand["aufheizen"] == {}
+    assert stand["offen"]["art"] == "vermutet" and stand["auf"] is None and stand.get("auf_kw", {}) == {}
     assert not _an(hass, "switch.hk1")                    # FE-0025: Heizung pausiert 10 min
     # Tür zu: Raum wird wieder wärmer
     temp = 15.8
@@ -892,7 +893,7 @@ async def test_tuer_vermutet_offen_dann_weiter_lernen(hass: HomeAssistant, freez
         await uhr.minute(temp)
     await uhr.minute(19.85)                               # Soll − 0,2 erreicht: Messung fertig
     stand = st.lz["lernen"][C1]
-    assert stand["aufheizen"].get("mild|1", [0, 0])[1] == 1, stand["aufheizen"]
+    assert stand["auf_kw"].get("mild", [0, 0])[1] == 1, stand["auf_kw"]
     assert _c(hass, entry)["lernen"]["offen"] is None
 
 

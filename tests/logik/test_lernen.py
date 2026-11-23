@@ -16,7 +16,10 @@ from logik.lernen import (
     STOPP_AB_MIN,
     Tpi,
     anzeige,
+    auf_kw,
+    auf_kw_umrechnen,
     aufheiz_min,
+    kw_fuer,
     band,
     ein_minuten,
     klasse,
@@ -138,59 +141,109 @@ def test_kext_lernt_in_ruhigen_zyklen():
 
 
 # ---------------------------------------------------------------- AN-0004: Aufheizen lernen
-def _aufheizen(stand, von, bis, minuten, aussen=0.0, soll=20.0, ab=T0):
-    """minuten lang durchgehend heizen, Temperatur linear von → bis, dann aus."""
+EIN_KW = (1.0,)   # ein Heizkörper mit 1 kW: Rate je kW = Rate
+
+
+def _aufheizen(stand, von, bis, minuten, aussen=0.0, soll=20.0, ab=T0, kw=1.0, kw_nenn=EIN_KW):
+    """minuten lang durchgehend heizen (Leistung `kw`), Temperatur linear von → bis, dann aus."""
     t = ab
     for i in range(minuten):
-        stand = takt(stand, jetzt=t, heizt=True, innen=von + (bis - von) * i / minuten, soll=soll, aussen=aussen, art="oel", regelt=True)
+        stand = takt(stand, jetzt=t, heizt=True, innen=von + (bis - von) * i / minuten, soll=soll, aussen=aussen, art="oel",
+                     regelt=True, kw=kw, kw_nenn=kw_nenn)
         t += timedelta(minutes=1)
-    stand = takt(stand, jetzt=t, heizt=False, innen=bis, soll=soll, aussen=aussen, art="oel", regelt=True)
+    stand = takt(stand, jetzt=t, heizt=False, innen=bis, soll=soll, aussen=aussen, art="oel", regelt=True, kw=0.0, kw_nenn=kw_nenn)
     return stand, t + timedelta(hours=3)
 
 
 def test_aufheizen_lernt_rate_je_band():
     s, t = _aufheizen(neuer_stand(), 15.0, 18.0, 60)             # 3 °C in 60 min (letzte Heizminute 17,95)
-    assert s["auf"] is None and s["aufheizen"]["kalt|1"][1] == 1
-    assert s["aufheizen"]["kalt|1"][0] == pytest.approx(2.95, abs=0.01)
-    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0) is None     # erst ab AUF_N Messungen
+    assert s["auf"] is None and s["auf_kw"]["kalt"][1] == 1
+    assert s["auf_kw"]["kalt"][0] == pytest.approx(2.95, abs=0.01)
+    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0, kw_nenn=EIN_KW) is None     # erst ab AUF_N Messungen
     for _ in range(AUF_N - 1):
         s, t = _aufheizen(s, 15.0, 18.0, 60, ab=t)
-    assert s["aufheizen"]["kalt|1"][1] == AUF_N
-    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0) == 85        # 4 °C / 2,95 °C/h = 81,4 → 85 min
-    assert aufheiz_min(s, innen=21.0, soll=20.0, aussen=0.0) == 0
-    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=10.0) is None     # mild: noch nichts gelernt
-    a = anzeige(s)
-    assert a["aufheizen"]["kalt|1"]["n"] == AUF_N and a["auf_n"] == AUF_N
+    assert s["auf_kw"]["kalt"][1] == AUF_N
+    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0, kw_nenn=EIN_KW) == 85        # 4 °C / 2,95 °C/h = 81,4 → 85 min
+    assert aufheiz_min(s, innen=21.0, soll=20.0, aussen=0.0, kw_nenn=EIN_KW) == 0
+    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=10.0, kw_nenn=EIN_KW) is None     # mild: noch nichts gelernt
+    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0) is None                       # ohne Leistung keine Rate
+    a = anzeige(s, EIN_KW)
+    assert a["aufheizen"]["kalt|1"]["n"] == AUF_N and a["auf_n"] == AUF_N and a["auf_kw"]["kalt"]["n"] == AUF_N
 
 
 def test_aufheizen_zaehlt_nicht_nahe_am_soll_oder_zu_kurz():
     s, _ = _aufheizen(neuer_stand(), 19.5, 20.0, 60)               # beginnt nur 0,5 °C unter dem Soll
-    assert s["aufheizen"] == {}
+    assert s["auf_kw"] == {}
     s, _ = _aufheizen(neuer_stand(), 15.0, 16.0, 10)               # zu kurz
-    assert s["aufheizen"] == {}
+    assert s["auf_kw"] == {}
     s, _ = _aufheizen(neuer_stand(), 15.0, 21.0, 120)              # erreicht das Soll: endet dort
-    assert s["aufheizen"]["kalt|1"][1] == 1 and s["auf"] is None
+    assert s["auf_kw"]["kalt"][1] == 1 and s["auf"] is None
+    s, _ = _aufheizen(neuer_stand(), 15.0, 18.0, 60, kw=None)      # ohne gemessene Leistung: keine Rate je kW
+    assert s["auf_kw"] == {} and s["auf"] is None
+    s, _ = _aufheizen(neuer_stand(), 15.0, 18.0, 60, kw=0.05)      # Mittel unter AUF_KW_MIN: verworfen
+    assert s["auf_kw"] == {}
 
 
-def test_aufheizen_je_anzahl_heizkoerper():
-    s, t = neuer_stand(), T0
-    for _ in range(AUF_N):
-        tt = t
-        for i in range(60):   # zwei Heizkörper: 4 °C je Stunde
-            s = takt(s, jetzt=tt, heizt=True, innen=15.0 + 4.0 * i / 60, soll=20.0, aussen=0.0, art="oel", regelt=True, anzahl=2)
-            tt += timedelta(minutes=1)
-        s = takt(s, jetzt=tt, heizt=False, innen=19.0, soll=20.0, aussen=0.0, art="oel", regelt=True, anzahl=0)
-        t = tt + timedelta(hours=3)
-    assert "kalt|2" in s["aufheizen"] and "kalt|1" not in s["aufheizen"]
-    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0, anzahl=2) == 65      # 4 °C / 3,93 °C/h
-    assert aufheiz_min(s, innen=16.0, soll=20.0, aussen=0.0, anzahl=1) is None
-    # Zusatz kommt mitten im Aufheizen dazu: die Messung mit einem endet, eine neue mit zweien beginnt
-    s2, tt = neuer_stand(), T0
-    for i in range(30):
-        s2 = takt(s2, jetzt=tt, heizt=True, innen=15.0 + i * 0.02, soll=20.0, aussen=0.0, art="oel", regelt=True, anzahl=1)
+def test_aufheizen_je_kw_ueber_stufenwechsel():
+    """0.8.182: Der Zusatz kommt mitten im Aufheizen dazu – die Messung läuft weiter, gelernt wird die Rate je kW der
+    mittleren Leistung (30 min 1,8 kW, 30 min 1,8 + 1,4 kW → Mittel 2,5 kW). Bis 0.8.181 begann sie dort neu."""
+    s, tt = neuer_stand(), T0
+    kw_nenn = (1.8, 1.4)
+    for i in range(60):   # 15 → 19 °C in 60 min: 4 °C/h
+        s = takt(s, jetzt=tt, heizt=True, innen=15.0 + 4.0 * i / 60, soll=20.0, aussen=0.0, art="oel", regelt=True,
+                 kw=1.8 if i < 30 else 3.2, kw_nenn=kw_nenn)
+        assert s["auf"] is not None, i
         tt += timedelta(minutes=1)
-    s2 = takt(s2, jetzt=tt, heizt=True, innen=15.6, soll=20.0, aussen=0.0, art="oel", regelt=True, anzahl=2)
-    assert s2["aufheizen"]["kalt|1"][1] == 1 and s2["auf"]["n"] == 2
+    s = takt(s, jetzt=tt, heizt=False, innen=19.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw=0.0, kw_nenn=kw_nenn)
+    rate = (19.0 - 4.0 / 60 - 15.0)   # letzte Heizminute, über 60 min
+    assert s["auf_kw"]["kalt"] == [pytest.approx(rate / 2.5, abs=1e-3), 1]
+    a = anzeige(s, kw_nenn)   # für die Tabelle der Seite: je Anzahl mit deren Leistung
+    assert a["aufheizen"]["kalt|1"]["rate"] == pytest.approx(rate / 2.5 * 1.8, abs=1e-2)
+    assert a["aufheizen"]["kalt|2"]["rate"] == pytest.approx(rate / 2.5 * 3.2, abs=1e-2)
+
+
+def test_aufheizen_taktender_oelradiator_zaehlt_weiter():
+    """Der eigene Thermostat eines Ölradiators schaltet ab (Plug an, zieht keinen Strom): die Messung läuft weiter, die
+    Minuten mit 0 kW zählen zur mittleren Leistung. Erst ein ausgeschalteter Plug beendet sie."""
+    s, tt = neuer_stand(), T0
+    for i in range(40):   # 3 min an, 2 min aus
+        zieht = i % 5 < 3
+        s = takt(s, jetzt=tt, heizt=zieht, an=True, innen=15.0 + 0.05 * i, soll=20.0, aussen=0.0, art="oel", regelt=True,
+                 kw=2.0 if zieht else 0.0, kw_nenn=(2.0,))
+        assert s["auf"] is not None, i
+        tt += timedelta(minutes=1)
+    s = takt(s, jetzt=tt, heizt=False, an=False, innen=17.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw=0.0,
+             kw_nenn=(2.0,))
+    rate = (15.0 + 0.05 * 39 - 15.0) / 40 * 60
+    assert s["auf"] is None and s["auf_kw"]["kalt"] == [pytest.approx(rate / 1.2, abs=1e-3), 1]   # Mittel 3/5 × 2 kW
+
+
+def test_kw_fuer():
+    assert kw_fuer((1.8, 1.4), 1) == 1.8 and kw_fuer((1.8, 1.4), 2) == pytest.approx(3.2)
+    assert kw_fuer((2.0,), 2) == 4.0 and kw_fuer((), 1) == 0.0 and kw_fuer((1.8, 0), 2) == 1.8 + 1.8
+
+
+def test_alte_raten_je_anzahl_werden_umgerechnet_nicht_verworfen():
+    """Bis 0.8.181 je Anzahl Heizkörper („kalt|1“): beim ersten Takt mit bekannter Leistung je kW umgerechnet, nach Anzahl
+    Messungen gewichtet; die Anzahl bleibt (gelernt bleibt gelernt), das alte Feld bleibt unverändert stehen."""
+    alt = {**neuer_stand(), "aufheizen": {"kalt|1": [2.023, 8], "mild|1": [2.406, 9], "kalt|2": [4.0, 2], "x|1": [9.0, 3]}}
+    kw_nenn = (1.781, 1.397)
+    erwartet = {"kalt": [round((2.023 / 1.781 * 8 + 4.0 / 3.178 * 2) / 10, 4), 10], "mild": [round(2.406 / 1.781, 4), 9]}
+    assert auf_kw_umrechnen(alt["aufheizen"], kw_nenn) == erwartet
+    assert auf_kw(alt, kw_nenn) == erwartet                      # vor dem ersten Takt: gelesen wie umgerechnet
+    assert auf_kw_umrechnen(alt["aufheizen"], ()) == {}           # ohne Leistung nicht umrechenbar
+    s = takt(alt, jetzt=T0, heizt=False, innen=19.0, soll=20.0, aussen=0.0, art="oel", regelt=True)
+    assert "auf_kw" not in s                                     # ohne Leistung: erst später umrechnen
+    s = takt(alt, jetzt=T0, heizt=False, innen=19.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw_nenn=kw_nenn)
+    assert s["auf_kw"] == erwartet and s["aufheizen"] == alt["aufheizen"]
+    # mit einem Heizkörper dieselbe Rate wie vorher gelernt (ohne den kalt|2-Anteil)
+    nur = auf_kw_umrechnen({"kalt|1": [2.023, 8]}, kw_nenn)
+    assert aufheiz_min({"auf_kw": nur}, innen=18.0, soll=20.0, aussen=0.0, kw_nenn=kw_nenn) is not None
+    assert nur["kalt"][0] * 1.781 == pytest.approx(2.023, abs=1e-3)
+    # einmal umgerechnet, bleibt es (eine neue Leistung rechnet nicht noch einmal um)
+    s2 = takt(s, jetzt=T0 + timedelta(minutes=1), heizt=False, innen=19.0, soll=20.0, aussen=0.0, art="oel", regelt=True,
+              kw_nenn=(3.0, 3.0))
+    assert s2["auf_kw"] == erwartet
 
 
 # ---------------------------------------------------------------- WU-0009: Tür offen schützt das Lernen

@@ -12,7 +12,8 @@ Plan-Chip („morgen ab 03:30 · warm 06:35“) und Dialog „Lernstand“ › �
   stündlichen Wettervorhersage (zwischen den Stunden linear, vor der ersten Stunde vom Wert von jetzt aus); ohne
   Vorhersage gilt der Wert von jetzt, ganz ohne Außenwert wird nicht ausgekühlt (wie bis 0.8.156). Mit Frostschutz
   kühlt er nicht unter die Frostschutzgrenze.
-- **Aufheizen** mit der gelernten Rate (Außenband zum Start, Anzahl Heizkörper; seit 0.8.178 laufen beim Aufheizen
+- **Aufheizen** mit der gelernten Rate (Außenband zum Start; seit 0.8.182 je kW gelernt, × Leistung der Heizkörper,
+  die laufen – `lernen.rate_fuer`; seit 0.8.178 laufen beim Aufheizen
   alle – zuerst voll aufheizen, so spät wie möglich; bis 0.8.177 „einer reicht“, AN-0006). Nicht gelernt: Rate aus der Containergröße
   (`groesse.rate_geschaetzt`), τ = `lernen.TAU_START_H`.
 - **Start** = spätester Zeitpunkt im 5-min-Raster, mit dem es bis zum Ziel warm ist. **Grenze „frühestens“ zählt vom
@@ -82,8 +83,9 @@ class Eingabe:
     vorhersage: tuple[tuple[datetime, float], ...] = ()                 # stündlich: (Stundenbeginn, °C)
     verlauf: tuple[tuple[datetime, float | None, float | None], ...] = ()   # gemessen: (Zeit, innen, außen)
     tau: Sequence[float] | None = None         # Lernstand `tau` = [τ in h, Anzahl]
-    raten: Mapping[str, Sequence[float]] = field(default_factory=dict)  # Lernstand `aufheizen` {"kalt|1": [°C/h, n]}
+    raten: Mapping[str, Sequence[float]] = field(default_factory=dict)  # Lernstand `auf_kw` {"kalt": [°C/h je kW, n]}
     anzahl: int = 1                            # aktive Heizkörper im Container
+    kw_nenn: tuple[float, ...] = ()            # Leistung je aktivem Heizkörper (kW, Haupt zuerst)
     stufen: bool = False                       # „Zusatz nur bei Bedarf“ (AN-0006)
     m2: float | None = None                    # Größe für die Schätzung
     untergrenze: float | None = None           # Frostschutz an: so tief kühlt er nicht aus
@@ -242,16 +244,14 @@ def _bei(punkte: Sequence[tuple[float, float]], m: float) -> float:
     return c0 + (c1 - c0) * (m - m0) / (m1 - m0) if m1 > m0 else c1
 
 
-def _rate_gelernt(raten: Mapping[str, Sequence[float]], bd: str, anzahl: int) -> tuple[float, int] | None:
-    e = raten.get(lernen.auf_schluessel(bd, anzahl))
-    if e and int(e[1]) >= lernen.AUF_N and float(e[0]) > 0:
-        return float(e[0]), int(e[1])
-    return None
+def _rate_gelernt(e: Eingabe, bd: str, anzahl: int) -> tuple[float, int] | None:
+    g = lernen.rate_fuer({"auf_kw": e.raten}, e.kw_nenn, bd, anzahl)
+    return g if g is not None and g[1] >= lernen.AUF_N else None
 
 
-def _rate_n(raten: Mapping[str, Sequence[float]], bd: str, anzahl: int) -> int:
-    e = raten.get(lernen.auf_schluessel(bd, anzahl))
-    return int(e[1]) if e else 0
+def _rate_n(e: Eingabe, bd: str) -> int:
+    x = e.raten.get(bd)
+    return int(x[1]) if x else 0
 
 
 @dataclass(frozen=True)
@@ -280,8 +280,8 @@ def _suchen(e: Eingabe, kurve: Sequence[tuple[int, float]], aussen: Callable[[fl
     def rate(m: float) -> tuple[str, float, int, bool]:
         a = aussen(max(m, jetzt_m)) if aussen is not None else e.aussen
         bd = lernen.band(a)
-        g = _rate_gelernt(e.raten, bd, anzahl)
-        return (bd, g[0], g[1], False) if g else (bd, geschaetzt, _rate_n(e.raten, bd, anzahl), True)
+        g = _rate_gelernt(e, bd, anzahl)
+        return (bd, g[0], g[1], False) if g else (bd, geschaetzt, _rate_n(e, bd), True)
 
     def auf(m: float) -> int:   # vor jetzt: die Temperatur von jetzt (früher war es eher wärmer)
         return _aufheiz(_bei(kurve, max(m, jetzt_m)), e.soll, rate(m)[1])

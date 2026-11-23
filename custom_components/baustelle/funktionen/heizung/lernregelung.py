@@ -13,7 +13,7 @@ from ...logik import baseline as b, groesse, lernen, stufen
 from ...logik.arbeitszeit import Plan, WarmAb
 from ...logik.regelung import Soll, SollGrund
 from ...logik.zaehlen import rate
-from ..basis import zeit
+from ..basis import zahl, zeit
 from . import baseline as h_baseline, start as h_start
 from .typen import LERN_GRUENDE
 
@@ -149,7 +149,8 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
         hz._aufheizen_letzte_minute[info.id] = (any(hz._zieht_strom(g) for g in heizer), hz._aufheizen.get(info.id, False))
         alt = hz.lern_staende.get(info.id) or lernen.neuer_stand()
         neu = lernen.takt(
-            alt, jetzt=jetzt, heizt=any(hz._zieht_strom(g) for g in heizer), anzahl=sum(1 for g in heizer if hz._zieht_strom(g)),
+            alt, jetzt=jetzt, heizt=any(hz._zieht_strom(g) for g in heizer),
+            kw=_kw_jetzt(hz, heizer), kw_nenn=h_start.kw_nenn(hz, info.id),   # 0.8.182: Aufheizrate je kW
             tuer_offen=hz._tuer_offen(info.id), innen=hz.st.temperatur(info.fuehler),
             hand=any(g.id in hz.st.lz["hand"] for g in heizer),
             # Grund der letzten Heizminute: nach Schnell aufheizen und nach dem Aufheizen (0.8.178) lernt K innen nicht –
@@ -170,6 +171,17 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
             hz.st.einstellungen.speichern()
 
 
+def _kw_jetzt(hz: Heizung, heizer: list[Any]) -> float:
+    """Heizleistung des Containers jetzt (kW): je Heizkörper, der Strom zieht, der Messwert des Shellys, ohne Messwert
+    seine Leistung (`nenn_kw`); die anderen 0."""
+    kw = 0.0
+    for g in heizer:
+        if hz._zieht_strom(g):
+            w = zahl(hz.st.hass.states.get(g.leistung)) if g.leistung else None
+            kw += w / 1000 if w is not None else hz.st.nenn_kw(g)
+    return round(kw, 3)
+
+
 def lern_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
     """Lernstand für die Seite (api: laufzeit.container.<id>.lernen); None ohne Fühler."""
     info = hz.st.bereiche.get(bid)
@@ -179,7 +191,7 @@ def lern_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
     soll_t = hz.soll_temperatur(bid)
     return {
         "an": bool(hz.st.einstellungen.bereich(bid).get("lernen")),
-        **lernen.anzeige(hz.lern_staende.get(bid) or {}),
+        **lernen.anzeige(hz.lern_staende.get(bid) or {}, h_start.kw_nenn(hz, bid)),
         "anteil": round(anteil * 100) if anteil is not None else None,
         "erwartet": round(nachlauf, 2), "aus_bei": round(soll_t - nachlauf, 2), "zyklus_min": lernen.ZYKLUS_MIN,
         "warm": hz.warm_anzeige(bid),

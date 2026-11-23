@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from homeassistant.util import dt as dt_util
 
-from ...logik import start as start_logik
+from ...logik import lernen, start as start_logik
 from ...logik.arbeitszeit import WarmAb
 from ..basis import ZAEHLER_SPEICHERN_S, zeit
 
@@ -27,6 +27,15 @@ def lernend_thermo(hz: Heizung, bid: str) -> bool:
     """Lernender Container mit Fühler im Modus Thermostat – nur für ihn gilt „Warm ab“ und die Start-Logik."""
     info = hz.st.bereiche.get(bid)
     return bool(info is not None and info.fuehler and hz.st.einstellungen.bereich(bid).get("lernen") and hz.modus(bid) == "thermo")
+
+
+def kw_nenn(hz: Heizung, bid: str) -> tuple[float, ...]:
+    """Leistung je aktivem Heizkörper (kW, `nenn_kw`: gemessenes Mittel im Betrieb, sonst eingestellt), Haupt zuerst –
+    damit rechnet die Aufheizrate je kW (`logik/lernen.kw_fuer`, 0.8.182)."""
+    heizer = {g.id: g for g in hz.heizer_von(bid)}
+    haupt, zusatz = hz.haupt_und_zusatz(bid)
+    folge = [*haupt, *zusatz, *(i for i in heizer if i not in haupt and i not in zusatz)]
+    return tuple(round(hz.st.nenn_kw(heizer[i]), 3) for i in folge if i in heizer)
 
 
 def warm_einst(hz: Heizung, bid: str, aufheiz_min: int | None = None) -> WarmAb:
@@ -143,17 +152,18 @@ def start(hz: Heizung, bid: str, jetzt: datetime | None = None) -> start_logik.S
         hz._start_cache[bid] = (schnell, None, None)
         return None
     stand = hz.lern_staende.get(bid) or {}
+    kw = kw_nenn(hz, bid)
     eingabe = start_logik.Eingabe(
         jetzt=jetzt, tag=tag, a=plan.a, warm=warm, soll=hz.soll_temperatur(bid),
         innen=innen, aussen=aussen, vorhersage=_vorhersage_gelesen(hz),
-        verlauf=_verlauf(hz, bid), tau=stand.get("tau"), raten=dict(stand.get("aufheizen") or {}),
-        anzahl=len(hz.heizer_von(bid)) or 1, stufen=hz.stufen_an(bid), m2=e.get("groesse_m2"),
+        verlauf=_verlauf(hz, bid), tau=stand.get("tau"), raten=lernen.auf_kw(stand, kw),
+        anzahl=len(hz.heizer_von(bid)) or 1, kw_nenn=kw, stufen=hz.stufen_an(bid), m2=e.get("groesse_m2"),
         untergrenze=float(h["frost_grenze"]) if h.get("frost") else None, fest=f,
         frueher=tuple((str(g), int(m)) for g, m in plan.frueher),   # die Verschiebung des Plans selbst (eine Regel)
     )
     zeichen = (jetzt, tag, eingabe.a, eingabe.warm, eingabe.soll, innen, aussen, eingabe.vorhersage,
                tuple(eingabe.tau) if eingabe.tau else None, tuple(sorted((k, tuple(v)) for k, v in eingabe.raten.items())),
-               eingabe.anzahl, eingabe.stufen, eingabe.m2, eingabe.untergrenze, _fest_t(f), eingabe.frueher,
+               eingabe.anzahl, eingabe.kw_nenn, eingabe.stufen, eingabe.m2, eingabe.untergrenze, _fest_t(f), eingabe.frueher,
                len(eingabe.verlauf), eingabe.verlauf[-1][0] if eingabe.verlauf else None)
     if alt is not None and alt[1] == zeichen:
         hz._start_cache[bid] = (schnell, zeichen, alt[2])

@@ -16,7 +16,7 @@ A = 7 * 60 + 10                                          # Arbeitsbeginn 07:10
 WARM = WarmAb(vor_min=30, max_min=300)                   # warm 30 min vorher, frühestens 5 h vor dem Ziel
 MILD = [8, 7.5, 7, 6.4, 5.8, 5.2, 4.7, 4.3, 4.1, 4.0, 4.2]   # außen je Stunde ab 21:00 (Mockup AUSSEN_MILD)
 KALT = [-4, -5, -6, -7, -8, -8.7, -9.3, -9.8, -10, -10, -9.6]
-RATEN = {"mild|1": [2.6, 14], "kalt|1": [2.6, 14]}
+RATEN = {"mild": [2.6, 14], "kalt": [2.6, 14]}   # 0.8.182: °C/h je kW – mit 1 kW je Heizkörper wie °C/h
 
 
 def _vorhersage(werte, ab=datetime(2026, 10, 28, 21, tzinfo=TZ)):
@@ -25,7 +25,7 @@ def _vorhersage(werte, ab=datetime(2026, 10, 28, 21, tzinfo=TZ)):
 
 def _eingabe(**neu):
     werte = dict(jetzt=ABEND, tag=MORGEN, a=A, warm=WARM, soll=21.9, innen=18.3, aussen=8.0, vorhersage=_vorhersage(MILD),
-                 tau=[15, 9], raten=RATEN)
+                 tau=[15, 9], raten=RATEN, kw_nenn=(1.0,))
     werte.update(neu)
     return S.Eingabe(**werte)
 
@@ -109,7 +109,7 @@ def test_kaeltere_vorhersage_start_rueckt_nach_vorne():
 def test_grenze_zaehlt_vom_ziel_nicht_vom_arbeitsbeginn():
     """Sehr kalt, langsam (2,8 °C/h mit zwei Heizkörpern): bräuchte früher als 06:40 − 5 h = 01:40 – startet um 01:40
     (nicht 02:10 = 07:10 − 5 h), warm erst nach dem Ziel; `beginn_ohne` = Start ohne Grenze."""
-    e = _eingabe(innen=12.0, aussen=-3.0, vorhersage=_vorhersage(KALT), raten={"kalt|2": [2.8, 8]}, anzahl=2)
+    e = _eingabe(innen=12.0, aussen=-3.0, vorhersage=_vorhersage(KALT), raten={"kalt": [1.4, 8]}, anzahl=2, kw_nenn=(1.0, 1.0))
     s = S.rechnen(e)
     assert s.grenze_m == 1440 + 100 and s.beginn_m == 1440 + 100 and s.begrenzt      # 01:40
     assert s.beginn_ohne_m is not None and s.beginn_ohne_m < s.beginn_m and s.warm_m > s.ziel_m
@@ -176,12 +176,12 @@ def test_noch_nicht_gelernt_tau_und_rate_geschaetzt():
 def test_zuerst_voll_aufheizen_alle_spaet():
     """0.8.178 (Herbert 20.11.2026): zuerst voll aufheizen – auch wenn einer reichte, laufen alle und der Start ist
     entsprechend später (bis 0.8.177: „einer reicht“, früh mit einem)."""
-    raten = {"kalt|1": [2.6, 5], "kalt|2": [5.0, 5]}
+    raten = {"kalt": [2.5, 5], "mild": [2.5, 5]}
     einer = S.rechnen(_eingabe(raten=raten, anzahl=1))
-    alle = S.rechnen(_eingabe(raten=raten, anzahl=2, stufen=True))
+    alle = S.rechnen(_eingabe(raten=raten, anzahl=2, stufen=True, kw_nenn=(1.0, 1.0)))
     assert alle.anzahl == 2 and alle.zusatz and alle.rate == 5.0 and alle.beginn_m > einer.beginn_m
-    beide = S.rechnen(_eingabe(innen=12.0, raten={"kalt|1": [1.0, 5], "mild|1": [1.0, 5],
-                                                                 "kalt|2": [3.0, 5], "mild|2": [3.0, 5]}, anzahl=2, stufen=True))
+    beide = S.rechnen(_eingabe(innen=12.0, raten={"kalt": [1.0, 5], "mild": [1.0, 5]}, anzahl=2, stufen=True,
+                               kw_nenn=(1.0, 2.0)))
     assert beide.anzahl == 2 and beide.zusatz and beide.rate_einer == 1.0
     assert "einer allein 1 °C/h, zu langsam" in S.anzeige(beide, ABEND)["schritte"][2]["rechnung"]
 
@@ -249,12 +249,12 @@ def test_frueher_regen_und_noch_frueher_verschieben_den_start_wie_den_plan():
 def test_zusatz_ueberfaellig_heizen_beide():
     """Code-Review: Automatik erst um 05:00 an, Start war fällig – beide (5 °C/h) rechtzeitig. Seit 0.8.178 laufen
     beim Aufheizen immer alle (bis 0.8.177 reichte eine Minute zu spät noch einer)."""
-    raten = {"kalt|1": [2.6, 5], "mild|1": [2.6, 5], "kalt|2": [5.0, 5], "mild|2": [5.0, 5]}
+    raten = {"kalt": [2.5, 5], "mild": [2.5, 5]}
     spaet = S.rechnen(_eingabe(jetzt=datetime(2026, 10, 29, 5, 0, tzinfo=TZ), innen=14.0, aussen=4.7, vorhersage=(),
-                               raten=raten, anzahl=2, stufen=True))
+                               raten=raten, anzahl=2, stufen=True, kw_nenn=(1.0, 1.0)))
     assert spaet.anzahl == 2 and spaet.zusatz and spaet.warm_m <= spaet.ziel_m
     knapp = S.rechnen(_eingabe(jetzt=datetime(2026, 10, 29, 3, 31, tzinfo=TZ), innen=13.9, aussen=4.7, vorhersage=(),
-                               raten=raten, anzahl=2, stufen=True))
+                               raten=raten, anzahl=2, stufen=True, kw_nenn=(1.0, 1.0)))
     assert knapp.anzahl == 2 and knapp.zusatz
 
 
@@ -275,8 +275,8 @@ def test_wochenende_schnell_genug():
     import time
     jetzt = datetime(2026, 10, 30, 13, 0, tzinfo=TZ)
     vh = _vorhersage([5 - (i % 24) / 4 for i in range(72)], datetime(2026, 10, 30, 14, tzinfo=TZ))
-    e = _eingabe(jetzt=jetzt, tag=date(2026, 11, 2), vorhersage=vh, raten={"kalt|1": [2.6, 5], "mild|1": [2.6, 5],
-                 "kalt|2": [5.0, 5], "mild|2": [5.0, 5]}, anzahl=2, stufen=True)
+    e = _eingabe(jetzt=jetzt, tag=date(2026, 11, 2), vorhersage=vh, raten={"kalt": [2.5, 5], "mild": [2.5, 5]},
+                 anzahl=2, stufen=True, kw_nenn=(1.0, 1.0))
     S.rechnen(e)
     t0 = time.perf_counter()
     for _ in range(10):

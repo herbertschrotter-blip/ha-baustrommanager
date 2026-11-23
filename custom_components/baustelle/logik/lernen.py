@@ -14,7 +14,14 @@ Dazu lernt jeder Container selbst:
 - **K außen** (Wärmeverlust): bleibt der Raum in einem ruhigen Zyklus nahe am Soll im Mittel darunter, wird er größer,
   darüber kleiner.
 - **Aufheizen** (AN-0004, „Optimum Start“ wie Honeywell/Netatmo): wie viele °C je Stunde der Raum beim durchgehenden
-  Heizen gewinnt, je Außentemperatur (kalt/mild) und Anzahl laufender Heizkörper (AN-0006: „kalt|1“, „kalt|2“ …).
+  Heizen gewinnt – seit 0.8.182 **je kW** der dabei gemessenen mittleren Heizleistung (`auf_kw`: {"kalt": [°C/h je kW,
+  Anzahl], "mild": …}), je Außentemperatur (kalt/mild). Die Messung läuft über Stufenwechsel hinweg weiter (ein
+  Heizkörper mehr oder weniger, ein Ölradiator, dessen eigener Thermostat taktet): sie dauert, solange ein Heizkörper
+  eingeschaltet ist; die Leistung (kW, von den Shellys) wird je Minute gemittelt, auch die Minuten mit 0 kW. Die Rate für
+  eine Zahl Heizkörper ist Rate je kW × deren Leistung (`kw_fuer`). Bis 0.8.181 wurde je Anzahl laufender Heizkörper
+  gelernt (AN-0006: „kalt|1“, „kalt|2“ im Feld `aufheizen`) und die Messung bei jedem Stufenwechsel neu begonnen – bei
+  taktenden Ölradiatoren kam so keine Messung mehr zustande. Diese Werte bleiben stehen und werden beim ersten Takt mit
+  der Leistung der Heizkörper in `auf_kw` umgerechnet (`auf_kw_umrechnen`), nicht verworfen.
   Daraus rechnet `aufheiz_min`, wie lange der Container bis zum Soll
   braucht – der Heizplan beginnt dann selbst so früh, dass das Soll rechtzeitig erreicht ist (`arbeitszeit.WarmAb`).
   Die Kälte steckt in der Rate, darum braucht ein lernender Container keinen Kälte-Frühstart.
@@ -55,7 +62,7 @@ Zeiten sind `datetime` (mit Zone), Temperaturen °C.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from math import ceil, floor
@@ -89,6 +96,10 @@ AUF_MAX_MIN = 240
 AUF_N = 3                      # ab so vielen Messungen je Außenband rechnet der Container den Beginn selbst
 AUF_GRENZEN = (0.2, 20.0)      # °C je Stunde
 AUF_RASTER_MIN = 5             # Aufheizdauer auf 5 min aufgerundet (ruhiger Plan)
+AUF_KW_MIN = 0.1
+"""0.8.182: Mittlere Heizleistung einer Aufheiz-Messung in kW, unter der sie verworfen wird. Ein Heizkörper auf der
+Baustelle hat 1,4–2,5 kW; liegt das Mittel unter 0,1 kW, hat in der Messung praktisch nichts geheizt (Shelly meldet
+nichts Plausibles) – eine Rate je kW daraus wäre unsinnig groß."""
 OFFEN_FENSTER_MIN = 10         # Tür vermutlich offen: in so vielen Minuten Heizen …
 OFFEN_ABFALL = 0.3             # … so viel °C kälter geworden …
 OFFEN_AUSSEN = 0.2             # … während es draußen höchstens so viel kälter wurde
@@ -263,6 +274,7 @@ def neuer_stand() -> dict[str, Any]:
     return {"kint": KINT_START, "kext": KEXT_START, "n_kint": 0, "n_kext": 0, "nachlauf": {}, "treffer": [], "zyklen": 0,
             "ein": [], "beob": None, "zyklus": None, "letzte": None, "aufheizen": {}, "auf": None,
             "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None, "sperre": None}
+    # "auf_kw" (0.8.182) fehlt absichtlich: ein Stand ohne das Feld wird beim ersten Takt aus `aufheizen` umgerechnet
 
 
 def lern_sperre(*, baseline: bool = False, hand: bool = False, modus: str = "thermo", tuer: bool = False) -> str | None:
@@ -293,14 +305,17 @@ def _iso(zeit: datetime) -> str:
 
 def takt(
     stand: dict[str, Any], *, jetzt: datetime, heizt: bool, innen: float | None, soll: float, aussen: float | None,
-    art: str, regelt: bool, anzahl: int = 1, tuer_offen: bool = False, hand: bool = False, kint_ok: bool = True,
-    an: bool | None = None, vermutet: bool | None = None, baseline: bool = False, modus: str = "thermo",
+    art: str, regelt: bool, kw: float | None = None, kw_nenn: Sequence[float] = (), tuer_offen: bool = False,
+    hand: bool = False, kint_ok: bool = True, an: bool | None = None, vermutet: bool | None = None, baseline: bool = False,
+    modus: str = "thermo",
 ) -> dict[str, Any]:
     """Eine Minute Lernen: Ein-Zeiten mitschreiben, Nachlauf nach dem Ausschalten beobachten, K-Werte anpassen.
 
     `heizt`: ein Heizkörper des Containers zieht gerade Strom. `art`: „oel“ oder „konvektor“ (was eingeschaltet ist
     bzw. zuletzt war). `regelt`: der Container regelt gerade selbst (lernender Thermostat) – nur dann wird K außen
-    gelernt. `anzahl`: so viele Heizkörper ziehen gerade Strom (Aufheizen je Anzahl). `tuer_offen`: Türkontakt offen.
+    gelernt. `kw`: Heizleistung des Containers gerade (Summe der Heizkörper, kW; None = unbekannt – die Minute zählt
+    nicht zum Mittel der Aufheiz-Messung). `kw_nenn`: Leistung je Heizkörper (Haupt zuerst) – rechnet alte Raten je
+    Anzahl in `auf_kw` um. `tuer_offen`: Türkontakt offen.
     `hand`: von Hand geschaltet – dann wird nichts gelernt (Szenarien, Herbert 01.10.2026). `kint_ok`: False, wenn
     nicht die Regelung ausschaltet (z. B. Ende von „Schnell aufheizen“) – dann kein K innen aus diesem Ausschalten.
     `an`: ein Heizkörper ist eingeschaltet (ohne Angabe: `heizt`). `vermutet`: „Tür vermutlich offen“, wenn der Aufrufer
@@ -309,6 +324,8 @@ def takt(
     Gibt den neuen Stand zurück (der alte bleibt unverändert).
     """
     s = {**neuer_stand(), **stand}
+    if "auf_kw" not in stand and (kw_nenn or not s["aufheizen"]):   # 0.8.182: alte Raten je Anzahl einmal umrechnen
+        s["auf_kw"] = auf_kw_umrechnen(s["aufheizen"], kw_nenn)
     # Tür offen (WU-0009): Verlauf der letzten Minuten, Erkennung am Temperaturabfall, Ruhezeit
     s["verlauf"] = tuer_verlauf(s["verlauf"], jetzt=jetzt, innen=innen, aussen=aussen, heizt=heizt, an=an)
     if vermutet is None:
@@ -352,19 +369,19 @@ def takt(
             s["beob"] = {"aus": _iso(jetzt), "temp": ab, "spitze": max(ab, innen if innen is not None else ab),
                          "spitze_zeit": _iso(jetzt), "soll": soll, "schluessel": schluessel(art, klasse(dauer), band(aussen)),
                          "kint": kint_ok}
-    # Aufheizen (AN-0004): durchgehend heizen von deutlich unter dem Soll
+    # Aufheizen (AN-0004): durchgehend heizen von deutlich unter dem Soll; 0.8.182: läuft über Stufenwechsel weiter,
+    # solange ein Heizkörper eingeschaltet ist, und mittelt die Leistung (auch Minuten, in denen ein Thermostat aus ist)
     auf = s["auf"]
+    ein = heizt if an is None else an
     if auf is not None:
         dauer_auf = (jetzt - _zeit(auf["start"])).total_seconds() / 60
-        ende_temp = innen if heizt else s["letzte"]
-        anders = heizt and int(auf.get("n", 1)) != anzahl     # ein Heizkörper mehr oder weniger: neue Messung
-        if not heizt or anders or (innen is not None and innen >= soll - SPITZE_VORBEI) or dauer_auf >= AUF_MAX_MIN:
-            s = _auf_ende(s, dauer_auf, ende_temp)
-            if anders and not ruhe and innen is not None and innen <= soll - AUF_AB_GRAD:
-                s["auf"] = {"start": _iso(jetzt), "temp": innen, "band": band(aussen), "n": anzahl}
+        if not ein or (innen is not None and innen >= soll - SPITZE_VORBEI) or dauer_auf >= AUF_MAX_MIN:
+            s = _auf_ende(s, dauer_auf, innen if ein else s["letzte"], kw_nenn)
+        else:
+            s["auf"] = _auf_kw_dazu(auf, kw)
     elif heizt and not ruhe and innen is not None and innen <= soll - AUF_AB_GRAD and (not lief or s["ruhe_bis"] is not None):
         s["ruhe_bis"] = None     # nach einer Ruhezeit beginnt die Messung neu, auch wenn der Heizkörper durchlief
-        s["auf"] = {"start": _iso(jetzt), "temp": innen, "band": band(aussen), "n": anzahl}
+        s["auf"] = _auf_kw_dazu({"start": _iso(jetzt), "temp": innen, "band": band(aussen), "kw": 0.0, "kw_min": 0}, kw)
     if innen is not None:
         s["letzte"] = innen
     grenze = jetzt.timestamp() - 2 * 3600
@@ -446,22 +463,79 @@ def _kaelter_beim_heizen(verlauf: list[list[Any]], jetzt: datetime, minuten: int
     return innen_ab >= abfall and aussen_ab <= aussen_max
 
 
-def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None) -> dict[str, Any]:
-    """Aufheizen abschließen: lang genug und spürbar wärmer → Rate (°C/h) in den Mittelwert des Außenbands."""
+def _auf_kw_dazu(auf: dict[str, Any], kw: float | None) -> dict[str, Any]:
+    """Leistung dieser Minute zur Aufheiz-Messung (Summe kW, Minuten mit Wert); ohne Wert bleibt sie, wie sie ist."""
+    if kw is None:
+        return auf
+    return {**auf, "kw": round(float(auf.get("kw") or 0.0) + max(0.0, kw), 4), "kw_min": int(auf.get("kw_min") or 0) + 1}
+
+
+def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None, kw_nenn: Sequence[float] = ()) -> dict[str, Any]:
+    """Aufheizen abschließen: lang genug, spürbar wärmer und mit gemessener Leistung (mindestens `AUF_KW_MIN` im Mittel)
+    → Rate (°C/h) ÷ mittlere Leistung (kW) in den Mittelwert des Außenbands (`auf_kw`). Eine Messung aus einer
+    Vorversion (ohne Leistung) zählt nicht."""
     auf = s["auf"]
     s = {**s, "auf": None}
     if temp is None or minuten < AUF_MIN_MIN or temp - auf["temp"] < AUF_MIN_ANSTIEG:
         return s
+    kw_min = int(auf.get("kw_min") or 0)
+    kw = float(auf.get("kw") or 0.0) / kw_min if kw_min else 0.0
+    if kw < AUF_KW_MIN:
+        return s
     rate = min(AUF_GRENZEN[1], max(AUF_GRENZEN[0], (temp - auf["temp"]) / minuten * 60))
-    k = auf_schluessel(auf["band"], int(auf.get("n", 1)))
-    alt = s["aufheizen"].get(k)
-    if alt is None:
-        neu = [round(rate, 3), 1]
-    else:   # erste Messungen gleich gewichtet, danach gleitend wie beim Nachlauf
-        n = int(alt[1]) + 1
-        neu = [round(alt[0] + (rate - alt[0]) * max(GEWICHT, 1 / n), 3), n]
-    s["aufheizen"] = {**s["aufheizen"], k: neu}
+    tabelle = auf_kw(s, kw_nenn)
+    s["auf_kw"] = {**tabelle, auf["band"]: rate_mittel(tabelle.get(auf["band"]), rate / kw)}
     return s
+
+
+def rate_mittel(alt: Sequence[float] | None, wert: float) -> list[float]:
+    """[Wert, Anzahl]: erste Messungen gleich gewichtet, danach gleitend mit `GEWICHT` (wie beim Nachlauf)."""
+    if not alt:
+        return [round(wert, 4), 1]
+    n = int(alt[1]) + 1
+    return [round(float(alt[0]) + (wert - float(alt[0])) * max(GEWICHT, 1 / n), 4), n]
+
+
+def kw_fuer(kw_nenn: Sequence[float], anzahl: int) -> float:
+    """Leistung (kW) von `anzahl` Heizkörpern: die ersten `anzahl` aus `kw_nenn` (Haupt zuerst); sind es mehr als
+    bekannt, zählen die übrigen mit dem Mittel. 0 ohne bekannte Leistung."""
+    werte = [float(x) for x in kw_nenn if x and x > 0]
+    k = max(1, int(anzahl))
+    if not werte:
+        return 0.0
+    return sum(werte[:k]) + max(0, k - len(werte)) * sum(werte) / len(werte)
+
+
+def auf_kw_umrechnen(aufheizen: Mapping[str, Sequence[float]], kw_nenn: Sequence[float]) -> dict[str, list[float]]:
+    """Raten je Anzahl Heizkörper bis 0.8.181 („kalt|1“: [°C/h, n]) → je kW und Außenband ({"kalt": [°C/h je kW, n]}):
+    jede Rate ÷ Leistung ihrer Anzahl (`kw_fuer`), je Band nach Anzahl Messungen gewichtet gemittelt, die Anzahl
+    zusammengezählt – ein gelernter Container bleibt gelernt. Ohne bekannte Leistung: leer."""
+    summe: dict[str, list[float]] = {}
+    for k, v in (aufheizen or {}).items():
+        bd, _, anz = str(k).partition("|")
+        kw = kw_fuer(kw_nenn, int(anz) if anz.isdigit() else 1)
+        if not v or int(v[1]) <= 0 or float(v[0]) <= 0 or kw <= 0 or bd not in BAENDER:
+            continue
+        x = summe.setdefault(bd, [0.0, 0])
+        x[0] += float(v[0]) / kw * int(v[1])
+        x[1] += int(v[1])
+    return {bd: [round(w / n, 4), int(n)] for bd, (w, n) in summe.items() if n}
+
+
+def auf_kw(stand: Mapping[str, Any], kw_nenn: Sequence[float] = ()) -> dict[str, list[float]]:
+    """Gelernte Aufheizrate je kW und Außenband; ein Stand aus einer Vorversion (ohne `auf_kw`) umgerechnet."""
+    if isinstance(stand.get("auf_kw"), Mapping):
+        return dict(stand["auf_kw"])
+    return auf_kw_umrechnen(stand.get("aufheizen") or {}, kw_nenn)
+
+
+def rate_fuer(stand: Mapping[str, Any], kw_nenn: Sequence[float], bd: str, anzahl: int) -> tuple[float, int] | None:
+    """Rate (°C/h) mit `anzahl` Heizkörpern im Außenband `bd` und Anzahl Messungen; None ohne Messung oder Leistung."""
+    e = auf_kw(stand, kw_nenn).get(bd)
+    kw = kw_fuer(kw_nenn, anzahl)
+    if not e or int(e[1]) <= 0 or float(e[0]) <= 0 or kw <= 0:
+        return None
+    return float(e[0]) * kw, int(e[1])
 
 
 def _tau_takt(s: dict[str, Any], jetzt: datetime, innen: float | None, aussen: float | None, ruhig: bool) -> dict[str, Any]:
@@ -510,17 +584,18 @@ def tau_mittel(alt: list[float] | None, tau: float | None) -> list[float] | None
 
 
 def auf_schluessel(bd: str, anzahl: int) -> str:
-    """Schlüssel der Aufheizrate: Außenband und Anzahl laufender Heizkörper („kalt|1“)."""
+    """Schlüssel der Aufheizrate bis 0.8.181 und der Anzeige: Außenband und Anzahl Heizkörper („kalt|1“)."""
     return f"{bd}|{max(1, int(anzahl))}"
 
 
-def aufheiz_min(stand: Mapping[str, Any], *, innen: float | None, soll: float, aussen: float | None, anzahl: int = 1) -> int | None:
-    """Minuten bis zum Soll mit der gelernten Rate (Außenband, Anzahl Heizkörper; auf 5 min aufgerundet); None = noch
-    nicht gelernt."""
-    e = (stand.get("aufheizen") or {}).get(auf_schluessel(band(aussen), anzahl))
-    if innen is None or not e or int(e[1]) < AUF_N or float(e[0]) <= 0:
+def aufheiz_min(stand: Mapping[str, Any], *, innen: float | None, soll: float, aussen: float | None,
+                kw_nenn: Sequence[float] = (), anzahl: int = 1) -> int | None:
+    """Minuten bis zum Soll mit der gelernten Rate (Außenband, Leistung von `anzahl` Heizkörpern; auf 5 min
+    aufgerundet); None = noch nicht gelernt."""
+    e = rate_fuer(stand, kw_nenn, band(aussen), anzahl)
+    if innen is None or e is None or e[1] < AUF_N:
         return None
-    roh = max(0.0, soll - innen) / float(e[0]) * 60
+    roh = max(0.0, soll - innen) / e[0] * 60
     return int(ceil(roh / AUF_RASTER_MIN - 1e-9) * AUF_RASTER_MIN)
 
 
@@ -543,16 +618,22 @@ def _beob_ende(s: dict[str, Any], jetzt: datetime, *, abbruch: bool) -> dict[str
     return s
 
 
-def anzeige(stand: Mapping[str, Any]) -> dict[str, Any]:
-    """Lernstand für die Seite: K-Werte mit Fortschritt, Nachlauf-Tabelle, Treffer."""
+def anzeige(stand: Mapping[str, Any], kw_nenn: Sequence[float] = ()) -> dict[str, Any]:
+    """Lernstand für die Seite: K-Werte mit Fortschritt, Nachlauf-Tabelle, Treffer. Aufheizen (0.8.182): je kW gelernt
+    (`auf_kw`), für die Tabelle der Seite als Rate je Anzahl Heizkörper („kalt|1“, „kalt|2“ …) mit deren Leistung."""
     s = {**neuer_stand(), **stand}
+    je_kw = auf_kw(stand, kw_nenn)
+    anzahlen = range(1, max(1, len([x for x in kw_nenn if x and x > 0])) + 1)
+    aufheizen = {auf_schluessel(bd, k): {"rate": round(v[0] * kw, 3), "n": int(v[1])}
+                 for bd, v in je_kw.items() for k in anzahlen if (kw := kw_fuer(kw_nenn, k)) > 0}
     return {
         "zyklen": s["zyklen"],
         "kint": {"wert": s["kint"], "start": KINT_START, "fort": min(1.0, s["n_kint"] / LERN_ZYKLEN)},
         "kext": {"wert": s["kext"], "start": KEXT_START, "fort": min(1.0, s["n_kext"] / LERN_ZYKLEN)},
         "nachlauf": {k: {"grad": v[0], "min": v[1], "n": v[2]} for k, v in s["nachlauf"].items()},
         "treffer": list(s["treffer"]),
-        "aufheizen": {k: {"rate": v[0], "n": v[1]} for k, v in s["aufheizen"].items()},
+        "aufheizen": aufheizen,
+        "auf_kw": {bd: {"rate": v[0], "n": int(v[1])} for bd, v in je_kw.items()},   # °C/h je kW
         "offen": s["offen"], "ruhe_bis": s["ruhe_bis"],
         "sperre": s["sperre"],   # 0.8.181: warum gerade nicht gelernt wird ({grund, seit, bis}), sonst None
         "auf_n": AUF_N,

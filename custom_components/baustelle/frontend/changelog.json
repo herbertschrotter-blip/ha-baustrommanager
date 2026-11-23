@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.8.182",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Heizung: **Aufheizrate je kW statt je Anzahl Heizkörper** (Prüfpunkt 2): Die Messung des Aufheizens begann bei jedem Stufenwechsel neu (ein Heizkörper mehr oder weniger). Bei 001 kommt der zweite Ölradiator wegen Staffelung und Mindestpause einige Minuten später dazu (06:13 der erste, 06:23 der zweite) und die eigenen Thermostate der Ölradiatoren takten – so kam seit 0.8.178 keine Messung mehr zustande („kalt|1“ blieb bei 8, „kalt|2“ fehlt). Jetzt läuft die Messung weiter, solange ein Heizkörper eingeschaltet ist, und gelernt wird die Rate je kW der dabei von den Shellys gemessenen mittleren Heizleistung. Die Rate für einen, zwei … Heizkörper ist Rate je kW × deren Leistung; so rechnet der Start bei 001 jetzt mit beiden statt nur mit dem ersten.",
+      "Gelerntes bleibt: Die bisherigen Raten je Anzahl werden beim ersten Takt mit der Leistung der Heizkörper je kW umgerechnet (gelernt bleibt gelernt); das alte Feld bleibt unverändert stehen."
+    ]
+  },
+  {
     "version": "0.8.181",
     "datum": "2026-11-23",
     "punkte": [

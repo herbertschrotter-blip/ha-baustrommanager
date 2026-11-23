@@ -10,6 +10,7 @@ from homeassistant.util import dt as dt_util
 from ...logik import bedarf as bedarf_logik, lernen
 from ...logik.regelung import LageContainer
 from ...logik.zaehlen import rate
+from . import start as h_start
 
 if TYPE_CHECKING:
     from . import Heizung
@@ -47,8 +48,8 @@ def _aufheiz_rate(hz: Heizung, bid: str) -> float | None:
     """Gelernte Aufheizrate (°C/h) für das Wetter von jetzt und die Zahl der Heizkörper (wie „Warm ab“)."""
     stand = hz.lern_staende.get(bid) or {}
     anzahl = 1 if hz.stufen_an(bid) and not hz._zusatz_gelernt.get(bid) else (len(hz.heizer_von(bid)) or 1)
-    rate = (stand.get("aufheizen") or {}).get(lernen.auf_schluessel(lernen.band(hz.st.daten.wetter.aussen), anzahl))
-    return float(rate[0]) if rate else None
+    rate = lernen.rate_fuer(stand, h_start.kw_nenn(hz, bid), lernen.band(hz.st.daten.wetter.aussen), anzahl)   # 0.8.182: je kW
+    return rate[0] if rate else None
 
 
 def _gerecht(hz: Heizung, bid: str, jetzt: datetime) -> float:
