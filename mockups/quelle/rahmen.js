@@ -22,7 +22,8 @@
 //   R.gruppe({ k, ic, t, kurz(p), inhalt(p), nach: 'container', marke: true, wann(p) })   Einstellungen-Gruppe (Seitenleiste + Chips)
 //   R.gruppeWeg({ k, wann(p) })  Gruppe der Seite ausblenden (Seitenleiste + Chips), z. B. wenn ein Vorschlag sie ersetzt (BSM-034.05)
 //   R.reiter({ k, t, tKurz, inhalt(p), nach: 'verlauf', wann(p) })                       Reiter oben mit eigener Ansicht (p.gehe(k))
-//   R.abschnitt({ ansicht: 'container', vor(p), nach(p), wann(p) })                       vor/nach den Inhalt einer Ansicht der Seite
+//   R.abschnitt({ ansicht: 'container', vor(p), nach(p), statt(p, orig), wann(p) })       vor/nach den Inhalt einer Ansicht der Seite;
+//       statt: Inhalt der Ansicht ganz ersetzen (orig = bisheriger Inhalt, z. B. für den Vergleich „heute“) (ordnung.html)
 //   R.einblendung(art, vorlage(p, s), { breit(s) })                                        Einblendung im Sheet-Platz der Seite;
 //       öffnen mit R.auf(p, { art, …, zurueck }) – Schließen kehrt zu s.zurueck zurück, wenn das eine Rahmen-Einblendung ist
 //   R.vorlage({ merkmal, fn(t, p), wann(p) })   jede Lit-Vorlage der Seite (auch in Dialogen), deren Text merkmal enthält
@@ -80,10 +81,15 @@ function laufzeit() {
       n.values[0] = r.k; n.values[1] = S.view === r.k ? 'on' : ''; n.values[2] = () => p.gehe(r.k); n.values[3] = p.narrow && r.tKurz ? r.tKurz : r.t; L.splice(i + 1, 0, n); t.values[j] = 'sechs'; }
     const r = R.find(x => x.k === S.view); if (r) seiteErsetzen(t, () => r.inhalt(p));
     // Abschnitte vor/nach dem Inhalt einer Ansicht
-    for (const a of ABSCHNITTE) if (a.ansicht === S.view && gilt(a, p)) seiteErsetzen(t, orig => html`${a.vor ? a.vor(p) : nothing}${orig}${a.nach ? a.nach(p) : nothing}`);
-    // Einblendungen im Sheet-Platz der Seite (alt.js _ui: <div class="sheet glas-panel ${an}">${melden}${sheet}</div>)
+    for (const a of ABSCHNITTE) if (a.ansicht === S.view && gilt(a, p)) seiteErsetzen(t, orig => html`${a.vor ? a.vor(p) : nothing}${a.statt ? a.statt(p, orig) : orig}${a.nach ? a.nach(p) : nothing}`);
+    // Einblendungen im Sheet-Platz der Seite (alt.js _ui: <div class="sheet glas-panel ${an}${breit}">${melden}${sheet}</div>):
+    // alle Werte im class-Attribut ersetzen, der Inhalt ist der Wert direkt vor '</div>' (seit 0.8.18x zwei Werte in class)
     const sh = S.sheet, e = sh && EINBL[sh.art];
-    if (e) { const k = t.strings.findIndex(s => s.includes('class="sheet glas-panel ')); if (k >= 0) { t.values[k] = 'an r-sheet' + (e.breit && e.breit(sh) ? ' r-breit' : ''); t.values[k + 2] = e.vorlage(p, sh); } }
+    if (e) { const k = t.strings.findIndex(s => s.includes('class="sheet glas-panel ')); if (k >= 0) {
+      t.values[k] = 'an r-sheet' + (e.breit && e.breit(sh) ? ' r-breit' : '');
+      for (let i = k + 1; i < t.strings.length && !t.strings[i].includes('>'); i++) t.values[i] = '';
+      let j = k; while (j + 1 < t.strings.length && !t.strings[j + 1].trimStart().startsWith('</div>')) j++;
+      t.values[j] = e.vorlage(p, sh); } }
     // Vorlagen der Seite gezielt ersetzen (Merkmal im Vorlagentext)
     for (const v of VORLAGEN) if (gilt(v, p)) t.values = t.values.map(x => tief(x, enthaelt(v.merkmal), y => v.fn(y, p)));
     return t;
@@ -143,7 +149,9 @@ window.RAHMEN._leiste(rWerte());`);
 /* Bilder und Prüfung im Browser: je Fall Desktop und 390 px, Konsolenfehler, waagrechtes Überlaufen */
 // Bekanntes Überlaufen der echten Seite (auch in glas.html), nicht vom Vorschlag: Leisten mit eigenem Scrollen (Chips, Modus-Leiste
 // im Container-Kopf). Der Container-Kopf am Handy ist seit BSM-031.11 (0.8.114) nicht mehr zu breit.
-const BEKANNT_SEITE = ['.ev-chips', '.chips', '[class*=leiste]', '.c-d-knoepfe .seg', 'svg *'];   // Zierrat im Thermostat-Rad (svg)
+// Reiter Heizung: .hz-raster schaltet per @media (min-width: 700px) auf 4 Spalten – im Mockup misst @media das ganze Fenster
+// (1440 px), nicht den Handy-Rahmen; in glas.html genauso (ordnung.html, 23.11.2026), in HA am Handy nicht.
+const BEKANNT_SEITE = ['.ev-chips', '.chips', '[class*=leiste]', '.c-d-knoepfe .seg', 'svg *', '.hz-raster'];   // Zierrat im Thermostat-Rad (svg)
 async function bilder(datei, ordner, faelle) {
   const { createServer } = require('http'), FRONTEND = path.join(repo, 'custom_components', 'baustelle', 'frontend');
   const puppeteer = require(require.resolve('puppeteer-core', { paths: [FRONTEND] }));
