@@ -16,6 +16,9 @@ from logik.lernen import (
     STOPP_AB_MIN,
     Tpi,
     anzeige,
+    A_GRENZEN,
+    TAU_START_H,
+    a_messung,
     auf_kw,
     auf_kw_umrechnen,
     aufheiz_min,
@@ -216,6 +219,26 @@ def test_aufheizen_taktender_oelradiator_zaehlt_weiter():
              kw_nenn=(2.0,))
     rate = (15.0 + 0.05 * 39 - 15.0) / 40 * 60
     assert s["auf"] is None and s["auf_kw"]["kalt"] == [pytest.approx(rate / 1.2, abs=1e-3), 1]   # Mittel 3/5 × 2 kW
+
+
+def test_aufheizen_lernt_a_des_raummodells():
+    """0.8.183: aus derselben Messung a = (Rate + mittleres (innen − außen) ÷ τ) ÷ kW (τ bis TAU_N Messungen der
+    Startwert); ohne Außenwert kein a, die Rate je kW schon."""
+    s, _ = _aufheizen(neuer_stand(), 15.0, 18.0, 60, aussen=0.0, kw=2.0, kw_nenn=(2.0,))
+    mittel = sum(15.0 + 3.0 * i / 60 for i in range(60)) / 60
+    rate = s["auf_kw"]["kalt"][0] * 2.0
+    assert s["a"] == [pytest.approx((rate + mittel / TAU_START_H) / 2.0, abs=1e-3), 1]
+    assert anzeige(s)["modell"] == {"a": s["a"][0], "n": 1, "n_noetig": AUF_N}
+    gelernt, _ = _aufheizen({**neuer_stand(), "tau": [24.0, 5]}, 15.0, 18.0, 60, aussen=0.0, kw=2.0, kw_nenn=(2.0,))
+    assert gelernt["a"][0] == pytest.approx((rate + mittel / 24.0) / 2.0, abs=1e-3)   # gelerntes τ
+    ohne, _ = _aufheizen(neuer_stand(), 15.0, 18.0, 60, aussen=None, kw=2.0, kw_nenn=(2.0,))
+    assert ohne["a"] is None and ohne["auf_kw"]["mild"][1] == 1
+    assert a_messung(3.0, 1.0, {"diff": 0.0, "diff_min": 10}, None) == 3.0
+    assert a_messung(A_GRENZEN[1] + 1, 1.0, {"diff": 0.0, "diff_min": 10}, None) is None
+    # ein Stand aus 0.8.182 (ohne a) lernt einfach weiter
+    alt = {k: v for k, v in neuer_stand().items() if k != "a"}
+    s2, _ = _aufheizen(alt, 15.0, 18.0, 60, aussen=0.0, kw=2.0, kw_nenn=(2.0,))
+    assert s2["a"][1] == 1
 
 
 def test_kw_fuer():

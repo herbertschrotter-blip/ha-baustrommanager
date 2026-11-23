@@ -163,8 +163,9 @@ def test_festhalten_nimmt_messung_und_prognose_mit():
 
 # ---------------------------------------------------------------- Schätzung, Zusatz, sofort
 def test_noch_nicht_gelernt_tau_und_rate_geschaetzt():
-    s = S.rechnen(_eingabe(tau=None, raten={}))
+    s = S.rechnen(_eingabe(tau=None, raten={}, kw_nenn=()))   # ohne bekannte Leistung: feste Rate aus der Größe
     assert s.tau_geschaetzt and s.tau_h == lernen.TAU_START_H and s.rate_geschaetzt and s.rate == groesse.RATE_EINZEL
+    assert s.modell_a is None
     assert s.geschaetzt and s.beginn_m < S.rechnen(_eingabe()).beginn_m       # vorsichtiger: früher
     a = S.anzeige(s, ABEND, heute_ende=990)
     assert "noch geschätzt" in a["satz"] and a["schritte"][0]["marke"] == "geschaetzt" and a["schritte"][2]["marke"] == "geschaetzt"
@@ -320,3 +321,58 @@ def test_sommerzeit_umstellung_echte_minuten():
         plan = tagesplan(tag, [Arbeitszeit(ab=date(2026, 1, 1), name="AZ", tage={tag.weekday(): (A, 990)})], [], HeizRegeln(),
                          WetterTag(), trocknen=False, warm=WarmAb(vor_min=30, max_min=480, aufheiz_min=s.plan_aufheiz_min))
         assert f"{plan.vor // 60:02d}:{plan.vor % 60:02d}" == beginn          # Plan (Wanduhr) beginnt zur selben Uhrzeit
+
+
+# ---------------------------------------------------------------- 0.8.183: Raummodell dT/dt = a·P − (innen − außen) ÷ τ
+MODELL = [4.0, 5]   # a = 4 °C/h je kW aus 5 Messungen
+
+
+def test_aufheizen_modell_rechnet_wie_die_formel():
+    """Ohne Außenwert kein Verlust: (Soll − innen) ÷ (a·kw); mit fester Außentemperatur exakt τ·ln((G − T0) ÷ (G − Soll))
+    mit dem Gleichgewicht G = außen + a·kw·τ; reicht die Leistung nicht (G ≤ Soll), None."""
+    from math import log
+    assert S.aufheizen_modell(15.0, 0, 21.0, 4.0, 1.5, 12.0, None) == 60.0
+    g = 0.0 + 4.0 * 1.5 * 12.0
+    erwartet = 12.0 * 60 * log((g - 15.0) / (g - 21.0))
+    assert abs(S.aufheizen_modell(15.0, 0, 21.0, 4.0, 1.5, 12.0, lambda m: 0.0) - erwartet) < 1e-6
+    assert S.aufheizen_modell(15.0, 0, 21.0, 0.1, 1.0, 12.0, lambda m: 0.0) is None        # G = 1,2 °C
+    assert S.aufheizen_modell(22.0, 0, 21.0, 4.0, 1.5, 12.0, lambda m: 0.0) == 0.0
+
+
+def test_raummodell_stetig_ueber_5_grad():
+    """Mit gelerntem a rechnet der Start für jede Außentemperatur stetig: kein Sprung zwischen 4,9 und 5,1 °C (bis 0.8.182
+    wechselte dort das Band – mit 2,0 statt 3,0 °C/h fast eine Stunde Unterschied), kälter heißt früher."""
+    raten = {"kalt": [1.0, 9], "mild": [1.5, 9]}   # Bänder (würden springen) – das Modell geht vor
+    def start(aussen, **neu):
+        return S.rechnen(_eingabe(innen=15.0, aussen=aussen, vorhersage=(), raten=raten, kw_nenn=(2.0,), **neu))
+    kalt, mild = start(4.9, modell=MODELL), start(5.1, modell=MODELL)
+    assert kalt.modell_a == 4.0 and not kalt.rate_geschaetzt and kalt.rate_n == 5
+    assert abs(kalt.beginn_m - mild.beginn_m) <= S.RASTER_MIN and abs(kalt.aufheiz_min - mild.aufheiz_min) <= S.RASTER_MIN
+    ohne_kalt, ohne_mild = start(4.9), start(5.1)                  # ohne Modell: die Bänder springen
+    assert ohne_kalt.modell_a is None and ohne_mild.beginn_m - ohne_kalt.beginn_m >= 30
+    beginne = [start(x, modell=MODELL).beginn_m for x in (-10, -5, 0, 4.9, 5.1, 10)]
+    assert beginne == sorted(beginne)
+    a = S.anzeige(kalt, ABEND)
+    assert "4 °C/h je kW × 2 kW" in a["schritte"][2]["rechnung"] and a["schritte"][2]["marke"] == "gelernt"
+
+
+def test_raummodell_rueckfall_bis_auf_n_messungen():
+    """Weniger als AUF_N Messungen für a: wie bisher die Rate je kW des Bands; ohne Rate die Schätzung – mit Leistung
+    das Raummodell mit a aus dem Rauminhalt, ohne Leistung die feste Rate aus der Größe."""
+    wenig = S.rechnen(_eingabe(modell=[4.0, lernen.AUF_N - 1], kw_nenn=(2.0,)))
+    assert wenig.modell_a is None and wenig.rate == 2.6 * 2.0 and not wenig.rate_geschaetzt
+    geschaetzt = S.rechnen(_eingabe(raten={}, modell=[4.0, 1], kw_nenn=(2.0,)))
+    assert geschaetzt.rate_geschaetzt and geschaetzt.modell_a == groesse.a_geschaetzt(None) and geschaetzt.rate_n == 1
+    assert "Größe und Heizleistung" in S.anzeige(geschaetzt, ABEND)["satz"]
+    ohne_kw = S.rechnen(_eingabe(raten={}, modell=MODELL, kw_nenn=()))
+    assert ohne_kw.modell_a is None and ohne_kw.rate == groesse.RATE_EINZEL
+
+
+def test_schaetzung_konvektor_plausibel():
+    """Einzelcontainer mit Konvektor 1,9 kW, außen 0 °C, 15 → 21,9 °C: geschätzt mit 5–9 °C/h (gemessen 7–9 °C/h; bis
+    0.8.182 fest 2,5 °C/h); Doppelcontainer mit 3,2 kW Ölradiatoren um 2–5 °C/h (gemessen 001 etwa 2 °C/h mit 1,8 kW)."""
+    einzel = S.rechnen(_eingabe(innen=15.0, aussen=0.0, vorhersage=(), raten={}, tau=[12, 9], kw_nenn=(1.9,)))
+    assert einzel.rate_geschaetzt and 5.0 <= einzel.rate <= 9.0, einzel.rate
+    doppel = S.rechnen(_eingabe(innen=15.0, aussen=0.0, vorhersage=(), raten={}, tau=[13, 9], kw_nenn=(1.8, 1.4),
+                                anzahl=2, stufen=True, m2=groesse.DOPPEL_M2))
+    assert doppel.rate_geschaetzt and 2.0 <= doppel.rate <= 5.0, doppel.rate

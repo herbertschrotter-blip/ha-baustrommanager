@@ -158,12 +158,13 @@ def start(hz: Heizung, bid: str, jetzt: datetime | None = None) -> start_logik.S
         innen=innen, aussen=aussen, vorhersage=_vorhersage_gelesen(hz),
         verlauf=_verlauf(hz, bid), tau=stand.get("tau"), raten=lernen.auf_kw(stand, kw),
         anzahl=len(hz.heizer_von(bid)) or 1, kw_nenn=kw, stufen=hz.stufen_an(bid), m2=e.get("groesse_m2"),
+        modell=stand.get("a"),   # 0.8.183: Raummodell
         untergrenze=float(h["frost_grenze"]) if h.get("frost") else None, fest=f,
         frueher=tuple((str(g), int(m)) for g, m in plan.frueher),   # die Verschiebung des Plans selbst (eine Regel)
     )
     zeichen = (jetzt, tag, eingabe.a, eingabe.warm, eingabe.soll, innen, aussen, eingabe.vorhersage,
                tuple(eingabe.tau) if eingabe.tau else None, tuple(sorted((k, tuple(v)) for k, v in eingabe.raten.items())),
-               eingabe.anzahl, eingabe.kw_nenn, eingabe.stufen, eingabe.m2, eingabe.untergrenze, _fest_t(f), eingabe.frueher,
+               eingabe.anzahl, eingabe.kw_nenn, tuple(eingabe.modell) if eingabe.modell else None, eingabe.stufen, eingabe.m2, eingabe.untergrenze, _fest_t(f), eingabe.frueher,
                len(eingabe.verlauf), eingabe.verlauf[-1][0] if eingabe.verlauf else None)
     if alt is not None and alt[1] == zeichen:
         hz._start_cache[bid] = (schnell, zeichen, alt[2])

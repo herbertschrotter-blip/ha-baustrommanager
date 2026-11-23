@@ -22,6 +22,11 @@ Dazu lernt jeder Container selbst:
   gelernt (AN-0006: „kalt|1“, „kalt|2“ im Feld `aufheizen`) und die Messung bei jedem Stufenwechsel neu begonnen – bei
   taktenden Ölradiatoren kam so keine Messung mehr zustande. Diese Werte bleiben stehen und werden beim ersten Takt mit
   der Leistung der Heizkörper in `auf_kw` umgerechnet (`auf_kw_umrechnen`), nicht verworfen.
+- **Raummodell** (0.8.183, 1R1C): dT/dt = a·P − (innen − außen) ÷ τ – a in °C/h je kW (wie stark die Heizleistung
+  den Raum erwärmt), τ die Auskühlzeit. Aus derselben Aufheiz-Messung: a = (Rate + mittleres (innen − außen) ÷ τ) ÷
+  mittlere Leistung, mit dem gelernten τ (bis `TAU_N` Messungen `TAU_START_H`), plausibel in `A_GRENZEN`, gemittelt
+  wie die Rate (`a` = [a, Anzahl]). Anders als die Rate je Band ist a von der Außentemperatur unabhängig: der Wärmeverlust
+  steckt in τ. Damit rechnet `start` stetig für jede Außentemperatur; ab `AUF_N` Messungen gilt das Modell.
   Daraus rechnet `aufheiz_min`, wie lange der Container bis zum Soll
   braucht – der Heizplan beginnt dann selbst so früh, dass das Soll rechtzeitig erreicht ist (`arbeitszeit.WarmAb`).
   Die Kälte steckt in der Rate, darum braucht ein lernender Container keinen Kälte-Frühstart.
@@ -100,6 +105,10 @@ AUF_KW_MIN = 0.1
 """0.8.182: Mittlere Heizleistung einer Aufheiz-Messung in kW, unter der sie verworfen wird. Ein Heizkörper auf der
 Baustelle hat 1,4–2,5 kW; liegt das Mittel unter 0,1 kW, hat in der Messung praktisch nichts geheizt (Shelly meldet
 nichts Plausibles) – eine Rate je kW daraus wäre unsinnig groß."""
+A_GRENZEN = (0.2, 40.0)
+"""0.8.183: plausibles a des Raummodells in °C/h je kW – sonst wird die Messung für a verworfen. Gemessen 23.11.2026:
+Einzelcontainer mit Konvektor ≈ 4–5, Doppelcontainer mit Ölradiatoren ≈ 1,9; die Grenzen lassen das Zehnfache nach
+beiden Seiten (kleine Räume, schwache Heizkörper) und fangen nur Unsinn (Fühler am Heizkörper, Leistung falsch)."""
 OFFEN_FENSTER_MIN = 10         # Tür vermutlich offen: in so vielen Minuten Heizen …
 OFFEN_ABFALL = 0.3             # … so viel °C kälter geworden …
 OFFEN_AUSSEN = 0.2             # … während es draußen höchstens so viel kälter wurde
@@ -273,7 +282,7 @@ def neuer_stand() -> dict[str, Any]:
     """Lernstand eines Containers (JSON-fähig, im Store unter laufzeit.lernen.<container>)."""
     return {"kint": KINT_START, "kext": KEXT_START, "n_kint": 0, "n_kext": 0, "nachlauf": {}, "treffer": [], "zyklen": 0,
             "ein": [], "beob": None, "zyklus": None, "letzte": None, "aufheizen": {}, "auf": None,
-            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None, "sperre": None}
+            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None, "sperre": None, "a": None}
     # "auf_kw" (0.8.182) fehlt absichtlich: ein Stand ohne das Feld wird beim ersten Takt aus `aufheizen` umgerechnet
 
 
@@ -378,10 +387,11 @@ def takt(
         if not ein or (innen is not None and innen >= soll - SPITZE_VORBEI) or dauer_auf >= AUF_MAX_MIN:
             s = _auf_ende(s, dauer_auf, innen if ein else s["letzte"], kw_nenn)
         else:
-            s["auf"] = _auf_kw_dazu(auf, kw)
+            s["auf"] = _auf_minute(auf, kw, innen, aussen)
     elif heizt and not ruhe and innen is not None and innen <= soll - AUF_AB_GRAD and (not lief or s["ruhe_bis"] is not None):
         s["ruhe_bis"] = None     # nach einer Ruhezeit beginnt die Messung neu, auch wenn der Heizkörper durchlief
-        s["auf"] = _auf_kw_dazu({"start": _iso(jetzt), "temp": innen, "band": band(aussen), "kw": 0.0, "kw_min": 0}, kw)
+        s["auf"] = _auf_minute({"start": _iso(jetzt), "temp": innen, "band": band(aussen), "kw": 0.0, "kw_min": 0,
+                                "diff": 0.0, "diff_min": 0}, kw, innen, aussen)
     if innen is not None:
         s["letzte"] = innen
     grenze = jetzt.timestamp() - 2 * 3600
@@ -463,11 +473,15 @@ def _kaelter_beim_heizen(verlauf: list[list[Any]], jetzt: datetime, minuten: int
     return innen_ab >= abfall and aussen_ab <= aussen_max
 
 
-def _auf_kw_dazu(auf: dict[str, Any], kw: float | None) -> dict[str, Any]:
-    """Leistung dieser Minute zur Aufheiz-Messung (Summe kW, Minuten mit Wert); ohne Wert bleibt sie, wie sie ist."""
-    if kw is None:
-        return auf
-    return {**auf, "kw": round(float(auf.get("kw") or 0.0) + max(0.0, kw), 4), "kw_min": int(auf.get("kw_min") or 0) + 1}
+def _auf_minute(auf: dict[str, Any], kw: float | None, innen: float | None, aussen: float | None) -> dict[str, Any]:
+    """Eine Minute zur Aufheiz-Messung: Leistung (Summe kW, Minuten mit Wert) und Abstand innen − außen (Summe, Minuten
+    mit beiden Werten, für a des Raummodells); fehlt ein Wert, zählt die Minute dort nicht."""
+    neu = dict(auf)
+    if kw is not None:
+        neu.update(kw=round(float(auf.get("kw") or 0.0) + max(0.0, kw), 4), kw_min=int(auf.get("kw_min") or 0) + 1)
+    if innen is not None and aussen is not None:
+        neu.update(diff=round(float(auf.get("diff") or 0.0) + innen - aussen, 3), diff_min=int(auf.get("diff_min") or 0) + 1)
+    return neu
 
 
 def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None, kw_nenn: Sequence[float] = ()) -> dict[str, Any]:
@@ -485,7 +499,25 @@ def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None, kw_nenn: Se
     rate = min(AUF_GRENZEN[1], max(AUF_GRENZEN[0], (temp - auf["temp"]) / minuten * 60))
     tabelle = auf_kw(s, kw_nenn)
     s["auf_kw"] = {**tabelle, auf["band"]: rate_mittel(tabelle.get(auf["band"]), rate / kw)}
+    a = a_messung(rate, kw, auf, s.get("tau"))
+    if a is not None:
+        s["a"] = rate_mittel(s.get("a"), a)
     return s
+
+
+def tau_h(tau: Sequence[float] | None) -> float:
+    """Auskühlzeit τ in Stunden: gelernt ab `TAU_N` Messungen, sonst `TAU_START_H`."""
+    return float(tau[0]) if tau and int(tau[1]) >= TAU_N and float(tau[0]) > 0 else TAU_START_H
+
+
+def a_messung(rate: float, kw: float, auf: Mapping[str, Any], tau: Sequence[float] | None) -> float | None:
+    """a des Raummodells (°C/h je kW) aus einer Aufheiz-Messung: (Rate + mittleres (innen − außen) ÷ τ) ÷ Leistung;
+    None ohne Außenwert in der Messung oder außerhalb `A_GRENZEN`."""
+    n = int(auf.get("diff_min") or 0)
+    if not n or kw <= 0:
+        return None
+    a = (rate + float(auf["diff"]) / n / tau_h(tau)) / kw
+    return a if A_GRENZEN[0] <= a <= A_GRENZEN[1] else None
 
 
 def rate_mittel(alt: Sequence[float] | None, wert: float) -> list[float]:
@@ -634,6 +666,8 @@ def anzeige(stand: Mapping[str, Any], kw_nenn: Sequence[float] = ()) -> dict[str
         "treffer": list(s["treffer"]),
         "aufheizen": aufheizen,
         "auf_kw": {bd: {"rate": v[0], "n": int(v[1])} for bd, v in je_kw.items()},   # °C/h je kW
+        # 0.8.183: Raummodell dT/dt = a·P − (innen − außen) ÷ τ; ab AUF_N Messungen rechnet der Start damit
+        "modell": {"a": float(s["a"][0]) if s["a"] else None, "n": int(s["a"][1]) if s["a"] else 0, "n_noetig": AUF_N},
         "offen": s["offen"], "ruhe_bis": s["ruhe_bis"],
         "sperre": s["sperre"],   # 0.8.181: warum gerade nicht gelernt wird ({grund, seit, bis}), sonst None
         "auf_n": AUF_N,

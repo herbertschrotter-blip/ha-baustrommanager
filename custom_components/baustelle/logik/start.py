@@ -16,6 +16,11 @@ Plan-Chip („morgen ab 03:30 · warm 06:35“) und Dialog „Lernstand“ › �
   die laufen – `lernen.rate_fuer`; seit 0.8.178 laufen beim Aufheizen
   alle – zuerst voll aufheizen, so spät wie möglich; bis 0.8.177 „einer reicht“, AN-0006). Nicht gelernt: Rate aus der Containergröße
   (`groesse.rate_geschaetzt`), τ = `lernen.TAU_START_H`.
+- **Raummodell** (0.8.183, `aufheizen_modell`): Hat der Container a (°C/h je kW, `lernen.a_messung`) aus mindestens
+  `lernen.AUF_N` Messungen, rechnet das Aufheizen mit dT/dt = a·P − (innen − außen) ÷ τ Schritt für Schritt mit der
+  Vorhersage – stetig für jede Außentemperatur, ohne Sprung an der Grenze der Bänder (5 °C). Sonst wie bisher: Rate je kW
+  des Außenbands (gelernt ab `AUF_N`), sonst die Schätzung – mit bekannter Leistung das Raummodell mit a aus dem
+  Rauminhalt (`groesse.a_geschaetzt`), ohne Leistung die feste Rate aus der Größe.
 - **Start** = spätester Zeitpunkt im 5-min-Raster, mit dem es bis zum Ziel warm ist. **Grenze „frühestens“ zählt vom
   Ziel** (`WarmAb.fruehestens`, Herbert 29.10.2026; bis 0.8.156 vom Arbeitsbeginn): reicht sie nicht, startet er an der
   Grenze (`begrenzt`, `beginn_ohne` = Start ohne Grenze). Ist der Start schon vorbei (fällig), heizt er ab jetzt.
@@ -32,7 +37,7 @@ from collections.abc import Callable, Mapping, Sequence
 from bisect import bisect_left
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
-from math import ceil, exp, floor
+from math import ceil, exp, floor, log
 from typing import Any
 
 from . import groesse, lernen
@@ -44,6 +49,10 @@ ZEIGEN_H = 3              # Kurve: gemessen ab so vielen Stunden vor jetzt (bzw.
 AUSSEN_ABSTAND_MIN = 55   # gemessene Außenwerte in der Kurve: etwa einer je Stunde
 TAGE_KURZ = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
 NACHHOLEN_MIN = 5         # festhalten: liegt der Plan-Beginn höchstens so lange zurück, gilt er als Beginn, sonst jetzt
+MODELL_MAX_MIN = 12 * 60
+"""0.8.183: so weit rechnet das Raummodell das Aufheizen höchstens voraus. Erreicht es das Soll bis dahin nicht (die
+Heizleistung reicht bei dieser Kälte kaum), gilt diese Dauer – der Start liegt dann an der Grenze „frühestens“ und ist
+spät. 12 h liegen weit über jeder Grenze „frühestens“ (Einstellung bis 5 h) und halten die Suche schnell."""
 FRUEHER_TEXT = {"frueher_nach_regen": "Kleidung trocknen nach Regen", "noch_frueher": "Noch früher",
                 "fruehstart": "Kälte-Frühstart"}   # Gründe aus Plan.frueher (arbeitszeit.tagesplan, plan.py)
 
@@ -86,6 +95,7 @@ class Eingabe:
     raten: Mapping[str, Sequence[float]] = field(default_factory=dict)  # Lernstand `auf_kw` {"kalt": [°C/h je kW, n]}
     anzahl: int = 1                            # aktive Heizkörper im Container
     kw_nenn: tuple[float, ...] = ()            # Leistung je aktivem Heizkörper (kW, Haupt zuerst)
+    modell: Sequence[float] | None = None      # Lernstand `a` des Raummodells = [°C/h je kW, Anzahl] (0.8.183)
     stufen: bool = False                       # „Zusatz nur bei Bedarf“ (AN-0006)
     m2: float | None = None                    # Größe für die Schätzung
     untergrenze: float | None = None           # Frostschutz an: so tief kühlt er nicht aus
@@ -138,6 +148,8 @@ class Start:
     ziel_wand: int = 0             # Ziel als Wanduhr-Minute am Tag des Starts (für den Plan)
     null_utc: datetime = datetime(2000, 1, 1, tzinfo=UTC)   # heute 0:00 (Ortszeit) in UTC – Bezug aller *_m
     zone: tzinfo | None = None
+    modell_a: float | None = None   # 0.8.183: mit dem Raummodell gerechnet – a (°C/h je kW, gelernt oder geschätzt) …
+    modell_kw: float = 0.0          # … und die Leistung der Heizkörper (kW)
 
     def uhr(self, m: int) -> str:
         """Echte Minute ab heute 0:00 → „HH:MM“ in Ortszeit."""
@@ -244,6 +256,32 @@ def _bei(punkte: Sequence[tuple[float, float]], m: float) -> float:
     return c0 + (c1 - c0) * (m - m0) / (m1 - m0) if m1 > m0 else c1
 
 
+def aufheizen_modell(innen: float, von_m: float, soll: float, a: float, kw: float, tau_h: float,
+                     aussen: Callable[[float], float] | None, max_min: float = MODELL_MAX_MIN) -> float | None:
+    """Minuten bis zum Soll nach dem Raummodell dT/dt = a·kw − (T − außen) ÷ τ (ab Minute `von_m`): je Schritt von
+    `SCHRITT_MIN` exakt gelöst mit der Außentemperatur in der Mitte des Schritts, T → Gleichgewicht außen + a·kw·τ. Ohne
+    Außenwert kein Wärmeverlust (wie `auskuehlen`). None, wenn das Soll nicht in `max_min` Minuten erreicht ist."""
+    gewinn = a * kw   # °C/h ohne Verlust
+    if innen >= soll:
+        return 0.0
+    if gewinn <= 0:
+        return None
+    if aussen is None or tau_h <= 0:
+        x = (soll - innen) / gewinn * 60
+        return x if x <= max_min else None
+    t, m, ende = innen, float(von_m), float(von_m) + max_min
+    while m < ende:
+        dt = min(float(SCHRITT_MIN), ende - m)
+        gleich = aussen(m + dt / 2) + gewinn * tau_h
+        if gleich > soll:
+            x = tau_h * 60 * log((gleich - t) / (gleich - soll))
+            if x <= dt:
+                return m - von_m + x
+        t = gleich + (t - gleich) * exp(-dt / 60 / tau_h)
+        m += dt
+    return None
+
+
 def _rate_gelernt(e: Eingabe, bd: str, anzahl: int) -> tuple[float, int] | None:
     g = lernen.rate_fuer({"auf_kw": e.raten}, e.kw_nenn, bd, anzahl)
     return g if g is not None and g[1] >= lernen.AUF_N else None
@@ -267,46 +305,66 @@ class _Lauf:
     begrenzt: bool
     beginn_ohne: int | None
     spaet: bool
+    modell_a: float | None = None
+    modell_kw: float = 0.0
+
+
+def _weg(e: Eingabe, aussen: Callable[[float], float] | None, jetzt_m: int, anzahl: int, tau_h: float
+         ) -> Callable[[float, float, float], tuple[int, str, float, int, bool, float | None]]:
+    """Aufheizen ab Minute m bei t0 °C (höchstens `bis` Minuten vorausgerechnet) → (Minuten im 5-min-Raster, Band,
+    Rate °C/h, Anzahl Messungen, geschätzt, a des Raummodells oder None). Reihenfolge siehe Modul-Docstring."""
+    kw = lernen.kw_fuer(e.kw_nenn, anzahl)
+    a_n = int(e.modell[1]) if e.modell else 0
+    a_gelernt = float(e.modell[0]) if e.modell and a_n >= lernen.AUF_N and float(e.modell[0]) > 0 and kw > 0 else None
+
+    def weg(m: float, t0: float, bis: float = MODELL_MAX_MIN) -> tuple[int, str, float, int, bool, float | None]:
+        bd = lernen.band(aussen(max(m, jetzt_m)) if aussen is not None else e.aussen)
+        g = None if a_gelernt is not None else _rate_gelernt(e, bd, anzahl)
+        if a_gelernt is None and g is not None:
+            return _aufheiz(t0, e.soll, g[0]), bd, g[0], g[1], False, None
+        if a_gelernt is None and kw <= 0:   # ohne bekannte Leistung: die feste Schätzung aus der Größe
+            r = groesse.rate_geschaetzt(e.m2)
+            return _aufheiz(t0, e.soll, r), bd, r, _rate_n(e, bd), True, None
+        a = a_gelernt if a_gelernt is not None else groesse.a_geschaetzt(e.m2)
+        x = aufheizen_modell(t0, max(m, jetzt_m), e.soll, a, kw, tau_h, aussen, bis)
+        minuten = _raster_auf(x) if x is not None else int(bis) + RASTER_MIN
+        rate = (e.soll - t0) / minuten * 60 if minuten > 0 and e.soll > t0 else a * kw
+        return minuten, bd, rate, a_n, a_gelernt is None, a
+
+    return weg
 
 
 def _suchen(e: Eingabe, kurve: Sequence[tuple[int, float]], aussen: Callable[[float], float] | None, jetzt_m: int,
-            ziel_m: int, grenze_m: int, anzahl: int) -> _Lauf:
+            ziel_m: int, grenze_m: int, anzahl: int, tau_h: float = lernen.TAU_START_H) -> _Lauf:
     """Spätester Start im 5-min-Raster, mit dem es bis `ziel_m` warm ist; nicht vor der Grenze `grenze_m`.
 
     Liegt er schon vor jetzt (fällig, z. B. die Auswertung kam erst eine Minute später), bleibt er stehen – die Regelung
     heizt dann ab jetzt (der Plan beginnt in der Vergangenheit) und die Prognose rechnet ab der Temperatur von jetzt."""
-    geschaetzt = groesse.rate_geschaetzt(e.m2)
+    weg = _weg(e, aussen, jetzt_m, anzahl, tau_h)
 
-    def rate(m: float) -> tuple[str, float, int, bool]:
-        a = aussen(max(m, jetzt_m)) if aussen is not None else e.aussen
-        bd = lernen.band(a)
-        g = _rate_gelernt(e, bd, anzahl)
-        return (bd, g[0], g[1], False) if g else (bd, geschaetzt, _rate_n(e, bd), True)
-
-    def auf(m: float) -> int:   # vor jetzt: die Temperatur von jetzt (früher war es eher wärmer)
-        return _aufheiz(_bei(kurve, max(m, jetzt_m)), e.soll, rate(m)[1])
+    def t_bei(m: float) -> float:   # vor jetzt: die Temperatur von jetzt (früher war es eher wärmer)
+        return _bei(kurve, max(m, jetzt_m))
 
     ohne = None
     s = floor(ziel_m / RASTER_MIN) * RASTER_MIN
-    while s > jetzt_m:   # nur zwischen jetzt und dem Ziel wird gesucht (Kurve der Prognose)
-        if s + auf(s) <= ziel_m:
+    while s > jetzt_m and ziel_m - s <= MODELL_MAX_MIN:   # nur zwischen jetzt und dem Ziel (Kurve der Prognose)
+        if s + weg(s, t_bei(s), ziel_m - s)[0] <= ziel_m:
             ohne = s
             break
         s -= RASTER_MIN
     if ohne is None:   # vor jetzt gilt die Temperatur von jetzt: der späteste Start direkt (fällig bzw. ohne Grenze)
-        ohne = floor(min(jetzt_m, ziel_m - auf(jetzt_m)) / RASTER_MIN) * RASTER_MIN
+        ohne = floor(min(jetzt_m, ziel_m - weg(jetzt_m, t_bei(jetzt_m))[0]) / RASTER_MIN) * RASTER_MIN
     if ohne >= grenze_m:
         beginn, begrenzt = ohne, False
     else:
         beginn, begrenzt = grenze_m, True
     ab = max(beginn, jetzt_m)
-    bd, r, n, ges = rate(ab)
     t0 = _bei(kurve, ab)
-    a = _aufheiz(t0, e.soll, r)
+    a, bd, r, n, ges, modell_a = weg(ab, t0)
     warm = ab + a
     # spät: warm erst nach dem Ziel, ohne dass die Grenze schuld ist – oder die Grenze liegt schon zurück (fällig)
     return _Lauf(beginn, warm, t0, bd, r, n, ges, a, begrenzt, ohne if begrenzt else None,
-                 warm > ziel_m and (not begrenzt or beginn < jetzt_m))
+                 warm > ziel_m and (not begrenzt or beginn < jetzt_m), modell_a, lernen.kw_fuer(e.kw_nenn, anzahl))
 
 
 # ---------------------------------------------------------------------------------------------------- Rechnung
@@ -335,15 +393,15 @@ def rechnen(e: Eingabe) -> Start | None:
     alle = max(1, e.anzahl)
     rate_einer = None
     if e.stufen and alle >= 2:   # 0.8.178 (Herbert 20.11.2026): zuerst voll aufheizen – alle laufen, so spät wie möglich
-        einer = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, 1)
-        beide = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle)
+        einer = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, 1, tau_h)
+        beide = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle, tau_h)
         if not beide.rate_geschaetzt:
             lauf, anzahl, zusatz = beide, alle, True
             rate_einer = None if einer.rate_geschaetzt else einer.rate
         else:   # nur für einen gelernt oder nichts gelernt (Rate aus der Größe): für einen rechnen (früher, sicher), alle laufen mit
             lauf, anzahl, zusatz = einer, 1, True
     else:
-        lauf, anzahl, zusatz = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle), alle, False
+        lauf, anzahl, zusatz = _suchen(e, kurve, aussen, jetzt_m, ziel_m, grenze_m, alle, tau_h), alle, False
     # „früher“ (Regen, Noch früher): der Plan beginnt um so viel früher – der Start auch; ab da wird geheizt, also
     # rechnen Temperatur beim Start und „warm um“ ab dort (nicht vor Mitternacht des Tages, wie der Plan)
     extra = sum(max(0, int(m)) for _, m in e.frueher)
@@ -352,8 +410,8 @@ def rechnen(e: Eingabe) -> Start | None:
         b = max(versatz, lauf.beginn - extra)
         ab = max(b, jetzt_m)
         t0 = _bei(kurve, ab)
-        a = _aufheiz(t0, e.soll, lauf.rate)
-        lauf = replace(lauf, beginn=b, warm=ab + a, innen_start=t0, aufheiz=a,
+        a, _, r, *_ = _weg(e, aussen, jetzt_m, anzahl, tau_h)(ab, t0)
+        lauf = replace(lauf, beginn=b, warm=ab + a, innen_start=t0, aufheiz=a, rate=r,
                        spaet=ab + a > ziel_m and (not lauf.begrenzt or b < jetzt_m))
     return Start(
         **gemeinsam, auf_beginn_m=auf_beginn, frueher=tuple((g, int(m)) for g, m in e.frueher if int(m) > 0),
@@ -362,7 +420,7 @@ def rechnen(e: Eingabe) -> Start | None:
         aussen_bis=aussen(lauf.beginn) if aussen is not None else None, band=lauf.band, rate=lauf.rate,
         rate_n=lauf.rate_n, rate_geschaetzt=lauf.rate_geschaetzt, anzahl=anzahl, rate_einer=rate_einer,
         aufheiz_min=lauf.aufheiz, begrenzt=lauf.begrenzt, beginn_ohne_m=lauf.beginn_ohne, spaet=lauf.spaet, laeuft=False,
-        zusatz=zusatz, prognose_start=None,
+        zusatz=zusatz, prognose_start=None, modell_a=lauf.modell_a, modell_kw=lauf.modell_kw,
         kurve=_kurve(e, kurve, jetzt_m, lauf.beginn, lauf.warm, a_m),
         aussen_kurve=_aussen_kurve(e, aussen, jetzt_m, min(jetzt_m, lauf.beginn), a_m, heute),
     )
@@ -534,7 +592,8 @@ def anzeige(s: Start, jetzt: datetime, heute_ende: int | None = None, m2: float 
                 f"warm um etwa {s.uhr(s.warm_m)}" + (f", {spaet_min} min nach dem Ziel {s.uhr(s.ziel_m)}." if spaet_min > 0 else "."))
     elif s.geschaetzt:
         was = ("Auskühlen und Aufheizen aus Größe und Heizleistung" if s.tau_geschaetzt and s.rate_geschaetzt
-               else "Auskühlen noch geschätzt" if s.tau_geschaetzt else "Aufheizen aus der Größe")
+               else "Auskühlen noch geschätzt" if s.tau_geschaetzt
+               else "Aufheizen aus Größe und Heizleistung" if s.modell_a is not None else "Aufheizen aus der Größe")
         satz = (f"Startet {tag_t} um {s.uhr(s.beginn_m)}, damit es um {s.uhr(s.ziel_m)} {zahl(s.soll)} °C hat – noch geschätzt "
                 f"({was}, vorsichtig gerechnet).")
         if s.begrenzt:
@@ -607,7 +666,7 @@ def _schritte(s: Start, aussen_t: str | None, hk: str, m2: float | None, spaet_m
     rate_marke = (("geschaetzt", f"noch geschätzt · {s.rate_n} von {lernen.AUF_N} gemessen") if s.rate_geschaetzt
                   else ("gelernt", f"gelernt aus {s.rate_n} Mal"))
     if s.rate_geschaetzt:
-        wie = f"aus {zahl(groesse.flaeche(m2))} m²-Container"
+        wie = f"aus {zahl(groesse.flaeche(m2))} m²-Container" + (f" und {zahl(s.modell_kw, 2)} kW" if s.modell_a is not None else "")
     elif s.anzahl >= 2 and s.rate_einer is not None:
         wie = f"mit {s.anzahl} Heizkörpern · einer allein {zahl(s.rate_einer)} °C/h, zu langsam"
     elif s.anzahl >= 2:
@@ -631,8 +690,11 @@ def _schritte(s: Start, aussen_t: str | None, hk: str, m2: float | None, spaet_m
                             + (f"rechtzeitig vor {s.uhr(s.ziel_m)}" if spaet_min <= 0 else f"{spaet_min} min nach dem Ziel {s.uhr(s.ziel_m)}"),
                 "marke": None, "marke_t": None, "ton": "ergebnis"}
         return [kuehl, ziel, auf, warm] + _frueher_kachel(s)
-    auf = {"k": "auf", "t": "Aufheizen", "wert": f"≈ {dauer(s.aufheiz_min)}",
-           "rechnung": f"{zahl(max(0.0, s.soll - s.innen_start))} °C ÷ {zahl(s.rate)} °C/h · {wie}",
+    rechnung = f"{zahl(max(0.0, s.soll - s.innen_start))} °C ÷ {zahl(s.rate)} °C/h · {wie}"
+    if s.modell_a is not None:   # 0.8.183: Raummodell – die Rate ist das Mittel über das Aufheizen
+        rechnung = (f"{zahl(max(0.0, s.soll - s.innen_start))} °C mit {zahl(s.modell_a, 2)} °C/h je kW × "
+                    f"{zahl(s.modell_kw, 2)} kW, weniger Wärmeverlust (τ {zahl(s.tau_h, 0)} h) ≈ {zahl(s.rate)} °C/h · {wie}")
+    auf = {"k": "auf", "t": "Aufheizen", "wert": f"≈ {dauer(s.aufheiz_min)}", "rechnung": rechnung,
            "marke": rate_marke[0], "marke_t": rate_marke[1]}
     if s.begrenzt:
         gr_r = (f"{s.uhr(s.ziel_m)} − {dauer(s.max_min)} · erreicht: "

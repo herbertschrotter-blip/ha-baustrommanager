@@ -9,7 +9,7 @@ from homeassistant.const import STATE_ON
 from homeassistant.util import dt as dt_util
 
 from ...const import TYP_OELRADIATOR, ROLLE_HEIZKOERPER
-from ...logik import baseline as b, groesse, lernen, stufen
+from ...logik import baseline as b, lernen, stufen
 from ...logik.arbeitszeit import Plan, WarmAb
 from ...logik.regelung import Soll, SollGrund
 from ...logik.zaehlen import rate
@@ -214,7 +214,7 @@ def warm_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
     geschaetzt = s is not None and s.rate_geschaetzt
     return {
         "gelernt": s is not None and not s.rate_geschaetzt, "band": s.band if s is not None else lernen.band(hz.st.daten.wetter.aussen),
-        "geschaetzt": groesse.rate_geschaetzt(e.get("groesse_m2")) if geschaetzt else None,
+        "geschaetzt": round(s.rate, 2) if s is not None and geschaetzt else None,   # 0.8.183: wie der Start schätzt
         "rate": s.rate if s is not None and not s.rate_geschaetzt else None, "n": s.rate_n if s is not None else 0,
         "n_noetig": lernen.AUF_N, "vor": warm.vor_min, "nach": warm.nach_min, "max": warm.max_min,
         "vor_eigen": e.get("warm_vor") is not None, "nach_eigen": e.get("warm_nach") is not None,

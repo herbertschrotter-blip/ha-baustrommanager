@@ -2,7 +2,7 @@
 
 import pytest
 
-from logik.groesse import DOPPEL_M2, anzeige, art, EINZEL_M2, aufheiz_min, flaeche, je_m2, rate_geschaetzt, volumen
+from logik.groesse import A_M3, a_geschaetzt, DOPPEL_M2, anzeige, art, EINZEL_M2, aufheiz_min, flaeche, je_m2, rate_geschaetzt, volumen
 
 
 def test_flaeche_und_volumen():
@@ -30,3 +30,9 @@ def test_art_und_anzeige():
     assert art(None) == "einzel" and art(13.5) == "einzel" and art(28) == "doppel" and art(20) == "frei"
     a = anzeige(28)
     assert a["art"] == "doppel" and round(a["m3"]) == 64 and a["hoehe"] == 2.3 and a["typen"]["einzel"]["breite"] == 2.29
+
+
+def test_a_geschaetzt_aus_rauminhalt():
+    """0.8.183: a des Raummodells = A_M3 ÷ Rauminhalt – Einzel ≈ 3,9, Doppel ≈ 1,9 °C/h je kW."""
+    assert a_geschaetzt(None) == pytest.approx(A_M3 / (EINZEL_M2 * 2.30))
+    assert 3.5 < a_geschaetzt(EINZEL_M2) < 4.2 and 1.7 < a_geschaetzt(DOPPEL_M2) < 2.0

@@ -315,7 +315,9 @@ async def test_lern_reset_vergisst_auch_warm_ab(hass: HomeAssistant, freezer, sh
     assert st.lz["warm_start"][C1]["aufheiz_min"] == 80
     await ws(entry, "baustelle/aktion", aktion="lern_reset", bereich=C1)
     warm = _c(hass, entry)["lernen"]["warm"]
-    assert warm["gelernt"] is False and warm["geschaetzt"] == 2.5 and warm["plan"]["start"] == 7 * 60 - 100   # AN-0014
+    # AN-0014, seit 0.8.183 aus Größe und Leistung (Raummodell, a ≈ 3,9 °C/h je kW × 2 kW, τ wieder der Startwert)
+    assert warm["gelernt"] is False and warm["geschaetzt"] == 5.96 and warm["aufheiz_min"] == 45
+    assert warm["plan"]["start"] == 7 * 60 - 45
 
 
 # ====================================================================== B. Warm ab (AN-0004)
@@ -335,8 +337,9 @@ async def test_warm_ab_ungelernt_alte_regeln_mit_fruehstart(hass: HomeAssistant,
 
 
 async def test_warm_ab_ungelernt_geschaetzt_aus_der_groesse(hass: HomeAssistant, freezer, shellys, nachrichten, ws) -> None:
-    """AN-0014: noch nichts gelernt → Aufheizen aus der Größe geschätzt (Einzel 2,5 °C/h: 16 → 20 °C = 100 min,
-    Doppel 28 m² ≈ 1,2 °C/h = 200 min), wie gelernt ohne Kälte-Frühstart; die Größe ist je Container einstellbar."""
+    """AN-0014: noch nichts gelernt → Aufheizen aus der Größe geschätzt, seit 0.8.183 mit der Leistung (Raummodell:
+    a = 120 ÷ Rauminhalt, 2 kW, ohne Auskühlen): Einzel 3,86 × 2 = 7,7 °C/h: 16 → 20 °C = 31 → 35 min, Doppel 28 m²
+    1,86 × 2 = 3,7 °C/h = 64 → 65 min; wie gelernt ohne Kälte-Frühstart; die Größe ist je Container einstellbar."""
     entry, st = await _einrichten(hass, freezer, shellys, "2026-09-30 04:00:00+02:00")
     st.lz["wetter_tage"] = {"2026-09-30": {"frueh": -4.0}}
     st.lz["lernen"][C1] = {"tau": [1e9, 9]}   # nur das Aufheizen geschätzt; Auskühlen prüft D2
@@ -345,19 +348,18 @@ async def test_warm_ab_ungelernt_geschaetzt_aus_der_groesse(hass: HomeAssistant,
     st.einstellung_setzen(("automatik",), True)
     await hass.async_block_till_done()
     warm = _c(hass, entry)["lernen"]["warm"]
-    assert warm["gelernt"] is False and warm["geschaetzt"] == 2.5 and warm["aufheiz_min"] == 100 and warm["plan"]["start"] == 320
+    assert warm["gelernt"] is False and warm["geschaetzt"] == 6.86 and warm["aufheiz_min"] == 35 and warm["plan"]["start"] == 385
     ab = struktur(hass, entry)["laufzeit"]["abschnitte"][C1]["2026-09-30"]
-    assert ab[0] == [320, 420, "vorheizen"] and all(x[2] != "fruehstart" for x in ab)
+    assert ab[0] == [385, 420, "vorheizen"] and all(x[2] != "fruehstart" for x in ab)
     antwort = await ws(entry, "baustelle/setzen", pfad=["bereiche", C1, "groesse_m2"], wert=28)
     assert antwort["success"] is True
     warm = _c(hass, entry)["lernen"]["warm"]
-    assert round(warm["geschaetzt"], 2) == 1.21 and warm["aufheiz_min"] == 200 and warm["plan"]["start"] == 220
+    assert warm["geschaetzt"] == 3.69 and warm["aufheiz_min"] == 65 and warm["plan"]["start"] == 355
     antwort = await ws(entry, "baustelle/setzen", pfad=["bereiche", C1, "groesse_m2"], wert=2)
     assert antwort["success"] is False
-    await _zu(hass, freezer, "2026-09-30 04:01:00+02:00", st)
+    await _zu(hass, freezer, "2026-09-30 05:56:00+02:00", st)
     f = st.lz["warm_start"][C1]   # fest, mit Merker „geschätzt“ und den Werten beim Start (FE-0031/32)
-    # Beginn 03:40 lag schon zurück, als die Größe auf 28 m² ging: festgehalten wird 04:00 (da begann das Heizen)
-    assert (f["tag"], f["aufheiz_min"], f["zusatz"], f["geschaetzt"], f["beginn"], f["innen_start"]) == ("2026-09-30", 200, False, True, 240, 16.0)
+    assert (f["tag"], f["aufheiz_min"], f["zusatz"], f["geschaetzt"], f["beginn"], f["innen_start"]) == ("2026-09-30", 65, False, True, 355, 16.0)
 
 
 async def test_warm_ab_gelernt_kein_fruehstart(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:

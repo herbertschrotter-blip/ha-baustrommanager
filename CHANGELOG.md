@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.183] – 2026-11-23
+
+- Heizung: **Raummodell statt zweier Außenbänder** (Prüfpunkt 3): Jeder lernende Container lernt aus seinen
+  Aufheiz-Messungen dazu a – wie viele °C je Stunde ein kW Heizleistung bringt, ohne den Wärmeverlust nach außen
+  (dT/dt = a·P − (innen − außen) ÷ τ, τ = gelernte Auskühlzeit). Ab 3 Messungen rechnet der Start das Aufheizen damit
+  Schritt für Schritt mit der Wettervorhersage – stetig für jede Außentemperatur, ohne den Sprung bei 5 °C zwischen
+  „kalt“ und „mild“. Bis dahin gilt wie bisher die gelernte Rate des Außenbands.
+- Schätzung ohne Gelerntes aus **Containergröße und Heizleistung**: a ≈ 120 ÷ Rauminhalt (Einzelcontainer ≈ 3,9,
+  Doppel ≈ 1,9 °C/h je kW, aus den Messungen der Baustelle, vorsichtig gewählt). Ein Einzelcontainer mit 1,9-kW-Konvektor
+  wird so auf rund 6 °C/h geschätzt statt fest 2,5 °C/h (gemessen 7–9 °C/h). Ohne bekannte Leistung bleibt die alte
+  Schätzung. Im Dialog „So rechnet der Start“ steht beim Aufheizen die Rechnung mit a, kW und τ.
+
 ## [0.8.182] – 2026-11-23
 
 - Heizung: **Aufheizrate je kW statt je Anzahl Heizkörper** (Prüfpunkt 2): Die Messung des Aufheizens begann bei jedem
