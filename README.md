@@ -98,7 +98,7 @@ Quelle der Wahrheit ist dieses Repo (`/config/projekte/ha-baustrommanager`). `/c
 
 ## Installation über HACS
 
-1. HACS → Integrationen → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/herbertschrotter-blip/ha-baustrommanager`,
+1. HACS → Integrationen → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/herbertschrotter-blip/bau-ha-baustrommanager`,
    Kategorie **Integration**.
 2. **Baustelle** herunterladen, Home Assistant neu starten (ab 2026.9). Die Abhängigkeit `psycopg` (für PostgreSQL)
    installiert HA beim ersten Start selbst.

@@ -6,7 +6,7 @@ import pytest
 from logik.geraete import rolle_passt
 from logik.inventar import (
     HAENGT, InventarFehler, assistent_typen, assistent_vorschlag, assistent_zuordnung, container_vorschau, frei_setzen,
-    kandidat_reihenfolge, mit_zuordnung, nur_geraet,
+    anderer_kanal, kandidat_reihenfolge, mit_zuordnung, nachholen_auswahl, nur_geraet, rolle_setzen, rolle_vorschlag,
 )
 
 
@@ -163,3 +163,35 @@ def test_container_nummer_als_text_und_ohne_inventar():
     assert f["nummer_text"] == "03"
     o = container_vorschau(schacht=False, eigen=True, art=None, ohne_inventar=True)
     assert not o["im_inventar"] and o["inventar"] is None and not o["belegt"] and "Nicht im Inventar" in o["hinweis"]
+
+
+def test_nachholen_nur_die_auswahl():
+    """Gutachten 0.8.194: war die Umbenennung eine Auswahl (Assistent), holt „Nachholen“ nur ihre Schritte nach – nicht den
+    ganzen Container; eine Umbenennung ohne Auswahl bleibt, wie sie war."""
+    v = _vorschau_container()
+    auswahl = [{**s, "auswahl": True, "ergebnis": "fehler" if s["ziel"] == "plug" else "ok"} for s in nur_geraet(v, {"switch.neu"})["schritte"]]
+    aus = nachholen_auswahl(v, auswahl)
+    assert {s["gruppe"] for s in aus["schritte"]} == {"001-02_C_PLUG_POL"}
+    assert aus["konflikte"] == {"switch.neu": "switch.001_02_c_plug_pol"}
+    assert len(nachholen_auswahl(v, [{k: x for k, x in s.items() if k != "auswahl"} for s in auswahl])["schritte"]) == 18
+
+
+def test_rolle_erster_heizkoerper_primaer():
+    """Gutachten 0.8.194: der erste Heizkörper eines leeren Containers ist Primär, jeder weitere Zusatz."""
+    assert rolle_vorschlag(0) == "primaer" and rolle_vorschlag(1) == "zusatz"
+    assert rolle_setzen(None, "primaer", None) == (True, None)
+    assert rolle_setzen(None, "zusatz", None) == (False, True)
+    assert rolle_setzen("primaer", "zusatz", True) == (True, False)
+    assert rolle_setzen("zusatz", "primaer", None) == (False, True)
+
+
+def test_anderer_kanal_desselben_geraets():
+    """Zweiter Kanal eines Shelly 2PM, dessen erster schon im Container im Inventar steht → nur einhängen."""
+    aus = [{"id": "a1", "kennung": "shelly-2pm"}]
+    ein = [{"ausruestung_id": "a1", "container_id": "c1", "geraet_id": "g1", "bis": None}]
+    sch = {"g1": "switch.k1"}
+    assert anderer_kanal(aus, ein, "shelly-2pm", "c1", sch, "switch.k2")
+    assert not anderer_kanal(aus, ein, "shelly-2pm", "c1", sch, "switch.k1")    # derselbe Kanal
+    assert not anderer_kanal(aus, ein, "shelly-2pm", "c2", sch, "switch.k2")    # anderer Container
+    assert not anderer_kanal(aus, ein, "anderes", "c1", sch, "switch.k2")
+    assert not anderer_kanal(aus, [{**ein[0], "bis": "2026-11-01"}], "shelly-2pm", "c1", sch, "switch.k2")

@@ -1777,7 +1777,7 @@ class BaustellePanel extends LitElement {
   assistentAuf(o = {}) {
     const S = this.s, zurueck = 'zurueck' in o ? o.zurueck : S.sheet && ['bereich', 'inv-container'].includes(S.sheet.art) ? S.sheet : null;
     this.invNeu();
-    S.sheet = { art: 'geraet-assistent', schritt: 1, bid: null, vorgabe: false, dev: null, schalter: null, typ: null, nenn: null, rolle: 'zusatz', frei: false, freiName: '', q: '', ...o, zurueck };
+    S.sheet = { art: 'geraet-assistent', schritt: 1, bid: null, vorgabe: false, dev: null, schalter: null, typ: null, nenn: null, rolle: null, frei: false, freiName: '', q: '', ...o, zurueck };
     return this.neuZeichnen();
   }
   assistentSchritt(s, n) { s.schritt = n; return this.neuZeichnen(); }
@@ -1792,7 +1792,19 @@ class BaustellePanel extends LitElement {
   }
   /* Gutachten 0.8.192: nach Hinzufügen und Rückgängig den Entwurf von „Bearbeiten“ darunter verwerfen – er wird beim nächsten
      Zeichnen aus den frischen Daten neu gebildet (sonst setzte „Speichern“ Fühler, Tür und Primär auf den alten Stand zurück) */
-  entwurfNeu(sheet) { for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) if (x.art === 'bereich') delete x.edit; }
+  /* Gutachten 0.8.194: was Herbert in „Bearbeiten“ schon geändert, aber noch nicht gespeichert hat, bleibt – der neue Entwurf
+     übernimmt diese Felder (Geräte je id), alles andere kommt frisch */
+  entwurfNeu(sheet) {
+    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) {
+      if (x.art !== 'bereich' || !x.edit) continue;
+      const a = x.editAnfang || {}, gl = (u, v) => JSON.stringify(u) === JSON.stringify(v);
+      const eigen = Object.fromEntries(Object.entries(x.edit).filter(([k, v]) => k !== 'geraete' && !gl(v, a[k])));
+      const altG = Object.fromEntries((a.geraete || []).map(g => [g.id, g]));
+      const geraete = (x.edit.geraete || []).filter(g => g.neu || !gl(g, altG[g.id]));   // geändert, entfernt (weg) oder neu
+      x.editBehalten = { ...(x.editBehalten || {}), ...eigen, ...(geraete.length ? { geraete } : {}) };
+      delete x.edit; delete x.editAnfang;
+    }
+  }
   async assistentNachher(s) { this.entwurfNeu(s.zurueck); this.invNeu(); this.neuZeichnen(); await this._laden(); this.entwurfNeu(s.zurueck); }
   assistentNenn(s, dd) { const v = s.nenn ? Math.round((s.nenn + dd) * 10) / 10 : dd > 0 ? 2 : null; s.nenn = v && v >= 0.1 ? Math.min(10, v) : null; return this.neuZeichnen(); }
   async assistentAnlegen(s, namenLassen = false) {
@@ -1909,7 +1921,7 @@ class BaustellePanel extends LitElement {
   idsTauschen(sheet, ids) {   // {alt: neu} der Integration (baustelle/inventar_umbenennen, …_rueckgaengig) in Entwurf und Formular jedes Dialogs darunter
     if (!ids || !Object.keys(ids).length) return;
     const tausch = o => { for (const k of Object.keys(o)) { const v = o[k]; if (typeof v === 'string' && Object.hasOwn(ids, v)) o[k] = ids[v]; else if (v && typeof v === 'object') tausch(v); } };
-    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) { if (x.edit) tausch(x.edit); if (x.form) tausch(x.form); }
+    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) { for (const k of ['edit', 'editAnfang', 'editBehalten', 'form']) if (x[k]) tausch(x[k]); }
   }
   npProbe(id, m) { return this.ws({ type: 'baustelle/notprogramm_probe', entry_id: this.d.entry, geraet: id, minuten: m }, m ? `Ausfall-Probe ${m} min gestartet` : 'Ausfall-Probe beendet'); }
   /* Dialoge für Container und Geräte (src/ansichten/einblendungen-einrichtung.js, BSM-022 3e); Rümpfe wie bisher in klick() */
@@ -2006,12 +2018,22 @@ class BaustellePanel extends LitElement {
   aussehenAuf(x) { return this.unterDialog({ art: 'aussehen', id: x.id }); }   // BSM-032
   bereichEntwurf(x, s) {   // Entwurf für „Container bearbeiten“: einmal aus den Daten, danach bleibt er beim Neuzeichnen stehen
     const d = this.d;
-    return s.edit ||= { modus: x.modus ?? null, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
+    if (s.edit) return s.edit;
+    const e = { modus: x.modus ?? null, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
       groesseArt: (x.groesse && x.groesse.art) || 'einzel', m2: x.groesse ? x.groesse.m2 : null,
       warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn, primaer: x.primaer || '',   // AN-0015
       lernen: !!(x.lern && x.lern.an), trocknen: !!x.trocknen,   // AN-0018: Lernen und Trocknen stehen in „Bearbeiten“, gespeichert mit „Speichern“
       // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
       geraete: x.geraete.map(g => ({ id: g.id, n: g.n, typ: g.typ, schalter: g.schalter, leistung: g.leistungEigen || undefined, energie: g.energieEigen || undefined, alt: { n: g.n, typ: g.typ } })) };
+    s.editAnfang = JSON.parse(JSON.stringify(e));
+    const b = s.editBehalten;   // eigene, noch nicht gespeicherte Änderungen von vorher (entwurfNeu)
+    if (b) {
+      const { geraete, ...rest } = b, je = Object.fromEntries((geraete || []).filter(g => !g.neu).map(g => [g.id, g]));
+      Object.assign(e, rest);
+      e.geraete = e.geraete.map(g => je[g.id] ? { ...g, ...je[g.id], schalter: g.schalter } : g).concat((geraete || []).filter(g => g.neu));
+      delete s.editBehalten;
+    }
+    return (s.edit = e);
   }
   symAendern(x, fn) { const c = JSON.parse(JSON.stringify(this.symKonfig(x))); fn(c); return this.symSenden(x, c); }
   symStandard() { const s = this.s.sheet; s.sym = null; s.std = true; return this.neuZeichnen(); }

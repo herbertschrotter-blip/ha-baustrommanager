@@ -73,6 +73,8 @@ async def test_typen_und_vorschau(hass: HomeAssistant, baustelle_register, hass_
     assert next(x for x in t["result"]["typen"] if x["k"] == "fuehler")["grund"] == "passt nicht zu Shelly Plug S Gen3"
     schacht = await _senden(ws, 2, type="baustelle/geraet_typen", entry_id=entry.entry_id, bereich_id=SCHACHT, device_id=dev)
     assert schacht["result"]["vorschlag"] == "pumpe"
+    # Gutachten 0.8.194: Primär nur, solange der Container keinen Heizkörper hat (C1 hat Heizkörper 1)
+    assert t["result"]["rolle"] == "zusatz" and schacht["result"]["rolle"] == "primaer"
 
     ohne = await _senden(ws, 3, type="baustelle/geraet_vorschau", entry_id=entry.entry_id, bereich_id=C1, device_id=dev, typ="konvektor")
     assert ohne["success"] and ohne["result"]["im_inventar"] is False and "Inventar" in ohne["result"]["hinweis"]
@@ -467,3 +469,71 @@ async def test_rueckgaengig_doppelt_laeuft_einmal(hass: HomeAssistant, baustelle
     erg = [await ws.receive_json(), await ws2.receive_json()]
     await hass.async_block_till_done()
     assert sorted(x["success"] for x in erg) == [False, True], erg
+
+
+async def test_rueckgaengig_ohne_datenbank_nimmt_nichts_zurueck(hass: HomeAssistant, baustelle_register, hass_ws_client,
+                                                                 monkeypatch) -> None:
+    """Gutachten 0.8.194: ist die Datenbank beim Rückgängig nicht bereit, wird nichts zurückgenommen (sonst blieben Namen
+    und Inventar, und „zurückgenommen“ stimmte nicht) – die Marke bleibt, später klappt es."""
+    entry = baustelle_register
+    dev = _neues_geraet(hass)
+    ws = await hass_ws_client(hass)
+    await _inventar(ws, entry, 1)
+    a = await _senden(ws, 2, type="baustelle/geraet_hinzufuegen", entry_id=entry.entry_id, bereich_id=C1, device_id=dev, typ="konvektor")
+    await hass.async_block_till_done()
+    assert a["success"] and a["result"]["umbenannt"]["status"] == "ausgefuehrt", a
+    db = hass.data[DATA_DB]
+    monkeypatch.setattr(type(db), "bereit", property(lambda _s: False))
+    nein = await _senden(ws, 3, type="baustelle/geraet_hinzufuegen_rueckgaengig", rueck=a["result"]["rueck"])
+    assert not nein["success"] and nein["error"]["code"] == "db_fehlt", nein
+    assert dr.async_get(hass).async_get(dev).name_by_user == "001-02_C_PLUG_POL"   # nichts angefasst
+    monkeypatch.undo()
+    _zustaende_umziehen(hass)
+    z = await _senden(ws, 4, type="baustelle/geraet_hinzufuegen_rueckgaengig", rueck=a["result"]["rueck"])
+    await hass.async_block_till_done()
+    assert z["success"] and z["result"]["ok"], z
+    assert dr.async_get(hass).async_get(dev).name_by_user is None
+
+
+async def test_nachholen_nach_assistent_nur_das_neue_geraet(hass: HomeAssistant, baustelle_register, hass_ws_client) -> None:
+    """Gutachten 0.8.194: bleibt die Umbenennung des Assistenten `teilweise`, holt „Nachholen“ nur ihre Schritte nach –
+    Heizkörper 1 und der Fühler des Containers behalten ihre Namen."""
+    entry = baustelle_register
+    dev = _neues_geraet(hass)
+    ws = await hass_ws_client(hass)
+    cid = await _inventar(ws, entry, 1)
+    a = await _senden(ws, 2, type="baustelle/geraet_hinzufuegen", entry_id=entry.entry_id, bereich_id=C1, device_id=dev, typ="konvektor")
+    await hass.async_block_till_done()
+    assert a["success"], a
+    db = hass.data[DATA_DB]
+    letzte = await db.async_ausfuehren(lambda v: db_inventar.umbenennung_letzte(v, cid))
+    assert all(x.get("auswahl") for x in letzte["schritte"])
+    # Gerätename „ging nicht“: zurück auf vorher und als Fehler eintragen
+    dr.async_get(hass).async_update_device(dev, name_by_user=None)
+    schritte = [{**x, "ergebnis": "fehler", "fehler": "weg"} if x["ziel"] == "geraet" else x for x in letzte["schritte"]]
+    await db.async_ausfuehren(lambda v: db_inventar.umbenennung_aendern(v, letzte["id"], schritte, "teilweise"))
+    n = await _senden(ws, 3, type="baustelle/inventar_umbenennen", container_id=cid)
+    await hass.async_block_till_done()
+    assert n["success"] and n["result"]["nachgeholt"], n
+    assert dr.async_get(hass).async_get(dev).name_by_user == "001-02_C_PLUG_POL"
+    assert er.async_get(hass).async_get("switch.hk1") is not None and er.async_get(hass).async_get("sensor.temp_c1") is not None
+    assert entry.subentries[HK1].title == "Heizkörper 1"
+
+
+async def test_vorschau_zweiter_kanal_mit_seinem_leistungssensor(hass: HomeAssistant, baustelle_register, hass_ws_client) -> None:
+    """Gutachten 0.8.194: beim 2. Kanal eines Shelly 2PM zeigt die Vorschau dessen Leistungssensor, nicht den von Kanal 1
+    (dieselbe Wahl wie die Steuerung, gleicher Namensanfang)."""
+    entry = baustelle_register
+    dev = _zweikanal(hass)
+    ents = er.async_get(hass)
+    quelle = next(e for e in hass.config_entries.async_entries("shelly") if e.title == "2PM")
+    for k in (1, 2):
+        ents.async_get_or_create("sensor", "shelly", f"2pm-{k}-p", suggested_object_id=f"shelly2pm_kanal_{k}_power",
+                                 config_entry=quelle, device_id=dev, original_device_class="power")
+    ws = await hass_ws_client(hass)
+    await _inventar(ws, entry, 1)
+    v = await _senden(ws, 2, type="baustelle/geraet_vorschau", entry_id=entry.entry_id, bereich_id=C1, device_id=dev,
+                      schalter="switch.shelly2pm_kanal_2", typ="konvektor")
+    assert v["success"], v
+    refs = {s["ref"] for s in v["result"]["schritte"]}
+    assert "sensor.shelly2pm_kanal_2_power" in refs and "sensor.shelly2pm_kanal_1_power" not in refs

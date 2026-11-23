@@ -60,6 +60,7 @@ function schrittTyp(p, s) {
   if (T === undefined) return html`<div class="glas-panel liste ga-l"><div class="leer">lädt …</div></div>${knopf('‹ Zurück', () => p.assistentSchritt(s, s.vorgabe ? 1 : 2))}`;
   if (!T) return html`<div class="glas-panel liste ga-l"><div class="leer">${p.invFehler(p.assistentSchluessel('gat', s)) || 'Typen nicht lesbar'}</div></div>${knopf('‹ Zurück', () => p.assistentSchritt(s, s.vorgabe ? 1 : 2))}`;
   if (!s.typ || !T.typen.some(t => t.k === s.typ && t.passt)) s.typ = T.vorschlag;
+  if (!s.rolle || (s.rolleFuer && s.rolleFuer !== s.bid)) { s.rolle = T.rolle || 'zusatz'; s.rolleFuer = s.bid; }   // erster Heizkörper im Container: Primär (Integration)
   const gew = T.typen.find(t => t.k === s.typ), gruppen = [...new Set(T.typen.map(t => t.gruppe))];
   return html`<div class="leise ga-fuss">${T.geraet.name} an <b>${b ? b.name : ''}</b> – was hängt dran?</div>
     ${gruppen.map(g => html`<div class="glas-panel liste ga-l"><div class="gruppe">${g}</div>${T.typen.filter(t => t.gruppe === g).map(t => html`<button class="zeile ga-wahl ${s.typ === t.k ? 'on' : ''} ${t.passt ? '' : 'ga-aus'}" data-v=${t.k} ?disabled=${!t.passt}

@@ -338,7 +338,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     const b = bereichVon(m), k = gaKandidaten().find(x => x.device_id === m.device_id && (!m.schalter || x.schalter === m.schalter)) || nichtGefunden('HA-Gerät nicht gefunden'), ort = b.art === 'pumpenschacht' ? 'schacht' : 'container';
     const typen = TYPEN.map(([kk, gruppe, text, zu, orte, nenn, rolle]) => { const grund = kk === 'licht' ? 'Licht im Symbol wählt man unter 🏠 Aussehen' : !zu.includes(k.typ) ? `passt nicht zu ${k.name}` : !orte.includes(ort) ? (orte.length === 1 && orte[0] === 'schacht' ? 'nur im Pumpenschacht' : 'nicht im Pumpenschacht') : null;
       return { k: kk, gruppe, text, passt: !grund, grund, nenn, rolle }; });
-    return { typen, vorschlag: (typen.find(t => t.passt) || {}).k || null, geraet: { name: k.name, typ: k.typ, shelly: !!k.shelly } };
+    return { typen, vorschlag: (typen.find(t => t.passt) || {}).k || null, rolle: (b.geraete || []).some(g => g.rolle === 'heizkoerper') ? 'zusatz' : 'primaer', geraet: { name: k.name, typ: k.typ, shelly: !!k.shelly } };
   }
   const gaContainer = m => inventar().container.find(c => c.status === 'aktiv' && c.einsatz && c.einsatz.bereich_id === m.bereich_id);
   function gaVorschau(m) {

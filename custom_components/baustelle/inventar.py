@@ -23,6 +23,7 @@ from .const import DOMAIN
 from .db import DATA_DB
 from .db import inventar as db_inventar
 from .abgleich import nicht_in_ha
+from .kern.einrichtung import _sensor_am_geraet
 from .inventar_geraete import (
     _entitaeten, _schalter, async_bestand, async_verweise, async_zuordnen, kandidaten, sensor_plan, status_uebernehmen,
     zuordnen_pruefen,
@@ -388,6 +389,10 @@ def zuordnen_vorschau(hass: HomeAssistant, roh: dict[str, Any], container_id: st
     if info is None:
         raise LookupError("HA-Gerät ohne Entität")
     kanal = next((e for e in entitaeten if e["entity_id"] == eid), None) if typ == "PLUG" else None
+    if typ == "PLUG" and eid:   # Mehrkanal (Shelly 2PM): nur die Messwerte dieses Kanals, wie die Steuerung sie wählt
+        reg = er.async_get(hass)
+        mess = {_sensor_am_geraet(reg, eid, "power"), _sensor_am_geraet(reg, eid, "energy")}
+        entitaeten = [e for e in entitaeten if e.get("klasse") not in ("power", "energy") or e["entity_id"] in mess]
     # dieselbe Regel wie das Zuordnen (`sensor_plan`): ein zweiter Fühler etc. kommt nur ins Inventar, nicht an den Container
     if (entry := hass.config_entries.async_get_entry(eingabe["baustelle_id"])) is None:   # `vorschau_eingabe` prüft das schon
         raise LookupError("Container ohne Bereich auf einer geladenen Baustelle")

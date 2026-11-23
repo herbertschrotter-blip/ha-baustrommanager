@@ -9,7 +9,7 @@ was bei Störungen zu tun ist (BSM-027). Stand 0.8.169 (30.10.2026). Technische 
 | Was | Wo |
 |---|---|
 | Home Assistant (HA) | Raspberry Pi 5 mit HA OS, Oberfläche im Browser bzw. HA-App; Neustart: Einstellungen → System → ⏻ |
-| Quelle (Code, Doku, Werkzeuge) | Git-Repo `herbertschrotter-blip/ha-baustrommanager`, auf dem Pi unter `/config/projekte/ha-baustrommanager` |
+| Quelle (Code, Doku, Werkzeuge) | Git-Repo `herbertschrotter-blip/bau-ha-baustrommanager`, auf dem Pi unter `/config/projekte/ha-baustrommanager` |
 | Eingespielte Integration | `/config/custom_components/baustelle` (nie dort ändern – immer aus dem Repo einspielen) |
 | Seite „Baustelle“ | Seitenleiste von HA; Version unter ⚙ → Über |
 | Datenbank | Pilot: Server im Add-on „TimescaleDB“ (PostgreSQL), eingestellt mit `db_url` in `/config/packages/baustelle.yaml` (Zugangsdaten über `!secret`). Ohne `db_url`: Datei `/config/baustelle/baustelle.db` (SQLite) |

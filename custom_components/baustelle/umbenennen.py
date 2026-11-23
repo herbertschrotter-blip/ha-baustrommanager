@@ -37,7 +37,8 @@ from .db import DATA_DB, einstellung_merken
 from .db import inventar as db_inventar
 from .inventar import _db, async_vorschau, verwirft_namen
 from .logik.inventar import (
-    RUECKGAENGIG_MOEGLICH, ausfuehrbar, fuer_plug, ids_getauscht, konflikte, nachholen_mischen, rueckgaengig, status,
+    RUECKGAENGIG_MOEGLICH, ausfuehrbar, fuer_plug, ids_getauscht, konflikte, nachholen_auswahl, nachholen_mischen, rueckgaengig,
+    status,
     verweise_tauschen, zurueck_eintragen,
 )
 from .notprogramm import Plug, PlugFehler, shelly_host
@@ -165,8 +166,15 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
     if (ergebnis := await async_vorschau(hass, db, container_id)) is None:
         raise LookupError("Container ohne Bereich auf einer geladenen Baustelle")
     eingabe, v = ergebnis
+    letzte = await db.async_ausfuehren(lambda verbindung: db_inventar.umbenennung_letzte(verbindung, container_id))
+    if auswahl is not None and letzte is not None and letzte["status"] == "teilweise":
+        # sonst stünde die offene Umbenennung nicht mehr als jüngste da und ließe sich nicht mehr nachholen
+        raise ValueError("die letzte Umbenennung des Containers ist noch nicht fertig – erst „Nachholen“")
+    nachholen = auswahl is None and letzte is not None and letzte["status"] == "teilweise"
     if auswahl is not None:
         v = auswahl(v)
+    elif nachholen and letzte is not None:   # war es eine Auswahl (Assistent), nur ihre Schritte – nicht den ganzen Container
+        v = nachholen_auswahl(v, letzte["schritte"] or [])
     if v["konflikte"]:
         raise ValueError("Konflikt: " + ", ".join(f"{a} → {n}" for a, n in v["konflikte"].items()))
     plan, plugs = ausfuehrbar(v["schritte"]), fuer_plug(v["schritte"])
@@ -180,11 +188,6 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
     ziele = _plug_ziele(hass, st, plugs)
     entfaellt = {s["ref"] for s in plugs if s["ref"] not in ziele}
     plugs = [s for s in plugs if s["ref"] in ziele]
-    letzte = await db.async_ausfuehren(lambda verbindung: db_inventar.umbenennung_letzte(verbindung, container_id))
-    if auswahl is not None and letzte is not None and letzte["status"] == "teilweise":
-        # sonst stünde die offene Umbenennung nicht mehr als jüngste da und ließe sich nicht mehr nachholen
-        raise ValueError("die letzte Umbenennung des Containers ist noch nicht fertig – erst „Nachholen“")
-    nachholen = auswahl is None and letzte is not None and letzte["status"] == "teilweise"
     if not plan and not plugs:
         if not nachholen:
             return {"id": None, "status": "nichts", "schritte": v["schritte"], "geaendert": [], "getauscht": {}}
@@ -208,6 +211,8 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
             geaendert = _verweise(hass, st, ids_getauscht(vorlaeufig), namen, benutzer)
         await _plug_namen(hass, plugs, ziele, fehler)
         jetzt_erledigt = _ergebnisse(v["schritte"], fehler, entfaellt)
+        if auswahl is not None:   # gemerkt als Auswahl – „Nachholen“ holt dann nur diese Schritte (`nachholen_auswahl`)
+            jetzt_erledigt = [{**x, "auswahl": True} for x in jetzt_erledigt]
         ok = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "ok")   # im Protokoll nur, was diesmal geschah
         offen = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "fehler")
         nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, jetzt_erledigt, nachholen=nachholen)

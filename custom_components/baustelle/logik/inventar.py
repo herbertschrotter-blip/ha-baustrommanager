@@ -551,6 +551,32 @@ def assistent_vorschlag(typen: Iterable[Mapping[str, Any]]) -> str | None:
     return next((t["k"] for t in typen if t["passt"]), None)
 
 
+def rolle_vorschlag(heizkoerper: int) -> str:
+    """Vorbelegung der Rolle im Assistenten (Gutachten 0.8.194): der erste Heizkörper eines Containers ist Primär, jeder
+    weitere Zusatz."""
+    return "zusatz" if heizkoerper > 0 else "primaer"
+
+
+def rolle_setzen(rolle: str | None, vorschlag: str, zusatz_bisher: bool | None) -> tuple[bool, bool | None]:
+    """Was die Rolle beim Hinzufügen setzt: (Primär im Container setzen, Wert für `geraete.<gid>.zusatz`). Ohne Angabe
+    gilt der Vorschlag; Primär lässt ein nie gesetztes `zusatz` leer (automatisch), Zusatz markiert das Gerät."""
+    primaer = (rolle or vorschlag) == "primaer"
+    return primaer, (None if primaer and zusatz_bisher is None else not primaer)
+
+
+def anderer_kanal(ausruestung: Iterable[Mapping[str, Any]], einsaetze: Iterable[Mapping[str, Any]], kennung: str,
+                  container_id: str, schalter_je_geraet: Mapping[str, str], schalter: str | None) -> bool:
+    """Steht das HA-Gerät (`kennung`) schon mit einem anderen Kanal in diesem Container im Inventar (z. B. 1. Kanal eines
+    Shelly 2PM)? Das Inventar führt ein Gerät nur einmal – der neue Kanal wird dann nur eingehängt, Inventar und Namen
+    bleiben. `schalter_je_geraet`: Unter-Eintrag → Schalter der geladenen Baustelle."""
+    a = next((x for x in ausruestung if x.get("kennung") == kennung), None)
+    e = next((x for x in einsaetze if a is not None and x["ausruestung_id"] == a["id"] and not x.get("bis")), None)
+    if e is None or e["container_id"] != container_id:
+        return False
+    jetzt = schalter_je_geraet.get(e.get("geraet_id") or "")
+    return jetzt is not None and jetzt != schalter
+
+
 def assistent_zuordnung(k: str) -> tuple[str, str | None]:
     """Typ der einen Liste → (Inventar-Typ, „Was hängt an diesem Plug?“); `InventarFehler` bei unbekanntem/Licht."""
     if k not in ASSISTENT_TYPEN or ASSISTENT_TYPEN[k][2] is None:
@@ -572,10 +598,26 @@ def nur_geraet(v: Mapping[str, Any], refs: Iterable[str]) -> dict[str, Any]:
     geteilt = {s.get("gruppe") for s in alle if s["ziel"] == "geraet" and s.get("gruppe") in gruppen and s["ref"] in fremd}
     schritte = [dict(s) for s in alle if s.get("gruppe") in gruppen
                 and not (s.get("gruppe") in geteilt and s["ziel"] in ("geraet", "label", "plug"))]
+    return _teil(v, schritte)
+
+
+def _teil(v: Mapping[str, Any], schritte: list[dict[str, Any]]) -> dict[str, Any]:
+    """Vorschau nur mit diesen Schritten: Konflikte nur ihrer Entity-IDs, Zähler neu."""
     ids = {s["alt"] for s in schritte if s["ziel"] == "entitaet_id"}
     konfl = {a: n for a, n in (v.get("konflikte") or {}).items() if a in ids}
     zaehler = {z: sum(1 for s in schritte if s["zustand"] == z) for z in ("aendern", "neu", "gleich", "konflikt")}
     return {"schritte": schritte, "konflikte": konfl, "zaehler": zaehler}
+
+
+def nachholen_auswahl(v: Mapping[str, Any], letzte: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Nachholen einer Umbenennung, die nur eine Auswahl war (Assistent, Entscheidung A; Gutachten 0.8.194): nur die
+    Schritte, die in ihr stehen (gleiches Ziel und gleiche Referenz) – nicht der ganze Container. War die Umbenennung
+    keine Auswahl (kein Schritt mit `auswahl`), bleibt die Vorschau, wie sie ist."""
+    alt = list(letzte)
+    if not any(s.get("auswahl") for s in alt):
+        return dict(v)
+    schluessel = {(s["ziel"], s["ref"]) for s in alt}
+    return {**v, **_teil(v, [dict(s) for s in v.get("schritte") or [] if (s["ziel"], s["ref"]) in schluessel])}
 
 
 def kandidat_reihenfolge(k: Mapping[str, Any]) -> tuple[Any, ...]:

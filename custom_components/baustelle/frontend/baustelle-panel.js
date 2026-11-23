@@ -1834,7 +1834,7 @@ function ueberVorlage(p4, { mitZurueck = true } = {}) {
       <div class="glas-panel liste"><div class="gruppe">Dieses System</div>
         ${gleich ? b2`<div class="zeile"><span>Integration / Seite</span><span class="leise">${V2} · baustelle</span></div>` : b2`<div class="zeile"><span>Seite</span><span class="leise">${V2}</span></div><div class="zeile"><span>Integration</span><span class="leise">${I2} · baustelle${verNeuer(V2, I2) ? " · bis zum Neustart" : ""}</span></div>`}
         <div class="zeile"><span>Home Assistant</span><span class="leise">${ha}</span></div>
-        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/ha-baustrommanager (öffentlich, MIT-Lizenz)</span></div>
+        <div class="zeile"><span>Quellcode</span><span class="leise">GitHub · herbertschrotter-blip/bau-ha-baustrommanager (öffentlich, MIT-Lizenz)</span></div>
         <div class="zeile"><span>Baustellen</span><span class="leise">${p4.alle.filter((b3) => b3.aktiv).length} laufend · ${p4.alle.filter((b3) => !b3.aktiv).length} abgeschlossen</span></div></div>
       <div class="glas-panel block"><div class="block-kopf"><b>Neu in ${V2}</b><span class="leise">${eigen ? datum(eigen.datum) : "geplant"}</span></div>${neu.map((n4) => b2`<div class="cl-punkt">${n4}</div>`)}</div>
       <div class="glas-panel block"><div class="block-kopf"><b>Verlauf</b><span class="leise">aus CHANGELOG.md</span></div>
@@ -4591,6 +4591,10 @@ function schrittTyp(p4, s4) {
   if (T2 === void 0) return b2`<div class="glas-panel liste ga-l"><div class="leer">lädt …</div></div>${knopf8("‹ Zurück", () => p4.assistentSchritt(s4, s4.vorgabe ? 1 : 2))}`;
   if (!T2) return b2`<div class="glas-panel liste ga-l"><div class="leer">${p4.invFehler(p4.assistentSchluessel("gat", s4)) || "Typen nicht lesbar"}</div></div>${knopf8("‹ Zurück", () => p4.assistentSchritt(s4, s4.vorgabe ? 1 : 2))}`;
   if (!s4.typ || !T2.typen.some((t5) => t5.k === s4.typ && t5.passt)) s4.typ = T2.vorschlag;
+  if (!s4.rolle || s4.rolleFuer && s4.rolleFuer !== s4.bid) {
+    s4.rolle = T2.rolle || "zusatz";
+    s4.rolleFuer = s4.bid;
+  }
   const gew = T2.typen.find((t5) => t5.k === s4.typ), gruppen2 = [...new Set(T2.typen.map((t5) => t5.gruppe))];
   return b2`<div class="leise ga-fuss">${T2.geraet.name} an <b>${b3 ? b3.name : ""}</b> – was hängt dran?</div>
     ${gruppen2.map((g2) => b2`<div class="glas-panel liste ga-l"><div class="gruppe">${g2}</div>${T2.typen.filter((t5) => t5.gruppe === g2).map((t5) => b2`<button class="zeile ga-wahl ${s4.typ === t5.k ? "on" : ""} ${t5.passt ? "" : "ga-aus"}" data-v=${t5.k} ?disabled=${!t5.passt}
@@ -6844,7 +6848,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.194";
+var SEITE_VERSION = "0.8.195";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -8127,7 +8131,7 @@ var BaustellePanel = class extends i4 {
   assistentAuf(o6 = {}) {
     const S3 = this.s, zurueck = "zurueck" in o6 ? o6.zurueck : S3.sheet && ["bereich", "inv-container"].includes(S3.sheet.art) ? S3.sheet : null;
     this.invNeu();
-    S3.sheet = { art: "geraet-assistent", schritt: 1, bid: null, vorgabe: false, dev: null, schalter: null, typ: null, nenn: null, rolle: "zusatz", frei: false, freiName: "", q: "", ...o6, zurueck };
+    S3.sheet = { art: "geraet-assistent", schritt: 1, bid: null, vorgabe: false, dev: null, schalter: null, typ: null, nenn: null, rolle: null, frei: false, freiName: "", q: "", ...o6, zurueck };
     return this.neuZeichnen();
   }
   assistentSchritt(s4, n4) {
@@ -8154,8 +8158,19 @@ var BaustellePanel = class extends i4 {
   }
   /* Gutachten 0.8.192: nach Hinzufügen und Rückgängig den Entwurf von „Bearbeiten“ darunter verwerfen – er wird beim nächsten
      Zeichnen aus den frischen Daten neu gebildet (sonst setzte „Speichern“ Fühler, Tür und Primär auf den alten Stand zurück) */
+  /* Gutachten 0.8.194: was Herbert in „Bearbeiten“ schon geändert, aber noch nicht gespeichert hat, bleibt – der neue Entwurf
+     übernimmt diese Felder (Geräte je id), alles andere kommt frisch */
   entwurfNeu(sheet) {
-    for (let x2 = sheet, n4 = 0; x2 && typeof x2 === "object" && n4 < 10; x2 = x2.zurueck, n4++) if (x2.art === "bereich") delete x2.edit;
+    for (let x2 = sheet, n4 = 0; x2 && typeof x2 === "object" && n4 < 10; x2 = x2.zurueck, n4++) {
+      if (x2.art !== "bereich" || !x2.edit) continue;
+      const a3 = x2.editAnfang || {}, gl = (u3, v2) => JSON.stringify(u3) === JSON.stringify(v2);
+      const eigen = Object.fromEntries(Object.entries(x2.edit).filter(([k2, v2]) => k2 !== "geraete" && !gl(v2, a3[k2])));
+      const altG = Object.fromEntries((a3.geraete || []).map((g2) => [g2.id, g2]));
+      const geraete = (x2.edit.geraete || []).filter((g2) => g2.neu || !gl(g2, altG[g2.id]));
+      x2.editBehalten = { ...x2.editBehalten || {}, ...eigen, ...geraete.length ? { geraete } : {} };
+      delete x2.edit;
+      delete x2.editAnfang;
+    }
   }
   async assistentNachher(s4) {
     this.entwurfNeu(s4.zurueck);
@@ -8374,8 +8389,7 @@ var BaustellePanel = class extends i4 {
       }
     };
     for (let x2 = sheet, n4 = 0; x2 && typeof x2 === "object" && n4 < 10; x2 = x2.zurueck, n4++) {
-      if (x2.edit) tausch(x2.edit);
-      if (x2.form) tausch(x2.form);
+      for (const k2 of ["edit", "editAnfang", "editBehalten", "form"]) if (x2[k2]) tausch(x2[k2]);
     }
   }
   npProbe(id, m3) {
@@ -8531,7 +8545,8 @@ var BaustellePanel = class extends i4 {
   // BSM-032
   bereichEntwurf(x2, s4) {
     const d3 = this.d;
-    return s4.edit ||= {
+    if (s4.edit) return s4.edit;
+    const e6 = {
       modus: x2.modus ?? null,
       name: x2.name,
       anschluss: x2.anschluss || d3.anschluesse[0] && d3.anschluesse[0].id || "",
@@ -8551,6 +8566,15 @@ var BaustellePanel = class extends i4 {
       // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
       geraete: x2.geraete.map((g2) => ({ id: g2.id, n: g2.n, typ: g2.typ, schalter: g2.schalter, leistung: g2.leistungEigen || void 0, energie: g2.energieEigen || void 0, alt: { n: g2.n, typ: g2.typ } }))
     };
+    s4.editAnfang = JSON.parse(JSON.stringify(e6));
+    const b3 = s4.editBehalten;
+    if (b3) {
+      const { geraete, ...rest } = b3, je = Object.fromEntries((geraete || []).filter((g2) => !g2.neu).map((g2) => [g2.id, g2]));
+      Object.assign(e6, rest);
+      e6.geraete = e6.geraete.map((g2) => je[g2.id] ? { ...g2, ...je[g2.id], schalter: g2.schalter } : g2).concat((geraete || []).filter((g2) => g2.neu));
+      delete s4.editBehalten;
+    }
+    return s4.edit = e6;
   }
   symAendern(x2, fn) {
     const c4 = JSON.parse(JSON.stringify(this.symKonfig(x2)));

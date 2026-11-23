@@ -40,7 +40,7 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 
 - Profil-Version: 1
 - Projekt-ID: ha-baustrommanager
-- Repo: herbertschrotter-blip/ha-baustrommanager
+- Repo: herbertschrotter-blip/bau-ha-baustrommanager
 - Branch-Policy: current
 
 ### Checks
@@ -103,7 +103,7 @@ eigener Seite „Baustrommanager (BSM)“ in der Seitenleiste. Zweck, Aufbau und
 
 - Review-Ablage: `docs/chatgpt-reviews/` (Serien `CGR-<Datum>-<thema>`, Übersicht `INDEX.md`)
 - Themen: seite-lit, notprogramm, datenbank, integration, hochrechnung
-- GitHub-Repo: herbertschrotter-blip/ha-baustrommanager (Branch nach Branch-Policy, derzeit `main`)
+- GitHub-Repo: herbertschrotter-blip/bau-ha-baustrommanager (Branch nach Branch-Policy, derzeit `main`)
 - Pflicht-Block: „Regeln der Integration“ – Fachlogik nur in `logik/` (mit Test), die Seite rechnet nichts Fachliches,
   ausgeliefert wird eine Datei `frontend/baustelle-panel.js`, Master-Mockup `mockups/glas.html` = echte Seite mit
   Beispieldaten, Pilotbaustelle läuft produktiv (kein Risiko im Betrieb, Stufen einzeln einspielbar), Automatik startet

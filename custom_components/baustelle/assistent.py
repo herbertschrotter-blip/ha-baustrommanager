@@ -33,6 +33,7 @@ from .const import (
     CONF_FUEHLER,
     CONF_SCHALTER,
     DOMAIN,
+    ROLLE_HEIZKOERPER,
     SUB_BEREICH,
     SUB_GERAET,
 )
@@ -56,6 +57,7 @@ from .logik.inventar import (
     CONTAINER_ARTEN,
     InventarFehler,
     abweichend,
+    anderer_kanal,
     assistent_typen,
     assistent_vorschlag,
     assistent_zuordnung,
@@ -65,6 +67,8 @@ from .logik.inventar import (
     frei_setzen,
     nicht_eingetragen,
     nur_geraet,
+    rolle_setzen,
+    rolle_vorschlag,
     typ_vorschlag,
     verweise_tauschen,
 )
@@ -144,6 +148,11 @@ def _typen(hass: HomeAssistant, st: Steuerung, bid: str, msg: dict[str, Any]) ->
     return w, assistent_typen(w["typ"], schacht=st.bereiche[bid].art == ART_PUMPENSCHACHT, geraet=w["name"])
 
 
+def _rolle(st: Steuerung, bid: str) -> str:
+    """Vorbelegung der Rolle (`logik.inventar.rolle_vorschlag`): Primär, solange der Container keinen Heizkörper hat."""
+    return rolle_vorschlag(sum(1 for g in st.geraete_in(bid) if g.rolle == ROLLE_HEIZKOERPER))
+
+
 def _typ(typen: list[dict[str, Any]], k: str) -> dict[str, Any]:
     t = next((x for x in typen if x["k"] == k), None)
     if t is None or not t["passt"]:
@@ -154,12 +163,9 @@ def _typ(typen: list[dict[str, Any]], k: str) -> dict[str, Any]:
 def _anderer_kanal(st: Steuerung, roh: dict[str, Any], cid: str, w: dict[str, Any]) -> bool:
     """Steht das HA-Gerät schon mit einem anderen Kanal in diesem Container im Inventar (z. B. 1. Kanal eines Shelly 2PM)?
     Das Inventar führt ein Gerät nur einmal – der neue Kanal wird dann nur eingehängt, Inventar und Namen bleiben."""
-    if w["typ"] != "PLUG":
-        return False
-    a = next((x for x in roh.get("ausruestung") or [] if x.get("kennung") == _kennung(w["geraet"])), None)
-    e = next((x for x in roh.get("ausruestung_einsaetze") or [] if a and x["ausruestung_id"] == a["id"] and not x.get("bis")), None)
-    g = st.geraete.get((e or {}).get("geraet_id") or "")
-    return e is not None and e["container_id"] == cid and g is not None and g.schalter != w["schalter"]
+    return w["typ"] == "PLUG" and anderer_kanal(roh.get("ausruestung") or [], roh.get("ausruestung_einsaetze") or [],
+                                                _kennung(w["geraet"]), cid, {g.id: g.schalter for g in st.geraete.values()},
+                                                w["schalter"])
 
 
 def _refs(w: dict[str, Any]) -> set[str]:
@@ -230,7 +236,7 @@ async def ws_geraet_typen(hass: HomeAssistant, connection: websocket_api.ActiveC
     except LookupError as err:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
         return
-    connection.send_result(msg["id"], {"typen": typen, "vorschlag": assistent_vorschlag(typen),
+    connection.send_result(msg["id"], {"typen": typen, "vorschlag": assistent_vorschlag(typen), "rolle": _rolle(st, msg["bereich_id"]),
                                        "geraet": {"name": w["name"], "typ": w["typ"], "shelly": w["shelly"]}})
 
 
@@ -292,7 +298,7 @@ def _rueck_merken(hass: HomeAssistant, daten: dict[str, Any]) -> str:
 
 
 def _einstellungen(hass: HomeAssistant, st: Steuerung, bid: str, gid: str, t: dict[str, Any], msg: dict[str, Any],
-                   benutzer: str | None) -> dict[str, list[Any]]:
+                   benutzer: str | None, vorschlag: str) -> dict[str, list[Any]]:
     """Nennleistung und Rolle (Primär setzt `bereiche.<bid>.primaer`, Zusatz `geraete.<gid>.zusatz`, Gutachten 0.8.192)
     – nur Heizkörper. Liefert {Pfad: [vorher, gesetzt]} für Rückgängig."""
     gesetzt: dict[str, list[Any]] = {}
@@ -309,10 +315,10 @@ def _einstellungen(hass: HomeAssistant, st: Steuerung, bid: str, gid: str, t: di
     if t["nenn"] and msg.get("nenn_kw"):
         setze(("geraete", gid, "nenn_kw"), eg.get("nenn_kw"), round(float(msg["nenn_kw"]), 1))
     if t["rolle"]:
-        primaer = (msg.get("rolle") or "zusatz") == "primaer"
+        primaer, zusatz = rolle_setzen(msg.get("rolle"), vorschlag, eg.get("zusatz"))
         if primaer:
             setze(("bereiche", bid, "primaer"), st.einstellungen.bereich(bid).get("primaer"), gid)
-        setze(("geraete", gid, "zusatz"), eg.get("zusatz"), None if primaer and eg.get("zusatz") is None else not primaer)
+        setze(("geraete", gid, "zusatz"), eg.get("zusatz"), zusatz)
     return gesetzt
 
 
@@ -349,6 +355,7 @@ async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.A
             raise InventarFehler("Entity-ID schon vergeben: " + ", ".join(f"{a} → {n}" for a, n in plan["konflikte"].items())
                                  + " – erst lösen (umbenennen oder löschen) oder „Nur anlegen, Namen lassen“")
         vorher = _vorher(hass, st, bid, w, inv_typ)
+        rolle = _rolle(st, bid)   # vor dem Einhängen: wie viele Heizkörper hat der Container schon
         if not plan["frei_moeglich"]:
             frei = None   # eigener Name nur mit seinem Schritt – nie ein Gerät überschreiben, das mehr trägt (Entscheidung A)
     except LookupError as err:
@@ -385,7 +392,7 @@ async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.A
     # 2. Nennleistung und Rolle (nur Heizkörper; das Gerät ist sein Unter-Eintrag)
     gid = rueck["geraet_id"] if rueck["geraet_id"] in st.geraete else None
     if gid:
-        rueck["gesetzt"] = _einstellungen(hass, st, bid, gid, t, msg, benutzer)
+        rueck["gesetzt"] = _einstellungen(hass, st, bid, gid, t, msg, benutzer, rolle)
     container = st.bereiche[bid].name
     # 3. umbenennen nach dem Schema – nur die Schritte des neuen Geräts, mit eigenem Gerätenamen (Entscheidung A)
     umbenannt: dict[str, Any] = {"status": "ohne_inventar" if cid is None else "nur_inventar" if plan["inventar"] else "eingehaengt"}
@@ -449,6 +456,11 @@ async def ws_geraet_hinzufuegen_rueckgaengig(hass: HomeAssistant, connection: we
     if st is None or bid not in st.bereiche:   # die Marke kommt zurück – später nochmal versuchen (Gutachten 0.8.192)
         speicher[msg["rueck"]] = r
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Baustelle nicht geladen – nichts zurückgenommen")
+        return
+    if (r.get("umbenennung_id") or r.get("ausruestung_id")) and (db is None or not db.bereit):
+        # Gutachten 0.8.194: sonst blieben Namen und Inventar-Einsatz, und „zurückgenommen“ wäre nur halb wahr
+        speicher[msg["rueck"]] = r
+        connection.send_error(msg["id"], "db_fehlt", "Datenbank gerade nicht erreichbar – nichts zurückgenommen, bitte gleich nochmal")
         return
     entry, vor = st.entry, dict(r.get("getauscht") or {})
     zurueck: dict[str, str] = {}

@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.8.195",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Fix (Gutachten zu 0.8.194): **„Nachholen“ nach dem Assistenten holt nur dessen Schritte nach.** Blieb das Umbenennen eines neuen Geräts halb fertig (z. B. Plug nicht erreichbar), benannte „Nachholen“ bisher den ganzen Container nach dem Schema um, und das selbständige Nachholen der Plug-Namen blieb hängen. Jetzt merkt sich die Umbenennung, dass sie eine Auswahl war (`logik/inventar.nachholen_auswahl`).",
+      "Fix: **Rückgängig ohne Datenbank** nimmt nichts zurück und sagt „Datenbank gerade nicht erreichbar – bitte gleich nochmal“. Bisher meldete es „wieder entfernt“, obwohl Namen und Inventar-Eintrag blieben; die Marke bleibt für den nächsten Versuch.",
+      "Fix: Beim **2. Kanal eines Shelly 2PM** zeigt die Namensvorschau dessen Leistungssensor, nicht den von Kanal 1 – dieselbe Wahl wie die Steuerung.",
+      "Fix: **Ungespeicherte Änderungen in „Bearbeiten“ bleiben**, wenn man von dort ein Gerät hinzufügt oder es zurücknimmt. Der Entwurf kommt aus den frischen Daten, behält aber, was man dort schon geändert hatte.",
+      "Fix: Der **erste Heizkörper** eines Containers ist im Assistenten als **Primär** vorbelegt, jeder weitere als Zusatz (`logik/inventar.rolle_vorschlag`, `rolle_setzen`). Die Regel für den zweiten Kanal eines Geräts steht jetzt ebenfalls in `logik/` (`anderer_kanal`), mit Test.",
+      "Doku: Repo heißt jetzt `herbertschrotter-blip/bau-ha-baustrommanager` (README, Manifest, „Über“, Betrieb, CLAUDE.md); GitHub leitet alte Links weiter."
+    ]
+  },
+  {
     "version": "0.8.194",
     "datum": "2026-11-23",
     "punkte": [

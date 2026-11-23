@@ -138,7 +138,8 @@ async function entwurfFrischPruefen() {
   neu(); await panel.bereichSpeichern(); await ruhe(40);
   erwarte('Befund 1: „Speichern“ setzt Primär nicht zurück', !letzte('baustelle/setzen').some(m => m.pfad && m.pfad[2] === 'primaer'));
   // Rückgängig aus „Bearbeiten“: danach kommt der Entwurf wieder aus frischen Daten (Primär wie vorher)
-  panel.bereichEinst(b.id); await ruhe(10); await klick('.sheet [data-k="assistent"]', 20);
+  panel.bereichEinst(b.id); await ruhe(10); panel.s.sheet.edit.name = 'Eigener Entwurf';   // ungespeichert (Gutachten 0.8.194)
+  await klick('.sheet [data-k="assistent"]', 20);
   Object.assign(panel.s.sheet, { dev: 'd5', schalter: 'switch.steckdose_werkstatt', schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
   Object.assign(panel.s.sheet, { typ: 'konvektor', rolle: 'primaer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
   await klick('.sheet [data-k="anlegen"]', 60); const vorRueck = panel.s.sheet.zurueck && panel.s.sheet.zurueck.edit;
@@ -147,6 +148,7 @@ async function entwurfFrischPruefen() {
   await klick({ act: 'zu' }, 10);
   const e3 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
   erwarte('Befund 1: nach Rückgängig Entwurf aus frischen Daten', e3 && e3 !== vorRueck && e3.primaer === 'g-d6');
+  erwarte('Gutachten 0.8.194: ungespeicherte Änderung in „Bearbeiten“ bleibt', e3 && e3.name === 'Eigener Entwurf');
   await klick({ act: 'zu' }, 5);
   // Fühler: Fühler an einen Container ohne Fühler, danach Rückgängig
   neu(); panel.bereichEinst(C2.id); await ruhe(10);

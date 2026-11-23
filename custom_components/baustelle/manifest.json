@@ -22,10 +22,10 @@
     "panel_custom",
     "websocket_api"
   ],
-  "documentation": "https://github.com/herbertschrotter-blip/ha-baustrommanager",
+  "documentation": "https://github.com/herbertschrotter-blip/bau-ha-baustrommanager",
   "integration_type": "hub",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/herbertschrotter-blip/ha-baustrommanager/issues",
+  "issue_tracker": "https://github.com/herbertschrotter-blip/bau-ha-baustrommanager/issues",
   "requirements": ["psycopg[binary]==3.3.6"],
-  "version": "0.8.194"
+  "version": "0.8.195"
 }
