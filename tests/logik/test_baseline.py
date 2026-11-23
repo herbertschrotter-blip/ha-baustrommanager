@@ -342,3 +342,17 @@ def test_von_hand_auch_nach_der_signatur():
     l = einplanen(a, SA, 2, FR, wochenende, erledigt, 60.0, 0.25, "h")
     assert isinstance(l, Lauf) and (l.von, l.bis) == (SA, MO)
     assert "ohne Lauf" in einplanen(replace(a, ruht=True), SA, 1, FR, wochenende, [], 60.0, 0.25, "h")
+
+
+def test_kontrolltag_mit_anderem_container_wenn_der_messcontainer_ruht():
+    """0.8.186 (Gutachten, Befund 6): Ruht der fertige Messcontainer einer Bauart (ohne Automatik, bei Bedarf, aus), fällt
+    der Kontrolltag nicht aus – ein anderer fertiger, nicht ruhender Container derselben Bauart bekommt ihn. Läuft der
+    Messcontainer, bleibt er es."""
+    mess = Kandidat("001", "001", "oelradiator", 2.0, 12, fertig=True, bauart="oel:einzel", eigene_tage=12)
+    anderer = Kandidat("005", "005", "oelradiator", 2.0, 12, fertig=True, bauart="oel:einzel", eigene_tage=0)
+    assert planen(FR, wochenende, [mess, anderer], [], 60.0, 0.25, "a").bereich == "001"
+    l = planen(FR, wochenende, [replace(mess, ruht=True), anderer], [], 60.0, 0.25, "b")
+    assert (l.bereich, l.von, l.bis) == ("005", SA, SO)
+    assert planen(FR, wochenende, [replace(mess, ruht=True), replace(anderer, ruht=True)], [], 60.0, 0.25, "c") is None
+    gesperrt = replace(anderer, gesperrt=frozenset({SA}))
+    assert planen(FR, wochenende, [replace(mess, ruht=True), gesperrt], [], 60.0, 0.25, "d") is None

@@ -148,14 +148,16 @@ def freier_block(ab: date, frei: Callable[[date], bool], suche: int = SUCHE_TAGE
     return None
 
 
+def _eigen(k: Kandidat) -> int:
+    """Eigene Baseline-Tage des Containers (ohne Angabe die der Bauart)."""
+    return k.baseline_tage if k.eigene_tage is None else k.eigene_tage
+
+
 def messung_je_bauart(kandidaten: Iterable[Kandidat]) -> dict[str, Kandidat]:
     """Je Bauart der eine Container, der misst: ein fertiger, sonst der mit den meisten eigenen Baseline-Tagen (so bleibt
     die Messung beim selben Container), bei Gleichstand der erste nach Name. Ohne Heizkörper zählt keiner."""
-    def eigen(k: Kandidat) -> int:
-        return k.baseline_tage if k.eigene_tage is None else k.eigene_tage
-
     aus: dict[str, Kandidat] = {}
-    for k in sorted(kandidaten, key=lambda k: (not k.fertig, -eigen(k), k.name)):
+    for k in sorted(kandidaten, key=lambda k: (not k.fertig, -_eigen(k), k.name)):
         if k.typ and k.nenn_kw > 0:
             aus.setdefault(k.gruppe, k)
     return aus
@@ -175,14 +177,26 @@ def uebernimmt(bereich: str, typ: str, quelle: object, je_typ: Mapping[str, Kand
 def container_waehlen(kandidaten: Iterable[Kandidat], letzter_typ: str | None, tage: Sequence[date],
                      kontrolle: Collection[str] = ()) -> Kandidat | None:
     """Nächster Container (siehe Modul-Docstring): nur Messcontainer, die nicht fertig und an den Tagen nicht gesperrt
-    sind; dazu die fertigen der Bauarten in `kontrolle` (Kontrolltag fällig), wenn ihr erster Tag frei ist – nach den
-    noch messenden."""
-    def geht(k: Kandidat) -> bool:
-        if not k.fertig:
-            return not k.gesperrt.intersection(tage)
-        return k.gruppe in kontrolle and not k.ruht and not k.gesperrt.intersection(tage[:KONTROLL_TAGE])
+    sind; dazu für die fertigen Bauarten in `kontrolle` (Kontrolltag fällig) ein fertiger, nicht ruhender Container der
+    Bauart, dessen erster Tag frei ist – der Messcontainer zuerst, sonst ein anderer derselben Bauart (0.8.186: ruht der
+    Messcontainer, fällt der Kontrolltag nicht aus) – nach den noch messenden."""
+    ks = list(kandidaten)
 
-    frei = [k for k in messung_je_bauart(kandidaten).values() if geht(k)]
+    def kontrolle_geht(k: Kandidat) -> bool:
+        return (k.fertig and k.typ != "" and k.nenn_kw > 0 and not k.ruht
+                and not k.gesperrt.intersection(tage[:KONTROLL_TAGE]))
+
+    frei = []
+    for gruppe, m in messung_je_bauart(ks).items():
+        if not m.fertig:
+            if not m.gesperrt.intersection(tage):
+                frei.append(m)
+        elif gruppe in kontrolle:
+            # in der Reihenfolge von `messung_je_bauart`: der Messcontainer zuerst
+            k = next((x for x in sorted(ks, key=lambda x: (not x.fertig, -_eigen(x), x.name))
+                      if x.gruppe == gruppe and kontrolle_geht(x)), None)
+            if k is not None:
+                frei.append(k)
     if not frei:
         return None
     return min(frei, key=lambda k: (k.fertig, k.typ == "gemischt", k.typ == letzter_typ, k.baseline_tage, k.name))

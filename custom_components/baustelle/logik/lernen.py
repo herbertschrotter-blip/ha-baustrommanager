@@ -14,18 +14,26 @@ Dazu lernt jeder Container selbst:
 - **K außen** (Wärmeverlust): bleibt der Raum in einem ruhigen Zyklus nahe am Soll im Mittel darunter, wird er größer,
   darüber kleiner.
 - **Aufheizen** (AN-0004, „Optimum Start“ wie Honeywell/Netatmo): wie viele °C je Stunde der Raum beim durchgehenden
-  Heizen gewinnt – seit 0.8.182 **je kW** der dabei gemessenen mittleren Heizleistung (`auf_kw`: {"kalt": [°C/h je kW,
-  Anzahl], "mild": …}), je Außentemperatur (kalt/mild). Die Messung läuft über Stufenwechsel hinweg weiter (ein
-  Heizkörper mehr oder weniger, ein Ölradiator, dessen eigener Thermostat taktet): sie dauert, solange ein Heizkörper
-  eingeschaltet ist; die Leistung (kW, von den Shellys) wird je Minute gemittelt, auch die Minuten mit 0 kW. Die Rate für
-  eine Zahl Heizkörper ist Rate je kW × deren Leistung (`kw_fuer`). Bis 0.8.181 wurde je Anzahl laufender Heizkörper
+  Heizen gewinnt – seit 0.8.182 **je kW** Heizleistung (`auf_kw`: {"kalt": [°C/h je kW, Anzahl], "mild": …}), je
+  Außentemperatur (kalt/mild). Die Messung läuft über Stufenwechsel hinweg weiter (ein Heizkörper mehr oder weniger, ein
+  Ölradiator, dessen eigener Thermostat taktet): sie dauert, solange ein Heizkörper eingeschaltet ist. Geteilt wird seit
+  0.8.186 durch die **Nennleistung der eingeschalteten Heizkörper** (`kw_an`: Plug an, ob der Gerätethermostat gerade
+  Strom zieht oder nicht), je Minute gemittelt – dieselbe Größe, mit der die Vorhersage rechnet (`kw_fuer` aus `kw_nenn`).
+  So steckt das Takten des Gerätethermostats in der gelernten Rate: taktet ein Ölradiator 3 min an, 4 min aus, lernt der
+  Container die langsamere Rate, die er damit wirklich schafft. (0.8.182–0.8.185 teilten durch die gemessene Leistung
+  samt der Minuten mit 0 kW, die Vorhersage multiplizierte aber mit der Nennleistung – bei taktenden Radiatoren war die
+  Rate um 1 ÷ Einschaltanteil zu groß, der Start viel zu spät.) Die Rate für eine Zahl Heizkörper ist Rate je kW × deren
+  Leistung (`kw_fuer`). Bis 0.8.181 wurde je Anzahl laufender Heizkörper
   gelernt (AN-0006: „kalt|1“, „kalt|2“ im Feld `aufheizen`) und die Messung bei jedem Stufenwechsel neu begonnen – bei
   taktenden Ölradiatoren kam so keine Messung mehr zustande. Diese Werte bleiben stehen und werden beim ersten Takt mit
   der Leistung der Heizkörper in `auf_kw` umgerechnet (`auf_kw_umrechnen`), nicht verworfen.
 - **Raummodell** (0.8.183, 1R1C): dT/dt = a·P − (innen − außen) ÷ τ – a in °C/h je kW (wie stark die Heizleistung
   den Raum erwärmt), τ die Auskühlzeit. Aus derselben Aufheiz-Messung: a = (Rate + mittleres (innen − außen) ÷ τ) ÷
-  mittlere Leistung, mit dem gelernten τ (bis `TAU_N` Messungen `TAU_START_H`), plausibel in `A_GRENZEN`, gemittelt
-  wie die Rate (`a` = [a, Anzahl]). Anders als die Rate je Band ist a von der Außentemperatur unabhängig: der Wärmeverlust
+  mittlere Leistung, plausibel in `A_GRENZEN`. Weil a in 1 ÷ τ linear ist, merkt sich der Container seit 0.8.186 die
+  beiden Teile getrennt (`a_teile` = [Mittel Rate ÷ kW, Mittel (innen − außen) ÷ kW, Anzahl], gemittelt wie die Rate)
+  und rechnet `a` = [a, Anzahl] immer mit dem **aktuellen** τ (bis `TAU_N` Messungen `TAU_START_H`) – lernt er später
+  ein anderes τ, zieht a mit. Ein a aus 0.8.183–0.8.185 (ohne Teile) bleibt stehen und geht bei der nächsten Messung als
+  fester Teil (Rate ÷ kW = a, Abstand 0) in die Teile ein. Anders als die Rate je Band ist a von der Außentemperatur unabhängig: der Wärmeverlust
   steckt in τ. Damit rechnet `start` stetig für jede Außentemperatur; ab `AUF_N` Messungen gilt das Modell.
   Daraus rechnet `aufheiz_min`, wie lange der Container bis zum Soll
   braucht – der Heizplan beginnt dann selbst so früh, dass das Soll rechtzeitig erreicht ist (`arbeitszeit.WarmAb`).
@@ -59,7 +67,10 @@ und 15 K Abstand nach außen wären es in 5 min 0,6 °C, real (τ 10–40 h) unt
 Aufheizrate, τ) zählt nur, wenn der Container in ihrem ganzen Zeitraum selbst geregelt hat. Läuft ein Baseline-Lauf, ist
 er von Hand geschaltet, im Modus Aus oder Zeitplan oder ist die Tür (Kontakt oder vermutet) offen, werden laufende
 Messungen verworfen und keine neuen begonnen – nach der Tür noch `OFFEN_RUHE_MIN`, nach den anderen Gründen noch
-`SPERRE_NACH_MIN` Minuten (der Wechsel von und zu Baseline, Hand oder Modus). Gelerntes bleibt dabei stehen.
+`SPERRE_NACH_MIN` Minuten (der Wechsel von und zu Baseline, Hand oder Modus). Gelerntes bleibt dabei stehen. Dasselbe
+gilt nach einer **Lücke** (0.8.186: länger als `TAU_LUECKE_MIN` kein Takt – Automatik aus, Home Assistant aus): was in
+der Lücke geschah, ist unbekannt. Nach einer Sperre beginnt eine neue Aufheiz-Messung auch, wenn der Heizkörper
+durchläuft (`auf_neu`).
 
 Alle Werte sind begrenzt; ohne Messung gilt Nachlauf 0 und die Startwerte – dann verhält sich die Regelung wie TPI.
 Zeiten sind `datetime` (mit Zone), Temperaturen °C.
@@ -105,6 +116,9 @@ AUF_KW_MIN = 0.1
 """0.8.182: Mittlere Heizleistung einer Aufheiz-Messung in kW, unter der sie verworfen wird. Ein Heizkörper auf der
 Baustelle hat 1,4–2,5 kW; liegt das Mittel unter 0,1 kW, hat in der Messung praktisch nichts geheizt (Shelly meldet
 nichts Plausibles) – eine Rate je kW daraus wäre unsinnig groß."""
+AUF_VERSION = 2
+"""0.8.186: Kennung einer Aufheiz-Messung, die durch die Nennleistung der eingeschalteten Heizkörper teilt (`kw_an`).
+Eine laufende Messung ohne sie (begonnen vor 0.8.186, Leistung anders gemittelt) wird beim Abschluss verworfen."""
 A_GRENZEN = (0.2, 40.0)
 """0.8.183: plausibles a des Raummodells in °C/h je kW – sonst wird die Messung für a verworfen. Gemessen 23.11.2026:
 Einzelcontainer mit Konvektor ≈ 4–5, Doppelcontainer mit Ölradiatoren ≈ 1,9; die Grenzen lassen das Zehnfache nach
@@ -135,7 +149,7 @@ sie bis zu `BEOBACHTEN_MAX_MIN` Minuten nach dem Ausschalten ab (so lange wird a
 Erst danach misst die Regelung wieder sich selbst – sonst sähe das Abkühlen nach dem Baseline-Lauf aus wie ein
 Überschwingen der Regelung (23.11.2026: Treffer +10,6 / +12,7 / +22,1 °C, K innen 001 0,419 → 0,398)."""
 SPERRE_TEXT = {"baseline": "Baseline-Lauf", "hand": "von Hand", "aus": "Modus Aus", "zeitplan": "Modus Zeitplan",
-               "tuer": "Tür offen"}
+               "tuer": "Tür offen", "luecke": "Lücke in den Messwerten"}
 VERMUTET_TEXT = {   # Protokoll bei „Tür vermutlich offen“ je Erkennung (`tuer_vermutet_grund`)
     "heizen": "Tür vermutlich offen – der Raum kühlt beim Heizen ab",
     "schnell": "Tür vermutlich offen – der Raum kühlt schnell ab",
@@ -282,8 +296,10 @@ def neuer_stand() -> dict[str, Any]:
     """Lernstand eines Containers (JSON-fähig, im Store unter laufzeit.lernen.<container>)."""
     return {"kint": KINT_START, "kext": KEXT_START, "n_kint": 0, "n_kext": 0, "nachlauf": {}, "treffer": [], "zyklen": 0,
             "ein": [], "beob": None, "zyklus": None, "letzte": None, "aufheizen": {}, "auf": None,
-            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None, "sperre": None, "a": None}
-    # "auf_kw" (0.8.182) fehlt absichtlich: ein Stand ohne das Feld wird beim ersten Takt aus `aufheizen` umgerechnet
+            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None, "sperre": None, "a": None,
+            "auf_neu": False}
+    # "auf_kw" (0.8.182) fehlt absichtlich: ein Stand ohne das Feld wird beim ersten Takt aus `aufheizen` umgerechnet;
+    # "a_teile" (0.8.186) ebenso: ein a aus 0.8.183–0.8.185 bleibt stehen, bis die nächste Messung die Teile anlegt
 
 
 def lern_sperre(*, baseline: bool = False, hand: bool = False, modus: str = "thermo", tuer: bool = False) -> str | None:
@@ -316,15 +332,17 @@ def takt(
     stand: dict[str, Any], *, jetzt: datetime, heizt: bool, innen: float | None, soll: float, aussen: float | None,
     art: str, regelt: bool, kw: float | None = None, kw_nenn: Sequence[float] = (), tuer_offen: bool = False,
     hand: bool = False, kint_ok: bool = True, an: bool | None = None, vermutet: bool | None = None, baseline: bool = False,
-    modus: str = "thermo",
+    modus: str = "thermo", kw_an: float | None = None,
 ) -> dict[str, Any]:
     """Eine Minute Lernen: Ein-Zeiten mitschreiben, Nachlauf nach dem Ausschalten beobachten, K-Werte anpassen.
 
     `heizt`: ein Heizkörper des Containers zieht gerade Strom. `art`: „oel“ oder „konvektor“ (was eingeschaltet ist
     bzw. zuletzt war). `regelt`: der Container regelt gerade selbst (lernender Thermostat) – nur dann wird K außen
     gelernt. `kw`: Heizleistung des Containers gerade (Summe der Heizkörper, kW; None = unbekannt – die Minute zählt
-    nicht zum Mittel der Aufheiz-Messung). `kw_nenn`: Leistung je Heizkörper (Haupt zuerst) – rechnet alte Raten je
-    Anzahl in `auf_kw` um. `tuer_offen`: Türkontakt offen.
+    nicht zum Mittel der Aufheiz-Messung, nur ohne `kw_an`). `kw_nenn`: Leistung je Heizkörper (Haupt zuerst) – rechnet
+    alte Raten je Anzahl in `auf_kw` um. `kw_an` (0.8.186): Nennleistung der eingeschalteten Heizkörper (Plug an, wie
+    `kw_nenn`, auch wenn der Gerätethermostat gerade keinen Strom zieht) – durch sie teilt die Aufheiz-Messung; ohne
+    Angabe die gemessene Leistung `kw` (nur für Aufrufer ohne Plug-Zustand, z. B. Tests mit `an` = `heizt`). `tuer_offen`: Türkontakt offen.
     `hand`: von Hand geschaltet – dann wird nichts gelernt (Szenarien, Herbert 01.10.2026). `kint_ok`: False, wenn
     nicht die Regelung ausschaltet (z. B. Ende von „Schnell aufheizen“) – dann kein K innen aus diesem Ausschalten.
     `an`: ein Heizkörper ist eingeschaltet (ohne Angabe: `heizt`). `vermutet`: „Tür vermutlich offen“, wenn der Aufrufer
@@ -333,6 +351,9 @@ def takt(
     Gibt den neuen Stand zurück (der alte bleibt unverändert).
     """
     s = {**neuer_stand(), **stand}
+    # 0.8.186: Lücke seit dem letzten Takt (Automatik aus, Home Assistant aus) – was dazwischen geschah, ist unbekannt
+    vorher = _zeit(s["verlauf"][-1][0]) if s["verlauf"] else None
+    luecke = vorher is not None and (jetzt - vorher).total_seconds() / 60 > TAU_LUECKE_MIN
     if "auf_kw" not in stand and (kw_nenn or not s["aufheizen"]):   # 0.8.182: alte Raten je Anzahl einmal umrechnen
         s["auf_kw"] = auf_kw_umrechnen(s["aufheizen"], kw_nenn)
     # Tür offen (WU-0009): Verlauf der letzten Minuten, Erkennung am Temperaturabfall, Ruhezeit
@@ -348,6 +369,8 @@ def takt(
         s["offen"] = None
     # 0.8.181: Lernen nur aus echten Regelphasen – gesperrt: laufende Messungen (auch τ) verwerfen, keine neuen
     sperre = lern_sperre(baseline=baseline, hand=hand, modus=modus, tuer=tuer_offen or vermutet)
+    if sperre is None and luecke:
+        sperre = "luecke"
     alt_sperre = s["sperre"]
     if sperre is not None:
         nach = OFFEN_RUHE_MIN if sperre == "tuer" else SPERRE_NACH_MIN
@@ -356,7 +379,10 @@ def takt(
             bis = _zeit(alt_sperre["bis"])   # eine längere Nachlaufzeit (nach Baseline) kürzt die Tür nicht
         seit = alt_sperre["seit"] if alt_sperre is not None and alt_sperre.get("grund") == sperre else _iso(jetzt)
         s["sperre"] = {"grund": sperre, "seit": seit, "bis": _iso(bis)}
-        s["auf"] = s["beob"] = s["zyklus"] = s["ab"] = None
+        s["auf"] = s["beob"] = s["zyklus"] = None
+        s["auf_neu"] = True   # nach der Sperre beginnt das Aufheizen neu, auch wenn der Heizkörper durchläuft
+        if sperre != "luecke":   # nach einer Lücke schließt `_tau_takt` die Messung an der Lücke ab (bis zum letzten Wert)
+            s["ab"] = None
     elif alt_sperre is not None and (not alt_sperre.get("bis") or jetzt >= _zeit(alt_sperre["bis"])):
         s["sperre"] = None
     ruhe = (sperre is not None or (s["sperre"] is not None and jetzt < _zeit(s["sperre"]["bis"]))
@@ -382,16 +408,19 @@ def takt(
     # solange ein Heizkörper eingeschaltet ist, und mittelt die Leistung (auch Minuten, in denen ein Thermostat aus ist)
     auf = s["auf"]
     ein = heizt if an is None else an
+    kw_mess = kw_an if kw_an is not None else kw
     if auf is not None:
         dauer_auf = (jetzt - _zeit(auf["start"])).total_seconds() / 60
         if not ein or (innen is not None and innen >= soll - SPITZE_VORBEI) or dauer_auf >= AUF_MAX_MIN:
             s = _auf_ende(s, dauer_auf, innen if ein else s["letzte"], kw_nenn)
         else:
-            s["auf"] = _auf_minute(auf, kw, innen, aussen)
-    elif heizt and not ruhe and innen is not None and innen <= soll - AUF_AB_GRAD and (not lief or s["ruhe_bis"] is not None):
+            s["auf"] = _auf_minute(auf, kw_mess, innen, aussen)
+    elif (heizt and not ruhe and innen is not None and innen <= soll - AUF_AB_GRAD
+          and (not lief or s["ruhe_bis"] is not None or s["auf_neu"])):
         s["ruhe_bis"] = None     # nach einer Ruhezeit beginnt die Messung neu, auch wenn der Heizkörper durchlief
+        s["auf_neu"] = False
         s["auf"] = _auf_minute({"start": _iso(jetzt), "temp": innen, "band": band(aussen), "kw": 0.0, "kw_min": 0,
-                                "diff": 0.0, "diff_min": 0}, kw, innen, aussen)
+                                "diff": 0.0, "diff_min": 0, "v": AUF_VERSION}, kw_mess, innen, aussen)
     if innen is not None:
         s["letzte"] = innen
     grenze = jetzt.timestamp() - 2 * 3600
@@ -408,6 +437,8 @@ def takt(
     ruhig = (not heizt and not an and not ruhe and s["beob"] is None and innen is not None
              and aussen is not None and not TAU_TAG[0] <= jetzt.hour < TAU_TAG[1])
     s = _tau_takt(s, jetzt, innen, aussen, ruhig)
+    if s.get("a_teile"):   # 0.8.186: a immer mit dem aktuellen τ
+        s["a"] = a_aus_teilen(s["a_teile"], s.get("tau"))
     # K außen: ruhiger Zyklus nahe am Soll (je ZYKLUS_MIN Minuten ein Mittelwert)
     z = s["zyklus"]
     if not regelt or ruhe or innen is None or abs(soll - innen) >= 1.0:
@@ -485,11 +516,15 @@ def _auf_minute(auf: dict[str, Any], kw: float | None, innen: float | None, auss
 
 
 def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None, kw_nenn: Sequence[float] = ()) -> dict[str, Any]:
-    """Aufheizen abschließen: lang genug, spürbar wärmer und mit gemessener Leistung (mindestens `AUF_KW_MIN` im Mittel)
-    → Rate (°C/h) ÷ mittlere Leistung (kW) in den Mittelwert des Außenbands (`auf_kw`). Eine Messung aus einer
-    Vorversion (ohne Leistung) zählt nicht."""
+    """Aufheizen abschließen: lang genug, spürbar wärmer und mit Leistung (mindestens `AUF_KW_MIN` im Mittel) → Rate
+    (°C/h) ÷ mittlere Leistung (kW, `kw_an`) in den Mittelwert des Außenbands (`auf_kw`) und die Teile von a
+    (`a_teile`). Eine Messung, die vor 0.8.186 begonnen hat (ohne Kennung `AUF_VERSION`), zählt nicht: ihre Leistung
+    ist anders gemittelt. Solange alte Raten je Anzahl noch nicht in `auf_kw` umgerechnet sind (ohne `kw_nenn`), wird
+    `auf_kw` nicht geschrieben – sonst gingen sie verloren."""
     auf = s["auf"]
     s = {**s, "auf": None}
+    if auf.get("v") != AUF_VERSION:
+        return s
     if temp is None or minuten < AUF_MIN_MIN or temp - auf["temp"] < AUF_MIN_ANSTIEG:
         return s
     kw_min = int(auf.get("kw_min") or 0)
@@ -497,11 +532,14 @@ def _auf_ende(s: dict[str, Any], minuten: float, temp: float | None, kw_nenn: Se
     if kw < AUF_KW_MIN:
         return s
     rate = min(AUF_GRENZEN[1], max(AUF_GRENZEN[0], (temp - auf["temp"]) / minuten * 60))
-    tabelle = auf_kw(s, kw_nenn)
-    s["auf_kw"] = {**tabelle, auf["band"]: rate_mittel(tabelle.get(auf["band"]), rate / kw)}
-    a = a_messung(rate, kw, auf, s.get("tau"))
-    if a is not None:
-        s["a"] = rate_mittel(s.get("a"), a)
+    if isinstance(s.get("auf_kw"), Mapping) or kw_nenn or not s.get("aufheizen"):
+        tabelle = auf_kw(s, kw_nenn)
+        s["auf_kw"] = {**tabelle, auf["band"]: rate_mittel(tabelle.get(auf["band"]), rate / kw)}
+    teile = a_teile_messung(rate, kw, auf, s.get("tau"))
+    if teile is not None:
+        alt = s.get("a_teile") or ([float(s["a"][0]), 0.0, int(s["a"][1])] if s.get("a") else None)   # a aus 0.8.183–185
+        s["a_teile"] = teile_mittel(alt, teile)
+        s["a"] = a_aus_teilen(s["a_teile"], s.get("tau"))
     return s
 
 
@@ -513,11 +551,36 @@ def tau_h(tau: Sequence[float] | None) -> float:
 def a_messung(rate: float, kw: float, auf: Mapping[str, Any], tau: Sequence[float] | None) -> float | None:
     """a des Raummodells (°C/h je kW) aus einer Aufheiz-Messung: (Rate + mittleres (innen − außen) ÷ τ) ÷ Leistung;
     None ohne Außenwert in der Messung oder außerhalb `A_GRENZEN`."""
+    teile = a_teile_messung(rate, kw, auf, tau)
+    return None if teile is None else teile[0] + teile[1] / tau_h(tau)
+
+
+def a_teile_messung(rate: float, kw: float, auf: Mapping[str, Any], tau: Sequence[float] | None
+                    ) -> tuple[float, float] | None:
+    """Die beiden Teile von a aus einer Aufheiz-Messung (0.8.186): (Rate ÷ kW, mittleres (innen − außen) ÷ kW), also
+    a = Teil 1 + Teil 2 ÷ τ. None ohne Außenwert in der Messung oder wenn a mit dem τ von jetzt außerhalb `A_GRENZEN`
+    liegt (Unsinn: Fühler am Heizkörper, Leistung falsch)."""
     n = int(auf.get("diff_min") or 0)
     if not n or kw <= 0:
         return None
-    a = (rate + float(auf["diff"]) / n / tau_h(tau)) / kw
-    return a if A_GRENZEN[0] <= a <= A_GRENZEN[1] else None
+    r, d = rate / kw, float(auf["diff"]) / n / kw
+    return (r, d) if A_GRENZEN[0] <= r + d / tau_h(tau) <= A_GRENZEN[1] else None
+
+
+def teile_mittel(alt: Sequence[float] | None, teile: tuple[float, float]) -> list[float]:
+    """[Rate ÷ kW, (innen − außen) ÷ kW, Anzahl]: beide Teile gemittelt wie `rate_mittel` – weil a linear in den Teilen
+    ist, ergibt das genau das Mittel der a aller Messungen, gerechnet mit demselben (aktuellen) τ."""
+    if not alt:
+        return [round(teile[0], 4), round(teile[1], 4), 1]
+    n = int(alt[2]) + 1
+    g = max(GEWICHT, 1 / n)
+    return [round(float(alt[0]) + (teile[0] - float(alt[0])) * g, 4), round(float(alt[1]) + (teile[1] - float(alt[1])) * g, 4), n]
+
+
+def a_aus_teilen(teile: Sequence[float], tau: Sequence[float] | None) -> list[float]:
+    """`a` = [a, Anzahl] aus `a_teile` mit dem aktuellen τ, begrenzt auf `A_GRENZEN`."""
+    a = float(teile[0]) + float(teile[1]) / tau_h(tau)
+    return [round(max(A_GRENZEN[0], min(A_GRENZEN[1], a)), 4), int(teile[2])]
 
 
 def rate_mittel(alt: Sequence[float] | None, wert: float) -> list[float]:

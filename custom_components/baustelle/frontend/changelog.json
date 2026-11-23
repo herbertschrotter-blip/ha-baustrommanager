@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.8.186",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Heizung: **Aufheizzeit bei taktenden Ölradiatoren stimmt** (Gutachten zu 0.8.181–0.8.185): Die gelernte Aufheizrate je kW wurde durch die gemessene Leistung geteilt – samt der Minuten, in denen der Thermostat am Radiator gerade aus war –, die Vorhersage multiplizierte aber mit der vollen Leistung. Bei einem Radiator, der 3 min heizt und 4 min pausiert, war die Rate so mehr als doppelt zu groß und der Start viel zu spät (Beispiel: gebraucht 130 min, vorhergesagt 60 min). Jetzt rechnen Lernen und Vorhersage mit derselben Leistung: der Nennleistung der eingeschalteten Heizkörper. Das Takten steckt damit in der gelernten Rate. Schon gelernte Raten bleiben stehen und gleichen sich mit jeder neuen Messung an.",
+      "Das Raummodell rechnet immer mit der aktuellen Auskühlzeit τ: Wird τ später anders gelernt, zieht a mit, statt beim Startwert von 12 h stehen zu bleiben. Ein schon gelerntes a bleibt stehen und lernt weiter.",
+      "Fehlen die Messwerte länger als 10 min (Automatik aus, Home Assistant aus), wird keine Messung über die Lücke gelernt; danach ruht das Lernen 90 min, wie nach einem Baseline-Lauf.",
+      "Nach einer Lernsperre (von Hand, Baseline, Modus, Lücke) beginnt eine neue Aufheiz-Messung auch dann, wenn der Heizkörper einfach weiterläuft (bisher nur nach offener Tür).",
+      "Alte Aufheizraten aus 0.8.181 gehen nicht verloren, wenn die Leistung der Heizkörper einmal unbekannt ist.",
+      "Baseline: Ruht der Messcontainer einer fertigen Bauart, bekommt ein anderer fertiger Container derselben Bauart den Kontrolltag des Monats."
+    ]
+  },
+  {
     "version": "0.8.185",
     "datum": "2026-11-23",
     "punkte": [

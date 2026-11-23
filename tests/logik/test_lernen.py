@@ -147,8 +147,25 @@ def test_kext_lernt_in_ruhigen_zyklen():
 EIN_KW = (1.0,)   # ein Heizkörper mit 1 kW: Rate je kW = Rate
 
 
+def _pause_bis(stand, ab, temp, aussen=0.0, soll=20.0, kw_nenn=EIN_KW):
+    """Seit dem letzten Takt bis vor `ab` Minute für Minute aus, der Raum kühlt linear auf `temp` (0.8.186: ein Sprung
+    über `TAU_LUECKE_MIN` wäre eine Lücke und sperrte das Lernen)."""
+    if not stand.get("verlauf"):
+        return stand
+    t = datetime.fromisoformat(stand["verlauf"][-1][0]) + timedelta(minutes=1)
+    start, n = stand.get("letzte") if stand.get("letzte") is not None else temp, max(1, int((ab - t).total_seconds() // 60))
+    i = 0
+    while t < ab:
+        stand = takt(stand, jetzt=t, heizt=False, innen=start + (temp - start) * i / n, soll=soll, aussen=aussen, art="oel",
+                     regelt=True, kw=0.0, kw_nenn=kw_nenn)
+        t += timedelta(minutes=1)
+        i += 1
+    return stand
+
+
 def _aufheizen(stand, von, bis, minuten, aussen=0.0, soll=20.0, ab=T0, kw=1.0, kw_nenn=EIN_KW):
     """minuten lang durchgehend heizen (Leistung `kw`), Temperatur linear von → bis, dann aus."""
+    stand = _pause_bis(stand, ab, von, aussen, soll, kw_nenn)
     t = ab
     for i in range(minuten):
         stand = takt(stand, jetzt=t, heizt=True, innen=von + (bis - von) * i / minuten, soll=soll, aussen=aussen, art="oel",
@@ -206,19 +223,48 @@ def test_aufheizen_je_kw_ueber_stufenwechsel():
 
 
 def test_aufheizen_taktender_oelradiator_zaehlt_weiter():
-    """Der eigene Thermostat eines Ölradiators schaltet ab (Plug an, zieht keinen Strom): die Messung läuft weiter, die
-    Minuten mit 0 kW zählen zur mittleren Leistung. Erst ein ausgeschalteter Plug beendet sie."""
+    """Der eigene Thermostat eines Ölradiators schaltet ab (Plug an, zieht keinen Strom): die Messung läuft weiter.
+    0.8.186 (Gutachten, Befund 1): geteilt wird durch die Nennleistung der eingeschalteten Heizkörper (`kw_an`, Plug an),
+    nicht durch die gemessene Leistung samt der Minuten mit 0 kW – das Takten steckt so in der Rate je kW, und die
+    Vorhersage (Rate je kW × Nennleistung) rechnet mit derselben Größe. Erst ein ausgeschalteter Plug beendet sie."""
     s, tt = neuer_stand(), T0
     for i in range(40):   # 3 min an, 2 min aus
         zieht = i % 5 < 3
         s = takt(s, jetzt=tt, heizt=zieht, an=True, innen=15.0 + 0.05 * i, soll=20.0, aussen=0.0, art="oel", regelt=True,
-                 kw=2.0 if zieht else 0.0, kw_nenn=(2.0,))
+                 kw=2.0 if zieht else 0.0, kw_an=2.0, kw_nenn=(2.0,))
         assert s["auf"] is not None, i
         tt += timedelta(minutes=1)
     s = takt(s, jetzt=tt, heizt=False, an=False, innen=17.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw=0.0,
-             kw_nenn=(2.0,))
+             kw_an=0.0, kw_nenn=(2.0,))
     rate = (15.0 + 0.05 * 39 - 15.0) / 40 * 60
-    assert s["auf"] is None and s["auf_kw"]["kalt"] == [pytest.approx(rate / 1.2, abs=1e-3), 1]   # Mittel 3/5 × 2 kW
+    assert s["auf"] is None and s["auf_kw"]["kalt"] == [pytest.approx(rate / 2.0, abs=1e-3), 1]   # Nennleistung 2 kW
+    # die Vorhersage mit der Nennleistung ergibt wieder die gemessene Rate (nicht das 1 ÷ Einschaltanteil-Fache)
+    assert s["auf_kw"]["kalt"][0] * kw_fuer((2.0,), 1) == pytest.approx(rate, abs=1e-3)
+
+
+def test_taktender_oelradiator_vorhersage_trifft_die_beobachtete_dauer():
+    """Pflicht-Test zu Befund 1: Raum nach dem Raummodell (a = 4 °C/h je kW, τ = 24 h, außen 0 °C), Ölradiator 2 kW,
+    dessen Thermostat 3 min an, 4 min aus taktet (wirksam 0,86 kW). Aus dieser einen Messung muss `aufheiz_min` (Rate je
+    kW × Nennleistung) und der Start über das Raummodell (`start.aufheizen_modell` mit a und kw_fuer) ungefähr die
+    beobachtete Dauer ergeben. Bis 0.8.185 war die Rate je kW um 7/3 zu groß: Vorhersage 60 statt 130 min."""
+    from logik import start as start_logik
+    a_echt, tau, kw_nenn = 4.0, 24.0, (2.0,)
+    s, tt, innen, i = {**neuer_stand(), "tau": [tau, 5]}, T0, 14.0, 0
+    while True:
+        zieht = i % 7 < 3
+        s = takt(s, jetzt=tt, heizt=zieht, an=True, innen=innen, soll=20.0, aussen=0.0, art="oel", regelt=True,
+                 kw=2.0 if zieht else 0.0, kw_an=2.0, kw_nenn=kw_nenn)
+        if s["auf"] is None:
+            break
+        innen += (a_echt * (2.0 if zieht else 0.0) - innen / tau) / 60
+        tt += timedelta(minutes=1)
+        i += 1
+    beobachtet, ende = i, innen   # Minuten von 14 °C bis zum Ende der Messung (Soll − 0,2)
+    assert 100 < beobachtet < 160 and s["auf_kw"]["kalt"][1] == 1 and s["a"][1] == 1
+    gelernt = {"auf_kw": {"kalt": [s["auf_kw"]["kalt"][0], AUF_N]}}
+    assert aufheiz_min(gelernt, innen=14.0, soll=ende, aussen=0.0, kw_nenn=kw_nenn) == pytest.approx(beobachtet, abs=6)
+    modell = start_logik.aufheizen_modell(14.0, 0, ende, s["a"][0], kw_fuer(kw_nenn, 1), tau, lambda m: 0.0)
+    assert modell == pytest.approx(beobachtet, rel=0.05)
 
 
 def test_aufheizen_lernt_a_des_raummodells():
@@ -440,8 +486,9 @@ def test_tau_lernt_aus_der_nacht():
     assert s["ab"] is None and s["tau"][1] == 1 and s["tau"][0] == pytest.approx(15.0, rel=0.08)
     a = anzeige(s)["tau"]
     assert a["n"] == 1 and a["n_noetig"] == TAU_N and a["h"] == s["tau"][0]
-    s2, t2 = _auskuehlen(s, abend + timedelta(days=1), 3, tau=20.0)
-    s2 = _heizen_an(s2, t2, innen=16.2)   # nach 3 h bei τ 20 h: 16,2 °C (ein Sprung auf 15 °C wäre „schnell kälter“)
+    # 0.8.186: nach der Lücke (ein Tag) erst SPERRE_NACH_MIN gesperrt, dann misst er die übrigen 2,5 h
+    s2, t2 = _auskuehlen(s, abend + timedelta(days=1), 4, tau=20.0)
+    s2 = _heizen_an(s2, t2, innen=15.7)   # nach 4 h bei τ 20 h: 15,6 °C (ein Sprung auf 15 °C wäre „schnell kälter“)
     assert s2["tau"][1] == 2 and s["tau"][0] < s2["tau"][0] < 20.5     # Mittel aus beiden
 
 
@@ -486,10 +533,11 @@ def test_tau_mit_echter_zeit_und_luecke():
     from logik.lernen import tau_messung
     assert tau_messung(fein) == pytest.approx(15.0, rel=0.03) and tau_messung(grob) == pytest.approx(15.0, rel=0.03)
     assert grob["min"] == pytest.approx(240)
-    # Lücke von 60 min nach 3 h: die Messung endet dort (τ aus 3 h), die nächste beginnt neu
-    s = kuehlen(1, 5, luecke_nach_h=3, luecke_min=60)
+    # Lücke von 60 min nach 3 h: die Messung endet dort (τ aus 3 h); 0.8.186: die Lücke sperrt danach SPERRE_NACH_MIN
+    # (was in ihr geschah, ist unbekannt), dann beginnt die nächste neu
+    s = kuehlen(1, 6, luecke_nach_h=3, luecke_min=60)
     assert s["tau"] is not None and s["tau"][1] == 1 and s["tau"][0] == pytest.approx(15.0, rel=0.05)
-    assert s["ab"]["min"] < 60 + 1 and TAU_LUECKE_MIN < 60
+    assert s["ab"]["min"] == pytest.approx(60 - SPERRE_NACH_MIN + 60) and TAU_LUECKE_MIN < 60
 
 
 # ---------------------------------------------------- 0.8.181 (Prüfpunkt 1): Lernen nur aus echten Regelphasen
@@ -537,7 +585,8 @@ def test_befund_ende_baseline_lernt_keinen_treffer_und_kein_k_innen():
     assert s["kint"] == 0.419 and s["n_kint"] == 7 and s["treffer"] == [0.1] and s["nachlauf"] == {}
     assert s["sperre"]["grund"] == "baseline"                          # Nachlaufzeit läuft noch
     # nach der Nachlaufzeit regelt der Container wieder selbst: dann wird wieder gelernt
-    s, t = _minuten(s, t + timedelta(minutes=SPERRE_NACH_MIN), [19.4] * 30, True)
+    s, t = _minuten(s, t, [29.7 - (29.7 - 19.4) * i / SPERRE_NACH_MIN for i in range(SPERRE_NACH_MIN)], False)   # kühlt ab
+    s, t = _minuten(s, t, [19.4] * 30, True)
     assert s["sperre"] is None
     s, t = _minuten(s, t, [19.4, 19.8, 20.2, 20.4, 20.6, 20.3], False)
     assert s["n_kint"] == 8 and len(s["treffer"]) == 2
@@ -605,3 +654,93 @@ def test_schnell_kaelter_sperrt_lernen_mit_nachlaufzeit():
     assert s["sperre"] is not None
     s, t = _minuten(s, t, [18.9], False)
     assert s["sperre"] is None and s["offen"] is None
+
+
+# ------------------------------------------------------------------------ 0.8.186: Befunde aus dem Gutachten
+def _steigt(s, t, minuten, ab=15.0, schritt=0.03, **kw):
+    """minuten lang durchgehend heizen (Plug an, 2 kW), der Raum wird je Minute um `schritt` wärmer."""
+    for i in range(minuten):
+        s = takt(s, jetzt=t, heizt=True, an=True, innen=round(ab + schritt * i, 3), soll=20.0, aussen=0.0, art="oel",
+                 regelt=True, kw=2.0, kw_an=2.0, kw_nenn=(2.0,), **kw)
+        t += timedelta(minutes=1)
+    return s, t
+
+
+def test_luecke_verwirft_laufende_messungen_und_sperrt():
+    """Befund 2: `takt` läuft nur bei eingeschalteter Automatik. Fehlt er länger als TAU_LUECKE_MIN (Automatik aus,
+    Home Assistant aus), wird die Aufheiz-Messung nicht über die Lücke gelernt, sondern verworfen, und das Lernen ist
+    SPERRE_NACH_MIN gesperrt (was in der Lücke geschah, ist unbekannt). Eine kurze Lücke (Neustart) stört nicht."""
+    from logik.lernen import TAU_LUECKE_MIN
+    s, t = _steigt(neuer_stand(), T0, 30)
+    assert s["auf"] is not None
+    kurz, _ = _steigt(s, t + timedelta(minutes=TAU_LUECKE_MIN - 1), 1, ab=15.9)
+    assert kurz["auf"] is not None and kurz["sperre"] is None
+    s, t = _steigt(s, t + timedelta(minutes=60), 1, ab=17.5)   # eine Stunde nichts, dann wärmer
+    assert s["auf"] is None and s["auf_kw"] == {} and s["a"] is None
+    assert s["sperre"]["grund"] == "luecke" and anzeige(s)["sperre"]["grund"] == "luecke"
+    # Befund 4: der Heizkörper läuft durch – nach der Sperre beginnt trotzdem eine neue Messung
+    s, t = _steigt(s, t, SPERRE_NACH_MIN - 1, ab=17.5, schritt=0.001)
+    assert s["auf"] is None and s["sperre"] is not None
+    s, t = _steigt(s, t, 1, ab=17.6)
+    assert s["sperre"] is None and s["auf"] is not None and s["auf_neu"] is False
+
+
+def test_nach_sperre_beginnt_aufheizen_auch_wenn_der_heizkoerper_durchlaeuft():
+    """Befund 4: Von Hand (oder Baseline, Modus) geheizt, dann regelt der Container wieder selbst und der Heizkörper
+    läuft einfach weiter: nach SPERRE_NACH_MIN beginnt eine Aufheiz-Messung (bisher nur nach der Tür)."""
+    s, t = _steigt(neuer_stand(), T0, 10, hand=True)
+    assert s["auf"] is None and s["sperre"]["grund"] == "hand"
+    s, t = _steigt(s, t, SPERRE_NACH_MIN, ab=15.3, schritt=0.0)
+    assert s["sperre"] is None and s["auf"] is not None
+    s, t = _steigt(s, t, 60, ab=15.3, schritt=0.05)
+    s = takt(s, jetzt=t, heizt=False, an=False, innen=18.3, soll=20.0, aussen=0.0, art="oel", regelt=True, kw=0.0,
+             kw_an=0.0, kw_nenn=(2.0,))
+    assert s["auf"] is None and s["auf_kw"]["kalt"][1] == 1
+
+
+def test_a_rechnet_mit_dem_aktuellen_tau():
+    """Befund 3: a = Rate ÷ kW + (innen − außen) ÷ kW ÷ τ. Gelernt, solange τ noch der Startwert ist, zieht a mit, sobald
+    später ein anderes τ gelernt wird (die Teile stehen in `a_teile`) – nichts wird verworfen."""
+    s, _ = _aufheizen(neuer_stand(), 15.0, 18.0, 60, aussen=0.0, kw=2.0, kw_nenn=(2.0,))
+    r, d, n = s["a_teile"]
+    assert n == 1 and s["a"] == [pytest.approx(r + d / TAU_START_H, abs=1e-3), 1]
+    s2 = takt({**s, "tau": [30.0, 3]}, jetzt=T0 + timedelta(days=1), heizt=False, innen=18.0, soll=20.0, aussen=0.0,
+              art="oel", regelt=True, kw_nenn=(2.0,))
+    assert s2["a"] == [pytest.approx(r + d / 30.0, abs=1e-3), 1] and s2["a"][0] < s["a"][0] and s2["a_teile"] == s["a_teile"]
+    # zwei Messungen: das Mittel der Teile ergibt das Mittel der a mit demselben τ
+    s3, _ = _aufheizen(s, 15.0, 17.0, 60, aussen=0.0, kw=2.0, kw_nenn=(2.0,), ab=T0 + timedelta(hours=4))
+    r2, d2, n2 = s3["a_teile"]
+    assert n2 == 2 and s3["a"][0] == pytest.approx(r2 + d2 / TAU_START_H, abs=1e-3)
+
+
+def test_a_aus_vorversion_bleibt_und_lernt_weiter():
+    """Ein a aus 0.8.183–0.8.185 (ohne Teile) bleibt unverändert stehen und geht bei der nächsten Messung als fester
+    Teil (Abstand 0) mit seiner Anzahl in die Teile ein."""
+    alt = {**neuer_stand(), "a": [3.0, 2]}
+    s = takt(alt, jetzt=T0, heizt=False, innen=18.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw_nenn=(2.0,))
+    assert s["a"] == [3.0, 2] and "a_teile" not in s
+    s, _ = _aufheizen(alt, 15.0, 18.0, 60, aussen=0.0, kw=2.0, kw_nenn=(2.0,))
+    neu = (s["auf_kw"]["kalt"][0], sum(15.0 + 3.0 * i / 60 for i in range(60)) / 60 / 2.0)
+    assert s["a_teile"] == [pytest.approx(3.0 + (neu[0] - 3.0) / 3, abs=1e-3), pytest.approx(neu[1] / 3, abs=1e-3), 3]
+    assert s["a"][1] == 3
+
+
+def test_alte_raten_gehen_ohne_leistung_nicht_verloren():
+    """Befund 5: Alte Raten je Anzahl (bis 0.8.181) und keine Leistung bekannt (`kw_nenn` leer): eine fertige Messung
+    schreibt `auf_kw` nicht – sonst stünde dort nur die neue und die alten wären verloren. Später umgerechnet wie bisher."""
+    alt = {**neuer_stand(), "aufheizen": {"kalt|1": [2.0, 8]}}
+    s, t = _aufheizen(alt, 15.0, 18.0, 60, aussen=0.0, kw=2.0, kw_nenn=())
+    assert "auf_kw" not in s and s["aufheizen"] == alt["aufheizen"] and s["auf"] is None
+    s = takt(s, jetzt=t, heizt=False, innen=15.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw_nenn=(2.0,))
+    assert s["auf_kw"] == {"kalt": [1.0, 8]}
+
+
+def test_messung_aus_vorversion_zaehlt_nicht():
+    """Befund 7: Eine Aufheiz-Messung, die vor 0.8.186 begonnen hat (ohne Kennung, Leistung anders gemittelt), wird
+    beim Abschluss verworfen – wie der Docstring von `_auf_ende` sagt."""
+    s, t = _steigt(neuer_stand(), T0, 5)
+    alt = {**s, "auf": {k: v for k, v in s["auf"].items() if k != "v"}}
+    s2, t2 = _steigt(alt, t, 55, ab=15.15, schritt=0.05)
+    s2 = takt(s2, jetzt=t2, heizt=False, an=False, innen=18.0, soll=20.0, aussen=0.0, art="oel", regelt=True, kw=0.0,
+              kw_an=0.0, kw_nenn=(2.0,))
+    assert s2["auf"] is None and s2["auf_kw"] == {} and s2["a"] is None

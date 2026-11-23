@@ -151,6 +151,7 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
         neu = lernen.takt(
             alt, jetzt=jetzt, heizt=any(hz._zieht_strom(g) for g in heizer),
             kw=_kw_jetzt(hz, heizer), kw_nenn=h_start.kw_nenn(hz, info.id),   # 0.8.182: Aufheizrate je kW
+            kw_an=_kw_an(hz, heizer),   # 0.8.186: dieselbe Leistung wie die Vorhersage (Nennleistung, Plug an)
             tuer_offen=hz._tuer_offen(info.id), innen=hz.st.temperatur(info.fuehler),
             hand=any(g.id in hz.st.lz["hand"] for g in heizer),
             # Grund der letzten Heizminute: nach Schnell aufheizen und nach dem Aufheizen (0.8.178) lernt K innen nicht –
@@ -180,6 +181,13 @@ def _kw_jetzt(hz: Heizung, heizer: list[Any]) -> float:
             w = zahl(hz.st.hass.states.get(g.leistung)) if g.leistung else None
             kw += w / 1000 if w is not None else hz.st.nenn_kw(g)
     return round(kw, 3)
+
+
+def _kw_an(hz: Heizung, heizer: list[Any]) -> float:
+    """Nennleistung der eingeschalteten Heizkörper (kW, `nenn_kw` wie `start.kw_nenn`): Plug an zählt, auch wenn der
+    Gerätethermostat gerade keinen Strom zieht – so lernt die Aufheizrate je kW das Takten mit (0.8.186)."""
+    return round(sum(hz.st.nenn_kw(g) for g in heizer
+                     if (z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON), 3)
 
 
 def lern_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
