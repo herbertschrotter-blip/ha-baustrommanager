@@ -9,6 +9,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { de, zahl } from '../hilfen.js';
 import { BEREICH_FARBEN, SYMBOL_STANDARD, bcContainer } from '../symbole.js';
 import { schalterVorlage } from './allgemein.js';
+import { MODI, MODUS_TEXT } from '../tabellen.js';
 import { optionenVorlage } from './einblendungen-baustelle.js';
 
 const GRIFF = html`<div class="griff"></div>`;
@@ -81,7 +82,7 @@ function groesse(p, b, e) {
       ${w && w.geschaetzt && gleich ? html`<div class="leise" style="padding:0 0 6px 12px">🧠 Noch nichts gelernt: Aufheizen geschätzt aus der Größe – ${de(w.geschaetzt, 1)} °C/h</div>` : nothing}`;
 }
 
-/* Container bearbeiten: Name, Zusatz-Heizkörper, Bei Bedarf, Warm ab, Größe, Aussehen, Fühler, Tür, Anschluss, Firma, Geräte */
+/* Container bearbeiten: Name, Zusatz-Heizkörper, Modus (UI-Bericht Maßnahme 4: statt „Nur bei Bedarf heizen“), Warm ab, Größe, Aussehen, Fühler, Tür, Anschluss, Firma, Geräte */
 function bereich(p, s) {
   const d = p.d, b = p.b; if (!b) { p.s.sheet = null; return nothing; }
   const e = p.bereichEntwurf(b, s), z = () => p.neuZeichnen();
@@ -92,7 +93,7 @@ function bereich(p, s) {
   if (e.tuer && !tueren.some(x => x[0] === e.tuer)) tueren.unshift([e.tuer, p.name(e.tuer)]);
   const warm = () => { const w = { vor: e.warmVor ?? d.e.warm_vor, nach: e.warmNach ?? d.e.warm_nach, vor_eigen: e.warmVor !== null, nach_eigen: e.warmNach !== null };   // AN-0004
     const sw = (k, v, eigen, f) => html`<span class="stepper klein" data-w=${k}><button data-d="-5" @click=${p.nurAdmin(() => p.warmEigen(e, k, -5))}>−</button><b class=${eigen ? 'eigen' : ''}>${f(v)}</b><button data-d="5" @click=${p.nurAdmin(() => p.warmEigen(e, k, 5))}>+</button></span>`;
-    return html`<div class="gruppe-t" data-zeile="warm">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w.vor_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('vor', w.vor, w.vor_eigen, v => v ? `${v} min vorher` : 'bei Beginn')}</div>
+    return html`<div class="gruppe-t" data-zeile="warm">🧠 Warm ab · lernende Regelung</div><div class="leise">Wann der Raum vor Arbeitsbeginn warm sein soll und wie lange er danach warm bleibt; ohne eigenen Wert gilt Heizung › Regeln › Vor der Arbeit.</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w.vor_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('vor', w.vor, w.vor_eigen, v => v ? `${v} min vorher` : 'bei Beginn')}</div>
             <div class="zeile"><div><span>Warm halten</span><div class="leise">${w.nach_eigen ? 'eigener Wert' : 'wie die Baustelle'}</div></div>${sw('nach', w.nach, w.nach_eigen, v => v ? `${v} min länger` : 'bis Ende')}</div>
             ${w.vor_eigen || w.nach_eigen ? html`<button class="zeile" @click=${p.nurAdmin(() => p.warmZurueck(e))}><span class="blau">Wie die Baustelle</span></button>` : nothing}`; };
   // AN-0015 (Mockup primaer.html A): genau ein Primärheizkörper je Container, die anderen sind Zusatz
@@ -114,13 +115,14 @@ function bereich(p, s) {
         <label class="feld">Name${text(e, 'name')}</label>
         ${!b.pumpe && b.geraete.filter(g => g.heizer).length >= 2 ? html`<div class="zeile" data-zeile="stufen"><div><b>🔥 Zusatz-Heizkörper nur bei Bedarf</b><div class="leise">zuerst heizt der Primärheizkörper; der Zusatz kommt bei Kälte, weit unter dem Soll oder wenn einer es nicht schafft.</div></div>${schalterVorlage(e.stufen, () => { e.stufen = !e.stufen; z(); })}</div>
         ${primaerWahl()}` : nothing}
-        ${b.pumpe ? nothing : html`<div class="zeile" data-zeile="bedarf"><div><b>Nur bei Bedarf heizen</b><div class="leise">z. B. Besprechungscontainer: heizt nur per Schalter oder Termin, sonst Frostschutz</div></div>${schalterVorlage(e.bedarf, () => { e.bedarf = !e.bedarf; z(); })}</div>`}
+        ${b.pumpe ? nothing : html`<label class="feld" data-zeile="modus">Modus · wie die Automatik heizt${auswahl(e, 'modus', MODI.map(([k, t]) => html`<option value=${k} ?selected=${e.modus === k} ?disabled=${k === 'thermo' && !e.fuehler}>${t}</option>`), z)}
+          <span class="leise">${MODUS_TEXT[e.modus] || ''}${e.modus === 'thermo' && !e.fuehler ? ' – braucht einen Temperaturfühler' : ''}</span></label>`}
         ${b.pumpe || !b.fuehler || !b.lern ? nothing : html`<div class="zeile" data-zeile="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${['thermo', 'bedarf'].includes(b.modus) ? 'lernt, wie schnell der Raum warm wird und wie viel er nachwärmt, und heizt so früh, dass das Soll rechtzeitig da ist' : 'wirkt nur im Modus Thermostat oder Bei Bedarf'}${b.lern.an ? html` · <button class="link blau" @click=${() => p.unterDialog({ art: 'lernen' })}>Lernstand ›</button>` : nothing}</div></div>${schalterVorlage(e.lernen, () => { e.lernen = !e.lernen; z(); })}</div>`}
         ${b.pumpe ? nothing : html`<div class="zeile" data-zeile="trocknen"><div><b>👕 Kleidung trocknen nach Regen</b><div class="leise">nach Regen länger nach der Arbeit und früher am Morgen heizen (Werte unter Heizung › Regeln)</div></div>${schalterVorlage(e.trocknen, () => { e.trocknen = !e.trocknen; z(); })}</div>`}
         ${b.lern && b.lern.warm ? warm() : nothing}
         ${b.pumpe || !b.groesse ? nothing : groesse(p, b, e)}
         ${b.pumpe ? nothing : html`<div class="glas-panel liste"><button class="zeile sym-zeile" @click=${() => p.aussehenAuf(b)}><span class="sym-mini">${unsafeHTML(bcContainer(BEREICH_FARBEN[b.f % BEREICH_FARBEN.length], 'aus', b))}</span><div><b class="blau">🏠 Aussehen</b><div class="leise">${b.symbol && b.symbol.doppel ? 'Doppel' : 'Einzel'} · ${b.symbol ? b.symbol.tueren.length : 1} ${b.symbol && b.symbol.tueren.length === 2 ? 'Türen' : 'Tür'} · ${b.symbol ? b.symbol.fenster.length : 1} Fenster · Farbe, Sensoren</div></div><span class="chev">›</span></button></div>`}
-        ${b.pumpe ? nothing : html`<label class="feld">Temperaturfühler${auswahl(e, 'fuehler', optionenVorlage(fuehler, e.fuehler, '– keiner –'))}</label>`}
+        ${b.pumpe ? nothing : html`<label class="feld">Temperaturfühler${auswahl(e, 'fuehler', optionenVorlage(fuehler, e.fuehler, '– keiner –'), () => { if (!e.fuehler && e.modus === 'thermo') e.modus = 'plan'; z(); })}</label>`}
         ${b.pumpe ? nothing : html`<label class="feld">Türkontakt${auswahl(e, 'tuer', optionenVorlage(tueren, e.tuer, 'keiner'))}</label>`}
         <label class="feld">Stromanschluss${auswahl(e, 'anschluss', d.anschluesse.map(a => html`<option value=${a.id} ?selected=${e.anschluss === a.id}>${a.name} · ${a.phasen === 3 ? '3 × ' : ''}${a.ampere} A</option>`), z)}</label>
         <label class="feld">Firma · für die Abrechnung${auswahl(e, 'firma', d.firmen.map(f => html`<option value=${f.id} ?selected=${e.firma === f.id}>${f.name}</option>`))}</label>

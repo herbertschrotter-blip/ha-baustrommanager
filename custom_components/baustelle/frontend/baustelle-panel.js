@@ -378,6 +378,13 @@ var AUSNAHME = { arbeit: "zusätzlich arbeiten", zeiten: "andere Zeiten", frei: 
 var HEIZER = (g2) => ["heizung", "heizkoerper"].includes(g2.rolle);
 var TYP_TEXT = (g2) => g2.rolle === "pumpe" ? "Pumpe" : HEIZER(g2) ? g2.typ === "konvektor" ? "Konvektor" : "Ölradiator" : ["trockner", "bautrockner"].includes(g2.rolle) ? "Bautrockner" : "Steckdose";
 var MODI = [["plan", "Zeitplan"], ["thermo", "Thermostat"], ["bedarf", "Bei Bedarf"], ["hand", "Hand"], ["aus", "Aus"]];
+var MODUS_TEXT = {
+  plan: "an in der Heizzeit – der Thermostat am Heizkörper regelt",
+  thermo: "in der Heizzeit auf das Soll nach dem Fühler",
+  bedarf: "nur per Schalter oder Termin, sonst Frostschutz",
+  hand: "die Automatik schaltet nicht – du schaltest selbst",
+  aus: "alles aus, Frostschutz bleibt"
+};
 var FREI_TEXT = { frost: "nur Frostschutz", absenk: "abgesenkt", aus: "alles aus" };
 var ARTEN = {
   m_selbst: "selbst_ein",
@@ -2118,6 +2125,7 @@ function pumpenVorlage(p4) {
     p4.s.pchart = k2;
     p4.neuZeichnen();
   };
+  const melden = (k2) => b2`<div class="zeile unter" data-m=${k2}><span>aufs Handy melden</span>${schalterVorlage(e6[k2], () => p4.einstellungUmschalten(k2))}</div>`;
   return b2`${kopfVorlage("Pumpen", d3.titel)}
       <div class="glas-panel kennz">${[["Zyklen heute", zahl(zyk) ? zyk : "–"], ["Laufzeit heute", stdMin(lauf)], ["Pumpen an", `${pumpen2.filter((g2) => g2.an).length} von ${pumpen2.length}`]].map(([k2, v2]) => b2`<div><b>${v2}</b><span>${k2}</span></div>`)}</div>
       ${W.map((w2) => b2`<button class="glas-panel warn-zeile ${w2.stufe}" data-id=${w2.b} @click=${() => p4.gehe("container", w2.b)}><b>⚠ ${p4.bName(w2.b)}: ${w2.titel}</b><span class="leise">${p4.seitText(w2.seitIso)}${w2.hilfe ? ` · ${w2.hilfe}` : ""}</span></button>`)}
@@ -2129,12 +2137,12 @@ function pumpenVorlage(p4) {
         <div class="seg">${CHARTS2.map(([k2, t5]) => b2`<button data-pc=${k2} class=${k2 === pc ? "on" : ""} @click=${() => chartWahl(k2)}>${t5}</button>`)}</div>
         <div class="chart-wrap">${r5 ? o5(balken(`p${pc}-${b3.id}`, r5, TAGE, pc === "zyklen" ? "Zyklen" : pc === "verbrauch" ? "kWh" : "h", pc === "zyklen" ? 0 : 1)) : LAEDT2}</div></div>`;
   })}
-      <div class="glas-panel block"><div class="block-kopf"><b>Überwachung</b><span class="leise">wann eine Pumpe gemeldet wird</span></div>
-        <div class="zeile"><div><b>Offline</b><div class="leise">Shelly antwortet nicht (Stromausfall?) – melden nach</div></div>${st("offline_min", 1, (v2) => `${de(v2, 0)} min`)}</div>
-        <div class="zeile"><div><b>Trockenlauf</b><div class="leise">Pumpe läuft, zieht aber weniger als</div></div>${st("trocken_w", 5, (v2) => `${de(v2, 0)} W`)}</div>
-        <div class="zeile"><div><b>Dauerlauf</b><div class="leise">läuft ohne Pause länger als</div></div>${st("dauer_min", 5, (v2) => `${v2} min`)}</div>
-        <div class="zeile"><div><b>Schaltet oft</b><div class="leise">mehr Zyklen je Stunde als</div></div>${st("zyklen_h", 1, (v2) => `${v2}`)}</div>
-        <button class="zeile" @click=${() => p4.einstGruppe("meldungen")}><span class="blau">Welche Meldungen aufs Handy gehen</span><span class="chev">Einstellungen ›</span></button>
+      <div class="glas-panel block"><div class="block-kopf"><b>Überwachung</b><span class="leise">wann eine Pumpe gemeldet wird – Schwellen und Meldungen</span></div>
+        <div class="zeile"><div><b>Trockenlauf</b><div class="leise">Pumpe läuft, zieht aber weniger als</div></div>${st("trocken_w", 5, (v2) => `${de(v2, 0)} W`)}</div>${melden("m_trocken")}
+        <div class="zeile"><div><b>Dauerlauf</b><div class="leise">läuft ohne Pause länger als</div></div>${st("dauer_min", 5, (v2) => `${v2} min`)}</div>${melden("m_dauer")}
+        <div class="zeile"><div><b>Schaltet oft</b><div class="leise">mehr Zyklen je Stunde als</div></div>${st("zyklen_h", 1, (v2) => `${v2}`)}</div>${melden("m_zyklen")}
+        <button class="zeile" data-k="offline-meldung" @click=${() => p4.einstGruppe("meldungen")}><div><b>Offline</b><div class="leise">Shelly antwortet nicht (Stromausfall?) – melden nach ${de(e6.offline_min, 0)} min, ${e6.m_offline ? "aufs Handy" : "nicht melden"} · gilt für alle Geräte</div></div><span class="chev">Meldungen ›</span></button>
+        <button class="zeile" @click=${() => p4.einstGruppe("meldungen")}><span class="blau">Empfänger und weitere Meldungen</span><span class="chev">Einstellungen ›</span></button>
         ${o5(erkl(e6.erklaer, "Pumpen werden nie geschaltet, nur überwacht. Ein Zyklus ist einmal an und wieder aus. Viele Zyklen je Stunde deuten auf einen hängenden Schwimmer oder steigendes Grundwasser, Trockenlauf auf einen leeren Schacht oder eine verstopfte Pumpe."))}</div>`;
 }
 function schachtVorlage(p4) {
@@ -2167,7 +2175,7 @@ function schachtVorlage(p4) {
       <div class="glas-panel liste"><div class="zeile"><span>Trockenlauf (unter ${de(d3.e.trocken_w, 0)} W beim Laufen)</span><span class="ok">${d3.e.m_trocken ? "● überwacht" : "○ aus"}</span></div>
         <div class="zeile"><span>Dauerlauf über ${d3.e.dauer_min} min</span><span class="ok">${d3.e.m_dauer ? "● überwacht" : "○ aus"}</span></div>
         <div class="zeile"><span>Stromausfall / offline (nach ${de(d3.e.offline_min, 0)} min)</span><span class="ok">${d3.e.m_offline ? "● überwacht" : "○ aus"}</span></div>
-        <button class="zeile" @click=${() => p4.gehe("pumpen")}><span class="blau">Schwellen im Reiter Pumpen</span><span class="chev">›</span></button></div>`;
+        <button class="zeile" @click=${() => p4.gehe("pumpen")}><span class="blau">Schwellen und Meldungen im Reiter Pumpen</span><span class="chev">›</span></button></div>`;
 }
 
 // src/ansichten/inventar.js
@@ -2488,19 +2496,29 @@ function uebersicht(p4) {
     ${nachC.length ? A : b2`<div class="glas-panel liste"><div class="leer">Keine Geräte in diesem Filter</div></div>`}
     <div class="leise p-fuss">Ein Gerät antippen: Zustand, Warnungen, Status, Einstellungen und Inventar an einer Stelle.</div>`;
 }
-function geraeteGruppeVorlage(p4) {
-  const X = geraeteZeilen(p4), Z2 = zaehlen(X), inv = invGruppeVorlage(p4), r5 = p4.s.gerReiter || "uebersicht";
-  const reiter = b2`<div class="seg glas-panel g-reiter">${[["uebersicht", "Übersicht"], ["inventar", "📦 Inventar"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${r5 === k2 ? "on" : ""} @click=${() => {
+function geraeteGruppeVorlage(p4, containerInhalt) {
+  const d3 = p4.d, X = geraeteZeilen(p4), Z2 = zaehlen(X), inv = invGruppeVorlage(p4), r5 = ["container", "uebersicht", "inventar"].includes(p4.s.gerReiter) ? p4.s.gerReiter : "container";
+  const C2 = d3.bereiche.filter((b3) => !b3.pumpe).length, P2 = d3.bereiche.length - C2;
+  const reiter = b2`<div class="g-kopf"><div class="seg glas-panel g-reiter">${[["container", "Container"], ["uebersicht", "Geräte"], ["inventar", "📦 Inventar"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${r5 === k2 ? "on" : ""} @click=${() => {
     p4.s.gerReiter = k2;
     p4.neuZeichnen();
-  }}>${t5}</button>`)}</div>`;
+  }}>${t5}</button>`)}</div>
+    ${d3.bereiche.length ? b2`<button class="chip glas-panel nur-admin" data-k="geraet-neu" @click=${p4.nurAdmin(() => p4.einblenden("geraet-neu"))}>+ Gerät</button>` : A}</div>`;
+  const kurz = r5 === "inventar" ? inv.kurz : r5 === "uebersicht" ? `${Z2.n} Geräte · ${Z2.weg ? `${Z2.weg} nicht erreichbar` : "alle erreichbar"}${Z2.warn ? ` · ${Z2.warn} mit Warnung` : ""}` : `${C2} Container · ${P2} ${P2 === 1 ? "Schacht" : "Schächte"} · ${Z2.n} Geräte${Z2.weg ? ` · ${Z2.weg} nicht erreichbar` : ""}`;
   return {
     k: "geraete",
-    ic: "🔌",
-    t: "Geräte",
-    kurz: r5 === "inventar" ? inv.kurz : `${Z2.n} Geräte · ${Z2.weg ? `${Z2.weg} nicht erreichbar` : "alle erreichbar"}${Z2.warn ? ` · ${Z2.warn} mit Warnung` : ""}`,
-    inhalt: () => b2`${reiter}${r5 === "inventar" ? inv.inhalt() : uebersicht(p4)}`
+    ic: "🏠",
+    t: "Container & Geräte",
+    kurz,
+    inhalt: () => b2`${reiter}${r5 === "inventar" ? inv.inhalt() : r5 === "uebersicht" ? uebersicht(p4) : containerInhalt(p4)}`
   };
+}
+function geraetNeu(p4) {
+  const d3 = p4.d;
+  return b2`${GRIFF2}<h3>Gerät hinzufügen</h3><div class="leise">In welchen Container oder Schacht kommt das Gerät?</div>
+      <div class="glas-panel liste">${d3.bereiche.map((b3) => b2`<button class="zeile" data-id=${b3.id} @click=${p4.nurAdmin(() => p4.geraetNeuIn(b3.id))}><span>${b3.pumpe ? "💧" : "🏠"} ${b3.name}</span><span class="leise">${b3.geraete.length} ${b3.pumpe ? "Pumpen" : "Geräte"} ›</span></button>`)}</div>
+      <div class="leise">Danach im Dialog „Bearbeiten“ den Shelly wählen und speichern.</div>
+      <button class="knopf leise-k" @click=${() => p4.schliessen()}>Abbrechen</button>`;
 }
 var WAND = { front: "Front", seite: "Seite" };
 var vorText = (p4, iso) => {
@@ -2574,7 +2592,7 @@ function geraeteKachelnVorlage(p4, b3) {
   const K = S3.filter((x2) => x2.s.art === "tuer" || x2.s.art === "fenster"), Li = S3.filter((x2) => x2.s.art === "licht"), weg = X.filter((x2) => x2.weg).length;
   const sym = b3.symbol || {}, kontakteDa = K.length || (sym.tueren || []).length || (sym.fenster || []).length;
   return b2`<div class="gk-geraete"><div class="gk-titel"><b>Geräte</b><span class="leise">${X.length} Geräte · ${weg ? b2`<span class="rot-t">${weg} nicht erreichbar</span>` : "alle erreichbar"}</span>
-      <button class="link blau" @click=${() => p4.einstGruppe("geraete")}>Alle Geräte ›</button></div>
+      <button class="link blau" @click=${() => p4.einstGruppe("geraete", "uebersicht")}>Alle Geräte ›</button></div>
     <div class="gk-kacheln">
       ${H2.length ? b2`<div class="glas-panel gk-k gk-k-heiz"><div class="gk-k-t">♨ Heizen</div><div class="gk-k-gross">${de(b3.kw || 0, 2)}<small> kW jetzt</small></div>
         ${b3.stufen && b3.stufen.an && b3.stufen.text ? b2`<div class="leise gk-k-satz">${b3.stufen.text}</div>` : A}${H2.map((g2) => zeileHk(p4, b3, g2))}</div>` : A}
@@ -2626,7 +2644,7 @@ function sensor(p4, s4) {
     ${inventarVorlage(p4, x2)}
     <button class="knopf leise-k" @click=${() => p4.schliessen()}>Schließen</button>`;
 }
-var GERAETE_EINBLENDUNGEN = { sensor };
+var GERAETE_EINBLENDUNGEN = { sensor, "geraet-neu": geraetNeu };
 var GERAETE_CSS = `
 .g-zahlen { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; } .g-zahlen .chip { font-size: 12px; padding: 5px 10px; }
 .g-filter, .g-reiter { margin: 0 0 10px; }
@@ -2859,7 +2877,7 @@ var KEIN_URLAUBSKALENDER = "Kein beschreibbarer Kalender – lege unter Einstell
 function wetterquelle(p4, s4) {
   const f3 = s4.form, kal = p4.entitaeten((x2) => x2.entity_id.startsWith("calendar.")), urlaubKal = p4.entitaeten(beschreibbar);
   const alt = f3.urlaub_kalender && !urlaubKal.some(([v2]) => v2 === f3.urlaub_kalender) ? [[f3.urlaub_kalender, `${p4.name(f3.urlaub_kalender) || f3.urlaub_kalender} (nicht beschreibbar)`]] : [];
-  return b2`${GRIFF3}<h3>Wetter</h3>
+  return b2`${GRIFF3}<h3>Wetter und Kalender</h3>
         <label class="feld">Wetter${auswahl(f3, "wetter", p4.entitaeten((x2) => x2.entity_id.startsWith("weather.")), "– keins –")}</label>
         <label class="feld">Außentemperatur${auswahl(f3, "temp_sensor", p4.entitaeten((x2) => x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "temperature"), "aus der Vorhersage")}</label>
         <label class="feld">Regenmenge${auswahl(f3, "regen_sensor", p4.entitaeten((x2) => x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "precipitation"), "aus der Vorhersage")}</label>
@@ -2923,13 +2941,15 @@ var preisNeu = (p4, s4) => b2`${GRIFF3}<h3>Neuer Strompreis</h3><label class="fe
         <div class="leise">Bis zu diesem Tag gilt weiter der bisherige Preis – Vergangenes bleibt, wie es war.</div>${knopf2("Speichern", p4.nurAdmin(() => p4.preisSpeichern()), "amber nur-admin")}${knopf2("Abbrechen", () => p4.schliessen(), "leise-k")}`;
 function bearbeiten(p4) {
   const d3 = p4.d, o6 = d3.optionen, auf = (art) => p4.nurAdmin(() => p4.einblenden(art));
+  const alle = b2`<button class="zeile bb-alle" data-k="bb-alle" @click=${() => p4.einstUebersicht()}><div><span class="blau"><b>Alle Einstellungen</b></span><div class="leise">Heizung, Container & Geräte, Pumpen, Strom, Meldungen, Bericht …</div></div><span class="chev">›</span></button>`;
   return b2`${GRIFF3}<div class="block-kopf"><h3>Baustelle bearbeiten</h3><span class="leise">${d3.titel}</span></div>
+        <div class="glas-panel liste">${alle}</div>
         <div class="gruppe-t">Baustelle</div>
         <button class="zeile nur-admin" @click=${auf("name")}><span>Name</span><span class="leise">${d3.titel} ›</span></button>
         <button class="zeile nur-admin" @click=${auf("zeitraum-bs")}><span>Beginn und Ende</span><span class="leise">${p4.bsZeit(d3)} ›</span></button>
         <button class="zeile nur-admin" @click=${auf("zeitraum-bs")}><span>Heizperiode</span><span class="leise">${MONATE[d3.hp[0] - 1]} – ${MONATE[d3.hp[1] - 1]} ›</span></button>
         <div class="gruppe-t">Ort</div>
-        <button class="zeile nur-admin" @click=${auf("wetterquelle")}><span>Wetter</span><span class="leise">${o6.wetter ? p4.name(o6.wetter) : "keins gewählt"} ›</span></button>
+        <button class="zeile nur-admin" @click=${auf("wetterquelle")}><span>Wetter und Kalender</span><span class="leise">${o6.wetter ? p4.name(o6.wetter) : "keins gewählt"} ›</span></button>
         <button class="zeile nur-admin" @click=${auf("wetterquelle")}><span>Außentemperatur</span><span class="leise">${o6.temp_sensor ? p4.name(o6.temp_sensor) : "aus der Vorhersage"} ›</span></button>
         <div class="gruppe-t">Container und Geräte · ${d3.bereiche.length}</div>
         ${d3.bereiche.map((b3) => b2`<button class="zeile" data-id=${b3.id} @click=${() => p4.bereichEinst(b3.id)}><span><i class="farbpunkt" style="background:${BEREICH_FARBEN[b3.f % 6]}"></i>${b3.name}</span><span class="leise">${b3.geraete.length} ${b3.pumpe ? "Pumpen" : "Geräte"} ›</span></button>`)}
@@ -2942,8 +2962,8 @@ function bearbeiten(p4) {
   })}
         <button class="zeile" @click=${() => p4.firmaAuf()}><span class="blau">+ Firma hinzufügen</span></button>
         ${d3.aktiv ? b2`<button class="zeile" @click=${() => p4.einblenden("abschliessen")}><span>Baustelle abschließen</span><span class="leise">kommt in den Verlauf ›</span></button>` : A}
-        <div class="leise p-fuss">Staffelung, Bericht, Meldungen und App stehen unter Einstellungen.</div>
-        <button class="zeile" @click=${() => p4.gehe("einst")}><span class="blau">Alle Einstellungen</span><span class="chev">›</span></button>
+        <div class="leise p-fuss">Hier nur das Wichtigste dieser Baustelle – alles andere unter „Alle Einstellungen ›“.</div>
+        ${alle}
         ${knopf2("Fertig", () => p4.schliessen(), "amber")}`;
 }
 var BAUSTELLE_EINBLENDUNGEN = { name: name2, "baustelle-neu": name2, "zeitraum-bs": zeitraum2, wetterquelle, abschliessen, "bs-loeschen": loeschen, urlaub, bericht, nachrichten, "preis-neu": preisNeu, "bs-bearbeiten": bearbeiten };
@@ -3113,13 +3133,13 @@ function soll(p4, z2, st) {
 }
 var REGEL_GRUPPEN = [
   ["vor", "🌅", "Vor der Arbeit", "warm, wenn es losgeht", ["vorheizen", "frueh", "lernend", "warm_vor", "warm_max"]],
-  ["arbeit", "👷", "In der Arbeitszeit", "auf das Soll halten", ["soll", "toleranz", "grenze", "basis", "boost", "zusatz", "tuer"]],
+  ["arbeit", "👷", "In der Arbeitszeit", "auf das Soll halten", ["toleranz", "grenze", "basis", "boost", "zusatz", "tuer"]],
   ["nach", "🌇", "Nach der Arbeit", "warm halten, trocknen, übernehmen", ["nachheizen", "warm_nach", "trocknen", "hand"]],
   ["nacht", "🌙", "Nachts, frei, Urlaub", "nur Frostschutz", ["frost", "urlaub"]],
   ["immer", "⏱", "Immer", "Messung und Strom", ["zieht", "fuehler", "staffel"]]
 ];
 var DATA_R = { fruehstart: "frueh" };
-var ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map((k2) => [k2, id]))), baseline: "bl" };
+var ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map((k2) => [k2, id]))), baseline: "bl", soll: "soll" };
 var regelGruppeAuf = (p4, z2) => {
   p4.s.rvAuf = ZEILE_GRUPPE[DATA_R[z2] || z2] || "alle";
 };
@@ -3145,11 +3165,37 @@ function regelSumme(p4) {
     hand: ["Hand übernehmen", `nach ${e6.hand_nachfrist} min`, null],
     frost: ["Frostschutz", `unter ${grad(e6.frost_temp)}`, !!e6.frost],
     urlaub: ["Urlaub", { frost: "nur Frostschutz", absenk: `absenken ${grad(e6.absenk)}`, aus: "alles aus" }[e6.urlaub] || "nur Frostschutz", null],
-    zieht: ["Heizt ab", `${e6.zieht_w} W`, null],
+    zieht: ["„heizt“ ab", `${e6.zieht_w} W`, null],
     fuehler: ["Fühler hält", min(e6.fuehler_halten), null],
     staffel: ["Staffelung", `${e6.nutzbar} % · max ${e6.max_gleich}`, !!e6.staffel],
     baseline: ["Baseline", "Testläufe", !!e6.baseline]
   };
+}
+var summeVorlage = (S3, keys) => {
+  const L2 = keys.map((k2) => S3[k2]).filter(Boolean), an = L2.filter((m3) => m3[2] !== false), aus = L2.filter((m3) => m3[2] === false);
+  return b2`${an.map((m3, i7) => b2`${i7 ? " · " : ""}<span class="rv-s">${m3[0]} <b>${m3[1]}</b></span>`)}${aus.length ? b2`${an.length ? " · " : ""}<span class="rv-s aus">${aus.map((m3) => m3[0]).join(", ")} aus</span>` : A}`;
+};
+var sollKurz = (p4) => {
+  const e6 = p4.d.e, G = p4.d.sollG;
+  return e6.soll_art !== "gleitend" ? `Soll ${de(e6.soll)} °C` : G ? `Soll gleitend, heute ${de(G.soll, 1)} °C` : `Soll gleitend, noch ${de(e6.soll)} °C`;
+};
+function regelnKurzVorlage(p4, cls) {
+  const S3 = regelSumme(p4), bl = baselineRegeln(p4) !== A, sprung = (g2) => () => p4.hzBearbeiten("regeln", g2);
+  const zeile3 = (id, ic, titel2, inhalt) => b2`<button class="zeile rk-zeile" data-gr=${id} @click=${sprung(id)}><span class="rk-ic">${ic}</span><div><b>${titel2}</b><div class="leise rv-sum">${inhalt}</div></div><span class="chev">›</span></button>`;
+  return b2`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">Kurzfassung</span></div>
+      ${zeile3("soll", "🌡", "Solltemperatur", sollKurz(p4).replace(/^Soll /, ""))}
+      ${REGEL_GRUPPEN.map(([id, ic, titel2, , teile]) => zeile3(id, ic, titel2, summeVorlage(S3, teile)))}
+      ${bl ? zeile3("bl", "🧪", "Baseline messen", summeVorlage(S3, ["baseline"])) : A}
+      <button class="zeile" data-k="hz-bearbeiten" @click=${sprung(null)}><span class="blau">Im Reiter Heizung bearbeiten</span><span class="chev">›</span></button></div>`;
+}
+function blockKurzVorlage(p4, k2, cls) {
+  const d3 = p4.d, e6 = d3.e, C2 = d3.bereiche.filter((b3) => !b3.pumpe), M2 = Object.fromEntries(MODI);
+  const T2 = {
+    trocknen: ["👕 Kleidung trocknen", d3.trocknen ? d3.trocknen.stufen_text : `ab ${de(e6.tr_mm, 1)} mm: +${e6.tr_laenger} min, morgen ${e6.tr_frueher} min früher`],
+    urlaub: ["🏖 Urlaub & Feiertage", `${{ frost: "nur Frostschutz", absenk: `absenken auf ${de(e6.absenk)} °C`, aus: "alles aus" }[e6.urlaub] || "nur Frostschutz"} · Feiertage ${e6.feiertag_frei ? "frei" : "Arbeitstag"}`],
+    container: ["🏠 Je Container", C2.map((b3) => `${b3.name}: ${M2[b3.modus] || b3.modus || "–"}${b3.trocknen ? " · 👕" : ""}${b3.soll !== void 0 ? ` · ${de(p4.sollVon(b3))} °C` : ""}`).join(" · ") || "keine Container"]
+  }[k2];
+  return b2`<div class=${cls} data-kurz=${k2}><button class="zeile rk-zeile" @click=${() => p4.hzBearbeiten(k2)}><div><b>${T2[0]}</b><div class="leise">${T2[1]}</div></div><span class="blau rk-sprung">Im Reiter Heizung bearbeiten ›</span></button></div>`;
 }
 function regelnInhalt(p4) {
   const e6 = p4.d.e, C2 = p4.d.bereiche.filter((b3) => !b3.pumpe), lernend = C2.filter((b3) => b3.lern && b3.lern.warm), st = (k2, s4, fmt) => stepperVorlage(p4, k2, s4, fmt);
@@ -3159,26 +3205,27 @@ function regelnInhalt(p4) {
   const R2 = {
     vorheizen: z2("Vorheizen", b2`vor Arbeitsbeginn, damit es warm ist${nichtLern}`, st("vorheizen", 5, min), false, "vorheizen"),
     frueh: b2`${z2("Kälte-Frühstart", b2`unter ${minus(e6.frueh_temp)} zusätzlich früher${nichtLern}`, bool("fruehstart"), false, "fruehstart")}${e6.fruehstart ? b2`${z2("wenn morgens kälter als", "", st("frueh_temp", 1, minus), true)}${z2("so viel früher", "", st("frueh_min", 5, min), true)}` : A}`,
-    lernend: z2("🧠 Lernende Container", `heizen selbst so früh, dass das Soll rechtzeitig erreicht ist – statt Vorheizen, Kälte-Frühstart und Nachheizen. Bis genug gelernt ist, gelten die Werte oben.${lernend.length ? ` Jetzt: ${lernend.map((b3) => b3.name).join(", ")}.` : " Gilt für Container mit Fühler, Modus Thermostat und lernender Regelung."}`, ""),
+    lernend: z2("🧠 Lernende Container · „Warm ab“", `heizen selbst so früh, dass das Soll rechtzeitig erreicht ist – statt Vorheizen, Kälte-Frühstart und Nachheizen. Bis genug gelernt ist, gelten die Werte oben.${lernend.length ? ` Jetzt: ${lernend.map((b3) => b3.name).join(", ")}.` : " Gilt für Container mit Fühler, Modus Thermostat und lernender Regelung."}`, ""),
     warm_vor: z2("Soll erreicht", "vor Arbeitsbeginn, z. B. zum Umziehen", st("warm_vor", 5, (v2) => v2 ? `${v2} min vorher` : "bei Beginn"), true),
     warm_max: z2("Frühestens", "vor Arbeitsbeginn – Grenze, falls der Raum sehr kalt ist", st("warm_max", 15, (v2) => `${v2} min vorher`), true),
     soll: soll(p4, z2, st),
     toleranz: z2("Schaltabstand ± um das Soll", "Thermostat: ein unter Soll − Abstand, aus über Soll + Abstand", st("toleranz", 0.1, (v2) => `± ${de(v2, 1)} °C`), true),
     grenze: z2("Heizgrenze", "nicht heizen, wenn es wärmer ist", st("grenze", 0.5, grad)),
-    basis: z2("Grundlage", "", b2`<div class="seg klein">${["jetzt", "Tageshöchstwert"].map((v2) => b2`<button data-v=${v2} class=${e6.basis === v2 ? "on" : ""} @click=${() => p4.heizgrenzeBasis(v2)}>${v2}</button>`)}</div>`, true),
+    basis: z2("Heizgrenze verglichen mit", b2`<b>jetzt</b>: der Außentemperatur gerade · <b>Tageshöchstwert</b>: dem wärmsten Wert, der heute vorhergesagt ist – damit an einem warmen Tag auch morgens nicht geheizt wird`, b2`<div class="seg klein">${["jetzt", "Tageshöchstwert"].map((v2) => b2`<button data-v=${v2} class=${e6.basis === v2 ? "on" : ""} @click=${() => p4.heizgrenzeBasis(v2)}>${v2}</button>`)}</div>`, true),
     boost: z2("⚡ Schnell aufheizen", "alle Heizkörper eines Containers zugleich, Vorrang in der Staffelung – bis zum Soll, ohne Fühler für", st("boost_min", 5, min)),
     zusatz: !zusatzMoeglich(C2) ? A : b2`${z2("🔥 Zusatz-Heizkörper", `in Containern mit „Zusatz nur bei Bedarf“: zuerst heizt einer, der Zusatz kommt dazu, wenn …${(() => {
       const n4 = C2.filter((b3) => b3.stufenAn);
       return n4.length ? ` Jetzt: ${n4.map((b3) => b3.name).join(", ")}.` : " Einschalten im Container unter Bearbeiten.";
     })()}`, "")}${z2("… der Raum weiter unter dem Soll ist als", "", st("stufen_abstand", 0.5, grad), true)}${z2("… einer schon so lange läuft", "", st("stufen_min", 5, min), true)}${z2("… und es dabei weniger wärmer wurde als", "", st("stufen_anstieg", 0.1, (v2) => `${de(v2)} °C`), true)}${z2("… es draußen kälter ist als (beide von Anfang an)", "", st("stufen_kalt", 1, minus), true)}`,
-    tuer: b2`${z2("🚪 Tür offen", "Heizung pausieren nach", st("tuer_pause", 1, min), false, "tuer")}${z2("Nachricht nach", "", st("tuer_melden", 5, min), true)}`,
+    tuer: b2`${z2("🚪 Tür offen", "Heizung pausieren nach", st("tuer_pause", 1, min), false, "tuer")}${z2(`Nachricht nach ${e6.tuer_melden} min`, "eingestellt unter Einstellungen › Meldungen", b2`<button class="rv-link" data-k="tuer-meldung" @click=${() => p4.einstGruppe("meldungen")}>Meldungen ›</button>`, true)}`,
+    // UI-Bericht Maßnahme 3: nur ein Ort
     nachheizen: z2("Nachheizen", b2`nach Arbeitsende, jeden Tag${nichtLern}`, st("nachheizen", 5, min), false, "nachheizen"),
     warm_nach: z2("Warm halten (lernende)", "nach Arbeitsende; Kleidung trocknen kommt dazu", st("warm_nach", 5, (v2) => v2 ? `${v2} min länger` : "bis Ende"), true),
     trocknen: z2("👕 Kleidung trocknen", `nach Regen in der Arbeitszeit · ${p4.d.trocknen ? p4.d.trocknen.stufen_text : `ab ${de(e6.tr_mm, 1)} mm: +${e6.tr_laenger} min, morgen ${e6.tr_frueher} min früher`}`, link(() => p4.hzAuf("trocknen"))),
     hand: z2("✋ Handbetrieb übernehmen nach", "Läuft ein Heizkörper zu lange von Hand, kommt eine Nachricht – ohne „So lassen“ übernimmt die Automatik so viel später", st("hand_nachfrist", 5, min)),
     frost: b2`${z2("❄ Frostschutz", "hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit", bool("frost"), false, "frost")}${e6.frost ? b2`${z2("ein unter", "", st("frost_temp", 0.5, grad), true)}${z2("aus über", "", st("frost_aus", 0.5, grad), true)}${z2("ohne Fühler nach Außentemperatur", e6.frost_aussen === null ? "aus – Container ohne Fühler bekommen keinen Frostschutz" : "der Heizkörperthermostat regelt dann selbst", b2`<span class="fa-sw">${schalterVorlage(e6.frost_aussen !== null, () => p4.frostAussenUmschalten())}</span>`, true)}${e6.frost_aussen === null ? A : z2("ein, wenn draußen unter", "aus erst 2 °C darüber", st("frost_aussen", 1, minus), true)}${z2("auch bei Automatik aus", "schaltet dann nur den Frostschutz, sonst nichts", bool("frost_immer"), true)}` : A}`,
     urlaub: z2("🏖 Urlaub & freie Feiertage", { frost: "nur Frostschutz", absenk: `absenken auf ${de(e6.absenk)} °C`, aus: "alles aus" }[e6.urlaub], link(() => p4.hzAuf("urlaub"))),
-    zieht: z2("Heizt tatsächlich ab", "Leistung, ab der ein Heizkörper als „heizt“ zählt – Heizzeit geheizt, Heiztage, Warm ab, Lernen, Wann heizt was", st("zieht_w", 5, (v2) => `${v2} W`)),
+    zieht: z2("Zählt als „heizt“ ab", "Ein Heizkörper gilt erst als heizend, wenn er mehr als diese Leistung zieht – darunter hat meist sein eigener Thermostat abgeschaltet. Zählt für Heizzeit, Heiztage, Lernen und „Wann heizt was“", st("zieht_w", 5, (v2) => `${v2} W`)),
     fuehler: z2("🌡 Fühler ohne Wert", "meldet ein Fühler nichts, gilt sein letzter Wert noch so lange – danach regelt der Container wie ohne Fühler", st("fuehler_halten", 5, min)),
     staffel: z2("⚡ Staffelung", e6.staffel ? `${e6.nutzbar} % je Anschluss nutzbar · höchstens ${e6.max_gleich} gleichzeitig · mindestens ${e6.min_lauf} min an, ${e6.min_pause} min Pause` : "aus – alle Heizkörper dürfen zugleich", link(() => p4.einstGruppe("strom")))
   };
@@ -3202,13 +3249,10 @@ function regelnInhalt(p4) {
         <span class="rv-gic">${ic}</span><span class="rv-gt"><b>${titel2} <span class="leise rv-unter">${unter}</span></b><span class="rv-sum">${sum2}</span></span><span class="chev">${auf ? "⌃" : "⌄"}</span></button>
       ${auf ? inhalt() : A}</div>`;
   };
-  const sum = (keys) => {
-    const L2 = keys.map((k2) => S3[k2]).filter(Boolean), an = L2.filter((m3) => m3[2] !== false), aus = L2.filter((m3) => m3[2] === false);
-    return b2`${an.map((m3, i7) => b2`${i7 ? " · " : ""}<span class="rv-s">${m3[0]} <b>${m3[1]}</b></span>`)}${aus.length ? b2`${an.length ? " · " : ""}<span class="rv-s aus">${aus.map((m3) => m3[0]).join(", ")} aus</span>` : A}`;
-  };
+  const sum = (keys) => summeVorlage(S3, keys);
   const karteG = (id, ic, titel2, unter, teile) => gruppe(id, ic, titel2, unter, sum(teile), () => b2`<div class="rv-karte">${teile.map((k2) => R2[k2])}</div>`);
   const bl = baselineRegeln(p4);
-  return b2`${REGEL_GRUPPEN.map(([id, ic, titel2, unter, teile]) => karteG(id, ic, titel2, unter, teile))}
+  return b2`<div class="rv-gr auf rv-soll" data-gr="soll"><div class="rv-karte">${R2.soll}</div></div>${REGEL_GRUPPEN.map(([id, ic, titel2, unter, teile]) => karteG(id, ic, titel2, unter, teile))}
     ${bl === A ? A : gruppe("bl", "🧪", "Baseline messen", "Testläufe ohne Automatik", sum(["baseline"]), () => bl)}
     ${gruppe(
     "fest",
@@ -4109,16 +4153,18 @@ function baustelle(p4) {
         <button class="zeile nur-admin" @click=${auf("baustelle-neu")}><span class="blau">+ Neue Baustelle</span></button></div>
       ${liste("Wetter und Kalender", b2`${knopf6("Wetter", o6.wetter ? nm(o6.wetter) : "keins gewählt", auf("wetterquelle"), "nur-admin")}${knopf6("Außentemperatur", o6.temp_sensor ? nm(o6.temp_sensor) : "aus der Vorhersage", auf("wetterquelle"), "nur-admin")}${knopf6("Regenmenge", o6.regen_sensor ? nm(o6.regen_sensor) : "aus der Vorhersage", auf("wetterquelle"), "nur-admin")}${knopf6("Urlaub", o6.urlaub_kalender ? `Kalender „${nm(o6.urlaub_kalender)}“` : "kein Kalender", auf("wetterquelle"), "nur-admin")}${knopf6("Feiertage", o6.feiertag_kalender ? nm(o6.feiertag_kalender) : "kein Kalender", auf("wetterquelle"), "nur-admin")}${knopf6("Termine (Bei Bedarf)", tk ? nm(tk) : "kein Kalender", auf("wetterquelle"), "nur-admin")}`)}`;
 }
-var heizung = (p4) => b2`${liste("Automatik", zeile2("Automatik", schalterVorlage(p4.d.e.auto, () => p4.automatikUmschalten()), "die Integration schaltet die Heizungen nach Plan und Regeln"))}${["regeln", "trocknen", "urlaub"].map((k2) => HZ_BLOECKE[k2](p4, "glas-panel block"))}${liste("Zeiten", b2`${knopf6("Arbeitszeit", "ändern, neue ab Datum", () => p4.hzAuf("az"))}${knopf6("Ausnahmen", "einmalig", () => p4.hzAuf("ausn"))}${knopf6("Heizplan · diese Woche", "ansehen", () => p4.hzAuf("plan"))}`)}`;
+var heizung = (p4) => b2`${liste("Automatik", zeile2("Automatik", schalterVorlage(p4.d.e.auto, () => p4.automatikUmschalten()), "die Integration schaltet die Heizungen nach Plan und Regeln"))}${regelnKurzVorlage(p4, "glas-panel block")}${["trocknen", "urlaub"].map((k2) => blockKurzVorlage(p4, k2, "glas-panel liste"))}${liste("Zeiten", b2`${knopf6("Arbeitszeit", "ändern, neue ab Datum", () => p4.hzBearbeiten("az"))}${knopf6("Ausnahmen", "einmalig", () => p4.hzBearbeiten("ausn"))}${knopf6("Heizplan · diese Woche", "ansehen", () => p4.hzBearbeiten("plan"))}`)}`;
 var container = (p4) => {
-  const d3 = p4.d;
-  return b2`<div class="glas-panel liste"><div class="gruppe">Container und Geräte</div>
-        ${d3.bereiche.map((b3) => b2`<button class="zeile" data-id=${b3.id} @click=${() => p4.bereichEinst(b3.id)}><span><i class="farbpunkt" style="background:${BEREICH_FARBEN[b3.f % 6]}"></i>${b3.name}</span><span class="leise">${b3.geraete.length} ${b3.pumpe ? "Pumpen" : "Geräte"} ›</span></button>`)}
-        <button class="zeile nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("container-neu"))}><span class="blau">+ Container oder Schacht</span></button></div>${HZ_BLOECKE.container(p4, "glas-panel block")}`;
+  const d3 = p4.d, M2 = Object.fromEntries(MODI);
+  return b2`<div class="glas-panel liste"><div class="gruppe">Container und Schächte</div>
+        ${d3.bereiche.map((b3) => b2`<button class="zeile" data-id=${b3.id} @click=${() => p4.bereichEinst(b3.id)}><span><i class="farbpunkt" style="background:${BEREICH_FARBEN[b3.f % 6]}"></i>${b3.name}</span><span class="leise">${b3.pumpe ? "" : `${M2[b3.modus] || b3.modus || ""} · `}${b3.geraete.length} ${b3.pumpe ? "Pumpen" : "Geräte"} ›</span></button>`)}
+        <button class="zeile nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("container-neu"))}><span class="blau">+ Container oder Schacht</span></button></div>${d3.bereiche.some((b3) => !b3.pumpe) ? blockKurzVorlage(p4, "container", "glas-panel liste") : A}`;
 };
 function pumpen(p4) {
-  const st = (k2, s4, fmt) => stepperVorlage(p4, k2, s4, fmt), P2 = p4.d.bereiche.filter((b3) => b3.pumpe);
-  return liste("Überwachung der Pumpen", b2`${zeile2("Offline – melden nach", st("offline_min", 1, (v2) => `${v2} min`))}${zeile2("Trockenlauf unter", st("trocken_w", 5, (v2) => `${v2} W`))}${zeile2("Dauerlauf länger als", st("dauer_min", 5, (v2) => `${v2} min`))}${zeile2("Schaltet oft ab", st("zyklen_h", 1, (v2) => `${v2} / h`))}${P2.map((b3) => zeile2(`♨ Automatik · ${b3.name}`, schalterVorlage(b3.auto, () => p4.bereichAuto(b3))))}`);
+  const e6 = p4.d.e, P2 = p4.d.bereiche.filter((b3) => b3.pumpe), an = (k2) => e6[k2] ? "melden" : "nicht melden";
+  return b2`${P2.length ? liste("Automatik je Schacht", P2.map((b3) => zeile2(`♨ Automatik · ${b3.name}`, schalterVorlage(b3.auto, () => p4.bereichAuto(b3))))) : A}
+    ${liste("Überwachung der Pumpen", b2`<div class="zeile"><span class="leise">Trockenlauf unter ${de(e6.trocken_w, 0)} W (${an("m_trocken")}) · Dauerlauf über ${e6.dauer_min} min (${an("m_dauer")}) · schaltet oft ab ${e6.zyklen_h} je Stunde (${an("m_zyklen")})</span></div>
+      ${p4._mitPumpen ? b2`<button class="zeile" data-k="pumpen-ueberwachung" @click=${() => p4.gehe("pumpen")}><span class="blau">Im Reiter Pumpen bearbeiten</span><span class="chev">›</span></button>` : b2`<div class="zeile"><span class="leise">Noch kein Pumpenschacht – der Reiter Pumpen erscheint mit dem ersten Schacht.</span></div>`}`)}`;
 }
 function strom(p4) {
   const d3 = p4.d, e6 = d3.e, st = (k2, s4, fmt) => stepperVorlage(p4, k2, s4, fmt);
@@ -4156,11 +4202,11 @@ function meldungen(p4) {
         <div class="zeile"><div><b>Knöpfe in der Nachricht</b><div class="leise">direkt aus der Nachricht reagieren, z. B. „bis morgen stumm“</div></div>${sw("knoepfe")}</div>
         <button class="zeile" @click=${() => p4.einblenden("nachrichten")}><span class="blau">Beispiele ansehen</span><span class="chev">›</span></button>
         <button class="zeile" @click=${() => p4.testMeldung()}><span class="blau">Test-Nachricht senden</span></button>
-        ${m3(`Stromausfall / offline (nach ${de(e6.offline_min, 0)} min)`, "m_offline")}${m3(`Pumpe Trockenlauf (unter ${de(e6.trocken_w, 0)} W)`, "m_trocken")}${m3(`Pumpe Dauerlauf über ${e6.dauer_min} min`, "m_dauer")}${m3(`Pumpe schaltet oft (ab ${e6.zyklen_h} je Stunde)`, "m_zyklen")}${m3("Heizkörper zieht keinen Strom", "m_leistung")}${m3("Frostgefahr trotz Frostschutz", "m_frost")}${m3("Gerät schaltet sich selbst wieder ein (Auto-ON am Shelly?)", "m_selbst")}
+        ${m3(`Stromausfall / offline (nach ${de(e6.offline_min, 0)} min)`, "m_offline")}${p4._mitPumpen ? b2`<button class="zeile" data-k="pumpen-meldungen" @click=${() => p4.gehe("pumpen")}><div><span>💧 Pumpe: Trockenlauf, Dauerlauf, schaltet oft</span><div class="leise">${["m_trocken", "m_dauer", "m_zyklen"].filter((k2) => e6[k2]).length} von 3 an · mit ihren Schwellen unter Pumpen › Überwachung</div></div><span class="chev">›</span></button>` : A}${m3("Heizkörper zieht keinen Strom", "m_leistung")}${m3("Frostgefahr trotz Frostschutz", "m_frost")}${m3("Gerät schaltet sich selbst wieder ein (Auto-ON am Shelly?)", "m_selbst")}
         <div class="gruppe">Hinweise</div>
         ${m3(`Zu kalt trotz Heizung (nach ${e6.kalt_min} min)`, "m_kalt")}${m3("Fühler meldet nichts / Batterie schwach", "m_fuehler")}${m3("Keine Wettervorhersage", "m_wetter")}${m3(`Handbetrieb länger als ${e6.hand_h} h`, "m_hand")}${m3("Kälte-Frühstart morgen (Nachricht am Vorabend)", "m_frueh")}
         <div class="leise p-fuss">Störungen, offene Tür, langer Handbetrieb und der Kälte-Frühstart kommen aufs Handy, andere Hinweise nur ins Protokoll und in den Warnung-Chip.</div></div>
-      ${liste("Schwellen der Hinweise", b2`${zeile2("Zu kalt trotz Heizung nach", st("kalt_min", 15, (v2) => `${v2} min`))}${zeile2("Handbetrieb länger als", st("hand_h", 1, (v2) => `${de(v2)} h`))}${zeile2("Tür offen – Nachricht nach", st("tuer_melden", 5, (v2) => `${v2} min`))}`)}`;
+      ${liste("Schwellen", b2`${zeile2("Gerät offline – melden nach", st("offline_min", 1, (v2) => `${v2} min`), "gilt für alle Shellys, auch Pumpen")}${zeile2("Zu kalt trotz Heizung nach", st("kalt_min", 15, (v2) => `${v2} min`))}${zeile2("Handbetrieb länger als", st("hand_h", 1, (v2) => `${de(v2)} h`))}${zeile2("Tür offen – Nachricht nach", st("tuer_melden", 5, (v2) => `${v2} min`), `die Heizung pausiert schon nach ${p4.d.e.tuer_pause} min (Heizung › Regeln)`)}`)}`;
 }
 function bericht2(p4) {
   const e6 = p4.d.e, sw = (k2) => schalterVorlage(e6[k2], () => p4.einstellungUmschalten(k2));
@@ -4187,40 +4233,47 @@ function entwicklung(p4) {
   return b2`<div class="seg ev-dev-reiter">${[["meldungen", "Meldungen"], ["werkzeuge", "Werkzeuge"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${(dev ? "meldungen" : "werkzeuge") === k2 ? "on" : ""} @click=${() => setze(k2)}>${t5}</button>`)}</div>
     ${dev ? devVorlage(p4, { teil: "meldungen" }) : b2`${devVorlage(p4, { teil: "werkzeuge" })}${liste("Für Tests", b2`<button class="zeile" @click=${() => p4.testMeldung()}><span class="blau">Test-Nachricht senden</span></button><button class="zeile" @click=${() => p4.einblenden("nachrichten")}><span>Beispiel-Nachrichten</span><span class="chev">›</span></button>`)}`}`;
 }
-var sollKurz = (p4) => {
-  const e6 = p4.d.e, G = p4.d.sollG;
-  return e6.soll_art !== "gleitend" ? `Soll ${de(e6.soll)} °C` : G ? `Soll gleitend, heute ${de(G.soll, 1)} °C` : `Soll gleitend, noch ${de(e6.soll)} °C`;
-};
+var ABSCHNITTE = [
+  ["Baustelle", ["baustelle"]],
+  ["Heizung & Container", ["heizung", "notprogramm", "geraete"]],
+  ["Pumpen", ["pumpen"]],
+  ["Strom & Kosten", ["strom", "firmen"]],
+  ["Meldungen & Bericht", ["meldungen", "bericht"]],
+  ["System", ["app", "dev", "ueber"]]
+];
 function gruppen(p4) {
-  const d3 = p4.d, e6 = d3.e, M2 = p4.meldungen(), P2 = d3.bereiche.filter((b3) => b3.pumpe), C2 = d3.bereiche.filter((b3) => !b3.pumpe), geraete = d3.bereiche.reduce((a3, b3) => a3 + b3.geraete.length, 0);
+  const d3 = p4.d, e6 = d3.e, M2 = p4.meldungen(), P2 = d3.bereiche.filter((b3) => b3.pumpe);
   const mAn = Object.keys(ARTEN).filter((k2) => e6[k2]).length;
   const offen = M2 === null ? "–" : M2.filter((m3) => p4.meldungOffen(m3)).length, np = npGruppeVorlage(p4);
   return [
     { k: "baustelle", ic: "🏗", t: "Baustelle", kurz: `${d3.titel} · ${p4.bsZeit(d3)}`, inhalt: () => baustelle(p4) },
     { k: "heizung", ic: "🔥", t: "Heizung", kurz: `Automatik ${e6.auto ? "an" : "aus"} · ${sollKurz(p4)} · Vorheizen ${e6.vorheizen} min`, inhalt: () => heizung(p4) },
     np,
-    { k: "container", ic: "🏠", t: "Container & Geräte", kurz: `${C2.length} Container · ${P2.length} ${P2.length === 1 ? "Schacht" : "Schächte"} · ${geraete} Geräte`, inhalt: () => container(p4) },
-    geraeteGruppeVorlage(p4),
-    // BSM-034.05: Übersicht und 📦 Inventar in einer Gruppe
-    { k: "pumpen", ic: "💧", t: "Pumpen", kurz: P2.length ? `offline nach ${e6.offline_min} min · Trockenlauf unter ${e6.trocken_w} W` : "keine Schächte", inhalt: () => pumpen(p4) },
+    geraeteGruppeVorlage(p4, container),
+    // UI-Bericht Maßnahme 5: Container, Geräte und 📦 Inventar in einer Gruppe
+    { k: "pumpen", ic: "💧", t: "Pumpen", kurz: P2.length ? `${P2.length} ${P2.length === 1 ? "Schacht" : "Schächte"} · Trockenlauf unter ${e6.trocken_w} W` : "keine Schächte", inhalt: () => pumpen(p4) },
     { k: "strom", ic: "⚡", t: "Strom & Staffelung", kurz: `${de(e6.preis, 2)} €/kWh · Staffelung ${e6.staffel ? "an" : "aus"}`, inhalt: () => strom(p4) },
     { k: "firmen", ic: "🏢", t: "Firmen", kurz: `${d3.firmen.length} ${d3.firmen.length === 1 ? "Firma" : "Firmen"} für die Abrechnung`, inhalt: () => firmen(p4) },
     { k: "meldungen", ic: "🔔", t: "Meldungen", kurz: `${mAn} von ${Object.keys(ARTEN).length} an${e6.empfaenger ? ` · ${e6.empfaenger}` : ""}`, inhalt: () => meldungen(p4) },
     { k: "bericht", ic: "📊", t: "Bericht", kurz: { aus: "aus", woche: "jede Woche", monat: "jeden Monat", beides: "Woche und Monat" }[e6.bericht] || e6.bericht, inhalt: () => bericht2(p4) },
     { k: "app", ic: "🖥", t: "Ansicht", kurz: `Erklärungen ${e6.erklaer ? "an" : "aus"} · Melden-Knopf ${e6.melden ? "an" : "aus"}`, inhalt: () => ansicht(p4) },
-    { k: "dev", ic: "🛠", t: "Entwicklung", kurz: `${offen} offene Meldungen · Diagnose`, dev: true, inhalt: () => entwicklung(p4) },
+    { k: "dev", ic: "🛠", t: "Entwicklung", kurz: `${offen} offene Meldungen · Diagnose`, inhalt: () => entwicklung(p4) },
     { k: "ueber", ic: "ℹ", t: "Über", kurz: `Version ${p4.seiteVersion}`, inhalt: () => ueberVorlage(p4, { mitZurueck: false }) }
   ];
 }
+var nachAbschnitt = (G) => ABSCHNITTE.map(([t5, K]) => [t5, K.map((k2) => G.find((x2) => x2.k === k2)).filter(Boolean)]).filter(([, L2]) => L2.length);
 function einstellungenVorlage(p4) {
-  if (p4.s.evGruppe === "inventar") {
+  if (p4.s.evGruppe === "inventar" || p4.s.evGruppe === "container") {
+    p4.s.gerReiter = p4.s.evGruppe;
     p4.s.evGruppe = "geraete";
-    p4.s.gerReiter = "inventar";
   }
-  const G = gruppen(p4), g2 = G.find((x2) => x2.k === p4.s.evGruppe) || G[0], schmal = p4.narrow, wahl2 = (k2) => () => p4.einstGruppeWahl(k2);
-  const nav = b2`<nav class="ev-nav glas-panel">${G.map((x2) => b2`${x2.dev ? b2`<div class="ev-trenn"></div>` : A}<button data-v=${x2.k} class=${x2 === g2 ? "on" : ""} @click=${wahl2(x2.k)}><span class="ev-ic">${x2.ic}</span><span>${x2.t}</span><small>${x2.kurz}</small></button>`)}</nav>`;
-  const chips = b2`<div class="ev-chips">${G.map((x2) => b2`<button class="glas-panel chip ${x2 === g2 ? "amber" : ""}" data-v=${x2.k} @click=${wahl2(x2.k)}>${x2.ic} ${x2.t}</button>`)}</div>`;
-  return b2`${kopfVorlage("Einstellungen", p4.d.titel)}<div class=${schmal ? "schmal" : ""}>${schmal ? chips : A}<div class="ev-sl">${schmal ? A : nav}
+  const G = gruppen(p4), schmal = p4.narrow, wahl2 = (k2) => () => p4.einstGruppeWahl(k2), A2 = nachAbschnitt(G);
+  const g2 = G.find((x2) => x2.k === p4.s.evGruppe) || (schmal ? null : G[0]);
+  const knopfG = (x2) => b2`<button data-v=${x2.k} class=${x2 === g2 ? "on" : ""} @click=${wahl2(x2.k)}><span class="ev-ic">${x2.ic}</span><span>${x2.t}</span><small>${x2.kurz}</small></button>`;
+  const nav = b2`<nav class="ev-nav glas-panel">${A2.map(([t5, L2], i7) => b2`<div class="ev-abschnitt ${i7 ? "" : "erster"}">${t5}</div>${L2.map(knopfG)}`)}</nav>`;
+  if (schmal && !g2) return b2`${kopfVorlage("Einstellungen", p4.d.titel)}<div class="ev-liste">${A2.map(([t5, L2]) => b2`<div class="glas-panel liste"><div class="gruppe">${t5}</div>
+      ${L2.map((x2) => b2`<button class="zeile ev-lz" data-v=${x2.k} @click=${wahl2(x2.k)}><span class="ev-ic">${x2.ic}</span><div><b>${x2.t}</b><div class="leise">${x2.kurz}</div></div><span class="chev">›</span></button>`)}</div>`)}</div>`;
+  return b2`${kopfVorlage("Einstellungen", p4.d.titel)}<div class=${schmal ? "schmal" : ""}>${schmal ? b2`<button class="glas-panel chip ev-zurueck" @click=${wahl2(null)}>‹ Alle Einstellungen</button>` : A}<div class="ev-sl">${schmal ? A : nav}
       <div class="ev-inhalt"><div class="ev-titel"><span class="ev-ic">${g2.ic}</span><div><b>${g2.t}</b><div class="leise">${g2.kurz}</div></div></div>${g2.inhalt()}</div></div></div>`;
 }
 
@@ -4340,7 +4393,7 @@ function bereich(p4, s4) {
   const warm = () => {
     const w2 = { vor: e6.warmVor ?? d3.e.warm_vor, nach: e6.warmNach ?? d3.e.warm_nach, vor_eigen: e6.warmVor !== null, nach_eigen: e6.warmNach !== null };
     const sw = (k2, v2, eigen, f3) => b2`<span class="stepper klein" data-w=${k2}><button data-d="-5" @click=${p4.nurAdmin(() => p4.warmEigen(e6, k2, -5))}>−</button><b class=${eigen ? "eigen" : ""}>${f3(v2)}</b><button data-d="5" @click=${p4.nurAdmin(() => p4.warmEigen(e6, k2, 5))}>+</button></span>`;
-    return b2`<div class="gruppe-t" data-zeile="warm">🧠 Warm ab</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w2.vor_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("vor", w2.vor, w2.vor_eigen, (v2) => v2 ? `${v2} min vorher` : "bei Beginn")}</div>
+    return b2`<div class="gruppe-t" data-zeile="warm">🧠 Warm ab · lernende Regelung</div><div class="leise">Wann der Raum vor Arbeitsbeginn warm sein soll und wie lange er danach warm bleibt; ohne eigenen Wert gilt Heizung › Regeln › Vor der Arbeit.</div><div class="zeile"><div><span>Soll erreicht</span><div class="leise">${w2.vor_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("vor", w2.vor, w2.vor_eigen, (v2) => v2 ? `${v2} min vorher` : "bei Beginn")}</div>
             <div class="zeile"><div><span>Warm halten</span><div class="leise">${w2.nach_eigen ? "eigener Wert" : "wie die Baustelle"}</div></div>${sw("nach", w2.nach, w2.nach_eigen, (v2) => v2 ? `${v2} min länger` : "bis Ende")}</div>
             ${w2.vor_eigen || w2.nach_eigen ? b2`<button class="zeile" @click=${p4.nurAdmin(() => p4.warmZurueck(e6))}><span class="blau">Wie die Baustelle</span></button>` : A}`;
   };
@@ -4376,10 +4429,8 @@ function bereich(p4, s4) {
     z2();
   })}</div>
         ${primaerWahl()}` : A}
-        ${b3.pumpe ? A : b2`<div class="zeile" data-zeile="bedarf"><div><b>Nur bei Bedarf heizen</b><div class="leise">z. B. Besprechungscontainer: heizt nur per Schalter oder Termin, sonst Frostschutz</div></div>${schalterVorlage(e6.bedarf, () => {
-    e6.bedarf = !e6.bedarf;
-    z2();
-  })}</div>`}
+        ${b3.pumpe ? A : b2`<label class="feld" data-zeile="modus">Modus · wie die Automatik heizt${auswahl2(e6, "modus", MODI.map(([k2, t5]) => b2`<option value=${k2} ?selected=${e6.modus === k2} ?disabled=${k2 === "thermo" && !e6.fuehler}>${t5}</option>`), z2)}
+          <span class="leise">${MODUS_TEXT[e6.modus] || ""}${e6.modus === "thermo" && !e6.fuehler ? " – braucht einen Temperaturfühler" : ""}</span></label>`}
         ${b3.pumpe || !b3.fuehler || !b3.lern ? A : b2`<div class="zeile" data-zeile="lernen"><div><b>🧠 Lernende Regelung</b><div class="leise">${["thermo", "bedarf"].includes(b3.modus) ? "lernt, wie schnell der Raum warm wird und wie viel er nachwärmt, und heizt so früh, dass das Soll rechtzeitig da ist" : "wirkt nur im Modus Thermostat oder Bei Bedarf"}${b3.lern.an ? b2` · <button class="link blau" @click=${() => p4.unterDialog({ art: "lernen" })}>Lernstand ›</button>` : A}</div></div>${schalterVorlage(e6.lernen, () => {
     e6.lernen = !e6.lernen;
     z2();
@@ -4391,7 +4442,10 @@ function bereich(p4, s4) {
         ${b3.lern && b3.lern.warm ? warm() : A}
         ${b3.pumpe || !b3.groesse ? A : groesse(p4, b3, e6)}
         ${b3.pumpe ? A : b2`<div class="glas-panel liste"><button class="zeile sym-zeile" @click=${() => p4.aussehenAuf(b3)}><span class="sym-mini">${o5(bcContainer(BEREICH_FARBEN[b3.f % BEREICH_FARBEN.length], "aus", b3))}</span><div><b class="blau">🏠 Aussehen</b><div class="leise">${b3.symbol && b3.symbol.doppel ? "Doppel" : "Einzel"} · ${b3.symbol ? b3.symbol.tueren.length : 1} ${b3.symbol && b3.symbol.tueren.length === 2 ? "Türen" : "Tür"} · ${b3.symbol ? b3.symbol.fenster.length : 1} Fenster · Farbe, Sensoren</div></div><span class="chev">›</span></button></div>`}
-        ${b3.pumpe ? A : b2`<label class="feld">Temperaturfühler${auswahl2(e6, "fuehler", optionenVorlage(fuehler, e6.fuehler, "– keiner –"))}</label>`}
+        ${b3.pumpe ? A : b2`<label class="feld">Temperaturfühler${auswahl2(e6, "fuehler", optionenVorlage(fuehler, e6.fuehler, "– keiner –"), () => {
+    if (!e6.fuehler && e6.modus === "thermo") e6.modus = "plan";
+    z2();
+  })}</label>`}
         ${b3.pumpe ? A : b2`<label class="feld">Türkontakt${auswahl2(e6, "tuer", optionenVorlage(tueren, e6.tuer, "keiner"))}</label>`}
         <label class="feld">Stromanschluss${auswahl2(e6, "anschluss", d3.anschluesse.map((a3) => b2`<option value=${a3.id} ?selected=${e6.anschluss === a3.id}>${a3.name} · ${a3.phasen === 3 ? "3 × " : ""}${a3.ampere} A</option>`), z2)}</label>
         <label class="feld">Firma · für die Abrechnung${auswahl2(e6, "firma", d3.firmen.map((f3) => b2`<option value=${f3.id} ?selected=${e6.firma === f3.id}>${f3.name}</option>`))}</label>
@@ -5691,6 +5745,7 @@ var GLAS_CSS = `:host { display: block; height: 100%; }
 .glas-nav { position: absolute; left: 14px; right: 14px; bottom: 22px; display: flex; justify-content: space-around; padding: 6px; z-index: 5; }
 .glas-nav button { flex: 1; text-align: center; padding: 8px 2px; border-radius: 16px; font-size: 13px; color: var(--ink2); transition: background .2s, color .2s; }
 .glas-nav button.nav-ic { flex: 0 0 48px; display: grid; place-items: center; padding: 5px 2px; }
+.glas-nav .nav-t { display: none; }
 .glas-nav button.nav-ic svg { display: block; transition: transform .4s cubic-bezier(.3,.7,.2,1); } .glas-nav button.nav-ic:hover svg { transform: rotate(60deg); }
 .glas-nav button.on { color: var(--ink); font-weight: 700; background: rgba(255,255,255,.16); }
 .hell .glas-nav button.on { background: rgba(255,255,255,.7); }
@@ -6040,6 +6095,9 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .erkl { font-size: 12px; color: var(--ink2); background: rgba(255,255,255,.06); border-radius: 10px; padding: 8px 10px; margin-top: 8px; line-height: 1.45; }
 .hell .erkl { background: rgba(0,0,0,.04); }
 .glas-nav.sechs button { font-size: 12px; padding-left: 1px; padding-right: 1px; } .glas-nav.sechs button.nav-ic { flex-basis: 40px; }
+/* UI-Bericht Maßnahme 4: oben (breit) trägt ⚙ den Text „Einstellungen“, am Handy bleibt das Symbol (title/aria-label) */
+@container (min-width: 700px) { .glas-nav { width: 680px; } .glas-nav.glas-nav button.nav-ic { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 12px; }
+  .glas-nav .nav-t { display: inline; } .glas-nav button.nav-ic:hover svg { transform: none; } }
 .modus-z { flex-wrap: wrap; } .modus-z > div:first-child { flex: 1 1 200px; } .modus-z .seg { flex: 1 1 100%; }
 .seg button[disabled] { opacity: .35; cursor: not-allowed; }
 .jc-modus { font: inherit; font-size: 12px; color: var(--ink); background: rgba(255,255,255,.1); border: 1px solid var(--gridc); border-radius: 9px; padding: 4px 6px; }
@@ -6217,7 +6275,18 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .ev-nav .ev-trenn { height: 1px; background: rgba(127,127,127,.25); margin: 6px 8px; }
 .ev-inhalt > * + * { margin-top: 12px; }
 .ev-titel { display: flex; align-items: center; gap: 10px; margin: 2px 4px 10px; } .ev-titel b { font-size: 20px; } .ev-titel .leise { font-size: 12px; }
-.ev-chips { position: relative; display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; } .ev-chips button { flex: 0 0 auto; }
+.ev-abschnitt { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); padding: 12px 10px 3px; } .ev-abschnitt.erster { padding-top: 4px; }
+/* UI-Bericht Maßnahme 5: am Handy eine senkrechte Liste der Gruppen nach Abschnitten */
+.ev-liste > * + * { margin-top: 12px; } .ev-lz { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; text-align: left; }
+.ev-lz .ev-ic { font-size: 18px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: rgba(127,127,127,.16); }
+.ev-lz .leise { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ev-lz > div { min-width: 0; }
+.ev-zurueck { margin: 0 0 10px; }
+.g-kopf { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .g-kopf .g-reiter { flex: 1 1 auto; }
+/* UI-Bericht Maßnahme 3: Kurzfassung der Heizregeln in den Einstellungen */
+.rk-zeile { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left; } .rk-zeile > div { min-width: 0; }
+.rk-zeile:not(:has(.rk-ic)) { grid-template-columns: 1fr auto; } .rk-ic { font-size: 18px; } .rk-sprung { font-size: 13px; white-space: nowrap; }
+@media (max-width: 520px) { .rk-zeile:not(:has(.rk-ic)) { grid-template-columns: 1fr; } }
+.rv-soll { margin-bottom: 8px; } .rv-soll .rv-karte { padding-top: 8px; }
 .ev-dev-reiter { margin-bottom: 10px; }
 @media (max-width: 700px) { .ev-sl { grid-template-columns: 1fr; } .ev-nav { display: none; } }
 .schmal .ev-sl { grid-template-columns: 1fr; } .schmal .ev-nav { display: none; }
@@ -6574,7 +6643,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.189";
+var SEITE_VERSION = "0.8.190";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -8019,7 +8088,7 @@ var BaustellePanel = class extends i4 {
         if (this.flowFehler(r5)) return r5;
       }
       const call = (k2, w2) => this._hass.callWS({ type: "baustelle/setzen", entry_id: d3.entry, pfad: pfad(k2), wert: w2 });
-      if (e6.bedarf !== !!eb.bedarf) await call("bedarf", e6.bedarf);
+      if (e6.modus && e6.modus !== x2.modus) await call("modus", e6.modus);
       if (x2.groesse) {
         const m22 = e6.groesseArt === "einzel" ? null : e6.groesseArt === "doppel" ? x2.groesse.typen.doppel.m2 : zahl(e6.m2) && Number(e6.m2) >= 4 ? Number(e6.m2) : void 0;
         if (m22 !== void 0 && (m22 ?? x2.groesse.typen.einzel.m2) !== x2.groesse.m2) await call("groesse_m2", m22);
@@ -8106,7 +8175,7 @@ var BaustellePanel = class extends i4 {
   bereichEntwurf(x2, s4) {
     const d3 = this.d;
     return s4.edit ||= {
-      bedarf: !!x2.bedarf,
+      modus: x2.modus || "plan",
       name: x2.name,
       anschluss: x2.anschluss || d3.anschluesse[0] && d3.anschluesse[0].id || "",
       tuer: x2.tuer && x2.tuer.eid || "",
@@ -8248,6 +8317,11 @@ var BaustellePanel = class extends i4 {
     return this.neuZeichnen();
   }
   /* Einstellungen (src/ansichten/einstellungen.js, BSM-022 3e); Übersicht und Einblendungen nutzen sie über klick() */
+  /* Reiter ⚙: am Handy ein zweites Antippen zeigt wieder die Liste der Gruppen (UI-Bericht Maßnahme 5) */
+  navEinst(schonDa) {
+    if (schonDa && this._narrow) this.s.evGruppe = null;
+    return this.gehe("einst");
+  }
   einstGruppeWahl(k2) {
     this.s.evGruppe = k2;
     this.s.evDev = null;
@@ -8256,6 +8330,16 @@ var BaustellePanel = class extends i4 {
   bereichEinst(id) {
     this.s.cid = id;
     this.s.sheet = { art: "bereich" };
+    return this.neuZeichnen();
+  }
+  /* „+ Gerät“ (Einstellungen › Container & Geräte): Container gewählt → „Bearbeiten“ mit einer neuen Gerätezeile */
+  geraetNeuIn(id) {
+    const b3 = this.d.bereiche.find((x2) => x2.id === id);
+    if (!b3) return void 0;
+    this.s.cid = id;
+    const s4 = { art: "bereich" }, e6 = this.bereichEntwurf(b3, s4);
+    e6.geraete.push({ neu: true, schalter: "", n: "", typ: b3.pumpe ? "Pumpe" : "Ölradiator" });
+    this.s.sheet = s4;
     return this.neuZeichnen();
   }
   firmaAuf(id) {
@@ -8304,6 +8388,14 @@ var BaustellePanel = class extends i4 {
     return this.setzen(["automatik"], !e6.auto, !e6.auto ? "Automatik ein" : "Automatik aus – Geräte bleiben, wie sie sind");
   }
   hzAuf(k2) {
+    this.s.sheet = { art: "hz", k: k2 };
+    return this.neuZeichnen();
+  }
+  /* UI-Bericht Maßnahme 3: aus den Einstellungen in den Reiter Heizung springen, Block (und Regel-Gruppe) offen */
+  hzBearbeiten(k2, gruppe = null) {
+    if (!this._mitHeizung) return this.hzAuf(k2);
+    this.gehe("heizung");
+    if (k2 === "regeln") this.s.rvAuf = gruppe;
     this.s.sheet = { art: "hz", k: k2 };
     return this.neuZeichnen();
   }
@@ -8495,10 +8587,16 @@ var BaustellePanel = class extends i4 {
     this.s.cZr = null;
     return this.gehe("container", id);
   }
-  einstGruppe(g2) {
+  einstGruppe(g2, reiter = null) {
     this.s.evGruppe = g2;
+    if (reiter) this.s.gerReiter = reiter;
     return this.gehe("einst");
   }
+  einstUebersicht() {
+    this.s.evGruppe = null;
+    return this.gehe("einst");
+  }
+  // breit: erste Gruppe, schmal: Liste der Gruppen
   bereichAuto(x2) {
     return this.setzen(["bereiche", x2.id, "auto"], !x2.auto);
   }
@@ -8676,8 +8774,6 @@ var BaustellePanel = class extends i4 {
     return this.updateComplete;
   }
   willUpdate() {
-    const evc = this.ui && this.ui.querySelector(".ev-chips");
-    this._evPos = evc ? evc.scrollLeft : 0;
     if (this.ui) this.ui.classList.toggle("still", !this._neu && this._view === this.s.view);
     this._sheetVorher = this._sheetArt;
     this._view = this.s.view;
@@ -8733,7 +8829,7 @@ var BaustellePanel = class extends i4 {
     const meldenKnopf = (cls, fn) => b2`<button class="melden-knopf ${cls}" title="Fehler, Wunsch oder Anregung melden" aria-label="Melden" @click=${fn}>${o5(ICON_MELDEN)}</button>`;
     return b2`<div class="scroll">${i6(`${S3.view}:${S3.cid || ""}`, b2`<div class="seite ${neu ? "rein" : ""}">${this.versionHinweis()}${this.nurLesenHinweis()}${seite}</div>`)}</div>
       ${this._narrow ? b2`<button class="menue-knopf glas-panel" aria-label="Seitenleiste" title="Seitenleiste" @click=${() => this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }))}>☰</button>` : A}
-      <nav class="glas-nav glas-panel ${tabs.length > 5 ? "sechs" : ""}">${tabs.map(([k2, t5]) => k2 === "einst" ? b2`<button data-v=${k2} class="${k2 === aktivTab ? "on" : ""} nav-ic" aria-label="Einstellungen" title="Einstellungen" @click=${() => this.gehe(k2)}>${o5(ICON_COG)}</button>` : b2`<button data-v=${k2} class="${k2 === aktivTab ? "on" : ""}" @click=${() => this.gehe(k2)}>${t5}</button>`)}</nav>
+      <nav class="glas-nav glas-panel ${tabs.length > 5 ? "sechs" : ""}">${tabs.map(([k2, t5]) => k2 === "einst" ? b2`<button data-v=${k2} class="${k2 === aktivTab ? "on" : ""} nav-ic" aria-label="Einstellungen" title="Einstellungen" @click=${() => this.navEinst(aktivTab === "einst")}>${o5(ICON_COG)}<span class="nav-t">Einstellungen</span></button>` : b2`<button data-v=${k2} class="${k2 === aktivTab ? "on" : ""}" @click=${() => this.gehe(k2)}>${t5}</button>`)}</nav>
       <div class="schleier ${S3.sheet ? "an" : ""}" @click=${() => this.schliessen()}></div>
       <div class="sheet glas-panel ${S3.sheet ? "an" : ""}${S3.sheet && INV_BREIT.includes(S3.sheet.art) ? " breit" : ""}">${melden && this.roh && S3.sheet && S3.sheet.art !== "melden" ? meldenKnopf("im-sheet", () => this.meldenAuf()) : A}${sheet}</div>
       <div class="tip"></div><div class="toast glas-panel"></div>
@@ -8746,12 +8842,6 @@ var BaustellePanel = class extends i4 {
     if (sc && this._neu) sc.scrollTop = 0;
     const sh = this.ui.querySelector(".sheet");
     if (sh && this._sheetArt !== this._sheetVorher) sh.scrollTop = 0;
-    const evc2 = this.ui.querySelector(".ev-chips");
-    if (evc2) {
-      evc2.scrollLeft = this._evPos;
-      const on = evc2.querySelector(".chip.amber");
-      if (on && (on.offsetLeft < evc2.scrollLeft || on.offsetLeft + on.offsetWidth > evc2.scrollLeft + evc2.clientWidth)) evc2.scrollLeft = Math.max(0, on.offsetLeft - (evc2.clientWidth - on.offsetWidth) / 2);
-    }
     this._neu = false;
   }
   /* Lit-Teile neu zeichnen (Über, Melden) – unveränderte alte Ansichten bleiben dabei stehen */

@@ -248,7 +248,7 @@ async function allgemein() {
   erwarte('Stepper bleiben in den Grenzen der Integration', letzte('baustelle/setzen').every(a => a.wert >= 5 && a.wert <= 30 || a.pfad[1] === 'boost_min' && a.wert >= 5)
     && d().e.boost_min === 5 && d().e.soll === 30);
   neu(); panel.setzen(['preis'], 0.31); await ruhe(); erwarte('Preis', letzte('baustelle/setzen').length === 1);
-  { await klick({ act: 'tab', v: 'einst' }, 10); await klick('.ev-nav button[data-v="bericht"], .ev-chips button[data-v="bericht"]', 10); const m = litEl('.ev-inhalt input[type="email"]');   // Lit (3e): echtes change
+  { await klick({ act: 'tab', v: 'einst' }, 10); await klick({ act: 'ev-gruppe', v: 'bericht' }, 10); const m = litEl('.ev-inhalt input[type="email"]');   // Lit (3e): echtes change
     if (m) { neu(); m.value = ' bau@example.at '; m.dispatchEvent(new Event('change', { bubbles: true, composed: true })); await ruhe(); erwarte('Mail', letzte('baustelle/setzen').length === 1); } }
   const c = C()[0];
   await klick({ act: 'container', id: c.id }, 20);
@@ -319,7 +319,7 @@ async function allgemein() {
   }
   const x = C().find(b => b.tuer) || C()[0], an = d().anschluesse.find(a => a.id !== x.anschluss) || d().anschluesse[0], fi = d().firmen.find(f => f.id !== x.firma);
   await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
-  eingabe({ f: 'name' }, `${x.name} Nord`); eingabe({ f: 'tuer' }, x.tuer ? '' : 'binary_sensor.tuer_neu'); eingabe({ f: 'anschluss' }, an.id); if (fi) eingabe({ f: 'firma' }, fi.id); await klick('.sheet [data-zeile="bedarf"] .sw');
+  eingabe({ f: 'name' }, `${x.name} Nord`); eingabe({ f: 'tuer' }, x.tuer ? '' : 'binary_sensor.tuer_neu'); eingabe({ f: 'anschluss' }, an.id); if (fi) eingabe({ f: 'firma' }, fi.id); eingabe({ f: 'modus' }, x.modus === 'bedarf' ? 'plan' : 'bedarf');   // UI-Bericht Maßnahme 4: Modus statt Schalter „Nur bei Bedarf“
   const hk = x.geraete.findIndex(g => g.heizer && g.rolle === 'heizung');
   if (hk >= 0) eingabe({ f: 'typ', i: String(hk) }, x.geraete[hk].gtyp === 'konvektor' ? 'Ölradiator' : 'Konvektor');
   if (x.geraete.length > 1) await klick(`.sheet .ge-zeile[data-i=\"${String(x.geraete.length - 1)}\"] .x`);
@@ -330,7 +330,7 @@ async function allgemein() {
     !schritte.some(s => s.schalter === x.geraete[hk].schalter && (s.leistung || s.energie)));
   erwarte('Bearbeiten: Name über Subentry-Dialog, Geräte ändern/hinzufügen über baustelle/geraet (BSM-034.02)', api.some(a => a[2] && a[2].subentry_id === x.id)
     && (hk < 0 || schritte.some(s => s.aktion === 'aendern' && s.geraet === x.geraete[hk].id)) && (!frei[1] || schritte.some(s => s.aktion === 'anlegen' && s.schalter === frei[1])));
-  erwarte('Bearbeiten: Tür, Anschluss, Bedarf über baustelle/setzen', ['tuer', 'bedarf'].every(k => letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, k]))));
+  erwarte('Bearbeiten: Tür und Modus über baustelle/setzen', ['tuer', 'modus'].every(k => letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, k]))));
   if (an.id !== x.anschluss) erwarte('Bearbeiten: Anschluss', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, 'anschluss'])));
   if (x.groesse) {   // AN-0014: Größe – Doppel speichert die Fläche der Integration, m² frei den eingetragenen Wert
     await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
@@ -654,7 +654,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await setzen({ act: 'e-bool', k: 'm_frueh' }, ['meldungen_einst', 'arten', 'fruehstart'], false, 'Meldungsart Kälte-Frühstart');
   await setzen({ act: 'basis', v: 'jetzt' }, ['heizung', 'heizgrenze_basis'], 'jetzt', 'Heizgrenze-Grundlage');
   await setzen({ act: 'e-wert', k: 'bericht', v: 'beides' }, ['bericht', 'haeufigkeit'], 'beides', 'Bericht');
-  { await klick({ act: 'tab', v: 'einst' }, 10); await klick('.ev-nav button[data-v="strom"], .ev-chips button[data-v="strom"]', 10);   // Vorrang (Lit, 3e)
+  { await klick({ act: 'tab', v: 'einst' }, 10); await klick({ act: 'ev-gruppe', v: 'strom' }, 10);   // Vorrang (Lit, 3e)
     if (!panel.d.e.staffel) { panel.d.e.staffel = true; await panel.neuZeichnen(); }   // Vorrang-Zeilen gibt es nur mit Staffelung
     const z = [...panel.shadowRoot.querySelectorAll('.ev-inhalt div.zeile.unter')].find(x => x.querySelector('.seg') && x.textContent.includes('Poliercontainer'));
     neu(); if (z) { z.querySelector('.seg button[data-v="hoch"]').click(); await ruhe(); }
@@ -665,7 +665,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await setzen({ act: 'jc-soll', id: 'polier', d: '0.5' }, ['bereiche', 'polier', 'soll'], 21, 'Je Container Soll');
   neu(); panel.setzen(['preis'], 0.31); await ruhe();
   erwarte('Preis speichern', (a => a && JSON.stringify(a.pfad) === '["preis"]' && a.wert === 0.31)(letzte('baustelle/setzen').at(-1)));
-  { await klick({ act: 'tab', v: 'einst' }, 10); await klick('.ev-nav button[data-v="bericht"], .ev-chips button[data-v="bericht"]', 10); const m = litEl('.ev-inhalt input[type="email"]');
+  { await klick({ act: 'tab', v: 'einst' }, 10); await klick({ act: 'ev-gruppe', v: 'bericht' }, 10); const m = litEl('.ev-inhalt input[type="email"]');
     neu(); if (m) { m.value = ' bau@example.at '; m.dispatchEvent(new Event('change', { bubbles: true, composed: true })); await ruhe(); }
     erwarte('Mail speichern', (a => a && JSON.stringify(a.pfad) === '["bericht","mail_an"]' && a.wert === 'bau@example.at')(letzte('baustelle/setzen').at(-1))); }
   await klick({ act: 'container', id: 'polier' }, 20);
@@ -749,11 +749,12 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'container', id: 'mannschaft' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
   eingabe({ f: 'name' }, 'Mannschaft 1'); eingabe({ f: 'tuer' }, 'binary_sensor.tuer_mannschaft'); eingabe({ f: 'firma' }, 'huber'); eingabe({ f: 'anschluss' }, 'sued');
   await klick(`.sheet .ge-zeile[data-i=\"${'2'}\"] .x`); await klick('.sheet > button.zeile'); eingabe({ f: 'schalter', i: '3' }, 'switch.heizung_04'); eingabe({ f: 'n', i: '3' }, 'Heizung 04');
-  eingabe({ f: 'typ', i: '1' }, 'Ölradiator'); await klick('.sheet [data-zeile="bedarf"] .sw');
+  eingabe({ f: 'typ', i: '1' }, 'Ölradiator'); erwarte('UI-Bericht Maßnahme 4: kein Schalter „Nur bei Bedarf“, Modus im Dialog', !litEl('.sheet [data-zeile="bedarf"]') && !!litEl('.sheet [data-zeile="modus"] select'));
+  eingabe({ f: 'modus' }, 'bedarf');
   await klick({ act: 'b-speichern' }, 60);
   const sp = letzte('baustelle/setzen');
   erwarte('Bearbeiten: Name über Subentry-Dialog (reconfigure)', api.some(a => a[2] && a[2].subentry_id === 'mannschaft' && JSON.stringify(a[2].handler) === '["dobl","bereich"]'));
-  erwarte('Bearbeiten: Tür, Anschluss, Bedarf', ['tuer', 'anschluss', 'bedarf'].every(k => sp.some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', 'mannschaft', k]))));
+  erwarte('Bearbeiten: Tür, Anschluss, Modus', ['tuer', 'anschluss', 'modus'].every(k => sp.some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', 'mannschaft', k]))));
   erwarte('Bearbeiten: Firma „ab jetzt“', letzte('baustelle/liste').some(a => a.liste === 'firmen' && a.eintrag.id === 'huber' && a.eintrag.container.includes('mannschaft')));
   { const sr = letzte('baustelle/geraet').flatMap(m => m.schritte || []);
     erwarte('Bearbeiten: Gerät entfernen über baustelle/geraet', sr.some(s => s.aktion === 'entfernen' && s.geraet === 'mannschaft_t') && !letzte('config_entries/subentries/delete').length);
@@ -824,9 +825,10 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   // Pumpen und Schacht mit Lit (BSM-022 3c): Merkmale ohne Ereignisweg – Diagramm data-pc/data-c, Stepper data-k/data-d
   for (const v of ['zyklen', 'verbrauch', 'pumpzeit']) { await klick(`.seite .seg button[data-pc="${v}"]`, 20); pruefe('Pumpen ' + v);
     erwarte(`Pumpen: Diagramm ${v} gewählt`, panel.s.pchart === v && !!litEl(`.seite .seg button[data-pc="${v}"].on`)); }
-  neu(); await klick('.stepper button[data-k="trocken_w"][data-d="5"]'); await klick('.stepper button[data-k="offline_min"][data-d="1"]');
-  erwarte('Pumpen-Schwellen über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["meldungen_einst","trocken_unter_w"]' && a.wert === 35)
-    && letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["meldungen_einst","offline_min"]' && a.wert === 6));
+  neu(); { const vorher = !!panel.d.e.m_trocken; await klick('.stepper button[data-k="trocken_w"][data-d="5"]'); await klick('.seite [data-m="m_trocken"] .sw');   // Maßnahme 3: Schwelle und Meldung zusammen
+  erwarte('Pumpen-Schwellen und ihre Meldung über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["meldungen_einst","trocken_unter_w"]' && a.wert === 35)
+    && letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["meldungen_einst","arten","trockenlauf"]' && a.wert === !vorher));
+  erwarte('Maßnahme 3: Offline im Reiter Pumpen nur als Verweis auf Meldungen', !litEl('.seite .stepper button[data-k="offline_min"]') && !!litEl('.seite [data-k="offline-meldung"]')); }
   { // Pumpenschacht im Detail (Lit, 3c): öffnen, Diagramm, Zeitraum, Automatik, Pumpe schalten, zurück
     await klick('.seite .block-kopf .chip[data-id="schacht"]', 30);
     erwarte('3c: Schacht öffnet aus dem Reiter Pumpen', panel.s.view === 'container' && panel.s.cid === 'schacht' && ui.innerHTML.includes('PUMPENSCHACHT') && ui.innerHTML.includes('Automatik für diesen Schacht'));
@@ -1249,7 +1251,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     const h = await hzOffen('trocknen');
     erwarte('3d: Kachel „Kleidung trocknen“ mit ihren Reglern', h.includes('ab Regen in der Arbeitszeit') && ['ab_mm', 'laenger_min', 'frueher_min'].every(k => h.includes(`data-tr="0-${k}+"`)) && !h.includes('So wird geheizt'));
     await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 20); await klick({ act: 'ev-gruppe', v: 'heizung' }, 20);
-    erwarte('3d: Einstellungen Heizung – Regeln einmal, Trocknen mit Reglern', (ui.innerHTML.match(/So wird geheizt/g) || []).length === 1 && ui.innerHTML.includes('ab Regen in der Arbeitszeit'));
+    erwarte('Maßnahme 3: Einstellungen Heizung – Regeln als Kurzfassung, Trocknen ohne Regler', (ui.innerHTML.match(/So wird geheizt/g) || []).length === 1 && ui.innerHTML.includes('data-kurz="trocknen"') && !ui.innerHTML.includes('data-tr="0-'));
     await klick({ act: 'tab', v: 'heizung' }, 20); }
   /* AN-0012: Regeln nach Tagesablauf, bisher feste Werte einstellbar, feste Regeln sichtbar */
   { const h = await hzOffen('regeln'); pruefe('Regeln nach Tagesablauf');
@@ -1668,12 +1670,12 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       && !!litEl('.sheet .hp-legende .tl-ausn.mehr'));
     await klick({ act: 'zu' }, 5);
     panel.s.rvAuf = null; await klick({ act: 'hz-auf', k: 'regeln' }, 20); pruefe('Regeln Gruppen zu');
-    erwarte('AN-0020: Regeln zugeklappt – je Gruppe eine Zeile mit Zusammenfassung, keine Bedienelemente', litEls('.sheet .rv-gr').length >= 6 && !litEl('.sheet .rv-gr .rv-karte')
+    erwarte('AN-0020: Regeln zugeklappt – je Gruppe eine Zeile mit Zusammenfassung, keine Bedienelemente', litEls('.sheet .rv-gr').length >= 7 && !litEl('.sheet .rv-gr:not(.rv-soll) .rv-karte')
       && litEl('.sheet .rv-gr[data-gr="vor"] .rv-sum').textContent.includes('Vorheizen'));
     await klick('.sheet .rv-gr[data-gr="vor"] .rv-gk', 10);
     erwarte('AN-0020: Antippen öffnet die Gruppe mit den bisherigen Zeilen', !!litEl('.sheet .rv-gr[data-gr="vor"] [data-r="vorheizen"]'));
     await klick('.sheet .rv-gr[data-gr="nacht"] .rv-gk', 10);
-    erwarte('AN-0020: immer nur eine Gruppe offen', litEls('.sheet .rv-gr.auf').length === 1 && !!litEl('.sheet .rv-gr[data-gr="nacht"] [data-r="frost"]') && !litEl('.sheet [data-r="vorheizen"]'));
+    erwarte('AN-0020: immer nur eine Gruppe offen', litEls('.sheet .rv-gr.auf:not(.rv-soll)').length === 1 && !!litEl('.sheet .rv-gr[data-gr="nacht"] [data-r="frost"]') && !litEl('.sheet [data-r="vorheizen"]'));
     panel.s.rvAuf = null; await klick({ act: 'zu' }, 5); }
   /* AN-0003: Zusammensetzung der Heizzeit sichtbar (Verlängerungen zählen zusammen) */
   { const p = panel.planTag(panel.z.HEUTE_TAG), uhr2 = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
@@ -1870,22 +1872,45 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick({ act: 'zu' }, 5); Object.keys(c).forEach(k => delete c[k]); Object.assign(c, alt); nachPanel(); await klick({ act: 'tab', v: 'einst' }, 30); }
   /* WU-0007: alle Einstellungen in Gruppen mit Seitenleiste (Handy: Chips) */
   { const gruppe = async g => { await klick({ act: 'ev-gruppe', v: g }, 20); pruefe(`Einstellungen ${g}`); return ui.innerHTML; };
-    /* FE-0013: Chip-Leiste behält ihre Position; die gewählte Kategorie rückt nur in die Mitte, wenn sie außerhalb liegt */
-    { const leiste = panel.root.querySelector('.ev-chips'), chip = leiste.querySelector('.chip.amber');
-      let links = 250; const neuLeiste = () => panel.root.querySelector('.ev-chips');   // nach dem Neuzeichnen ist die Leiste ein neuer Knoten
-      layout.setzen((el, n) => el.classList.contains('ev-chips') && n === 'clientWidth' ? 300 : el.matches('.chip.amber') ? ({ offsetLeft: links, offsetWidth: 80 })[n] : undefined);
-      leiste.scrollLeft = 200; void chip;
-      await klick({ act: 'ev-gruppe', v: 'strom' }, 10); erwarte('FE-0013: Position bleibt (' + neuLeiste().scrollLeft + ')', neuLeiste().scrollLeft === 200);
-      links = 700; await klick({ act: 'ev-gruppe', v: 'ueber' }, 10);
-      erwarte('FE-0013: gewählte Kategorie mittig (' + neuLeiste().scrollLeft + ')', neuLeiste().scrollLeft === 700 - (300 - 80) / 2); layout.setzen(null); }
-    erwarte('WU-0007: Seitenleiste bzw. Chips mit allen Gruppen', ['baustelle', 'heizung', 'notprogramm', 'container', 'geraete', 'pumpen', 'strom', 'firmen', 'meldungen', 'bericht', 'app', 'dev', 'ueber'].every(g => ui.innerHTML.includes(`data-v="${g}"`)));
-    const soll = { baustelle: ['Beginn und Ende', 'Heizperiode', 'Regenmenge', 'Termine (Bei Bedarf)', 'Feiertage'], heizung: ['Vorheizen', 'Frostschutz', 'Kleidung trocknen', 'An Feiertagen frei', 'Automatik', 'data-k="frost_aussen"'],
-      notprogramm: ['Notprogramm in den Plugs', 'Taste am Plug'], container: ['Container und Geräte', 'Je Container'],
-      geraete: ['Schaltgeräte', 'class="zeile ger g-zeile"', '📦 Inventar'], pumpen: ['data-k="offline_min"', 'data-k="trocken_w"', 'data-k="zyklen_h"'], strom: ['Neuer Preis ab', 'Staffelung'], firmen: ['Firma hinzufügen'],
-      meldungen: ['Test-Nachricht senden', 'data-k="kalt_min"', 'data-k="hand_h"'], bericht: ['Wie oft'], app: ['Erklärungen anzeigen', 'Melden-Knopf', 'Auswertung auf Vorschlag zurücksetzen'],
+    /* UI-Bericht Maßnahme 5: Abschnitte; am Handy eine senkrechte Liste statt der Chip-Leiste, „‹ Alle Einstellungen“ zurück */
+    { await klick({ act: 'ev-gruppe', v: '' }, 10); const h = ui.innerHTML, L = litEls('.ev-liste .ev-lz').map(x => x.dataset.v);
+      erwarte('Maßnahme 5: Handy – Liste aller Gruppen nach Abschnitten', !litEl('.ev-chips') && JSON.stringify(L) === JSON.stringify(['baustelle', 'heizung', 'notprogramm', 'geraete', 'pumpen', 'strom', 'firmen', 'meldungen', 'bericht', 'app', 'dev', 'ueber'])
+        && ['Baustelle', 'Heizung &amp; Container', 'Pumpen', 'Strom &amp; Kosten', 'Meldungen &amp; Bericht', 'System'].every(t => h.includes(`<div class="gruppe">${t}</div>`)));
+      pruefe('Einstellungen Liste (Handy)');
+      await klick('.ev-liste .ev-lz[data-v="strom"]', 10); erwarte('Maßnahme 5: Gruppe aus der Liste, mit „‹ Alle Einstellungen“', panel.s.evGruppe === 'strom' && !!litEl('.ev-zurueck') && !litEl('.ev-liste'));
+      await klick('.ev-zurueck', 10); erwarte('Maßnahme 5: „‹ Alle Einstellungen“ zeigt wieder die Liste', !panel.s.evGruppe && !!litEl('.ev-liste'));
+      await klick({ act: 'ev-gruppe', v: 'meldungen' }, 10); await klick('.glas-nav button[data-v="einst"]', 10); erwarte('Maßnahme 5: ⚙ nochmal antippen zeigt die Liste', !panel.s.evGruppe && !!litEl('.ev-liste'));
+      erwarte('Maßnahme 4: ⚙ hat Text „Einstellungen“ (oben) und aria-label', /Einstellungen/.test(litEl('.glas-nav button[data-v="einst"] .nav-t').textContent) && litEl('.glas-nav button[data-v="einst"]').getAttribute('aria-label') === 'Einstellungen');
+      panel.narrow = false; await panel.neuZeichnen(); await ruhe(10); const n = ui.innerHTML;
+      erwarte('Maßnahme 5: Seitenleiste mit Abschnitts-Überschriften, ohne Liste', !!litEl('.ev-nav') && !litEl('.ev-liste') && litEls('.ev-nav .ev-abschnitt').length === 6 && n.includes('data-v="baustelle" class="on"'));
+      pruefe('Einstellungen Seitenleiste (breit)'); panel.narrow = true; await panel.neuZeichnen(); await ruhe(10); }
+    await klick({ act: 'ev-gruppe', v: '' }, 10);
+    erwarte('WU-0007: Liste mit allen Gruppen', ['baustelle', 'heizung', 'notprogramm', 'geraete', 'pumpen', 'strom', 'firmen', 'meldungen', 'bericht', 'app', 'dev', 'ueber'].every(g => ui.innerHTML.includes(`data-v="${g}"`)));
+    const soll = { baustelle: ['Beginn und Ende', 'Heizperiode', 'Regenmenge', 'Termine (Bei Bedarf)', 'Feiertage'], heizung: ['Solltemperatur', 'Vor der Arbeit', 'Nachts, frei, Urlaub', 'Kleidung trocknen', 'Urlaub &amp; Feiertage', 'Automatik', 'Im Reiter Heizung bearbeiten'],
+      notprogramm: ['Notprogramm in den Plugs', 'Taste am Plug'], geraete: ['Container und Schächte', 'Je Container', '📦 Inventar', 'data-k="geraet-neu"'], pumpen: ['Überwachung der Pumpen'], strom: ['Neuer Preis ab', 'Staffelung'], firmen: ['Firma hinzufügen'],
+      meldungen: ['Test-Nachricht senden', 'data-k="kalt_min"', 'data-k="hand_h"', 'data-k="tuer_melden"', 'data-k="offline_min"'], bericht: ['Wie oft'], app: ['Erklärungen anzeigen', 'Melden-Knopf', 'Auswertung auf Vorschlag zurücksetzen'],
       dev: ['Meldungen', 'ev-dev-reiter'], ueber: ['Version'] };
     for (const [g, texte] of Object.entries(soll)) { const h = await gruppe(g); const fehlt = texte.filter(t => !h.includes(t)); erwarte(`WU-0007: Gruppe ${g} – fehlt ${fehlt.join(', ')}`, !fehlt.length); }
-    { const h = await gruppe('geraete'), L = (panel.d.r && panel.d.r.geraete_links) || {};   // WU-0010
+    { const h0 = await gruppe('pumpen'), P = panel.d.bereiche.filter(b => b.pumpe);   // Maßnahme 3: Schwellen nur im Reiter Pumpen
+      erwarte('Maßnahme 3: ⚙ › Pumpen ohne Schwellen-Stepper, mit Sprung und Automatik je Schacht', !h0.includes('data-k="trocken_w"') && (!P.length || (h0.includes('data-k="pumpen-ueberwachung"') && h0.includes('Automatik · '))));
+      const hz = await gruppe('heizung');
+      erwarte('Maßnahme 3: ⚙ › Heizung nur Kurzfassung (keine Stepper der Regeln)', !hz.includes('data-k="vorheizen"') && !hz.includes('data-k="frost_aussen"') && !hz.includes('tr-stufe'));
+      await klick('.ev-inhalt .rk-zeile[data-gr="nacht"]', 20);
+      erwarte('Maßnahme 3: Sprung in den Reiter Heizung, Regeln mit offener Gruppe', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'regeln' && panel.s.rvAuf === 'nacht' && ui.innerHTML.includes('data-k="frost_temp"'));
+      erwarte('Maßnahme 3: Solltemperatur erste Zeile, offen', (() => { const g = litEls('.sheet .rv-gr'); return g[0] && g[0].dataset.gr === 'soll' && !!g[0].querySelector('[data-k="soll"], [data-k="gleit_min"]'); })());
+      erwarte('Maßnahme 3: Tür-Nachricht in den Regeln nur Verweis', !litEl('.sheet [data-k="tuer_melden"]'));
+      panel.s.rvAuf = 'alle'; await panel.neuZeichnen(); await ruhe(5);
+      erwarte('Maßnahme 3: Tür-Verweis da (Gruppe Arbeitszeit)', !!litEl('.sheet [data-k="tuer-meldung"]'));
+      erwarte('Maßnahme 4: Beschriftungen Heizgrenze und „heizt“', ui.innerHTML.includes('Heizgrenze verglichen mit') && ui.innerHTML.includes('Zählt als „heizt“ ab') && !ui.innerHTML.includes('Grundlage'));
+      panel.s.rvAuf = null; await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 10);
+      await gruppe('geraete'); await klick('.ev-inhalt .glas-panel.liste[data-kurz="container"] .rk-zeile', 20);
+      erwarte('Maßnahme 3: Je Container springt in den Reiter Heizung', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.k === 'container');
+      await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 10);
+      await gruppe('geraete'); await klick('[data-k="geraet-neu"]', 10); erwarte('Maßnahme 5: „+ Gerät“ fragt nach dem Container', panel.s.sheet && panel.s.sheet.art === 'geraet-neu'); pruefe('Gerät hinzufügen');
+      { const b0 = panel.d.bereiche[0]; await klick(`.sheet button.zeile[data-id="${b0.id}"]`, 10);
+        erwarte('Maßnahme 5: danach „Bearbeiten“ mit neuer Gerätezeile', panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.cid === b0.id && panel.s.sheet.edit.geraete.at(-1).neu === true && !!litEl(`.sheet .ge-zeile[data-i="${b0.geraete.length}"] select`)); }
+      await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 10); }
+    { panel.s.gerReiter = 'uebersicht'; const h = await gruppe('geraete'), L = (panel.d.r && panel.d.r.geraete_links) || {};   // WU-0010
       if (REFERENZ) {
         erwarte('BSM-034.05: eine Liste nach Container mit Zählern und Filter', ['g-zahlen', 'erreichbar', 'data-v="probleme"', 'Container ›'].every(t => h.includes(t)) && panel.d.bereiche.filter(b => b.geraete.length).every(b => h.includes(b.name)));
         erwarte('AN-0009: Statuspunkt und Signalbalken', h.includes('class="ger-punkt da"') && /class="ger-sig s[0-4]" title="Signal -\d+ dBm"/.test(h));
@@ -1913,7 +1938,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
           await klick({ act: 'zu' }, 5); }
         await klick('.g-reiter [data-v="inventar"]', 10);
         erwarte('BSM-034.05: Reiter Inventar zeigt das Inventar', ui.innerHTML.includes('inv-liste'));
-        panel.s.gerReiter = 'uebersicht';
+        panel.s.gerReiter = 'container';
       } }
     { const h = await gruppe('notprogramm');   // BSM-019: Notprogramm anzeigen und prüfen
       if (REFERENZ) {
@@ -2063,7 +2088,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { /* Maßnahme 2: Empfänger auf der Seite änderbar (Dienste von der Integration) */
     const r0 = panel.d.r, me = r0.einstellungen.meldungen_einst, alt = me.empfaenger;
     r0.baustelle.empfaenger_dienste = ['mobile_app_handy_herbert', 'mobile_app_tablet']; me.empfaenger = ['mobile_app_handy_herbert', 'mobile_app_weg'];
-    panel._neuBauen(); await klick({ act: 'tab', v: 'einst' }, 10); await klick('.ev-nav button[data-v="meldungen"], .ev-chips button[data-v="meldungen"]', 20);
+    panel._neuBauen(); await klick({ act: 'tab', v: 'einst' }, 10); await klick({ act: 'ev-gruppe', v: 'meldungen' }, 20);
     erwarte('Empfänger: je Dienst ein Schalter, fehlender markiert', ['mobile_app_handy_herbert', 'mobile_app_tablet', 'mobile_app_weg'].every(d => litEl(`[data-empf="${d}"] .sw`))
       && litEl('[data-empf="mobile_app_handy_herbert"] .sw.on') && !litEl('[data-empf="mobile_app_tablet"] .sw.on') && /weg[^]*?nicht gefunden/.test(litEl('[data-empf="mobile_app_weg"]').innerHTML));
     neu(); await klick('[data-empf="mobile_app_tablet"] .sw', 20);
@@ -2074,7 +2099,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     me.empfaenger = alt; delete r0.baustelle.empfaenger_dienste; panel._neuBauen(); await panel.neuZeichnen(); }
   { /* Maßnahme 2: Kurzzeile und „sonst gilt …“ bei gleitendem Soll mit dem Wert der Integration */
     const e = panel.d.e, art = e.soll_art, G = panel.d.sollG; e.soll_art = 'gleitend'; panel.d.sollG = { ...(G || {}), soll: 21.71 };
-    await klick('.ev-nav button[data-v="heizung"], .ev-chips button[data-v="heizung"]', 20);
+    await klick({ act: 'ev-gruppe', v: 'heizung' }, 20);
     erwarte('Kurzzeile ⚙ › Heizung: Soll gleitend, heute 21,7 °C', ui.innerHTML.includes('Soll gleitend, heute 21,7 °C'));
     panel.d.sollG = null; await panel.neuZeichnen(); await ruhe(10);
     erwarte('Kurzzeile ohne Außentemperatur: noch das feste Soll', ui.innerHTML.includes(`Soll gleitend, noch ${String(e.soll).replace('.', ',')} °C`));

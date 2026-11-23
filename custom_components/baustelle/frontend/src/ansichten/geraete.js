@@ -72,13 +72,27 @@ function uebersicht(p) {
     <div class="leise p-fuss">Ein Gerät antippen: Zustand, Warnungen, Status, Einstellungen und Inventar an einer Stelle.</div>`;
 }
 
-/* Gruppe der Einstellungen (ersetzt › Geräte und › 📦 Inventar) */
-export function geraeteGruppeVorlage(p) {
-  const X = geraeteZeilen(p), Z = zaehlen(X), inv = invGruppeVorlage(p), r = p.s.gerReiter || 'uebersicht';
-  const reiter = html`<div class="seg glas-panel g-reiter">${[['uebersicht', 'Übersicht'], ['inventar', '📦 Inventar']].map(([k, t]) =>
-    html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s.gerReiter = k; p.neuZeichnen(); }}>${t}</button>`)}</div>`;
-  return { k: 'geraete', ic: '🔌', t: 'Geräte', kurz: r === 'inventar' ? inv.kurz : `${Z.n} Geräte · ${Z.weg ? `${Z.weg} nicht erreichbar` : 'alle erreichbar'}${Z.warn ? ` · ${Z.warn} mit Warnung` : ''}`,
-    inhalt: () => html`${reiter}${r === 'inventar' ? inv.inhalt() : uebersicht(p)}` };
+/* Gruppe der Einstellungen „Container & Geräte“ (UI-Bericht Maßnahme 5: vorher zwei Gruppen „Container & Geräte“ und
+   „🔌 Geräte“): Reiter Container (containerInhalt aus einstellungen.js), Geräte (Übersicht) und 📦 Inventar, dazu „+ Gerät“ */
+export function geraeteGruppeVorlage(p, containerInhalt) {
+  const d = p.d, X = geraeteZeilen(p), Z = zaehlen(X), inv = invGruppeVorlage(p), r = ['container', 'uebersicht', 'inventar'].includes(p.s.gerReiter) ? p.s.gerReiter : 'container';
+  const C = d.bereiche.filter(b => !b.pumpe).length, P = d.bereiche.length - C;
+  const reiter = html`<div class="g-kopf"><div class="seg glas-panel g-reiter">${[['container', 'Container'], ['uebersicht', 'Geräte'], ['inventar', '📦 Inventar']].map(([k, t]) =>
+    html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s.gerReiter = k; p.neuZeichnen(); }}>${t}</button>`)}</div>
+    ${d.bereiche.length ? html`<button class="chip glas-panel nur-admin" data-k="geraet-neu" @click=${p.nurAdmin(() => p.einblenden('geraet-neu'))}>+ Gerät</button>` : nothing}</div>`;
+  const kurz = r === 'inventar' ? inv.kurz : r === 'uebersicht' ? `${Z.n} Geräte · ${Z.weg ? `${Z.weg} nicht erreichbar` : 'alle erreichbar'}${Z.warn ? ` · ${Z.warn} mit Warnung` : ''}`
+    : `${C} Container · ${P} ${P === 1 ? 'Schacht' : 'Schächte'} · ${Z.n} Geräte${Z.weg ? ` · ${Z.weg} nicht erreichbar` : ''}`;
+  return { k: 'geraete', ic: '🏠', t: 'Container & Geräte', kurz,
+    inhalt: () => html`${reiter}${r === 'inventar' ? inv.inhalt() : r === 'uebersicht' ? uebersicht(p) : containerInhalt(p)}` };
+}
+
+/* „+ Gerät“: erst den Container wählen, dann der bestehende Weg „+ Gerät hinzufügen“ in „Bearbeiten“ (bis zum Assistenten, Stufe 3) */
+function geraetNeu(p) {
+  const d = p.d;
+  return html`${GRIFF}<h3>Gerät hinzufügen</h3><div class="leise">In welchen Container oder Schacht kommt das Gerät?</div>
+      <div class="glas-panel liste">${d.bereiche.map(b => html`<button class="zeile" data-id=${b.id} @click=${p.nurAdmin(() => p.geraetNeuIn(b.id))}><span>${b.pumpe ? '💧' : '🏠'} ${b.name}</span><span class="leise">${b.geraete.length} ${b.pumpe ? 'Pumpen' : 'Geräte'} ›</span></button>`)}</div>
+      <div class="leise">Danach im Dialog „Bearbeiten“ den Shelly wählen und speichern.</div>
+      <button class="knopf leise-k" @click=${() => p.schliessen()}>Abbrechen</button>`;
 }
 
 /* ---------- Geräte im Container (AN-0018, Mockup container-unten.html, Variante B, Herbert 29.10.2026) ----------
@@ -142,7 +156,7 @@ export function geraeteKachelnVorlage(p, b) {
   const K = S.filter(x => x.s.art === 'tuer' || x.s.art === 'fenster'), Li = S.filter(x => x.s.art === 'licht'), weg = X.filter(x => x.weg).length;
   const sym = b.symbol || {}, kontakteDa = K.length || (sym.tueren || []).length || (sym.fenster || []).length;
   return html`<div class="gk-geraete"><div class="gk-titel"><b>Geräte</b><span class="leise">${X.length} Geräte · ${weg ? html`<span class="rot-t">${weg} nicht erreichbar</span>` : 'alle erreichbar'}</span>
-      <button class="link blau" @click=${() => p.einstGruppe('geraete')}>Alle Geräte ›</button></div>
+      <button class="link blau" @click=${() => p.einstGruppe('geraete', 'uebersicht')}>Alle Geräte ›</button></div>
     <div class="gk-kacheln">
       ${H.length ? html`<div class="glas-panel gk-k gk-k-heiz"><div class="gk-k-t">♨ Heizen</div><div class="gk-k-gross">${de(b.kw || 0, 2)}<small> kW jetzt</small></div>
         ${b.stufen && b.stufen.an && b.stufen.text ? html`<div class="leise gk-k-satz">${b.stufen.text}</div>` : nothing}${H.map(g => zeileHk(p, b, g))}</div>` : nothing}
@@ -194,7 +208,7 @@ function sensor(p, s) {
     ${inventarVorlage(p, x)}
     <button class="knopf leise-k" @click=${() => p.schliessen()}>Schließen</button>`;
 }
-export const GERAETE_EINBLENDUNGEN = { sensor };
+export const GERAETE_EINBLENDUNGEN = { sensor, 'geraet-neu': geraetNeu };
 
 export const GERAETE_CSS = `
 .g-zahlen { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; } .g-zahlen .chip { font-size: 12px; padding: 5px 10px; }

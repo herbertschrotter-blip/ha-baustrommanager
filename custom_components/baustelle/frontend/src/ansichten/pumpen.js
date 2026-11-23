@@ -19,6 +19,8 @@ export function pumpenVorlage(p) {
   const je = P.map(b => ({ b, h7: p.heizStunden(d, b, 'Woche'), z7: p.zyklen(d, b, 'Woche'), v7: p.verbrauch(d, b.id, 'Woche') }));
   const zyk = je.every(x => x.z7) ? summe(je.map(x => x.z7[heuteNr] || 0)) : null, lauf = je.every(x => x.h7) ? summe(je.map(x => x.h7[heuteNr] || 0)) : null;
   const chartWahl = k => { p.s.pchart = k; p.neuZeichnen(); };
+  // UI-Bericht Maßnahme 3: Schwelle und ihre Meldung an einem Ort (vorher Meldungen unter Einstellungen)
+  const melden = k => html`<div class="zeile unter" data-m=${k}><span>aufs Handy melden</span>${schalterVorlage(e[k], () => p.einstellungUmschalten(k))}</div>`;
   return html`${kopfVorlage('Pumpen', d.titel)}
       <div class="glas-panel kennz">${[['Zyklen heute', zahl(zyk) ? zyk : '–'], ['Laufzeit heute', stdMin(lauf)], ['Pumpen an', `${pumpen.filter(g => g.an).length} von ${pumpen.length}`]].map(([k, v]) => html`<div><b>${v}</b><span>${k}</span></div>`)}</div>
       ${W.map(w => html`<button class="glas-panel warn-zeile ${w.stufe}" data-id=${w.b} @click=${() => p.gehe('container', w.b)}><b>⚠ ${p.bName(w.b)}: ${w.titel}</b><span class="leise">${p.seitText(w.seitIso)}${w.hilfe ? ` · ${w.hilfe}` : ''}</span></button>`)}
@@ -28,12 +30,12 @@ export function pumpenVorlage(p) {
           <div class="leise">heute ${z7 ? z7[heuteNr] : '–'} Zyklen · ${stdMin(h7 ? h7[heuteNr] : null)} gelaufen</div></div></div>
         <div class="seg">${CHARTS.map(([k, t]) => html`<button data-pc=${k} class=${k === pc ? 'on' : ''} @click=${() => chartWahl(k)}>${t}</button>`)}</div>
         <div class="chart-wrap">${r ? unsafeHTML(balken(`p${pc}-${b.id}`, r, TAGE, pc === 'zyklen' ? 'Zyklen' : pc === 'verbrauch' ? 'kWh' : 'h', pc === 'zyklen' ? 0 : 1)) : LAEDT}</div></div>`; })}
-      <div class="glas-panel block"><div class="block-kopf"><b>Überwachung</b><span class="leise">wann eine Pumpe gemeldet wird</span></div>
-        <div class="zeile"><div><b>Offline</b><div class="leise">Shelly antwortet nicht (Stromausfall?) – melden nach</div></div>${st('offline_min', 1, v => `${de(v, 0)} min`)}</div>
-        <div class="zeile"><div><b>Trockenlauf</b><div class="leise">Pumpe läuft, zieht aber weniger als</div></div>${st('trocken_w', 5, v => `${de(v, 0)} W`)}</div>
-        <div class="zeile"><div><b>Dauerlauf</b><div class="leise">läuft ohne Pause länger als</div></div>${st('dauer_min', 5, v => `${v} min`)}</div>
-        <div class="zeile"><div><b>Schaltet oft</b><div class="leise">mehr Zyklen je Stunde als</div></div>${st('zyklen_h', 1, v => `${v}`)}</div>
-        <button class="zeile" @click=${() => p.einstGruppe('meldungen')}><span class="blau">Welche Meldungen aufs Handy gehen</span><span class="chev">Einstellungen ›</span></button>
+      <div class="glas-panel block"><div class="block-kopf"><b>Überwachung</b><span class="leise">wann eine Pumpe gemeldet wird – Schwellen und Meldungen</span></div>
+        <div class="zeile"><div><b>Trockenlauf</b><div class="leise">Pumpe läuft, zieht aber weniger als</div></div>${st('trocken_w', 5, v => `${de(v, 0)} W`)}</div>${melden('m_trocken')}
+        <div class="zeile"><div><b>Dauerlauf</b><div class="leise">läuft ohne Pause länger als</div></div>${st('dauer_min', 5, v => `${v} min`)}</div>${melden('m_dauer')}
+        <div class="zeile"><div><b>Schaltet oft</b><div class="leise">mehr Zyklen je Stunde als</div></div>${st('zyklen_h', 1, v => `${v}`)}</div>${melden('m_zyklen')}
+        <button class="zeile" data-k="offline-meldung" @click=${() => p.einstGruppe('meldungen')}><div><b>Offline</b><div class="leise">Shelly antwortet nicht (Stromausfall?) – melden nach ${de(e.offline_min, 0)} min, ${e.m_offline ? 'aufs Handy' : 'nicht melden'} · gilt für alle Geräte</div></div><span class="chev">Meldungen ›</span></button>
+        <button class="zeile" @click=${() => p.einstGruppe('meldungen')}><span class="blau">Empfänger und weitere Meldungen</span><span class="chev">Einstellungen ›</span></button>
         ${unsafeHTML(erkl(e.erklaer, 'Pumpen werden nie geschaltet, nur überwacht. Ein Zyklus ist einmal an und wieder aus. Viele Zyklen je Stunde deuten auf einen hängenden Schwimmer oder steigendes Grundwasser, Trockenlauf auf einen leeren Schacht oder eine verstopfte Pumpe.'))}</div>`;
 }
 
@@ -65,5 +67,5 @@ export function schachtVorlage(p) {
       <div class="glas-panel liste"><div class="zeile"><span>Trockenlauf (unter ${de(d.e.trocken_w, 0)} W beim Laufen)</span><span class="ok">${d.e.m_trocken ? '● überwacht' : '○ aus'}</span></div>
         <div class="zeile"><span>Dauerlauf über ${d.e.dauer_min} min</span><span class="ok">${d.e.m_dauer ? '● überwacht' : '○ aus'}</span></div>
         <div class="zeile"><span>Stromausfall / offline (nach ${de(d.e.offline_min, 0)} min)</span><span class="ok">${d.e.m_offline ? '● überwacht' : '○ aus'}</span></div>
-        <button class="zeile" @click=${() => p.gehe('pumpen')}><span class="blau">Schwellen im Reiter Pumpen</span><span class="chev">›</span></button></div>`;
+        <button class="zeile" @click=${() => p.gehe('pumpen')}><span class="blau">Schwellen und Meldungen im Reiter Pumpen</span><span class="chev">›</span></button></div>`;
 }

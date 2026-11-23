@@ -15,6 +15,9 @@ export const TYP_TEXT = g => g.rolle === 'pumpe' ? 'Pumpe' : HEIZER(g) ? (g.typ 
 
 /* Modus je Container (0.7.8): wie im Mockup, Thermostat nur mit Fühler */
 export const MODI = [['plan', 'Zeitplan'], ['thermo', 'Thermostat'], ['bedarf', 'Bei Bedarf'], ['hand', 'Hand'], ['aus', 'Aus']];
+/* Was ein Modus bedeutet (Container bearbeiten) */
+export const MODUS_TEXT = { plan: 'an in der Heizzeit – der Thermostat am Heizkörper regelt', thermo: 'in der Heizzeit auf das Soll nach dem Fühler',
+  bedarf: 'nur per Schalter oder Termin, sonst Frostschutz', hand: 'die Automatik schaltet nicht – du schaltest selbst', aus: 'alles aus, Frostschutz bleibt' };
 
 export const FREI_TEXT = { frost: 'nur Frostschutz', absenk: 'abgesenkt', aus: 'alles aus' };
 

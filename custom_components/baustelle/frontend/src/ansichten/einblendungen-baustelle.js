@@ -51,7 +51,7 @@ export const KEIN_URLAUBSKALENDER = 'Kein beschreibbarer Kalender – lege unter
 function wetterquelle(p, s) {
   const f = s.form, kal = p.entitaeten(x => x.entity_id.startsWith('calendar.')), urlaubKal = p.entitaeten(beschreibbar);
   const alt = f.urlaub_kalender && !urlaubKal.some(([v]) => v === f.urlaub_kalender) ? [[f.urlaub_kalender, `${p.name(f.urlaub_kalender) || f.urlaub_kalender} (nicht beschreibbar)`]] : [];
-  return html`${GRIFF}<h3>Wetter</h3>
+  return html`${GRIFF}<h3>Wetter und Kalender</h3>
         <label class="feld">Wetter${auswahl(f, 'wetter', p.entitaeten(x => x.entity_id.startsWith('weather.')), '– keins –')}</label>
         <label class="feld">Außentemperatur${auswahl(f, 'temp_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'temperature'), 'aus der Vorhersage')}</label>
         <label class="feld">Regenmenge${auswahl(f, 'regen_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'precipitation'), 'aus der Vorhersage')}</label>
@@ -125,13 +125,15 @@ const preisNeu = (p, s) => html`${GRIFF}<h3>Neuer Strompreis</h3><label class="f
 /* AN-0002: ✎ im Dialog „Baustellen“ – nur die Daten dieser Baustelle; Staffelung, Bericht, Meldungen und App bleiben unter Einstellungen */
 function bearbeiten(p) {
   const d = p.d, o = d.optionen, auf = art => p.nurAdmin(() => p.einblenden(art));
+  const alle = html`<button class="zeile bb-alle" data-k="bb-alle" @click=${() => p.einstUebersicht()}><div><span class="blau"><b>Alle Einstellungen</b></span><div class="leise">Heizung, Container & Geräte, Pumpen, Strom, Meldungen, Bericht …</div></div><span class="chev">›</span></button>`;
   return html`${GRIFF}<div class="block-kopf"><h3>Baustelle bearbeiten</h3><span class="leise">${d.titel}</span></div>
+        <div class="glas-panel liste">${alle}</div>
         <div class="gruppe-t">Baustelle</div>
         <button class="zeile nur-admin" @click=${auf('name')}><span>Name</span><span class="leise">${d.titel} ›</span></button>
         <button class="zeile nur-admin" @click=${auf('zeitraum-bs')}><span>Beginn und Ende</span><span class="leise">${p.bsZeit(d)} ›</span></button>
         <button class="zeile nur-admin" @click=${auf('zeitraum-bs')}><span>Heizperiode</span><span class="leise">${MONATE[d.hp[0] - 1]} – ${MONATE[d.hp[1] - 1]} ›</span></button>
         <div class="gruppe-t">Ort</div>
-        <button class="zeile nur-admin" @click=${auf('wetterquelle')}><span>Wetter</span><span class="leise">${o.wetter ? p.name(o.wetter) : 'keins gewählt'} ›</span></button>
+        <button class="zeile nur-admin" @click=${auf('wetterquelle')}><span>Wetter und Kalender</span><span class="leise">${o.wetter ? p.name(o.wetter) : 'keins gewählt'} ›</span></button>
         <button class="zeile nur-admin" @click=${auf('wetterquelle')}><span>Außentemperatur</span><span class="leise">${o.temp_sensor ? p.name(o.temp_sensor) : 'aus der Vorhersage'} ›</span></button>
         <div class="gruppe-t">Container und Geräte · ${d.bereiche.length}</div>
         ${d.bereiche.map(b => html`<button class="zeile" data-id=${b.id} @click=${() => p.bereichEinst(b.id)}><span><i class="farbpunkt" style="background:${BEREICH_FARBEN[b.f % 6]}"></i>${b.name}</span><span class="leise">${b.geraete.length} ${b.pumpe ? 'Pumpen' : 'Geräte'} ›</span></button>`)}
@@ -142,8 +144,8 @@ function bearbeiten(p) {
           return html`<button class="zeile" data-id=${f.id} @click=${() => p.firmaAuf(f.id)}><span>${f.name}${f.eigen ? html` <span class="badge">eigene</span>` : nothing}</span><span class="leise">${n} Container ›</span></button>`; })}
         <button class="zeile" @click=${() => p.firmaAuf()}><span class="blau">+ Firma hinzufügen</span></button>
         ${d.aktiv ? html`<button class="zeile" @click=${() => p.einblenden('abschliessen')}><span>Baustelle abschließen</span><span class="leise">kommt in den Verlauf ›</span></button>` : nothing}
-        <div class="leise p-fuss">Staffelung, Bericht, Meldungen und App stehen unter Einstellungen.</div>
-        <button class="zeile" @click=${() => p.gehe('einst')}><span class="blau">Alle Einstellungen</span><span class="chev">›</span></button>
+        <div class="leise p-fuss">Hier nur das Wichtigste dieser Baustelle – alles andere unter „Alle Einstellungen ›“.</div>
+        ${alle}
         ${knopf('Fertig', () => p.schliessen(), 'amber')}`;
 }
 

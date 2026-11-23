@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.8.190",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Change: **Jede Einstellung hat einen Ort** (UI-Bericht, Stufe 1, Maßnahme 3; Herbert 23.11.2026, Entscheidung 1): Die Heizregeln, Kleidung trocknen, Urlaub & Feiertage und „Je Container“ werden nur noch im Reiter Heizung bearbeitet. ⚙ › Heizung und ⚙ › Container & Geräte zeigen je Gruppe eine Kurzfassung; antippen springt in den Reiter Heizung mit der passenden Gruppe offen („Im Reiter Heizung bearbeiten ›“). Die **Solltemperatur ist die erste Zeile der Regeln** und nicht mehr zugeklappt.",
+      "Change: Die **Tür-Nachricht** steht nur noch unter ⚙ › Meldungen › Schwellen (in den Regeln ein Verweis). Die **Pumpen-Schwellen und ihre Meldungsschalter** stehen gemeinsam unter Pumpen › Überwachung; ⚙ › Pumpen zeigt die Automatik je Schacht und verweist dorthin, ⚙ › Meldungen ebenso. „Offline“ gilt für alle Geräte und steht deshalb mit seiner Schwelle unter ⚙ › Meldungen. „Baustelle bearbeiten“ führt oben und unten deutlich zu „Alle Einstellungen ›“.",
+      "Change: **Begriffe** (Maßnahme 4): Im Dialog „Bearbeiten“ eines Containers entfällt der Schalter „Nur bei Bedarf heizen“ – dort steht jetzt die Auswahl des Modus mit Erklärung. „Grundlage“ heißt „Heizgrenze verglichen mit“, „Heizt tatsächlich ab“ heißt „Zählt als „heizt“ ab“, „Warm ab“ ist erklärt, der Dialog „Wetter“ heißt „Wetter und Kalender“, und ⚙ in der Reiterleiste trägt oben den Text „Einstellungen“ (am Handy bleibt das Symbol).",
+      "Change: **Einstellungen geordnet** (Maßnahme 5): Die Gruppen stehen in Abschnitten – Baustelle · Heizung & Container · Pumpen · Strom & Kosten · Meldungen & Bericht · System. „Container & Geräte“ und „🔌 Geräte“ sind eine Gruppe mit den Reitern Container, Geräte und 📦 Inventar und dem Knopf „+ Gerät“ (Container wählen, dann „+ Gerät hinzufügen“ im Dialog „Bearbeiten“). Am Handy steht statt der scrollenden Chip-Leiste eine Liste der Gruppen; „‹ Alle Einstellungen“ bzw. ⚙ nochmal antippen führt zurück."
+    ]
+  },
+  {
     "version": "0.8.189",
     "datum": "2026-11-23",
     "punkte": [

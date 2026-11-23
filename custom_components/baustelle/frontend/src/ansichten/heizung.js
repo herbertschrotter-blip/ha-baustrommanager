@@ -173,12 +173,12 @@ function soll(p, z, st) {
 
 /* AN-0020: Gruppen der Regeln (Reihenfolge nach Tagesablauf) und welche Zeile (data-r) in welcher Gruppe steht – für „ändern ›“ */
 const REGEL_GRUPPEN = [['vor', '🌅', 'Vor der Arbeit', 'warm, wenn es losgeht', ['vorheizen', 'frueh', 'lernend', 'warm_vor', 'warm_max']],
-  ['arbeit', '👷', 'In der Arbeitszeit', 'auf das Soll halten', ['soll', 'toleranz', 'grenze', 'basis', 'boost', 'zusatz', 'tuer']],
+  ['arbeit', '👷', 'In der Arbeitszeit', 'auf das Soll halten', ['toleranz', 'grenze', 'basis', 'boost', 'zusatz', 'tuer']],
   ['nach', '🌇', 'Nach der Arbeit', 'warm halten, trocknen, übernehmen', ['nachheizen', 'warm_nach', 'trocknen', 'hand']],
   ['nacht', '🌙', 'Nachts, frei, Urlaub', 'nur Frostschutz', ['frost', 'urlaub']],
   ['immer', '⏱', 'Immer', 'Messung und Strom', ['zieht', 'fuehler', 'staffel']]];
 const DATA_R = { fruehstart: 'frueh' };   // data-r der Zeile → Schlüssel der Regel, wo sie abweichen
-const ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map(k => [k, id]))), baseline: 'bl' };
+const ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map(k => [k, id]))), baseline: 'bl', soll: 'soll' };   // Soll: immer offen, erste Zeile
 /** „ändern ›“ auf eine Regel: ihre Gruppe öffnen, damit die Zeile da ist */
 export const regelGruppeAuf = (p, z) => { p.s.rvAuf = ZEILE_GRUPPE[DATA_R[z] || z] || 'alle'; };   // unbekannt: alles auf, damit die Zeile da ist
 /* Zusammenfassung je Regel: [Name, Wert, an (true/false; null = nur Wert)] – feste Texte mit den Einstellungswerten */
@@ -196,9 +196,40 @@ function regelSumme(p) {
     warm_nach: lern.length ? ['Warm halten', e.warm_nach ? `${e.warm_nach} min` : 'bis Ende', null] : null,
     trocknen: ['Trocknen', 'nach Regen', null], hand: ['Hand übernehmen', `nach ${e.hand_nachfrist} min`, null],
     frost: ['Frostschutz', `unter ${grad(e.frost_temp)}`, !!e.frost], urlaub: ['Urlaub', { frost: 'nur Frostschutz', absenk: `absenken ${grad(e.absenk)}`, aus: 'alles aus' }[e.urlaub] || 'nur Frostschutz', null],
-    zieht: ['Heizt ab', `${e.zieht_w} W`, null], fuehler: ['Fühler hält', min(e.fuehler_halten), null],
+    zieht: ['„heizt“ ab', `${e.zieht_w} W`, null], fuehler: ['Fühler hält', min(e.fuehler_halten), null],
     staffel: ['Staffelung', `${e.nutzbar} % · max ${e.max_gleich}`, !!e.staffel], baseline: ['Baseline', 'Testläufe', !!e.baseline],
   };
+}
+
+/* Zusammenfassung einer Gruppe: eingeschaltete Regeln mit Wert, ausgeschaltete gesammelt */
+const summeVorlage = (S, keys) => { const L = keys.map(k => S[k]).filter(Boolean), an = L.filter(m => m[2] !== false), aus = L.filter(m => m[2] === false);
+  return html`${an.map((m, i) => html`${i ? ' · ' : ''}<span class="rv-s">${m[0]} <b>${m[1]}</b></span>`)}${aus.length ? html`${an.length ? ' · ' : ''}<span class="rv-s aus">${aus.map(m => m[0]).join(', ')} aus</span>` : nothing}`; };
+
+/* Kurzwert Soll: fest oder gleitend mit dem Wert von heute (laufzeit.soll_gleitend) */
+export const sollKurz = p => { const e = p.d.e, G = p.d.sollG;
+  return e.soll_art !== 'gleitend' ? `Soll ${de(e.soll)} °C` : G ? `Soll gleitend, heute ${de(G.soll, 1)} °C` : `Soll gleitend, noch ${de(e.soll)} °C`; };
+
+/* UI-Bericht Maßnahme 3 (Herbert 23.11.2026, Entscheidung 1): bearbeitet wird nur im Reiter Heizung › Regeln; die
+   Einstellungen zeigen je Gruppe die Zusammenfassung, antippen springt in den Reiter mit offener Gruppe */
+export function regelnKurzVorlage(p, cls) {
+  const S = regelSumme(p), bl = baselineRegeln(p) !== nothing, sprung = g => () => p.hzBearbeiten('regeln', g);
+  const zeile = (id, ic, titel, inhalt) => html`<button class="zeile rk-zeile" data-gr=${id} @click=${sprung(id)}><span class="rk-ic">${ic}</span><div><b>${titel}</b><div class="leise rv-sum">${inhalt}</div></div><span class="chev">›</span></button>`;
+  return html`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">Kurzfassung</span></div>
+      ${zeile('soll', '🌡', 'Solltemperatur', sollKurz(p).replace(/^Soll /, ''))}
+      ${REGEL_GRUPPEN.map(([id, ic, titel, , teile]) => zeile(id, ic, titel, summeVorlage(S, teile)))}
+      ${bl ? zeile('bl', '🧪', 'Baseline messen', summeVorlage(S, ['baseline'])) : nothing}
+      <button class="zeile" data-k="hz-bearbeiten" @click=${sprung(null)}><span class="blau">Im Reiter Heizung bearbeiten</span><span class="chev">›</span></button></div>`;
+}
+
+/* Kurzfassung eines Heizungs-Blocks (Trocknen, Urlaub, Je Container) mit Sprung in den Reiter Heizung */
+export function blockKurzVorlage(p, k, cls) {
+  const d = p.d, e = d.e, C = d.bereiche.filter(b => !b.pumpe), M = Object.fromEntries(MODI);
+  const T = {
+    trocknen: ['👕 Kleidung trocknen', d.trocknen ? d.trocknen.stufen_text : `ab ${de(e.tr_mm, 1)} mm: +${e.tr_laenger} min, morgen ${e.tr_frueher} min früher`],
+    urlaub: ['🏖 Urlaub & Feiertage', `${{ frost: 'nur Frostschutz', absenk: `absenken auf ${de(e.absenk)} °C`, aus: 'alles aus' }[e.urlaub] || 'nur Frostschutz'} · Feiertage ${e.feiertag_frei ? 'frei' : 'Arbeitstag'}`],
+    container: ['🏠 Je Container', C.map(b => `${b.name}: ${M[b.modus] || b.modus || '–'}${b.trocknen ? ' · 👕' : ''}${b.soll !== undefined ? ` · ${de(p.sollVon(b))} °C` : ''}`).join(' · ') || 'keine Container'],
+  }[k];
+  return html`<div class=${cls} data-kurz=${k}><button class="zeile rk-zeile" @click=${() => p.hzBearbeiten(k)}><div><b>${T[0]}</b><div class="leise">${T[1]}</div></div><span class="blau rk-sprung">Im Reiter Heizung bearbeiten ›</span></button></div>`;
 }
 
 /* AN-0012: Regeln nach Tagesablauf gruppiert (Mockup regeln-varianten.html, Variante B, abgenommen 01.10.2026) */
@@ -210,23 +241,23 @@ function regelnInhalt(p) {
   const R = {
     vorheizen: z('Vorheizen', html`vor Arbeitsbeginn, damit es warm ist${nichtLern}`, st('vorheizen', 5, min), false, 'vorheizen'),
     frueh: html`${z('Kälte-Frühstart', html`unter ${minus(e.frueh_temp)} zusätzlich früher${nichtLern}`, bool('fruehstart'), false, 'fruehstart')}${e.fruehstart ? html`${z('wenn morgens kälter als', '', st('frueh_temp', 1, minus), true)}${z('so viel früher', '', st('frueh_min', 5, min), true)}` : nothing}`,
-    lernend: z('🧠 Lernende Container', `heizen selbst so früh, dass das Soll rechtzeitig erreicht ist – statt Vorheizen, Kälte-Frühstart und Nachheizen. Bis genug gelernt ist, gelten die Werte oben.${lernend.length ? ` Jetzt: ${lernend.map(b => b.name).join(', ')}.` : ' Gilt für Container mit Fühler, Modus Thermostat und lernender Regelung.'}`, ''),
+    lernend: z('🧠 Lernende Container · „Warm ab“', `heizen selbst so früh, dass das Soll rechtzeitig erreicht ist – statt Vorheizen, Kälte-Frühstart und Nachheizen. Bis genug gelernt ist, gelten die Werte oben.${lernend.length ? ` Jetzt: ${lernend.map(b => b.name).join(', ')}.` : ' Gilt für Container mit Fühler, Modus Thermostat und lernender Regelung.'}`, ''),
     warm_vor: z('Soll erreicht', 'vor Arbeitsbeginn, z. B. zum Umziehen', st('warm_vor', 5, v => v ? `${v} min vorher` : 'bei Beginn'), true),
     warm_max: z('Frühestens', 'vor Arbeitsbeginn – Grenze, falls der Raum sehr kalt ist', st('warm_max', 15, v => `${v} min vorher`), true),
     soll: soll(p, z, st),
     toleranz: z('Schaltabstand ± um das Soll', 'Thermostat: ein unter Soll − Abstand, aus über Soll + Abstand', st('toleranz', .1, v => `± ${de(v, 1)} °C`), true),
     grenze: z('Heizgrenze', 'nicht heizen, wenn es wärmer ist', st('grenze', .5, grad)),
-    basis: z('Grundlage', '', html`<div class="seg klein">${['jetzt', 'Tageshöchstwert'].map(v => html`<button data-v=${v} class=${e.basis === v ? 'on' : ''} @click=${() => p.heizgrenzeBasis(v)}>${v}</button>`)}</div>`, true),
+    basis: z('Heizgrenze verglichen mit', html`<b>jetzt</b>: der Außentemperatur gerade · <b>Tageshöchstwert</b>: dem wärmsten Wert, der heute vorhergesagt ist – damit an einem warmen Tag auch morgens nicht geheizt wird`, html`<div class="seg klein">${['jetzt', 'Tageshöchstwert'].map(v => html`<button data-v=${v} class=${e.basis === v ? 'on' : ''} @click=${() => p.heizgrenzeBasis(v)}>${v}</button>`)}</div>`, true),
     boost: z('⚡ Schnell aufheizen', 'alle Heizkörper eines Containers zugleich, Vorrang in der Staffelung – bis zum Soll, ohne Fühler für', st('boost_min', 5, min)),
     zusatz: !zusatzMoeglich(C) ? nothing : html`${z('🔥 Zusatz-Heizkörper', `in Containern mit „Zusatz nur bei Bedarf“: zuerst heizt einer, der Zusatz kommt dazu, wenn …${(() => { const n = C.filter(b => b.stufenAn); return n.length ? ` Jetzt: ${n.map(b => b.name).join(', ')}.` : ' Einschalten im Container unter Bearbeiten.'; })()}`, '')}${z('… der Raum weiter unter dem Soll ist als', '', st('stufen_abstand', .5, grad), true)}${z('… einer schon so lange läuft', '', st('stufen_min', 5, min), true)}${z('… und es dabei weniger wärmer wurde als', '', st('stufen_anstieg', .1, v => `${de(v)} °C`), true)}${z('… es draußen kälter ist als (beide von Anfang an)', '', st('stufen_kalt', 1, minus), true)}`,
-    tuer: html`${z('🚪 Tür offen', 'Heizung pausieren nach', st('tuer_pause', 1, min), false, 'tuer')}${z('Nachricht nach', '', st('tuer_melden', 5, min), true)}`,
+    tuer: html`${z('🚪 Tür offen', 'Heizung pausieren nach', st('tuer_pause', 1, min), false, 'tuer')}${z(`Nachricht nach ${e.tuer_melden} min`, 'eingestellt unter Einstellungen › Meldungen', html`<button class="rv-link" data-k="tuer-meldung" @click=${() => p.einstGruppe('meldungen')}>Meldungen ›</button>`, true)}`,   // UI-Bericht Maßnahme 3: nur ein Ort
     nachheizen: z('Nachheizen', html`nach Arbeitsende, jeden Tag${nichtLern}`, st('nachheizen', 5, min), false, 'nachheizen'),
     warm_nach: z('Warm halten (lernende)', 'nach Arbeitsende; Kleidung trocknen kommt dazu', st('warm_nach', 5, v => v ? `${v} min länger` : 'bis Ende'), true),
     trocknen: z('👕 Kleidung trocknen', `nach Regen in der Arbeitszeit · ${p.d.trocknen ? p.d.trocknen.stufen_text : `ab ${de(e.tr_mm, 1)} mm: +${e.tr_laenger} min, morgen ${e.tr_frueher} min früher`}`, link(() => p.hzAuf('trocknen'))),
     hand: z('✋ Handbetrieb übernehmen nach', 'Läuft ein Heizkörper zu lange von Hand, kommt eine Nachricht – ohne „So lassen“ übernimmt die Automatik so viel später', st('hand_nachfrist', 5, min)),
     frost: html`${z('❄ Frostschutz', 'hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit', bool('frost'), false, 'frost')}${e.frost ? html`${z('ein unter', '', st('frost_temp', .5, grad), true)}${z('aus über', '', st('frost_aus', .5, grad), true)}${z('ohne Fühler nach Außentemperatur', e.frost_aussen === null ? 'aus – Container ohne Fühler bekommen keinen Frostschutz' : 'der Heizkörperthermostat regelt dann selbst', html`<span class="fa-sw">${schalterVorlage(e.frost_aussen !== null, () => p.frostAussenUmschalten())}</span>`, true)}${e.frost_aussen === null ? nothing : z('ein, wenn draußen unter', 'aus erst 2 °C darüber', st('frost_aussen', 1, minus), true)}${z('auch bei Automatik aus', 'schaltet dann nur den Frostschutz, sonst nichts', bool('frost_immer'), true)}` : nothing}`,
     urlaub: z('🏖 Urlaub & freie Feiertage', { frost: 'nur Frostschutz', absenk: `absenken auf ${de(e.absenk)} °C`, aus: 'alles aus' }[e.urlaub], link(() => p.hzAuf('urlaub'))),
-    zieht: z('Heizt tatsächlich ab', 'Leistung, ab der ein Heizkörper als „heizt“ zählt – Heizzeit geheizt, Heiztage, Warm ab, Lernen, Wann heizt was', st('zieht_w', 5, v => `${v} W`)),
+    zieht: z('Zählt als „heizt“ ab', 'Ein Heizkörper gilt erst als heizend, wenn er mehr als diese Leistung zieht – darunter hat meist sein eigener Thermostat abgeschaltet. Zählt für Heizzeit, Heiztage, Lernen und „Wann heizt was“', st('zieht_w', 5, v => `${v} W`)),
     fuehler: z('🌡 Fühler ohne Wert', 'meldet ein Fühler nichts, gilt sein letzter Wert noch so lange – danach regelt der Container wie ohne Fühler', st('fuehler_halten', 5, min)),
     staffel: z('⚡ Staffelung', e.staffel ? `${e.nutzbar} % je Anschluss nutzbar · höchstens ${e.max_gleich} gleichzeitig · mindestens ${e.min_lauf} min an, ${e.min_pause} min Pause` : 'aus – alle Heizkörper dürfen zugleich', link(() => p.einstGruppe('strom'))),
   };
@@ -247,11 +278,11 @@ function regelnInhalt(p) {
     return html`<div class="rv-gr ${auf ? 'auf' : ''}" data-gr=${id}><button class="rv-gk" aria-expanded=${auf ? 'true' : 'false'} @click=${() => { p.s.rvAuf = auf ? null : id; p.neuZeichnen(); }}>
         <span class="rv-gic">${ic}</span><span class="rv-gt"><b>${titel} <span class="leise rv-unter">${unter}</span></b><span class="rv-sum">${sum}</span></span><span class="chev">${auf ? '⌃' : '⌄'}</span></button>
       ${auf ? inhalt() : nothing}</div>`; };
-  const sum = keys => { const L = keys.map(k => S[k]).filter(Boolean), an = L.filter(m => m[2] !== false), aus = L.filter(m => m[2] === false);
-    return html`${an.map((m, i) => html`${i ? ' · ' : ''}<span class="rv-s">${m[0]} <b>${m[1]}</b></span>`)}${aus.length ? html`${an.length ? ' · ' : ''}<span class="rv-s aus">${aus.map(m => m[0]).join(', ')} aus</span>` : nothing}`; };
+  const sum = keys => summeVorlage(S, keys);
   const karteG = (id, ic, titel, unter, teile) => gruppe(id, ic, titel, unter, sum(teile), () => html`<div class="rv-karte">${teile.map(k => R[k])}</div>`);
   const bl = baselineRegeln(p);
-  return html`${REGEL_GRUPPEN.map(([id, ic, titel, unter, teile]) => karteG(id, ic, titel, unter, teile))}
+  // UI-Bericht Maßnahme 3: die Solltemperatur ist der wichtigste Wert – erste Zeile, nicht zugeklappt
+  return html`<div class="rv-gr auf rv-soll" data-gr="soll"><div class="rv-karte">${R.soll}</div></div>${REGEL_GRUPPEN.map(([id, ic, titel, unter, teile]) => karteG(id, ic, titel, unter, teile))}
     ${bl === nothing ? nothing : gruppe('bl', '🧪', 'Baseline messen', 'Testläufe ohne Automatik', sum(['baseline']), () => bl)}
     ${gruppe('fest', '📐', 'Feste Regeln', 'bewährte Schwellen, nicht änderbar', html`<span class="leise">${FEST.length} feste Schwellen</span>`,
       () => html`<div class="rv-karte">${FEST.map(([t, w, x]) => html`<div class="rv-fest"><span>${t}</span><b>${w}</b><div class="leise">${x}</div></div>`)}</div>`)}${unsafeHTML(erkl(e.erklaer, 'Vorheizen und Nachheizen gelten jeden Arbeitstag. Die Verlängerungen zählen zusammen: vor der Arbeit Vorheizen + Kälte-Frühstart + früher nach Regen, danach Nachheizen + Kleidung trocknen (AN-0003). Die Heizgrenze verhindert Heizen an warmen Tagen. Der Frostschutz springt unter „ein“ an und hört erst über „aus“ wieder auf, damit der Heizkörper nicht dauernd ein- und ausschaltet.'))}`;

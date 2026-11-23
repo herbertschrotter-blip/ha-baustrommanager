@@ -240,6 +240,7 @@ const GLAS_CSS = `:host { display: block; height: 100%; }
 .glas-nav { position: absolute; left: 14px; right: 14px; bottom: 22px; display: flex; justify-content: space-around; padding: 6px; z-index: 5; }
 .glas-nav button { flex: 1; text-align: center; padding: 8px 2px; border-radius: 16px; font-size: 13px; color: var(--ink2); transition: background .2s, color .2s; }
 .glas-nav button.nav-ic { flex: 0 0 48px; display: grid; place-items: center; padding: 5px 2px; }
+.glas-nav .nav-t { display: none; }
 .glas-nav button.nav-ic svg { display: block; transition: transform .4s cubic-bezier(.3,.7,.2,1); } .glas-nav button.nav-ic:hover svg { transform: rotate(60deg); }
 .glas-nav button.on { color: var(--ink); font-weight: 700; background: rgba(255,255,255,.16); }
 .hell .glas-nav button.on { background: rgba(255,255,255,.7); }
@@ -589,6 +590,9 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .erkl { font-size: 12px; color: var(--ink2); background: rgba(255,255,255,.06); border-radius: 10px; padding: 8px 10px; margin-top: 8px; line-height: 1.45; }
 .hell .erkl { background: rgba(0,0,0,.04); }
 .glas-nav.sechs button { font-size: 12px; padding-left: 1px; padding-right: 1px; } .glas-nav.sechs button.nav-ic { flex-basis: 40px; }
+/* UI-Bericht Maßnahme 4: oben (breit) trägt ⚙ den Text „Einstellungen“, am Handy bleibt das Symbol (title/aria-label) */
+@container (min-width: 700px) { .glas-nav { width: 680px; } .glas-nav.glas-nav button.nav-ic { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 5px; padding: 5px 12px; }
+  .glas-nav .nav-t { display: inline; } .glas-nav button.nav-ic:hover svg { transform: none; } }
 .modus-z { flex-wrap: wrap; } .modus-z > div:first-child { flex: 1 1 200px; } .modus-z .seg { flex: 1 1 100%; }
 .seg button[disabled] { opacity: .35; cursor: not-allowed; }
 .jc-modus { font: inherit; font-size: 12px; color: var(--ink); background: rgba(255,255,255,.1); border: 1px solid var(--gridc); border-radius: 9px; padding: 4px 6px; }
@@ -766,7 +770,18 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .ev-nav .ev-trenn { height: 1px; background: rgba(127,127,127,.25); margin: 6px 8px; }
 .ev-inhalt > * + * { margin-top: 12px; }
 .ev-titel { display: flex; align-items: center; gap: 10px; margin: 2px 4px 10px; } .ev-titel b { font-size: 20px; } .ev-titel .leise { font-size: 12px; }
-.ev-chips { position: relative; display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; } .ev-chips button { flex: 0 0 auto; }
+.ev-abschnitt { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); padding: 12px 10px 3px; } .ev-abschnitt.erster { padding-top: 4px; }
+/* UI-Bericht Maßnahme 5: am Handy eine senkrechte Liste der Gruppen nach Abschnitten */
+.ev-liste > * + * { margin-top: 12px; } .ev-lz { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; text-align: left; }
+.ev-lz .ev-ic { font-size: 18px; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: rgba(127,127,127,.16); }
+.ev-lz .leise { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .ev-lz > div { min-width: 0; }
+.ev-zurueck { margin: 0 0 10px; }
+.g-kopf { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .g-kopf .g-reiter { flex: 1 1 auto; }
+/* UI-Bericht Maßnahme 3: Kurzfassung der Heizregeln in den Einstellungen */
+.rk-zeile { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; text-align: left; } .rk-zeile > div { min-width: 0; }
+.rk-zeile:not(:has(.rk-ic)) { grid-template-columns: 1fr auto; } .rk-ic { font-size: 18px; } .rk-sprung { font-size: 13px; white-space: nowrap; }
+@media (max-width: 520px) { .rk-zeile:not(:has(.rk-ic)) { grid-template-columns: 1fr; } }
+.rv-soll { margin-bottom: 8px; } .rv-soll .rv-karte { padding-top: 8px; }
 .ev-dev-reiter { margin-bottom: 10px; }
 @media (max-width: 700px) { .ev-sl { grid-template-columns: 1fr; } .ev-nav { display: none; } }
 .schmal .ev-sl { grid-template-columns: 1fr; } .schmal .ev-nav { display: none; }
@@ -995,8 +1010,6 @@ const GRENZEN = { nutzbar: [10, 100], max_gleich: [1, 50], min_lauf: [1, 120], m
   vorheizen: [0, 240], nachheizen: [0, 240], soll: [5, 30], gleit_min: [5, 30], gleit_max: [5, 30], gleit_je: [0, 0.5], gleit_bezug: [0, 20], gleit_tage: [1, 7], grenze: [0, 30], frueh_temp: [-30, 20], frueh_min: [0, 240], frost_temp: [-5, 15],
   tr_mm: [0, 100], tr_laenger: [0, 480], tr_frueher: [0, 240], boost_min: [5, 480], toleranz: [0.1, 3], hand_nachfrist: [0, 240], fuehler_halten: [0, 120], zieht_w: [5, 500],
   frost_aus: [-3, 20], absenk: [5, 20], offline_min: [1, 1440], trocken_w: [5, 5000], dauer_min: [5, 1440], zyklen_h: [2, 200], kalt_min: [15, 1440], hand_h: [1, 240], warm_vor: [0, 240], warm_nach: [0, 240], frost_aussen: [-20, 10], warm_max: [15, 480], stufen_abstand: [0.5, 10], stufen_min: [5, 240], stufen_anstieg: [0, 5], stufen_kalt: [-30, 15] };
-const MODUS_TEXT = { plan: 'an in der Heizzeit – der Thermostat am Heizkörper regelt', thermo: 'in der Heizzeit auf das Soll nach dem Fühler',
-  bedarf: 'nur per Schalter oder Termin, sonst Frostschutz', hand: 'die Automatik schaltet nicht – Schalter unten', aus: 'alles aus, Frostschutz bleibt' };
 const STUNDEN = [...Array(24)].map((_, h) => String(h).padStart(2, '0'));
 /* Abschnitte der Integration → Klassen der Zeitleiste im Mockup */
 const ABSCHNITT = { fruehstart: 'extra', vorheizen: 'vor', nachheizen: 'vor', arbeitszeit: 'heiz', trocknen: 'trock', termin: 'termin', fenster: 'eigen' };
@@ -1866,7 +1879,7 @@ class BaustellePanel extends LitElement {
         const r = await this.dialog('config/config_entries/subentries/flow', { handler: [d.entry, 'bereich'], subentry_id: x.id }, this.bereichDaten(e.name.trim(), x.art || 'container', e.fuehler));
         if (this.flowFehler(r)) return r; }
       const call = (k, w) => this._hass.callWS({ type: 'baustelle/setzen', entry_id: d.entry, pfad: pfad(k), wert: w });
-      if (e.bedarf !== !!eb.bedarf) await call('bedarf', e.bedarf);
+      if (e.modus && e.modus !== x.modus) await call('modus', e.modus);   // UI-Bericht Maßnahme 4: Modus statt Schalter „Nur bei Bedarf“
       if (x.groesse) { const m2 = e.groesseArt === 'einzel' ? null : e.groesseArt === 'doppel' ? x.groesse.typen.doppel.m2 : (zahl(e.m2) && Number(e.m2) >= 4 ? Number(e.m2) : undefined);   // AN-0014
         if (m2 !== undefined && (m2 ?? x.groesse.typen.einzel.m2) !== x.groesse.m2) await call('groesse_m2', m2); }   // nur bei anderer Fläche (ohne Angabe = Einzel)
       if ((e.tuer || null) !== (eb.tuer || null)) await call('tuer', e.tuer || null);
@@ -1917,7 +1930,7 @@ class BaustellePanel extends LitElement {
   aussehenAuf(x) { return this.unterDialog({ art: 'aussehen', id: x.id }); }   // BSM-032
   bereichEntwurf(x, s) {   // Entwurf für „Container bearbeiten“: einmal aus den Daten, danach bleibt er beim Neuzeichnen stehen
     const d = this.d;
-    return s.edit ||= { bedarf: !!x.bedarf, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
+    return s.edit ||= { modus: x.modus || 'plan', name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
       groesseArt: (x.groesse && x.groesse.art) || 'einzel', m2: x.groesse ? x.groesse.m2 : null,
       warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn, primaer: x.primaer || '',   // AN-0015
       lernen: !!(x.lern && x.lern.an), trocknen: !!x.trocknen,   // AN-0018: Lernen und Trocknen stehen in „Bearbeiten“, gespeichert mit „Speichern“
@@ -1981,8 +1994,14 @@ class BaustellePanel extends LitElement {
     S.sheet = { art: 'bs-bearbeiten' }; return this.neuZeichnen();
   }
   /* Einstellungen (src/ansichten/einstellungen.js, BSM-022 3e); Übersicht und Einblendungen nutzen sie über klick() */
+  /* Reiter ⚙: am Handy ein zweites Antippen zeigt wieder die Liste der Gruppen (UI-Bericht Maßnahme 5) */
+  navEinst(schonDa) { if (schonDa && this._narrow) this.s.evGruppe = null; return this.gehe('einst'); }
   einstGruppeWahl(k) { this.s.evGruppe = k; this.s.evDev = null; return this.neuZeichnen(true); }
   bereichEinst(id) { this.s.cid = id; this.s.sheet = { art: 'bereich' }; return this.neuZeichnen(); }
+  /* „+ Gerät“ (Einstellungen › Container & Geräte): Container gewählt → „Bearbeiten“ mit einer neuen Gerätezeile */
+  geraetNeuIn(id) { const b = this.d.bereiche.find(x => x.id === id); if (!b) return undefined;
+    this.s.cid = id; const s = { art: 'bereich' }, e = this.bereichEntwurf(b, s);
+    e.geraete.push({ neu: true, schalter: '', n: '', typ: b.pumpe ? 'Pumpe' : 'Ölradiator' }); this.s.sheet = s; return this.neuZeichnen(); }
   firmaAuf(id) { const d = this.d, f = id ? this.firma(id) : null;
     this.s.sheet = { art: 'firma', form: { id: f && f.id, name: (f && f.name) || '', neu: [], container: f ? d.bereiche.filter(x => (x.firma || 'eigen') === f.id).map(x => x.id) : [] } }; return this.neuZeichnen(); }
   anschlussAuf(id) { const d = this.d, x = id ? this.anschluss(id) : null;
@@ -1997,6 +2016,10 @@ class BaustellePanel extends LitElement {
   /* Reiter Heizung (src/ansichten/heizung.js, BSM-022 3d); Einstellungen und Einblendungen nutzen sie über klick() */
   automatikUmschalten() { const e = this.d.e; return this.setzen(['automatik'], !e.auto, !e.auto ? 'Automatik ein' : 'Automatik aus – Geräte bleiben, wie sie sind'); }
   hzAuf(k) { this.s.sheet = { art: 'hz', k }; return this.neuZeichnen(); }
+  /* UI-Bericht Maßnahme 3: aus den Einstellungen in den Reiter Heizung springen, Block (und Regel-Gruppe) offen */
+  hzBearbeiten(k, gruppe = null) {
+    if (!this._mitHeizung) return this.hzAuf(k);
+    this.gehe('heizung'); if (k === 'regeln') this.s.rvAuf = gruppe; this.s.sheet = { art: 'hz', k }; return this.neuZeichnen(); }
   /* J4b: Baseline-Läufe (ansichten/baseline.js) – einschalten, Kostenrahmen in 10-€-Schritten (0–1000 wie panel.py), absagen bzw. abbrechen */
   baselineUmschalten() { const an = !this.d.e.baseline; return this.setzen(['heizung', 'baseline'], an, an ? 'Baseline messen ein – Läufe werden am Vortag angekündigt' : 'Baseline messen aus'); }
   baselineRahmen(schritt) { const alt = this.d.e.baseline_eur, wert = Math.min(1000, Math.max(0, alt + schritt)); return wert === alt ? undefined : this.setzen(['heizung', 'baseline_eur_monat'], wert); }
@@ -2086,7 +2109,8 @@ class BaustellePanel extends LitElement {
   }
   /* Aktionen der Ansichten (Lit-Vorlagen rufen sie direkt, die alten über klick(); BSM-022 3c) */
   containerOeffnen(id) { this.s.chart = 'temp'; this.s.cZr = null; return this.gehe('container', id); }
-  einstGruppe(g) { this.s.evGruppe = g; return this.gehe('einst'); }
+  einstGruppe(g, reiter = null) { this.s.evGruppe = g; if (reiter) this.s.gerReiter = reiter; return this.gehe('einst'); }
+  einstUebersicht() { this.s.evGruppe = null; return this.gehe('einst'); }   // breit: erste Gruppe, schmal: Liste der Gruppen
   bereichAuto(x) { return this.setzen(['bereiche', x.id, 'auto'], !x.auto); }
   geraetSchalten(b, i) { const g = b.geraete[i]; return this.aktion('schalten', { geraet: g.id, an: !g.an }, b.auto && this.d.e.auto ? 'Handbetrieb bis zum nächsten Schaltpunkt' : undefined); }
   stufeSchritt(k, schritt) {   // Stepper einer Einstellung: in den Grenzen, Frostschutz „ein unter“ < „aus über“
@@ -2171,7 +2195,6 @@ class BaustellePanel extends LitElement {
      Aufrufe werden zusammengefasst; neu = Ansicht gewechselt (oben beginnen, Einblend-Animation) */
   neuZeichnen(neu = false) { if (neu) this._neu = true; this.requestUpdate(); return this.updateComplete; }
   willUpdate() {
-    const evc = this.ui && this.ui.querySelector('.ev-chips'); this._evPos = evc ? evc.scrollLeft : 0;   // FE-0013: Chip-Leiste behält ihre Position
     if (this.ui) this.ui.classList.toggle('still', !this._neu && this._view === this.s.view);   // Neuzeichnen ohne Einblend-Animationen
     this._sheetVorher = this._sheetArt; this._view = this.s.view; this._sheetArt = this.s.sheet && this.s.sheet.art;
     // Reiter nach den Funktionen der Baustelle (api §8): Heizung nur mit Funktion heizung, Pumpen nur mit Funktion
@@ -2217,7 +2240,7 @@ class BaustellePanel extends LitElement {
     return html`<div class="scroll">${keyed(`${S.view}:${S.cid || ''}`, html`<div class="seite ${neu ? 'rein' : ''}">${this.versionHinweis()}${this.nurLesenHinweis()}${seite}</div>`)}</div>
       ${this._narrow ? html`<button class="menue-knopf glas-panel" aria-label="Seitenleiste" title="Seitenleiste" @click=${() => this.dispatchEvent(new Event('hass-toggle-menu', { bubbles: true, composed: true }))}>☰</button>` : nothing}
       <nav class="glas-nav glas-panel ${tabs.length > 5 ? 'sechs' : ''}">${tabs.map(([k, t]) => k === 'einst'
-        ? html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''} nav-ic" aria-label="Einstellungen" title="Einstellungen" @click=${() => this.gehe(k)}>${unsafeHTML(ICON_COG)}</button>`
+        ? html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''} nav-ic" aria-label="Einstellungen" title="Einstellungen" @click=${() => this.navEinst(aktivTab === 'einst')}>${unsafeHTML(ICON_COG)}<span class="nav-t">Einstellungen</span></button>`
         : html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''}" @click=${() => this.gehe(k)}>${t}</button>`)}</nav>
       <div class="schleier ${S.sheet ? 'an' : ''}" @click=${() => this.schliessen()}></div>
       <div class="sheet glas-panel ${S.sheet ? 'an' : ''}${S.sheet && INV_BREIT.includes(S.sheet.art) ? ' breit' : ''}">${melden && this.roh && S.sheet && S.sheet.art !== 'melden' ? meldenKnopf('im-sheet', () => this.meldenAuf()) : nothing}${sheet}</div>
@@ -2229,9 +2252,6 @@ class BaustellePanel extends LitElement {
     this.ui.classList.toggle('nur-lesen', this.nurLesen());
     const sc = this.ui.querySelector('.scroll'); if (sc && this._neu) sc.scrollTop = 0;
     const sh = this.ui.querySelector('.sheet'); if (sh && this._sheetArt !== this._sheetVorher) sh.scrollTop = 0;
-    const evc2 = this.ui.querySelector('.ev-chips');
-    if (evc2) { evc2.scrollLeft = this._evPos; const on = evc2.querySelector('.chip.amber');   // gewählte Kategorie sichtbar, mittig, wenn sie draußen liegt
-      if (on && (on.offsetLeft < evc2.scrollLeft || on.offsetLeft + on.offsetWidth > evc2.scrollLeft + evc2.clientWidth)) evc2.scrollLeft = Math.max(0, on.offsetLeft - (evc2.clientWidth - on.offsetWidth) / 2); }
     this._neu = false;
   }
   /* Lit-Teile neu zeichnen (Über, Melden) – unveränderte alte Ansichten bleiben dabei stehen */

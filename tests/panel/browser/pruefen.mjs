@@ -177,15 +177,17 @@ await fall('B3 Scrollschutz', browser, async (page, erwarte) => {
   const snach = await ruhig(page, D, '.sheet', 'scrollTop');
   erwarte('Einblendung: Position bleibt (±1 px)', svor.top > 20 && Math.abs(snach - svor.top) <= 1 && neu2, `vor ${JSON.stringify(svor)}, nach ${snach}, verarbeitet ${neu2}, unter der Maus ${unter}, Kasten ${JSON.stringify(sbox)}`);
   await klick(page, `${D} >>> .schleier.an`);
-  // Chipleiste der Einstellungen (Handy)
-  await klick(page, `${T} >>> nav button[data-v="einst"]`);
-  await klick(page, `${T} >>> .ev-chips [data-v="firmen"]`); await warte(200);
-  const box = await (await page.$(`${T} >>> .ev-chips`)).boundingBox();
+  // Liste der Einstellungen (Handy, UI-Bericht Maßnahme 5 statt der Chipleiste): Position bleibt beim Neuladen
+  await klick(page, `${T} >>> nav button[data-v="einst"]`); await warte(300);
+  await page.waitForSelector(`${T} >>> .ev-liste .ev-lz[data-v="firmen"]`, { timeout: 5000 });
+  const box = await (await page.$(`${T} >>> .scroll`)).boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  const cvor = await rad(page, T, '.ev-chips', 'scrollLeft', { deltaX: 30 });
+  const cvor = await rad(page, T, '.scroll', 'scrollTop', { deltaY: 300 });
   const neu3 = await update(T, 'Polier-Contain4r');
-  const cnach = await ruhig(page, T, '.ev-chips', 'scrollLeft');
-  erwarte('Chipleiste: Position bleibt (±1 px)', cvor > 0 && Math.abs(cnach - cvor) <= 1, `vor ${cvor}, nach ${cnach}, verarbeitet ${neu3}`);
+  const cnach = await ruhig(page, T, '.scroll', 'scrollTop');
+  erwarte('Liste der Einstellungen: Position bleibt (±1 px)', cvor > 0 && Math.abs(cnach - cvor) <= 1, `vor ${cvor}, nach ${cnach}, verarbeitet ${neu3}`);
+  await klick(page, `${T} >>> .ev-liste .ev-lz[data-v="firmen"]`); await warte(200);
+  erwarte('Liste: Gruppe öffnet mit „‹ Alle Einstellungen“', !!(await page.$(`${T} >>> .ev-zurueck`)), '');
 });
 
 /* B4 Container live: (1) neue 5-Minuten-Statistik → Kennzahlen neu, Position bleibt, Rest bleibt (seit 3d: dieselben Knoten,

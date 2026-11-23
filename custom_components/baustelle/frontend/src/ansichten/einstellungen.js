@@ -6,8 +6,8 @@ import { html, nothing } from 'lit';
 import { MONATE, de, zahl } from '../hilfen.js';
 import { BEREICH_FARBEN } from '../symbole.js';
 import { kopfVorlage, schalterVorlage, stepperVorlage } from './allgemein.js';
-import { HZ_BLOECKE } from './heizung.js';
-import { ARTEN } from '../tabellen.js';
+import { blockKurzVorlage, regelnKurzVorlage, sollKurz } from './heizung.js';
+import { ARTEN, MODI } from '../tabellen.js';
 import { preisListeVorlage } from './einblendungen-baustelle.js';
 import { devVorlage } from './dev.js';
 import { ueberVorlage } from '../ueber.js';
@@ -29,15 +29,20 @@ function baustelle(p) {
       ${liste('Wetter und Kalender', html`${knopf('Wetter', o.wetter ? nm(o.wetter) : 'keins gewählt', auf('wetterquelle'), 'nur-admin')}${knopf('Außentemperatur', o.temp_sensor ? nm(o.temp_sensor) : 'aus der Vorhersage', auf('wetterquelle'), 'nur-admin')}${knopf('Regenmenge', o.regen_sensor ? nm(o.regen_sensor) : 'aus der Vorhersage', auf('wetterquelle'), 'nur-admin')}${knopf('Urlaub', o.urlaub_kalender ? `Kalender „${nm(o.urlaub_kalender)}“` : 'kein Kalender', auf('wetterquelle'), 'nur-admin')}${knopf('Feiertage', o.feiertag_kalender ? nm(o.feiertag_kalender) : 'kein Kalender', auf('wetterquelle'), 'nur-admin')}${knopf('Termine (Bei Bedarf)', tk ? nm(tk) : 'kein Kalender', auf('wetterquelle'), 'nur-admin')}`)}`;
 }
 
-const heizung = p => html`${liste('Automatik', zeile('Automatik', schalterVorlage(p.d.e.auto, () => p.automatikUmschalten()), 'die Integration schaltet die Heizungen nach Plan und Regeln'))}${['regeln', 'trocknen', 'urlaub'].map(k => HZ_BLOECKE[k](p, 'glas-panel block'))}${liste('Zeiten', html`${knopf('Arbeitszeit', 'ändern, neue ab Datum', () => p.hzAuf('az'))}${knopf('Ausnahmen', 'einmalig', () => p.hzAuf('ausn'))}${knopf('Heizplan · diese Woche', 'ansehen', () => p.hzAuf('plan'))}`)}`;
+/* UI-Bericht Maßnahme 3 (Entscheidung 1): Heizregeln, Trocknen und Urlaub werden im Reiter Heizung bearbeitet, hier die Kurzfassung */
+const heizung = p => html`${liste('Automatik', zeile('Automatik', schalterVorlage(p.d.e.auto, () => p.automatikUmschalten()), 'die Integration schaltet die Heizungen nach Plan und Regeln'))}${regelnKurzVorlage(p, 'glas-panel block')}${['trocknen', 'urlaub'].map(k => blockKurzVorlage(p, k, 'glas-panel liste'))}${liste('Zeiten', html`${knopf('Arbeitszeit', 'ändern, neue ab Datum', () => p.hzBearbeiten('az'))}${knopf('Ausnahmen', 'einmalig', () => p.hzBearbeiten('ausn'))}${knopf('Heizplan · diese Woche', 'ansehen', () => p.hzBearbeiten('plan'))}`)}`;
 
-const container = p => { const d = p.d; return html`<div class="glas-panel liste"><div class="gruppe">Container und Geräte</div>
-        ${d.bereiche.map(b => html`<button class="zeile" data-id=${b.id} @click=${() => p.bereichEinst(b.id)}><span><i class="farbpunkt" style="background:${BEREICH_FARBEN[b.f % 6]}"></i>${b.name}</span><span class="leise">${b.geraete.length} ${b.pumpe ? 'Pumpen' : 'Geräte'} ›</span></button>`)}
-        <button class="zeile nur-admin" @click=${p.nurAdmin(() => p.einblenden('container-neu'))}><span class="blau">+ Container oder Schacht</span></button></div>${HZ_BLOECKE.container(p, 'glas-panel block')}`; };
+/* Reiter „Container“ der Gruppe Container & Geräte: Liste, + Container, Kurzfassung Je Container (bearbeitet im Reiter Heizung) */
+const container = p => { const d = p.d, M = Object.fromEntries(MODI); return html`<div class="glas-panel liste"><div class="gruppe">Container und Schächte</div>
+        ${d.bereiche.map(b => html`<button class="zeile" data-id=${b.id} @click=${() => p.bereichEinst(b.id)}><span><i class="farbpunkt" style="background:${BEREICH_FARBEN[b.f % 6]}"></i>${b.name}</span><span class="leise">${b.pumpe ? '' : `${M[b.modus] || b.modus || ''} · `}${b.geraete.length} ${b.pumpe ? 'Pumpen' : 'Geräte'} ›</span></button>`)}
+        <button class="zeile nur-admin" @click=${p.nurAdmin(() => p.einblenden('container-neu'))}><span class="blau">+ Container oder Schacht</span></button></div>${d.bereiche.some(b => !b.pumpe) ? blockKurzVorlage(p, 'container', 'glas-panel liste') : nothing}`; };
 
+/* UI-Bericht Maßnahme 3: Schwellen und ihre Meldungen stehen im Reiter Pumpen › Überwachung; hier die Automatik je Schacht */
 function pumpen(p) {
-  const st = (k, s, fmt) => stepperVorlage(p, k, s, fmt), P = p.d.bereiche.filter(b => b.pumpe);
-  return liste('Überwachung der Pumpen', html`${zeile('Offline – melden nach', st('offline_min', 1, v => `${v} min`))}${zeile('Trockenlauf unter', st('trocken_w', 5, v => `${v} W`))}${zeile('Dauerlauf länger als', st('dauer_min', 5, v => `${v} min`))}${zeile('Schaltet oft ab', st('zyklen_h', 1, v => `${v} / h`))}${P.map(b => zeile(`♨ Automatik · ${b.name}`, schalterVorlage(b.auto, () => p.bereichAuto(b))))}`);
+  const e = p.d.e, P = p.d.bereiche.filter(b => b.pumpe), an = k => e[k] ? 'melden' : 'nicht melden';
+  return html`${P.length ? liste('Automatik je Schacht', P.map(b => zeile(`♨ Automatik · ${b.name}`, schalterVorlage(b.auto, () => p.bereichAuto(b))))) : nothing}
+    ${liste('Überwachung der Pumpen', html`<div class="zeile"><span class="leise">Trockenlauf unter ${de(e.trocken_w, 0)} W (${an('m_trocken')}) · Dauerlauf über ${e.dauer_min} min (${an('m_dauer')}) · schaltet oft ab ${e.zyklen_h} je Stunde (${an('m_zyklen')})</span></div>
+      ${p._mitPumpen ? html`<button class="zeile" data-k="pumpen-ueberwachung" @click=${() => p.gehe('pumpen')}><span class="blau">Im Reiter Pumpen bearbeiten</span><span class="chev">›</span></button>` : html`<div class="zeile"><span class="leise">Noch kein Pumpenschacht – der Reiter Pumpen erscheint mit dem ersten Schacht.</span></div>`}`)}`;
 }
 
 function strom(p) {
@@ -74,11 +79,11 @@ function meldungen(p) {
         <div class="zeile"><div><b>Knöpfe in der Nachricht</b><div class="leise">direkt aus der Nachricht reagieren, z. B. „bis morgen stumm“</div></div>${sw('knoepfe')}</div>
         <button class="zeile" @click=${() => p.einblenden('nachrichten')}><span class="blau">Beispiele ansehen</span><span class="chev">›</span></button>
         <button class="zeile" @click=${() => p.testMeldung()}><span class="blau">Test-Nachricht senden</span></button>
-        ${m(`Stromausfall / offline (nach ${de(e.offline_min, 0)} min)`, 'm_offline')}${m(`Pumpe Trockenlauf (unter ${de(e.trocken_w, 0)} W)`, 'm_trocken')}${m(`Pumpe Dauerlauf über ${e.dauer_min} min`, 'm_dauer')}${m(`Pumpe schaltet oft (ab ${e.zyklen_h} je Stunde)`, 'm_zyklen')}${m('Heizkörper zieht keinen Strom', 'm_leistung')}${m('Frostgefahr trotz Frostschutz', 'm_frost')}${m('Gerät schaltet sich selbst wieder ein (Auto-ON am Shelly?)', 'm_selbst')}
+        ${m(`Stromausfall / offline (nach ${de(e.offline_min, 0)} min)`, 'm_offline')}${p._mitPumpen ? html`<button class="zeile" data-k="pumpen-meldungen" @click=${() => p.gehe('pumpen')}><div><span>💧 Pumpe: Trockenlauf, Dauerlauf, schaltet oft</span><div class="leise">${['m_trocken', 'm_dauer', 'm_zyklen'].filter(k => e[k]).length} von 3 an · mit ihren Schwellen unter Pumpen › Überwachung</div></div><span class="chev">›</span></button>` : nothing}${m('Heizkörper zieht keinen Strom', 'm_leistung')}${m('Frostgefahr trotz Frostschutz', 'm_frost')}${m('Gerät schaltet sich selbst wieder ein (Auto-ON am Shelly?)', 'm_selbst')}
         <div class="gruppe">Hinweise</div>
         ${m(`Zu kalt trotz Heizung (nach ${e.kalt_min} min)`, 'm_kalt')}${m('Fühler meldet nichts / Batterie schwach', 'm_fuehler')}${m('Keine Wettervorhersage', 'm_wetter')}${m(`Handbetrieb länger als ${e.hand_h} h`, 'm_hand')}${m('Kälte-Frühstart morgen (Nachricht am Vorabend)', 'm_frueh')}
         <div class="leise p-fuss">Störungen, offene Tür, langer Handbetrieb und der Kälte-Frühstart kommen aufs Handy, andere Hinweise nur ins Protokoll und in den Warnung-Chip.</div></div>
-      ${liste('Schwellen der Hinweise', html`${zeile('Zu kalt trotz Heizung nach', st('kalt_min', 15, v => `${v} min`))}${zeile('Handbetrieb länger als', st('hand_h', 1, v => `${de(v)} h`))}${zeile('Tür offen – Nachricht nach', st('tuer_melden', 5, v => `${v} min`))}`)}`;
+      ${liste('Schwellen', html`${zeile('Gerät offline – melden nach', st('offline_min', 1, v => `${v} min`), 'gilt für alle Shellys, auch Pumpen')}${zeile('Zu kalt trotz Heizung nach', st('kalt_min', 15, v => `${v} min`))}${zeile('Handbetrieb länger als', st('hand_h', 1, v => `${de(v)} h`))}${zeile('Tür offen – Nachricht nach', st('tuer_melden', 5, v => `${v} min`), `die Heizung pausiert schon nach ${p.d.e.tuer_pause} min (Heizung › Regeln)`)}`)}`;
 }
 
 function bericht(p) {
@@ -103,37 +108,44 @@ function entwicklung(p) {
     ${dev ? devVorlage(p, { teil: 'meldungen' }) : html`${devVorlage(p, { teil: 'werkzeuge' })}${liste('Für Tests', html`<button class="zeile" @click=${() => p.testMeldung()}><span class="blau">Test-Nachricht senden</span></button><button class="zeile" @click=${() => p.einblenden('nachrichten')}><span>Beispiel-Nachrichten</span><span class="chev">›</span></button>`)}`}`;
 }
 
-/* Kurzwert Soll: fest oder gleitend mit dem Wert von heute (laufzeit.soll_gleitend) */
-const sollKurz = p => { const e = p.d.e, G = p.d.sollG;
-  return e.soll_art !== 'gleitend' ? `Soll ${de(e.soll)} °C` : G ? `Soll gleitend, heute ${de(G.soll, 1)} °C` : `Soll gleitend, noch ${de(e.soll)} °C`; };
+
+/* UI-Bericht Maßnahme 5: Abschnitte der Gruppen (Überschrift, Schlüssel der Gruppen) */
+const ABSCHNITTE = [['Baustelle', ['baustelle']], ['Heizung & Container', ['heizung', 'notprogramm', 'geraete']], ['Pumpen', ['pumpen']],
+  ['Strom & Kosten', ['strom', 'firmen']], ['Meldungen & Bericht', ['meldungen', 'bericht']], ['System', ['app', 'dev', 'ueber']]];
 
 /* Gruppen: Schlüssel, Symbol, Titel, Kurzwert, Inhalt */
 function gruppen(p) {
-  const d = p.d, e = d.e, M = p.meldungen(), P = d.bereiche.filter(b => b.pumpe), C = d.bereiche.filter(b => !b.pumpe), geraete = d.bereiche.reduce((a, b) => a + b.geraete.length, 0);
+  const d = p.d, e = d.e, M = p.meldungen(), P = d.bereiche.filter(b => b.pumpe);
   const mAn = Object.keys(ARTEN).filter(k => e[k]).length;
   const offen = M === null ? '–' : M.filter(m => p.meldungOffen(m)).length, np = npGruppeVorlage(p);
   return [
     { k: 'baustelle', ic: '🏗', t: 'Baustelle', kurz: `${d.titel} · ${p.bsZeit(d)}`, inhalt: () => baustelle(p) },
     { k: 'heizung', ic: '🔥', t: 'Heizung', kurz: `Automatik ${e.auto ? 'an' : 'aus'} · ${sollKurz(p)} · Vorheizen ${e.vorheizen} min`, inhalt: () => heizung(p) },
     np,
-    { k: 'container', ic: '🏠', t: 'Container & Geräte', kurz: `${C.length} Container · ${P.length} ${P.length === 1 ? 'Schacht' : 'Schächte'} · ${geraete} Geräte`, inhalt: () => container(p) },
-    geraeteGruppeVorlage(p),   // BSM-034.05: Übersicht und 📦 Inventar in einer Gruppe
-    { k: 'pumpen', ic: '💧', t: 'Pumpen', kurz: P.length ? `offline nach ${e.offline_min} min · Trockenlauf unter ${e.trocken_w} W` : 'keine Schächte', inhalt: () => pumpen(p) },
+    geraeteGruppeVorlage(p, container),   // UI-Bericht Maßnahme 5: Container, Geräte und 📦 Inventar in einer Gruppe
+    { k: 'pumpen', ic: '💧', t: 'Pumpen', kurz: P.length ? `${P.length} ${P.length === 1 ? 'Schacht' : 'Schächte'} · Trockenlauf unter ${e.trocken_w} W` : 'keine Schächte', inhalt: () => pumpen(p) },
     { k: 'strom', ic: '⚡', t: 'Strom & Staffelung', kurz: `${de(e.preis, 2)} €/kWh · Staffelung ${e.staffel ? 'an' : 'aus'}`, inhalt: () => strom(p) },
     { k: 'firmen', ic: '🏢', t: 'Firmen', kurz: `${d.firmen.length} ${d.firmen.length === 1 ? 'Firma' : 'Firmen'} für die Abrechnung`, inhalt: () => firmen(p) },
     { k: 'meldungen', ic: '🔔', t: 'Meldungen', kurz: `${mAn} von ${Object.keys(ARTEN).length} an${e.empfaenger ? ` · ${e.empfaenger}` : ''}`, inhalt: () => meldungen(p) },
     { k: 'bericht', ic: '📊', t: 'Bericht', kurz: { aus: 'aus', woche: 'jede Woche', monat: 'jeden Monat', beides: 'Woche und Monat' }[e.bericht] || e.bericht, inhalt: () => bericht(p) },
     { k: 'app', ic: '🖥', t: 'Ansicht', kurz: `Erklärungen ${e.erklaer ? 'an' : 'aus'} · Melden-Knopf ${e.melden ? 'an' : 'aus'}`, inhalt: () => ansicht(p) },
-    { k: 'dev', ic: '🛠', t: 'Entwicklung', kurz: `${offen} offene Meldungen · Diagnose`, dev: true, inhalt: () => entwicklung(p) },
+    { k: 'dev', ic: '🛠', t: 'Entwicklung', kurz: `${offen} offene Meldungen · Diagnose`, inhalt: () => entwicklung(p) },
     { k: 'ueber', ic: 'ℹ', t: 'Über', kurz: `Version ${p.seiteVersion}`, inhalt: () => ueberVorlage(p, { mitZurueck: false }) },
   ];
 }
 
+/* Gruppen nach Abschnitten: [Überschrift, Gruppen] */
+const nachAbschnitt = G => ABSCHNITTE.map(([t, K]) => [t, K.map(k => G.find(x => x.k === k)).filter(Boolean)]).filter(([, L]) => L.length);
+
 export function einstellungenVorlage(p) {
-  if (p.s.evGruppe === 'inventar') { p.s.evGruppe = 'geraete'; p.s.gerReiter = 'inventar'; }   // BSM-034.05: Inventar ist ein Reiter der Geräte
-  const G = gruppen(p), g = G.find(x => x.k === p.s.evGruppe) || G[0], schmal = p.narrow, wahl = k => () => p.einstGruppeWahl(k);
-  const nav = html`<nav class="ev-nav glas-panel">${G.map(x => html`${x.dev ? html`<div class="ev-trenn"></div>` : nothing}<button data-v=${x.k} class=${x === g ? 'on' : ''} @click=${wahl(x.k)}><span class="ev-ic">${x.ic}</span><span>${x.t}</span><small>${x.kurz}</small></button>`)}</nav>`;
-  const chips = html`<div class="ev-chips">${G.map(x => html`<button class="glas-panel chip ${x === g ? 'amber' : ''}" data-v=${x.k} @click=${wahl(x.k)}>${x.ic} ${x.t}</button>`)}</div>`;
-  return html`${kopfVorlage('Einstellungen', p.d.titel)}<div class=${schmal ? 'schmal' : ''}>${schmal ? chips : nothing}<div class="ev-sl">${schmal ? nothing : nav}
+  if (p.s.evGruppe === 'inventar' || p.s.evGruppe === 'container') { p.s.gerReiter = p.s.evGruppe; p.s.evGruppe = 'geraete'; }   // frühere Gruppen sind Reiter von Container & Geräte
+  const G = gruppen(p), schmal = p.narrow, wahl = k => () => p.einstGruppeWahl(k), A = nachAbschnitt(G);
+  const g = G.find(x => x.k === p.s.evGruppe) || (schmal ? null : G[0]);
+  const knopfG = x => html`<button data-v=${x.k} class=${x === g ? 'on' : ''} @click=${wahl(x.k)}><span class="ev-ic">${x.ic}</span><span>${x.t}</span><small>${x.kurz}</small></button>`;
+  const nav = html`<nav class="ev-nav glas-panel">${A.map(([t, L], i) => html`<div class="ev-abschnitt ${i ? '' : 'erster'}">${t}</div>${L.map(knopfG)}`)}</nav>`;
+  // am Handy: ohne gewählte Gruppe eine senkrechte Liste nach Abschnitten, mit Gruppe „‹ Alle Einstellungen“ darüber
+  if (schmal && !g) return html`${kopfVorlage('Einstellungen', p.d.titel)}<div class="ev-liste">${A.map(([t, L]) => html`<div class="glas-panel liste"><div class="gruppe">${t}</div>
+      ${L.map(x => html`<button class="zeile ev-lz" data-v=${x.k} @click=${wahl(x.k)}><span class="ev-ic">${x.ic}</span><div><b>${x.t}</b><div class="leise">${x.kurz}</div></div><span class="chev">›</span></button>`)}</div>`)}</div>`;
+  return html`${kopfVorlage('Einstellungen', p.d.titel)}<div class=${schmal ? 'schmal' : ''}>${schmal ? html`<button class="glas-panel chip ev-zurueck" @click=${wahl(null)}>‹ Alle Einstellungen</button>` : nothing}<div class="ev-sl">${schmal ? nothing : nav}
       <div class="ev-inhalt"><div class="ev-titel"><span class="ev-ic">${g.ic}</span><div><b>${g.t}</b><div class="leise">${g.kurz}</div></div></div>${g.inhalt()}</div></div></div>`;
 }
