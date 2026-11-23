@@ -25,7 +25,7 @@ from .const import (
 from .db import inventar as db_inventar
 from .kern import geraete as k_geraete
 from .logik.geraete import FEHLER_TEXT
-from .logik.inventar import HAENGT, SENSOR_TYP, sensor_verdrahtung, typ_vorschlag
+from .logik.inventar import HAENGT, SENSOR_TYP, kandidat_reihenfolge, sensor_verdrahtung, typ_vorschlag
 
 if TYPE_CHECKING:
     from .steuerung import Steuerung
@@ -102,6 +102,44 @@ def kandidaten(hass: HomeAssistant, roh: dict[str, Any]) -> list[dict[str, Any]]
     return sorted(aus, key=lambda k: (k["typ"], str(k["name"])))
 
 
+def assistent_kandidaten(hass: HomeAssistant, roh: dict[str, Any]) -> list[dict[str, Any]]:
+    """Schritt 1 des Assistenten (Herberts Entscheidung B, 23.11.2026): jeder freie Schalter einzeln – je Kanal eine Zeile
+    (z. B. der 2. Kanal eines Shelly 2PM), auch Schalter, die kein Shelly sind (`shelly` False: dann gibt es keinen
+    Namen im Gerät selbst) –, dazu Fühler, Tür- und Fensterkontakte wie `kandidaten`. Frei = keine Baustelle verwendet
+    den Schalter; ein Gerät verschwindet nicht, nur weil sein erster Kanal belegt ist. `roh` (Inventar) darf leer sein."""
+    laufend = {e["ausruestung_id"] for e in roh.get("ausruestung_einsaetze") or [] if not e.get("bis")}
+    je_kennung = {a.get("kennung"): a for a in roh.get("ausruestung") or [] if a.get("kennung")}
+    belegt, aus = _belegt(hass), []
+    for geraet in cast("dict[str, dr.DeviceEntry]", dr.async_get(hass).devices).values():
+        if not isinstance(geraet, dr.DeviceEntry) or geraet.disabled or any(d == DOMAIN for d, _ in geraet.identifiers):
+            continue
+        ents = _entitaeten(hass, geraet.id)
+        a = je_kennung.get(_kennung(geraet))
+        basis = {"device_id": geraet.id, "name": geraet.name_by_user or geraet.name, "modell": geraet.model,
+                 "ausruestung_id": a["id"] if a else None, "status": a["status"] if a else None,
+                 "seit": geraet.created_at.isoformat() if getattr(geraet, "created_at", None) else None}
+        # nur echte Schalter: Einstellungs- und Diagnose-Schalter (z. B. Kindersicherung, LED) und versteckte nicht
+        schalter = [e for e in ents if e.domain == "switch" and e.entity_category is None and e.hidden_by is None]
+        im_inventar = a is not None and a["id"] in laufend
+        for e in schalter:
+            if e.entity_id in belegt:
+                continue
+            aus.append({**basis, "key": e.entity_id, "schalter": e.entity_id, "entity_id": e.entity_id, "typ": "PLUG",
+                        "shelly": e.platform == "shelly", "verwendet": None,
+                        "kanal": (e.name or e.original_name or e.entity_id) if len(schalter) > 1 else None,
+                        # ein Gerät steht nur in einem Container: ein weiterer Kanal geht nur in denselben
+                        "hinweis": "anderer Kanal steckt schon im Inventar eines Containers – nur dorthin" if im_inventar else None})
+        if schalter:
+            continue
+        typ = typ_vorschlag(schalter=False, klassen=[_klasse(e) for e in ents])
+        haupt = _messwert(ents, typ) if typ in KLASSE_FUER else None
+        if typ is None or (a is not None and a["id"] in laufend) or (haupt or "") in belegt:
+            continue
+        aus.append({**basis, "key": geraet.id, "schalter": None, "entity_id": haupt, "typ": typ, "shelly": False,
+                    "verwendet": None, "kanal": None, "hinweis": None})
+    return sorted(aus, key=kandidat_reihenfolge)
+
+
 def _einsatz(roh: dict[str, Any], container_id: str) -> dict[str, Any] | None:
     return next((e for e in roh["einsaetze"] if e["container_id"] == container_id and not e.get("bis")), None)
 
@@ -122,12 +160,13 @@ def sensor_plan(st: Steuerung, bid: str, typ: str, ents: list[er.RegistryEntry])
                               fuehler=sub.data.get(CONF_FUEHLER), tuer=e.get("tuer"), symbol=e.get("symbol"))
 
 
-def _verdrahten(hass: HomeAssistant, st: Steuerung, bid: str, geraet: dr.DeviceEntry, typ: str, haengt: str | None
-                ) -> tuple[str | None, str | None]:
-    """Gerät im Bereich `bid` einhängen; liefert (Unter-Eintrag des Shelly, Text was geschah). Fremde Baustelle → Fehler."""
+def _verdrahten(hass: HomeAssistant, st: Steuerung, bid: str, geraet: dr.DeviceEntry, typ: str, haengt: str | None,
+                schalter: str | None = None) -> tuple[str | None, str | None]:
+    """Gerät im Bereich `bid` einhängen; liefert (Unter-Eintrag des Shelly, Text was geschah). Fremde Baustelle → Fehler.
+    `schalter`: dieser Kanal (Assistent, Entscheidung B), sonst der erste Shelly-Schalter des Geräts."""
     ents = _entitaeten(hass, geraet.id)
     if typ == "PLUG":
-        schalter = _schalter(ents)
+        schalter = schalter or _schalter(ents)
         if schalter is None:
             raise ValueError("kein Shelly-Schalter am Gerät")
         for andere in _baustellen(hass):
@@ -188,21 +227,27 @@ def zuordnen_pruefen(hass: HomeAssistant, roh: dict[str, Any], container_id: str
 
 
 async def async_zuordnen(hass: HomeAssistant, db: Any, roh: dict[str, Any], container_id: str, device_id: str,
-                         typ: str | None = None, haengt: str | None = None) -> dict[str, Any]:
+                         typ: str | None = None, haengt: str | None = None, *, schalter: str | None = None,
+                         teilweise: bool = False) -> dict[str, Any]:
     """Ein HA-Gerät einem Container zuordnen (Inventar und, steht der Container auf einer geladenen Baustelle mit
-    Bereich, die Verdrahtung dort). `LookupError`/`ValueError` bei falscher Angabe."""
+    Bereich, die Verdrahtung dort). `LookupError`/`ValueError` bei falscher Angabe. `geraet_id` in der Antwort = der
+    Unter-Eintrag des Shelly. Mit `teilweise` (Assistent, Gutachten 0.8.192) meldet ein Fehler der Datenbank nach dem
+    Einhängen kein `ValueError`, sondern `fehler` in der Antwort – eingehängt ist es dann schon, im Inventar nicht."""
     geraet, typ, einsatz = zuordnen_pruefen(hass, roh, container_id, device_id, typ)
     st, geraet_id, text = _steuerung(hass, einsatz["baustelle_id"]), None, None
     if st is not None and einsatz.get("bereich_id") in st.bereiche:
-        geraet_id, text = _verdrahten(hass, st, einsatz["bereich_id"], geraet, typ, haengt)
+        geraet_id, text = _verdrahten(hass, st, einsatz["bereich_id"], geraet, typ, haengt, schalter)
     ergebnis = await db.async_ausfuehren(lambda v: db_inventar.ausruestung_zuordnen(
         v, kennung=_kennung(geraet), typ=typ, modell=geraet.model, container_id=container_id, geraet_id=geraet_id,
         jetzt=dt_util.utcnow()))
+    if ergebnis is None and teilweise and text:
+        return {"id": None, "gg": None, "neu": False, "typ": typ, "verdrahtet": text, "geraet_id": geraet_id,
+                "fehler": db.fehler or "Datenbank"}
     if ergebnis is None:
         raise ValueError(db.fehler or "Datenbank")
     if st is not None and text:
         st.protokoll("einstellung", einsatz.get("bereich_id"), f"Inventar: {geraet.name_by_user or geraet.name} {text}")
-    return {**ergebnis, "typ": typ, "verdrahtet": text}
+    return {**ergebnis, "typ": typ, "verdrahtet": text, "geraet_id": geraet_id}
 
 
 async def async_bestand(hass: HomeAssistant, db: Any, container_id: str, bereich_id: str, baustelle_id: str) -> list[dict[str, Any]]:

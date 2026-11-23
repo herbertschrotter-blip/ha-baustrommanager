@@ -1,5 +1,19 @@
 [
   {
+    "version": "0.8.193",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Fix (Gutachten zu 0.8.192, Herberts Entscheidung A): **Der Assistent benennt nur das neue Gerät um** – seinen Gerätenamen, seine Entity-IDs, den Namen im Shelly und den Heizkörper-Namen. Andere Geräte des Containers, die vom Schema abweichen, bleiben, wie sie sind (Chip „⚠ weicht ab“); ein früher mit eigenem Namen angelegtes Gerät wird nie überschrieben. Die Namensvorschau zeigt nur die Zeilen des neuen Geräts; neu ist „Nur anlegen, Namen lassen“.",
+      "Fix (Entscheidung B): **Schritt 1 bietet wieder alle freien Schalter an** – jeden freien Schalter einzeln, je Kanal eine Zeile (z. B. der 2. Kanal eines Shelly 2PM), Shellys oben, auch Schalter, die kein Shelly sind (dort entfällt der Name im Gerät selbst). Ein Gerät verschwindet nicht mehr, nur weil sein erster Kanal belegt ist; die Liste geht auch ohne Datenbank. Der zweite Kanal eines Geräts, das schon im Inventar dieses Containers steht, wird eingehängt, Inventar und Namen bleiben.",
+      "Fix: **Assistent aus „Bearbeiten“** – nach Hinzufügen oder Rückgängig bildet die Seite den Entwurf von „Bearbeiten“ neu aus den frischen Daten. Bisher führte ein Tipp auf den Hintergrund in den alten Entwurf zurück, und „Speichern“ setzte Fühler, Tür und Primär auf den alten Stand zurück.",
+      "Fix: **Rückgängig** findet das Gerät über seinen Unter-Eintrag (nicht mehr über die alte Entity-ID), setzt nur zurück, was seitdem niemand geändert hat (sonst sagt es, was blieb), nimmt die Nennleistung eines verschobenen Geräts mit zurück und meldet „wieder entfernt“ nur bei Erfolg. Die Marke bleibt, wenn die Baustelle gerade nicht geladen ist.",
+      "Fix: Konflikte der Vorschau (Entity-ID schon vergeben) prüft die Integration **vor** dem Schreiben. Fällt die Datenbank nach dem Einhängen aus, lädt die Baustelle trotzdem neu und die Antwort sagt ehrlich „eingehängt, nicht ins Inventar“.",
+      "Fix: Im Pumpenschacht ist nur die Pumpe wählbar – die Typenliste folgt derselben Regel wie das Anlegen (`logik/geraete.rolle_passt`, keine Steckdose im Schacht). Die Rolle „Zusatz“ wird jetzt gesetzt wie gewählt. Die Vorschau ohne Inventar sagt richtig, ob das Gerät am Container eingetragen wird (z. B. zweiter Fühler).",
+      "Fix: **„+ Container“** – die Nummer (z. B. `006`) kommt von der Integration; ohne Datenbank sagt die Vorschau es klar und bietet „Ohne Inventar anlegen …“ an (nur der Bereich, aufnehmen später über den Chip). Der Hinweis unten nennt die Wege richtig. Fühler mit Thermostat (`climate.*`) wählt man weiter in „Bearbeiten“; der Assistent führt nur Ausrüstung fürs Inventar.",
+      "Integration: neuer Befehl `baustelle/geraet_kandidaten`; `schalter` bei den `geraet_*`-Befehlen, `umbenennen` beim Hinzufügen, `getauscht` beim Rückgängig, `nummer_text`/`ohne_inventar` beim Container (docs/api-0.7.md §13)."
+    ]
+  },
+  {
     "version": "0.8.192",
     "datum": "2026-11-23",
     "punkte": [

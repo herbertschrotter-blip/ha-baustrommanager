@@ -373,14 +373,16 @@ async def ws_inventar_zuordnen_vorschau(hass: HomeAssistant, connection: websock
 
 
 def zuordnen_vorschau(hass: HomeAssistant, roh: dict[str, Any], container_id: str, device_id: str, typ: str | None,
-                      haengt: str | None) -> tuple[dict[str, Any], dict[str, Any]]:
+                      haengt: str | None, schalter: str | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """Vorschau der Namen, als wäre das HA-Gerät schon im Container: (Vorschau, Angaben zum Zuordnen) – für
-    `inventar_zuordnen_vorschau` und den Assistenten (M12). `LookupError`/`ValueError`; schreibt nichts."""
+    `inventar_zuordnen_vorschau` und den Assistenten (M12; `schalter` = gewählter Kanal, Entscheidung B).
+    `LookupError`/`ValueError`; schreibt nichts."""
     geraet, typ, _ = zuordnen_pruefen(hass, roh, container_id, device_id, typ)
     if (eingabe := vorschau_eingabe(hass, roh, container_id)) is None:
         raise LookupError("Container ohne Bereich auf einer geladenen Baustelle")
     ents = _entitaeten(hass, geraet.id)
-    eid = _schalter(ents) if typ == "PLUG" else next((e.entity_id for e in ents), None)
+    eid = (schalter or _schalter(ents)) if typ == "PLUG" else next((e.entity_id for e in ents), None)
+    shelly = next((e.platform == "shelly" for e in ents if e.entity_id == eid), True)
     info, entitaeten, labels_ = _geraet(hass, eid)
     if info is None:
         raise LookupError("HA-Gerät ohne Entität")
@@ -389,7 +391,7 @@ def zuordnen_vorschau(hass: HomeAssistant, roh: dict[str, Any], container_id: st
     st = hass.config_entries.async_get_entry(eingabe["baustelle_id"]).runtime_data
     eingetragen = typ not in AM_CONTAINER or sensor_plan(st, eingabe["bereich_id"], typ, ents) is not None
     neu = mit_zuordnung(eingabe, typ=typ, geraet=info, entitaeten=entitaeten, labels_=labels_, schalter=schalter,
-                        haengt=haengt, verdrahtet=eingetragen)
+                        haengt=haengt, verdrahtet=eingetragen, shelly=shelly)
     return vorschau(neu, _belegt(hass)), {"device_id": geraet.id, "typ": typ, "name": info["name"], "eingetragen": eingetragen,
                                           **({} if eingetragen else {"hinweis": nicht_eingetragen(typ)})}
 

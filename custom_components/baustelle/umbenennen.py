@@ -18,6 +18,7 @@ Schritte in umgekehrter Reihenfolge mit den alten Werten zurück (vorher als Vor
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -139,10 +140,10 @@ def _verweise(hass: HomeAssistant, st: Steuerung, ids: dict[str, str], namen: di
 
 
 async def _merken(db: Any, container_id: str, benutzer: str | None, letzte: dict[str, Any] | None,
-                  schritte: list[dict[str, Any]]) -> tuple[int | None, list[dict[str, Any]], str]:
+                  schritte: list[dict[str, Any]], *, nachholen: bool = True) -> tuple[int | None, list[dict[str, Any]], str]:
     """Neue Umbenennung anlegen – oder beim Nachholen in die jüngste (`teilweise`) eintragen."""
     jetzt: datetime = dt_util.utcnow()
-    if letzte is not None and letzte["status"] == "teilweise":
+    if nachholen and letzte is not None and letzte["status"] == "teilweise":
         schritte = nachholen_mischen(letzte["schritte"] or [], schritte)
         stand = status(schritte)
         nr = await db.async_ausfuehren(lambda v: db_inventar.umbenennung_aendern(v, letzte["id"], schritte, stand))
@@ -154,13 +155,18 @@ async def _merken(db: Any, container_id: str, benutzer: str | None, letzte: dict
 
 
 async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benutzer: str | None, *,
-                           nur_plug: bool = False, neu_laden: bool = True) -> dict[str, Any]:
+                           nur_plug: bool = False, neu_laden: bool = True,
+                           auswahl: Callable[[dict[str, Any]], dict[str, Any]] | None = None) -> dict[str, Any]:
     """Umbenennung eines Containers ausführen oder nachholen; wirft `LookupError` (nicht gefunden) bzw. `ValueError`
     (Konflikt). `nur_plug` (selbst nachholen): nur Plug-Namen, nichts in HA. `neu_laden` False (Assistent, M12): die
-    Baustelle bleibt angehalten, der Aufrufer lädt sie danach selbst neu (`async_reload`)."""
+    Baustelle bleibt angehalten, der Aufrufer lädt sie danach selbst neu (`async_reload`). `auswahl` (Assistent,
+    Entscheidung A): bildet aus der Vorschau des Containers die auszuführende (z. B. nur das neue Gerät,
+    `logik.inventar.nur_geraet`) – das ist immer eine neue Umbenennung, kein Nachholen."""
     if (ergebnis := await async_vorschau(hass, db, container_id)) is None:
         raise LookupError("Container ohne Bereich auf einer geladenen Baustelle")
     eingabe, v = ergebnis
+    if auswahl is not None:
+        v = auswahl(v)
     if v["konflikte"]:
         raise ValueError("Konflikt: " + ", ".join(f"{a} → {n}" for a, n in v["konflikte"].items()))
     plan, plugs = ausfuehrbar(v["schritte"]), fuer_plug(v["schritte"])
@@ -175,7 +181,10 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
     entfaellt = {s["ref"] for s in plugs if s["ref"] not in ziele}
     plugs = [s for s in plugs if s["ref"] in ziele]
     letzte = await db.async_ausfuehren(lambda verbindung: db_inventar.umbenennung_letzte(verbindung, container_id))
-    nachholen = letzte is not None and letzte["status"] == "teilweise"
+    if auswahl is not None and letzte is not None and letzte["status"] == "teilweise":
+        # sonst stünde die offene Umbenennung nicht mehr als jüngste da und ließe sich nicht mehr nachholen
+        raise ValueError("die letzte Umbenennung des Containers ist noch nicht fertig – erst „Nachholen“")
+    nachholen = auswahl is None and letzte is not None and letzte["status"] == "teilweise"
     if not plan and not plugs:
         if not nachholen:
             return {"id": None, "status": "nichts", "schritte": v["schritte"], "geaendert": [], "getauscht": {}}
@@ -201,7 +210,7 @@ async def async_ausfuehren(hass: HomeAssistant, db: Any, container_id: str, benu
         jetzt_erledigt = _ergebnisse(v["schritte"], fehler, entfaellt)
         ok = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "ok")   # im Protokoll nur, was diesmal geschah
         offen = sum(1 for s in jetzt_erledigt if s["ergebnis"] == "fehler")
-        nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, jetzt_erledigt)
+        nr, schritte, stand = await _merken(db, container_id, benutzer, letzte, jetzt_erledigt, nachholen=nachholen)
         st.protokoll("einstellung", eingabe["bereich_id"],
                      f"{'Umbenennung nachgeholt' if nachholen else 'Umbenannt nach Schema'} "
                      f"({eingabe['praefix']}_C_{eingabe['art']}): {ok} Schritte"

@@ -318,49 +318,77 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
      Nummern) – Beispiel über der ersten Baustelle; Anlegen ändert Inventar und Struktur wie echt */
   const TYPEN = [['radiator', 'Am Plug', '🔥 Ölradiator', ['PLUG'], ['container'], true, true], ['konvektor', 'Am Plug', '🔥 Konvektor', ['PLUG'], ['container'], true, true],
     ['bautrockner', 'Am Plug', '💨 Bautrockner', ['PLUG'], ['container'], true, false], ['pumpe', 'Am Plug', '💧 Pumpe (nur Schacht)', ['PLUG'], ['schacht'], false, false],
-    ['steckdose', 'Am Plug', '🔌 Steckdose / sonstiges', ['PLUG'], ['container', 'schacht'], false, false], ['fuehler', 'Sensor', '🌡 Temperaturfühler', ['TEMP'], ['container'], false, false],
+    ['steckdose', 'Am Plug', '🔌 Steckdose / sonstiges', ['PLUG'], ['container'], false, false], ['fuehler', 'Sensor', '🌡 Temperaturfühler', ['TEMP'], ['container'], false, false],
     ['tuer', 'Sensor', '🚪 Tür', ['DOOR', 'FEN'], ['container'], false, false], ['fenster', 'Sensor', '🪟 Fenster', ['DOOR', 'FEN'], ['container'], false, false], ['licht', 'Sensor', '💡 Licht', [], ['container'], false, false]];
   const bereichVon = m => welt().flatMap(x => x.bereiche).find(x => x.id === m.bereich_id) || nichtGefunden('Container nicht gefunden');
+  /* Schritt 1 (Entscheidung B): jeder freie Schalter einzeln (je Kanal), Shellys oben – wie inventar_geraete.assistent_kandidaten */
+  const gaZugeordnet = new Map(), gaRueck = new Map();   // Schlüssel → device_id (zugeordnet ohne Inventar-Beispiel)
+  function gaKandidaten() {
+    const z = invKandidaten().map(k => ({ ...k, key: k.typ === 'PLUG' ? k.entity_id : k.device_id, schalter: k.typ === 'PLUG' ? k.entity_id : null, shelly: k.typ === 'PLUG', kanal: null }));
+    const mehr = [{ device_id: 'd6', name: 'Shelly Pro 2PM', modell: 'Shelly Pro 2PM', typ: 'PLUG', ausruestung_id: null, status: null, entity_id: 'switch.shelly_pro_2pm_kanal_2', verwendet: null, seit: '2026-09-27T10:00:00+00:00',
+      key: 'switch.shelly_pro_2pm_kanal_2', schalter: 'switch.shelly_pro_2pm_kanal_2', shelly: true, kanal: 'Kanal 2' },
+    { device_id: 'd5', name: 'Steckdose Werkstatt', modell: 'Sonoff S26', typ: 'PLUG', ausruestung_id: null, status: null, entity_id: 'switch.steckdose_werkstatt', verwendet: null, seit: null,
+      key: 'switch.steckdose_werkstatt', schalter: 'switch.steckdose_werkstatt', shelly: false, kanal: null },
+    { device_id: 'd4', name: 'Shelly BLU Door/Window 2', modell: 'Shelly BLU Door/Window', typ: 'DOOR', ausruestung_id: null, status: null, entity_id: 'binary_sensor.tuer_neu', verwendet: null, seit: null,
+      key: 'd4', schalter: null, shelly: false, kanal: null }];
+    const reihe = ['PLUG', 'TEMP', 'DOOR', 'FEN'];
+    return [...z, ...mehr].filter(k => !gaZugeordnet.has(k.key)).sort((a, b) => (!a.shelly - !b.shelly) || reihe.indexOf(a.typ) - reihe.indexOf(b.typ) || a.name.localeCompare(b.name));
+  }
   function gaTypen(m) {
-    const b = bereichVon(m), k = invKandidaten().find(x => x.device_id === m.device_id) || nichtGefunden('HA-Gerät nicht gefunden'), ort = b.art === 'pumpenschacht' ? 'schacht' : 'container';
+    const b = bereichVon(m), k = gaKandidaten().find(x => x.device_id === m.device_id && (!m.schalter || x.schalter === m.schalter)) || nichtGefunden('HA-Gerät nicht gefunden'), ort = b.art === 'pumpenschacht' ? 'schacht' : 'container';
     const typen = TYPEN.map(([kk, gruppe, text, zu, orte, nenn, rolle]) => { const grund = kk === 'licht' ? 'Licht im Symbol wählt man unter 🏠 Aussehen' : !zu.includes(k.typ) ? `passt nicht zu ${k.name}` : !orte.includes(ort) ? (orte.length === 1 && orte[0] === 'schacht' ? 'nur im Pumpenschacht' : 'nicht im Pumpenschacht') : null;
       return { k: kk, gruppe, text, passt: !grund, grund, nenn, rolle }; });
-    return { typen, vorschlag: (typen.find(t => t.passt) || {}).k || null, geraet: { name: k.name, typ: k.typ } };
+    return { typen, vorschlag: (typen.find(t => t.passt) || {}).k || null, geraet: { name: k.name, typ: k.typ, shelly: !!k.shelly } };
   }
   const gaContainer = m => inventar().container.find(c => c.status === 'aktiv' && c.einsatz && c.einsatz.bereich_id === m.bereich_id);
   function gaVorschau(m) {
     const T = gaTypen(m), t = T.typen.find(x => x.k === m.typ); if (!t || !t.passt) throw { code: 'invalid_format', message: t ? t.grund : 'Typ unbekannt' };
-    const c = gaContainer(m);
-    if (!c) return { im_inventar: false, container: null, schritte: [], konflikte: {}, zaehler: {}, verweise: [], eingetragen: true, abweichend: 0,
-      hinweis: bereichVon(m).art === 'pumpenschacht' ? 'Pumpenschächte stehen nicht im Inventar – die Namen bleiben, wie sie sind' : 'Der Container steht nicht im Inventar – die Namen bleiben; erst aufnehmen, dann einheitlich benennen' };
-    const v = invZuordnenVorschau({ container_id: c.id, device_id: m.device_id }), frei = (m.name || '').trim();
-    const schritte = v.schritte.map(x => frei && x.ziel === 'geraet' && x.ref === m.device_id ? { ...x, neu: frei, frei: true } : x);
-    return { im_inventar: true, container: c.name, schritte, konflikte: {}, zaehler: v.zaehler, verweise: v.verweise, eingetragen: true, hinweis: null, frei: !!frei,
-      abweichend: schritte.filter(x => x.zustand !== 'gleich').length };
+    const c = gaContainer(m), b = bereichVon(m), k = gaKandidaten().find(x => x.device_id === m.device_id && (!m.schalter || x.schalter === m.schalter));
+    if (!c) { const zweiter = k.typ === 'TEMP' && b.fuehler;   // wie sensor_verdrahtung: ein zweiter Fühler wird ohne Inventar nicht eingetragen
+      return { im_inventar: false, container: null, schritte: [], konflikte: {}, zaehler: {}, verweise: [], eingetragen: !zweiter, moeglich: !zweiter, umbenennen: false, frei_moeglich: false, abweichend: 0, shelly: !!k.shelly,
+        hinweis: zweiter ? 'Der Container hat schon einen Fühler – ohne Inventar gibt es nichts einzutragen' : b.art === 'pumpenschacht' ? 'Pumpenschächte stehen nicht im Inventar – die Namen bleiben, wie sie sind' : 'Der Container steht nicht im Inventar – die Namen bleiben; erst aufnehmen, dann einheitlich benennen' }; }
+    // Entscheidung A: nur die Zeilen des neuen Geräts (logik/inventar.nur_geraet); kein Shelly → kein Name im Gerät selbst
+    const gg = k.typ === 'PLUG' ? 1 + Math.max(0, ...c.ausruestung.map(a => a.gg || 0)) : null, n = zuordnenName(c, k, gg), frei = (m.name || '').trim();
+    const eid = `${k.entity_id.split('.')[0]}.${n.toLowerCase().replace(/-/g, '_')}`;
+    const schritte = [{ gruppe: n, ziel: 'geraet', ref: k.device_id, was: 'HA-Gerät', alt: k.name, neu: frei || n, zustand: 'aendern', ...(frei ? { frei: true } : {}) },
+      { gruppe: n, ziel: 'entitaet_name', ref: k.entity_id, was: 'Name', alt: null, neu: n, zustand: 'neu' },
+      { gruppe: n, ziel: 'entitaet_id', ref: k.entity_id, was: 'Entity-ID', alt: k.entity_id, neu: eid, zustand: 'aendern' },
+      ...(k.typ === 'PLUG' && k.shelly ? [{ gruppe: n, ziel: 'plug', ref: 'neu', was: 'Plug-Name', alt: k.name.toLowerCase().replace(/\W+/g, '-'), neu: n, zustand: 'aendern' }] : [])];
+    const z = q => schritte.filter(x => x.zustand === q).length;
+    return { im_inventar: true, container: c.name, schritte, konflikte: {}, zaehler: { aendern: z('aendern'), neu: z('neu'), gleich: 0, konflikt: 0 }, verweise: [], eingetragen: true, moeglich: true, umbenennen: true, frei_moeglich: true,
+      hinweis: null, shelly: !!k.shelly, frei: !!frei, abweichend: schritte.length };
   }
   function gaHinzufuegen(m) {
-    const v = gaVorschau(m), c = gaContainer(m), k = invKandidaten().find(x => x.device_id === m.device_id), t = gaTypen(m).typen.find(x => x.k === m.typ);
-    if (c) invAendern({ aktion: 'ausruestung_zuordnen', container_id: c.id, device_id: m.device_id });
-    const frei = (m.name || '').trim() || null, n = v.schritte.filter(x => x.zustand !== 'gleich').length;
+    const v = gaVorschau(m), c = gaContainer(m), k = gaKandidaten().find(x => x.device_id === m.device_id && (!m.schalter || x.schalter === m.schalter)), t = gaTypen(m).typen.find(x => x.k === m.typ);
+    if (!v.eingetragen && !v.im_inventar) throw { code: 'invalid_format', message: v.hinweis };
+    if (c && invKandidaten().some(x => x.device_id === m.device_id)) invAendern({ aktion: 'ausruestung_zuordnen', container_id: c.id, device_id: m.device_id });
+    else gaZugeordnet.set(k.key, k.device_id);
+    const b = welt().find(x => x.bereiche.some(y => y.id === m.bereich_id)), gid = 'g-' + m.device_id, eb = ((b.einstellungen.bereiche ||= {})[m.bereich_id] ||= {});
+    gaRueck.set('r-' + m.device_id, { b: bereichVon(m), eb, fuehler: bereichVon(m).fuehler, primaer: eb.primaer, tuer: eb.tuer });   // für Rückgängig
+    if (k.typ === 'DOOR' && !eb.tuer) eb.tuer = k.entity_id;
+    if (t.rolle && m.rolle === 'primaer') eb.primaer = gid;   // wie die Integration: Rolle gesetzt, Fühler eingetragen (struktur danach)
+    if (k.typ === 'TEMP' && v.eingetragen) bereichVon(m).fuehler = k.entity_id;
+    const lassen = m.umbenennen === false, frei = lassen ? null : (m.name || '').trim() || null, n = v.schritte.filter(x => x.zustand !== 'gleich').length;
     return { ok: true, name: frei || k.name, typ: t.text, container: bereichVon(m).name, frei, rueck: 'r-' + m.device_id,
-      umbenannt: c ? { status: 'ausgefuehrt', anzahl: n, offen: 0, getauscht: { [k.entity_id]: k.entity_id.split('.')[0] + '.neu' } } : { status: 'ohne_inventar' } };
+      umbenannt: lassen ? { status: 'namen_gelassen' } : c ? { status: 'ausgefuehrt', anzahl: n, offen: 0, getauscht: { [k.entity_id]: k.entity_id.split('.')[0] + '.neu' } } : { status: 'ohne_inventar' } };
   }
   function cnPlan(m) {
     const I = inventar(), pad = (x, n) => String(x).padStart(n, '0');
-    if (m.schacht) return { im_inventar: false, inventar: null, nummer: null, naechste: null, belegt: false, grund: null, geraete: null, hinweis: 'Pumpenschächte stehen nicht im Inventar – angelegt wird der Bereich in HA' };
+    if (m.schacht || m.ohne_inventar) return { im_inventar: false, inventar: null, nummer: null, naechste: null, nummer_text: null, naechste_text: null, belegt: false, grund: null, geraete: null,
+      hinweis: m.schacht ? 'Pumpenschächte stehen nicht im Inventar – angelegt wird der Bereich in HA' : 'Ohne Inventar – angelegt wird nur der Bereich in HA; aufnehmen später über den Chip „Nicht im Inventar – aufnehmen ›“ am Container' };
     if (m.eigen !== false) { const alle = I.container.map(c => c.nr).filter(Boolean), naechste = Math.max(0, ...alle) + 1, nr = m.nr || naechste, belegt = alle.includes(nr);
-      return { im_inventar: true, inventar: `${pad(nr, 3)}_C_${m.art}`, nummer: nr, naechste, belegt, grund: belegt ? `Nummer ${pad(nr, 3)} ist schon vergeben – eine Nummer gilt für immer` : null, geraete: `${pad(nr, 3)}-01_C_PLUG_${m.art}`, hinweis: null }; }
+      return { im_inventar: true, inventar: `${pad(nr, 3)}_C_${m.art}`, nummer: nr, naechste, nummer_text: pad(nr, 3), naechste_text: pad(naechste, 3), belegt, grund: belegt ? `Nummer ${pad(nr, 3)} ist schon vergeben – eine Nummer gilt für immer` : null, geraete: `${pad(nr, 3)}-01_C_PLUG_${m.art}`, hinweis: null }; }
     const f = I.firmen.find(x => x.id === m.firma_id); if (!f) return { fehler: 'Bitte eine fremde Firma wählen (⚙ › Firmen)', belegt: true };
     const kz = f.kuerzel || String(m.kuerzel || '').toUpperCase(); if (!/^[A-Z]{2,5}$/.test(kz)) return { fehler: 'Firmenkürzel: 2 bis 5 Buchstaben (A–Z)', belegt: true };
     const nr = 1 + I.container.filter(c => c.firma_kuerzel === kz).length;
-    return { im_inventar: true, inventar: `${kz}-${pad(nr, 2)}_C_${m.art}`, nummer: nr, naechste: nr, belegt: false, grund: null, geraete: `${kz}-${pad(nr, 2)}-01_C_PLUG_${m.art}`, hinweis: null, firma: { name: f.name, kuerzel: kz } };
+    return { im_inventar: true, inventar: `${kz}-${pad(nr, 2)}_C_${m.art}`, nummer: nr, naechste: nr, nummer_text: pad(nr, 2), naechste_text: pad(nr, 2), belegt: false, grund: null, geraete: `${kz}-${pad(nr, 2)}-01_C_PLUG_${m.art}`, hinweis: null, firma: { name: f.name, kuerzel: kz } };
   }
   function cnNeu(m) {
     const v = cnPlan(m); if (v.fehler || v.belegt) throw { code: 'invalid_format', message: v.fehler || v.grund };
     const b = welt()[0]; if (b.bereiche.some(x => x.name === m.name)) throw { code: 'invalid_format', message: 'Diesen Namen gibt es auf der Baustelle schon' };
     const id = 'neu-' + b.bereiche.length; b.bereiche.push({ id, name: m.name, art: m.schacht ? 'pumpenschacht' : 'container', fuehler: null, nr: b.bereiche.length });
     let c = null;
-    if (!m.schacht) { const f = m.eigen === false ? inventar().firmen.find(x => x.id === m.firma_id) : null; if (f && !f.kuerzel) f.kuerzel = String(m.kuerzel).toUpperCase();
+    if (!m.schacht && !m.ohne_inventar) { const f = m.eigen === false ? inventar().firmen.find(x => x.id === m.firma_id) : null; if (f && !f.kuerzel) f.kuerzel = String(m.kuerzel).toUpperCase();
       c = invAendern({ aktion: 'container_anlegen', entry_id: b.baustelle.entry_id, art: m.art, bereich_id: id, ...(f ? { firma_kuerzel: f.kuerzel } : {}), ...(m.eigen !== false && m.nr ? { nr: m.nr } : {}) }); }
     return { ok: true, bereich_id: id, name: m.name, inventar: c ? v.inventar : null, container_id: c ? c.id : null };
   }
@@ -414,12 +442,15 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         case 'baustelle/inventar_rueckgaengig': return kopie(invRueck(m));
         case 'baustelle/inventar_kandidaten': return { geraete: kopie(invKandidaten()) };
         case 'baustelle/inventar_aendern': return kopie(invAendern(m));
+        case 'baustelle/geraet_kandidaten': return { geraete: kopie(gaKandidaten()) };
         case 'baustelle/geraet_typen': return kopie(gaTypen(m));
         case 'baustelle/geraet_vorschau': return kopie(gaVorschau(m));
         case 'baustelle/geraet_hinzufuegen': return kopie(gaHinzufuegen(m));
         case 'baustelle/geraet_hinzufuegen_rueckgaengig': { const z = 'z' + String(m.rueck).slice(2);   // wie die Integration: wieder frei
-          for (const c of inventar().container) c.ausruestung = c.ausruestung.filter(x => x.id !== z); return { ok: true, fehler: [] }; }
-        case 'baustelle/container_vorschau': { const v = cnPlan(m); return kopie(v.fehler ? { fehler: v.fehler, belegt: true } : v); }
+          for (const c of inventar().container) c.ausruestung = c.ausruestung.filter(x => x.id !== z);
+          for (const [k, d] of [...gaZugeordnet]) if (`r-${d}` === m.rueck) gaZugeordnet.delete(k);
+          { const r = gaRueck.get(m.rueck); if (r) { r.b.fuehler = r.fuehler; r.eb.primaer = r.primaer; r.eb.tuer = r.tuer; gaRueck.delete(m.rueck); } } return { ok: true, fehler: [], getauscht: {} }; }
+        case 'baustelle/container_vorschau': { const v = cnPlan(m); return kopie(v.fehler ? { fehler: v.fehler, belegt: true, ohne_inventar_moeglich: false } : { ...v, ohne_inventar_moeglich: false }); }
         case 'baustelle/container_neu': return kopie(cnNeu(m));
         default: return { ok: true };
       }

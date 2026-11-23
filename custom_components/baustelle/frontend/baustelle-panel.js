@@ -4552,25 +4552,22 @@ function kopf3(p4, s4) {
     <ol class="ga-schritte">${SCHRITTE.map((t5, i7) => b2`<li class=${i7 + 1 === s4.schritt ? "an" : i7 + 1 < s4.schritt ? "fertig" : ""} data-n=${i7 + 1}><span>${i7 + 1 < s4.schritt ? "✓" : i7 + 1}</span>${t5}</li>`)}</ol>`;
 }
 function schrittGeraet(p4, s4) {
-  const K = p4.invKandidaten(), z2 = () => p4.neuZeichnen(), q = (s4.q || "").trim().toLowerCase();
-  const frei = (K || []).filter((k2) => !k2.verwendet), L2 = frei.filter((k2) => !q || `${k2.name} ${k2.modell || ""} ${k2.entity_id || ""}`.toLowerCase().includes(q));
+  const K = p4.assistentKandidaten(), z2 = () => p4.neuZeichnen(), q = (s4.q || "").trim().toLowerCase();
+  const frei = K || [], L2 = frei.filter((k2) => !q || `${k2.name} ${k2.kanal || ""} ${k2.modell || ""} ${k2.entity_id || ""}`.toLowerCase().includes(q));
+  const an = (k2) => s4.dev === k2.device_id && (s4.schalter || null) === (k2.schalter || null);
   return b2`<input class="ga-suche" type="search" placeholder="Suchen: Name, Modell, Entity-ID" .value=${l3(s4.q || "")} @input=${(e6) => {
     s4.q = e6.target.value;
     z2();
   }}>
-    <div class="glas-panel liste ga-l"><div class="gruppe">Neu in Home Assistant, noch nicht zugeordnet · ${K ? frei.length : "…"}</div>
-      ${K === void 0 ? b2`<div class="leer">lädt …</div>` : !K ? b2`<div class="leer">${p4.invFehler("invk") || "Geräte nicht lesbar"}</div>` : !L2.length ? b2`<div class="leer">${q ? "Nichts gefunden" : "Keine freien Geräte"}</div>` : L2.map((k2) => {
+    <div class="glas-panel liste ga-l"><div class="gruppe">Frei in Home Assistant, noch nicht zugeordnet · ${K ? frei.length : "…"}</div>
+      ${K === void 0 ? b2`<div class="leer">lädt …</div>` : !K ? b2`<div class="leer">${p4.invFehler("gak") || "Geräte nicht lesbar"}</div>` : !L2.length ? b2`<div class="leer">${q ? "Nichts gefunden" : "Keine freien Geräte"}</div>` : L2.map((k2) => {
     const defekt = k2.status === "defekt", seit = datum3(k2.seit), jetzt = zustand2(p4, k2.entity_id);
-    return b2`<button class="zeile ga-wahl ${s4.dev === k2.device_id ? "on" : ""} ${defekt ? "ga-aus" : ""}" data-id=${k2.device_id} ?disabled=${defekt}
+    return b2`<button class="zeile ga-wahl ${an(k2) ? "on" : ""} ${defekt ? "ga-aus" : ""}" data-id=${k2.key} ?disabled=${defekt}
             @click=${() => {
-      if (s4.dev !== k2.device_id) {
-        s4.dev = k2.device_id;
-        s4.typ = null;
-        s4.nenn = null;
-      }
+      if (!an(k2)) Object.assign(s4, { dev: k2.device_id, schalter: k2.schalter || null, typ: null, nenn: null });
       z2();
     }}>
-            <div class="ga-zl"><b>${IC3[k2.typ] || "•"} ${k2.name}</b><div class="leise">${[k2.modell, seit && `neu seit ${seit}`, jetzt, defekt && "defekt – nicht zuordenbar"].filter(Boolean).join(" · ")}</div></div>${radio(s4.dev === k2.device_id)}</button>`;
+            <div class="ga-zl"><b>${IC3[k2.typ] || "•"} ${k2.name}${k2.kanal ? b2` · <span class="leise">${k2.kanal}</span>` : A}</b><div class="leise">${[k2.modell, k2.typ === "PLUG" && !k2.shelly && "kein Shelly – Name im Gerät bleibt", k2.hinweis, seit && `neu seit ${seit}`, jetzt, defekt && "defekt – nicht zuordenbar"].filter(Boolean).join(" · ")}</div></div>${radio(an(k2))}</button>`;
   })}</div>
     <div class="leise ga-fuss">Nicht dabei? Erst in HA hinzufügen (Einstellungen › Geräte & Dienste › Shelly), dann erscheint es hier. Alternative in Home Assistant: Geräte & Dienste › Baustelle › „Gerät“.</div>
     <div class="ga-knoepfe">${knopf8("Weiter ›", () => p4.assistentSchritt(s4, s4.vorgabe && s4.bid ? 3 : 2), "amber", "weiter", !s4.dev)}${knopf8("Abbrechen", () => p4.schliessen(), "leise-k")}</div>`;
@@ -4617,17 +4614,19 @@ function schrittNamen(p4, s4) {
   if (V2 === void 0) return b2`<div class="glas-panel liste ga-l"><div class="leer">Vorschau lädt …</div></div>${zurueck}`;
   if (!V2) return b2`<div class="glas-panel liste ga-l"><div class="leer">${p4.invFehler(p4.assistentSchluessel("gav", s4)) || "Keine Vorschau"}</div></div>${zurueck}`;
   const S3 = (V2.schritte || []).filter((r5) => r5.zustand !== "gleich"), kon = Object.keys(V2.konflikte || {}).length, gruppen2 = [...new Set(S3.map((r5) => r5.gruppe || ""))];
-  const umbenennen = V2.im_inventar && V2.eingetragen, text2 = !umbenennen ? "Anlegen" : s4.frei && (s4.freiName || "").trim() ? "Anlegen (freier Name)" : "Anlegen und umbenennen";
+  const umbenennen = !!V2.umbenennen, text2 = !umbenennen ? "Anlegen" : s4.frei && (s4.freiName || "").trim() ? "Anlegen (freier Name)" : "Anlegen und umbenennen";
+  const nichts = V2.moeglich === false;
   const tabelle = gruppen2.map((g2) => b2`<div class="glas-panel liste inv-liste inv-gruppe"><div class="inv-g-kopf"><b class="inv-id">${g2 || "–"}</b></div>
       <div class="inv-tr inv-th"><span class="t-was">Was</span><span class="t-alt">heute</span><span class="t-neu">neu</span><span class="t-m"></span></div>
       ${S3.filter((r5) => (r5.gruppe || "") === g2).map((r5) => b2`<div class="inv-tr ${r5.zustand}" data-ziel=${r5.ziel}><span class="t-was">${r5.was}</span><span class="t-alt ga-alt">${r5.alt ?? "–"}</span>
         <span class="t-neu ${r5.frei ? "amber-t" : ""}">${r5.neu ?? b2`<span class="leise">entfernen</span>`}</span><span class="t-m">${r5.frei ? b2`<span class="ga-abw">⚠ weicht ab</span>` : r5.zustand === "konflikt" ? b2`<span class="rot-t">✕ Konflikt</span>` : A}</span></div>`)}</div>`);
-  return b2`<div class="leise ga-fuss">${umbenennen ? b2`So heißt es danach in Home Assistant${V2.container ? b2` (Schema, Container <code>${V2.container}</code>)` : ""}. <b>Noch ist nichts geschrieben.</b>${gruppen2.length > 1 ? " Andere Geräte des Containers, die abweichen, werden mit benannt." : ""}` : V2.hinweis}</div>
+  return b2`<div class="leise ga-fuss">${umbenennen ? b2`So heißt das neue Gerät danach in Home Assistant${V2.container ? b2` (Schema, Container <code>${V2.container}</code>)` : ""}. <b>Noch ist nichts geschrieben.</b> Andere Geräte des Containers bleiben, wie sie sind.` : V2.hinweis}</div>
     ${V2.im_inventar && !V2.eingetragen ? b2`<div class="glas-panel liste ga-l inv-warn"><div class="zeile"><div><b class="amber-t">⚠ Nicht am Container eingetragen</b><div class="leise">${V2.hinweis || ""}</div></div></div></div>` : A}
+    ${nichts ? b2`<div class="leise rot-t ga-fuss">So lässt es sich nicht hinzufügen – bitte einen anderen Container oder Typ wählen.</div>` : A}
     ${umbenennen ? b2`<div class="ga-vorschau">${S3.length ? tabelle : b2`<div class="glas-panel liste ga-l"><div class="leer">Alles schon nach Schema</div></div>`}</div>` : A}
-    ${kon ? b2`<div class="leise rot-t ga-fuss">${kon} Entity-ID ist schon vergeben – erst lösen (umbenennen oder löschen), dann anlegen.</div>` : A}
+    ${kon ? b2`<div class="leise rot-t ga-fuss">${kon} Entity-ID ist schon vergeben – erst lösen (umbenennen oder löschen) oder „Nur anlegen, Namen lassen“.</div>` : A}
     ${(V2.verweise || []).length ? b2`<div class="leise amber-t ga-fuss">⚠ ${V2.verweise.length} Automation/Skript/Dashboard nennt alte Entity-IDs – danach dort die neue eintragen.</div>` : A}
-    ${umbenennen ? b2`<div class="glas-panel liste ga-l"><div class="zeile" data-zeile="frei"><div class="ga-zl"><b>Eigenen Namen statt Schema</b><div class="leise">${s4.frei ? b2`<input class="ga-frei" data-f="frei" .value=${l3(s4.freiName || "")} placeholder="Name des Geräts" @input=${(e6) => {
+    ${V2.frei_moeglich ? b2`<div class="glas-panel liste ga-l"><div class="zeile" data-zeile="frei"><div class="ga-zl"><b>Eigenen Namen statt Schema</b><div class="leise">${s4.frei ? b2`<input class="ga-frei" data-f="frei" .value=${l3(s4.freiName || "")} placeholder="Name des Geräts" @input=${(e6) => {
     s4.freiName = e6.target.value;
   }} @change=${(e6) => {
     s4.freiName = e6.target.value;
@@ -4637,15 +4636,16 @@ function schrittNamen(p4, s4) {
     s4.frei = !s4.frei;
     z2();
   }}><i></i></button></div></div>` : A}
-    <div class="ga-knoepfe">${knopf8(text2, p4.nurAdmin(() => kon ? p4.toast("Erst den Konflikt lösen") : p4.assistentAnlegen(s4)), `amber nur-admin`, "anlegen", !!kon || !!s4.laeuft)}${zurueck}</div>${rechteHinweis2(p4)}
-    <div class="leise ga-fuss">${s4.laeuft ? b2`<b>${s4.laeuft}</b>` : "Ein Schritt: legt das Gerät und den Inventar-Eintrag an und benennt um. Geht etwas nicht, steht hier genau, was schon geschehen ist."}</div>`;
+    <div class="ga-knoepfe">${knopf8(text2, p4.nurAdmin(() => kon ? p4.toast("Erst den Konflikt lösen") : p4.assistentAnlegen(s4)), `amber nur-admin`, "anlegen", !!kon || nichts || !!s4.laeuft)}${umbenennen ? knopf8("Nur anlegen, Namen lassen", p4.nurAdmin(() => p4.assistentAnlegen(s4, true)), "nur-admin", "namen-lassen", !!s4.laeuft) : A}${zurueck}</div>${rechteHinweis2(p4)}
+    <div class="leise ga-fuss">${s4.laeuft ? b2`<b>${s4.laeuft}</b>` : "Ein Schritt: legt das Gerät und den Inventar-Eintrag an und benennt es um. Geht etwas nicht, steht hier genau, was schon geschehen ist."}</div>`;
 }
 function schrittFertig(p4, s4) {
   const r5 = s4.erg || {}, u3 = r5.umbenannt || {}, b3 = p4.d.bereiche.find((x2) => x2.id === s4.bid);
-  const namen = u3.fehler ? b2`<span class="amber-t">${u3.fehler}</span>` : u3.status === "ohne_inventar" ? "Namen bleiben (nicht im Inventar)" : u3.status === "nur_inventar" ? "nur im Inventar zugeordnet, Namen bleiben" : u3.status === "teilweise" ? b2`<span class="amber-t">${u3.anzahl} Namen geändert, ${u3.offen} offen – „Nachholen“ unter 🏷 Namen in HA</span>` : `${u3.anzahl || 0} Namen geändert`;
+  const namen = u3.fehler ? b2`<span class="amber-t">${u3.fehler}</span>` : u3.status === "ohne_inventar" ? "Namen bleiben (nicht im Inventar)" : u3.status === "nur_inventar" ? "nur im Inventar zugeordnet, Namen bleiben" : u3.status === "eingehaengt" ? "eingehängt, Inventar und Namen bleiben" : u3.status === "namen_gelassen" ? "Namen bleiben, wie sie sind" : u3.status === "teilweise" ? b2`<span class="amber-t">${u3.anzahl} Namen geändert, ${u3.offen} offen – „Nachholen“ unter 🏷 Namen in HA</span>` : `${u3.anzahl || 0} Namen geändert`;
   return b2`<div class="glas-panel ga-fertig"><div class="ga-gross">${s4.zurueckGenommen ? "↺" : "✓"}</div>
       <b>${s4.zurueckGenommen ? `${r5.name} wieder entfernt` : `${r5.name} hängt an ${r5.container || (b3 ? b3.name : "")}`}</b>
       ${s4.zurueckGenommen ? A : b2`<div class="leise">${r5.typ || ""} · ${r5.frei ? b2`Name „${r5.frei}“ <span class="ga-abw">⚠ weicht ab</span> · ` : A}${namen}</div>`}
+      ${s4.rueckFehler ? b2`<div class="leise amber-t ga-rueck-fehler">Teilweise zurückgenommen – bleibt: ${s4.rueckFehler.join("; ")}</div>` : A}
       <div class="ga-knoepfe">${knopf8("Zum Container ›", () => p4.assistentZumContainer(s4), "amber", "zum-container")}${knopf8("+ Noch ein Gerät", () => p4.assistentAuf({ bid: s4.vorgabe ? s4.bid : null, vorgabe: s4.vorgabe, zurueck: s4.zurueck }), "", "noch-eins")}
         ${s4.zurueckGenommen || !r5.rueck ? A : knopf8("↺ Rückgängig", p4.nurAdmin(() => p4.assistentRueck(s4)), "nur-admin", "rueck", !!s4.laeuft)}</div>${s4.laeuft ? b2`<div class="leise">${s4.laeuft}</div>` : A}</div>`;
 }
@@ -4662,19 +4662,19 @@ function containerNeu(p4, s4) {
   }}>${t5}</button>`)}</div>`;
   const zeile3 = (t5, sub, rechts, k2) => b2`<div class="zeile" data-zeile=${k2}><div class="ga-zl"><b>${t5}</b>${sub ? b2`<div class="leise">${sub}</div>` : A}</div><div class="ga-zr">${rechts}</div></div>`;
   const nr = V2 && V2.nummer, sperre = !V2 || V2.fehler || V2.belegt || !f3.name.trim() || s4.laeuft;
-  const nummer = f3.schacht ? A : f3.eigen ? zeile3(
+  const nummer = f3.schacht || f3.ohneInventar ? A : f3.eigen ? zeile3(
     "Nummer",
-    V2 && V2.belegt ? b2`<span class="rot-t">${V2.grund}</span>` : V2 && V2.naechste ? `nächste freie: ${String(V2.naechste).padStart(3, "0")}` : "",
+    V2 && V2.belegt ? b2`<span class="rot-t">${V2.grund}</span>` : V2 && V2.naechste_text ? `nächste freie: ${V2.naechste_text}` : "",
     b2`<span class="stepper klein"><button data-d="-1" @click=${() => {
       f3.nr = Math.max(1, (f3.nr || nr || 1) - 1);
       z2();
-    }}>−</button><b>${nr ? String(nr).padStart(3, "0") : "…"}</b><button data-d="1" @click=${() => {
+    }}>−</button><b>${V2 && V2.nummer_text || "…"}</b><button data-d="1" @click=${() => {
       f3.nr = Math.min(999, (f3.nr || nr || 0) + 1);
       z2();
     }}>+</button></span>`,
     "nummer"
-  ) : zeile3("Nummer", "vergibt die Integration: die nächste dieser Firma auf der Baustelle", b2`<b class="inv-id">${nr ? String(nr).padStart(2, "0") : "–"}</b>`, "nummer");
-  return b2`${GRIFF8}<div class="block-kopf ga-kopf"><h3>+ Container</h3><span class="leise">auf der Seite und im Inventar</span></div>
+  ) : zeile3("Nummer", "vergibt die Integration: die nächste dieser Firma auf der Baustelle", b2`<b class="inv-id">${V2 && V2.nummer_text || "–"}</b>`, "nummer");
+  return b2`${GRIFF8}<div class="block-kopf ga-kopf"><h3>+ Container</h3><span class="leise">${f3.ohneInventar ? "nur auf der Seite – ohne Inventar" : "auf der Seite und im Inventar"}</span></div>
     <div class="glas-panel liste ga-l">
       ${zeile3("Art", null, seg([["container", "Container"], ["schacht", "Pumpenschacht"]], f3.schacht ? "schacht" : "container", (v2) => {
     f3.schacht = v2 === "schacht";
@@ -4695,7 +4695,7 @@ function containerNeu(p4, s4) {
     z2();
   }}>`, "kuerzel") : A}
       ${nummer}
-      ${f3.schacht ? A : zeile3("Verwendung", "Kürzel im Namen", b2`<select data-f="art" @change=${(e6) => {
+      ${f3.schacht || f3.ohneInventar ? A : zeile3("Verwendung", "Kürzel im Namen", b2`<select data-f="art" @change=${(e6) => {
     f3.art = e6.target.value;
     z2();
   }}>${Object.entries(I2 && I2.arten || { [f3.art]: f3.art }).map(([k2, t5]) => b2`<option value=${k2} ?selected=${f3.art === k2}>${t5} · ${k2}</option>`)}</select>`, "verwendung")}
@@ -4707,12 +4707,20 @@ function containerNeu(p4, s4) {
   }}>`, "name")}
     </div>
     <div class="glas-panel ga-vorschau-c"><div class="gruppe">Vorschau</div>
-      ${V2 === void 0 ? b2`<div class="leer">lädt …</div>` : !V2 ? b2`<div class="leer">${p4.invFehler(p4.containerSchluessel(f3)) || "Keine Vorschau"}</div>` : V2.fehler ? b2`<div class="ga-vz"><span class="rot-t">${V2.fehler}</span></div>` : b2`${V2.inventar ? b2`<div class="ga-vz"><span class="leise">Inventar</span><code>${V2.inventar}</code></div>` : b2`<div class="ga-vz"><span class="leise">${V2.hinweis}</span></div>`}
+      ${V2 === void 0 ? b2`<div class="leer">lädt …</div>` : !V2 ? b2`<div class="leer">${p4.invFehler(p4.containerSchluessel(f3)) || "Keine Vorschau"}</div>` : V2.fehler ? b2`<div class="ga-vz"><span class="rot-t">${V2.fehler}</span></div>
+          ${V2.ohne_inventar_moeglich ? b2`<div class="ga-knoepfe">${knopf8("Ohne Inventar anlegen …", () => {
+    f3.ohneInventar = true;
+    z2();
+  }, "", "ohne-inventar")}</div>` : A}` : b2`${V2.inventar ? b2`<div class="ga-vz"><span class="leise">Inventar</span><code>${V2.inventar}</code></div>` : b2`<div class="ga-vz"><span class="leise">${V2.hinweis}</span></div>`}
+          ${f3.ohneInventar ? b2`<div class="ga-knoepfe">${knopf8("‹ Doch mit Inventar", () => {
+    f3.ohneInventar = false;
+    z2();
+  }, "", "mit-inventar")}</div>` : A}
           <div class="ga-vz"><span class="leise">Kachel auf der Seite</span><span>${f3.name.trim() || "–"}</span></div>
           ${V2.geraete ? b2`<div class="ga-vz"><span class="leise">Geräte heißen dann</span><code>${V2.geraete} …</code></div>` : A}`}</div>
     <div class="ga-knoepfe">${knopf8("Anlegen und Gerät hinzufügen ›", p4.nurAdmin(() => p4.containerAnlegen(s4, true)), "amber nur-admin", "anlegen-weiter", !!sperre)}${knopf8("Nur anlegen", p4.nurAdmin(() => p4.containerAnlegen(s4, false)), "nur-admin", "anlegen", !!sperre)}${knopf8("Abbrechen", () => p4.schliessen(), "leise-k")}</div>
     ${rechteHinweis2(p4, "Anlegen dürfen nur Admins")}${s4.laeuft ? b2`<div class="leise ga-fuss"><b>${s4.laeuft}</b></div>` : A}
-    <div class="leise ga-fuss">Alle Wege (Übersicht, ⚙ › Container, Baustelle bearbeiten) öffnen dieses eine Formular. Alternative in Home Assistant: Geräte & Dienste › Baustelle › „Bereich“ – dort ohne Inventar; aufnehmen dann über den Chip „Nicht im Inventar“.</div>`;
+    <div class="leise ga-fuss">„+ Container“ in der Übersicht, unter ⚙ und im Assistenten öffnet dieses Formular. Container aus dem Firmen-Dialog oder aus Home Assistant (Geräte & Dienste › Baustelle › „Bereich“) stehen noch nicht im Inventar – aufnehmen dann über den Chip „Nicht im Inventar – aufnehmen ›“ am Container.</div>`;
 }
 var ASSISTENT_EINBLENDUNGEN = { "geraet-assistent": assistent, "container-neu": containerNeu };
 var ASSISTENT_BREIT = ["geraet-assistent"];
@@ -4738,7 +4746,7 @@ var ASSISTENT_CSS = `
 .ga-alt { color: var(--ink2); text-decoration: line-through; text-decoration-color: rgba(127,127,127,.6); overflow-wrap: anywhere; }
 .ga-abw { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); white-space: nowrap; }
 .ga-frei { margin: 4px 0; max-width: 100%; box-sizing: border-box; }
-.ga-fertig { padding: 18px; text-align: center; } .ga-gross { font-size: 40px; color: #30d158; }
+.ga-fertig { padding: 18px; text-align: center; } .ga-rueck-fehler { margin-top: 6px; } .ga-gross { font-size: 40px; color: #30d158; }
 .ga-vorschau-c { padding: 8px 14px; margin: 8px 0; }
 .ga-vz { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr; gap: 8px; padding: 5px 0; border-top: 1px solid rgba(120,120,128,.15); align-items: baseline; }
 .ga-vz code { word-break: break-all; }
@@ -6836,7 +6844,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.192";
+var SEITE_VERSION = "0.8.193";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -8108,7 +8116,7 @@ var BaustellePanel = class extends i4 {
     return r5 && r5.geraete;
   }
   invNeu() {
-    for (const k2 of Object.keys(this.cache)) if (k2 === "inv" || k2 === "invk" || k2.startsWith("invv:") || k2.startsWith("invr:") || k2.startsWith("invz:")) delete this.cache[k2];
+    for (const k2 of Object.keys(this.cache)) if (k2 === "inv" || k2 === "invk" || k2 === "gak" || ["invv:", "invr:", "invz:", "gat:", "gav:"].some((v2) => k2.startsWith(v2))) delete this.cache[k2];
   }
   invAuf(sheet) {
     this.s.sheet = sheet;
@@ -8119,49 +8127,69 @@ var BaustellePanel = class extends i4 {
   assistentAuf(o6 = {}) {
     const S3 = this.s, zurueck = "zurueck" in o6 ? o6.zurueck : S3.sheet && ["bereich", "inv-container"].includes(S3.sheet.art) ? S3.sheet : null;
     this.invNeu();
-    S3.sheet = { art: "geraet-assistent", schritt: 1, bid: null, vorgabe: false, dev: null, typ: null, nenn: null, rolle: "zusatz", frei: false, freiName: "", q: "", ...o6, zurueck };
+    S3.sheet = { art: "geraet-assistent", schritt: 1, bid: null, vorgabe: false, dev: null, schalter: null, typ: null, nenn: null, rolle: "zusatz", frei: false, freiName: "", q: "", ...o6, zurueck };
     return this.neuZeichnen();
   }
   assistentSchritt(s4, n4) {
     s4.schritt = n4;
     return this.neuZeichnen();
   }
+  /* Schritt 1 (Herberts Entscheidung B): jeder freie Schalter einzeln, je Kanal – von der Integration (baustelle/geraet_kandidaten) */
+  assistentKandidaten() {
+    const r5 = this._holen("gak", () => this._hass.callWS({ type: "baustelle/geraet_kandidaten" }), 3e4);
+    return r5 && r5.geraete;
+  }
+  assistentGeraet(s4) {
+    return { device_id: s4.dev, ...s4.schalter ? { schalter: s4.schalter } : {} };
+  }
   assistentSchluessel(k2, s4) {
-    return `${k2}:${s4.bid}:${s4.dev}${k2 === "gav" ? `:${s4.typ}:${s4.frei ? (s4.freiName || "").trim() : ""}` : ""}`;
+    return `${k2}:${s4.bid}:${s4.dev}:${s4.schalter || ""}${k2 === "gav" ? `:${s4.typ}:${s4.frei ? (s4.freiName || "").trim() : ""}` : ""}`;
   }
   assistentTypen(s4) {
-    return this._holen(this.assistentSchluessel("gat", s4), () => this._hass.callWS({ type: "baustelle/geraet_typen", entry_id: this.d.entry, bereich_id: s4.bid, device_id: s4.dev }), 3e4);
+    return this._holen(this.assistentSchluessel("gat", s4), () => this._hass.callWS({ type: "baustelle/geraet_typen", entry_id: this.d.entry, bereich_id: s4.bid, ...this.assistentGeraet(s4) }), 3e4);
   }
   assistentVorschau(s4) {
     const frei = s4.frei ? (s4.freiName || "").trim() : "";
-    return this._holen(this.assistentSchluessel("gav", s4), () => this._hass.callWS({ type: "baustelle/geraet_vorschau", entry_id: this.d.entry, bereich_id: s4.bid, device_id: s4.dev, typ: s4.typ, ...frei ? { name: frei } : {} }), 15e3);
+    return this._holen(this.assistentSchluessel("gav", s4), () => this._hass.callWS({ type: "baustelle/geraet_vorschau", entry_id: this.d.entry, bereich_id: s4.bid, ...this.assistentGeraet(s4), typ: s4.typ, ...frei ? { name: frei } : {} }), 15e3);
+  }
+  /* Gutachten 0.8.192: nach Hinzufügen und Rückgängig den Entwurf von „Bearbeiten“ darunter verwerfen – er wird beim nächsten
+     Zeichnen aus den frischen Daten neu gebildet (sonst setzte „Speichern“ Fühler, Tür und Primär auf den alten Stand zurück) */
+  entwurfNeu(sheet) {
+    for (let x2 = sheet, n4 = 0; x2 && typeof x2 === "object" && n4 < 10; x2 = x2.zurueck, n4++) if (x2.art === "bereich") delete x2.edit;
+  }
+  async assistentNachher(s4) {
+    this.entwurfNeu(s4.zurueck);
+    this.invNeu();
+    this.neuZeichnen();
+    await this._laden();
+    this.entwurfNeu(s4.zurueck);
   }
   assistentNenn(s4, dd) {
     const v2 = s4.nenn ? Math.round((s4.nenn + dd) * 10) / 10 : dd > 0 ? 2 : null;
     s4.nenn = v2 && v2 >= 0.1 ? Math.min(10, v2) : null;
     return this.neuZeichnen();
   }
-  async assistentAnlegen(s4) {
+  async assistentAnlegen(s4, namenLassen = false) {
     if (s4.laeuft) return void 0;
-    const T2 = this.assistentTypen(s4), t5 = T2 && T2.typen.find((x2) => x2.k === s4.typ), frei = s4.frei ? (s4.freiName || "").trim() : "";
-    s4.laeuft = "Wird angelegt und umbenannt … das Schalten des Containers pausiert kurz";
+    const T2 = this.assistentTypen(s4), t5 = T2 && T2.typen.find((x2) => x2.k === s4.typ), frei = s4.frei && !namenLassen ? (s4.freiName || "").trim() : "";
+    s4.laeuft = namenLassen ? "Wird angelegt … die Namen bleiben" : "Wird angelegt und umbenannt … das Schalten des Containers pausiert kurz";
     this.neuZeichnen();
     try {
       const r5 = await this._hass.callWS({
         type: "baustelle/geraet_hinzufuegen",
         entry_id: this.d.entry,
         bereich_id: s4.bid,
-        device_id: s4.dev,
+        ...this.assistentGeraet(s4),
         typ: s4.typ,
         ...frei ? { name: frei } : {},
+        ...namenLassen ? { umbenennen: false } : {},
         ...t5 && t5.nenn && s4.nenn ? { nenn_kw: s4.nenn } : {},
         ...t5 && t5.rolle ? { rolle: s4.rolle || "zusatz" } : {}
       });
       this.idsTauschen(s4.zurueck, r5.umbenannt && r5.umbenannt.getauscht);
-      Object.assign(s4, { erg: r5, schritt: 5, laeuft: null, zurueckGenommen: false });
+      Object.assign(s4, { erg: r5, schritt: 5, laeuft: null, zurueckGenommen: false, rueckFehler: null });
       this.toast(r5.umbenannt && r5.umbenannt.fehler ? r5.umbenannt.fehler : `${r5.name} hinzugefügt`);
-      this.invNeu();
-      this._laden();
+      await this.assistentNachher(s4);
     } catch (e6) {
       s4.laeuft = null;
       this.toast(this.fehlerText(e6));
@@ -8174,11 +8202,10 @@ var BaustellePanel = class extends i4 {
     this.neuZeichnen();
     try {
       const r5 = await this._hass.callWS({ type: "baustelle/geraet_hinzufuegen_rueckgaengig", rueck: s4.erg.rueck });
-      this.idsTauschen(s4.zurueck, Object.fromEntries(Object.entries(s4.erg.umbenannt && s4.erg.umbenannt.getauscht || {}).map(([a3, b3]) => [b3, a3])));
-      Object.assign(s4, { laeuft: null, zurueckGenommen: true });
-      this.toast(r5.ok ? "Zurückgenommen" : `Teilweise zurückgenommen: ${r5.fehler.join("; ")}`);
-      this.invNeu();
-      this._laden();
+      this.idsTauschen(s4.zurueck, r5.getauscht);
+      Object.assign(s4, { laeuft: null, zurueckGenommen: !!r5.ok, rueckFehler: r5.ok ? null : r5.fehler || [], erg: { ...s4.erg, rueck: null } });
+      this.toast(r5.ok ? "Zurückgenommen" : `Teilweise zurückgenommen: ${(r5.fehler || []).join("; ")}`);
+      await this.assistentNachher(s4);
     } catch (e6) {
       s4.laeuft = null;
       this.toast(this.fehlerText(e6));
@@ -8190,7 +8217,7 @@ var BaustellePanel = class extends i4 {
     return this.bereichEinst(s4.bid);
   }
   containerForm() {
-    return { schacht: false, eigen: true, art: "MAN", nr: null, firma_id: "", kuerzel: "", name: "" };
+    return { schacht: false, eigen: true, art: "MAN", nr: null, firma_id: "", kuerzel: "", name: "", ohneInventar: false };
   }
   containerNeuAuf(zurueck) {
     this.s.sheet = { art: "container-neu", form: this.containerForm(), zurueck };
@@ -8201,6 +8228,7 @@ var BaustellePanel = class extends i4 {
       schacht: !!f3.schacht,
       eigen: !!f3.eigen,
       ...f3.schacht ? {} : { art: f3.art },
+      ...!f3.schacht && f3.ohneInventar ? { ohne_inventar: true } : {},
       ...!f3.schacht && f3.eigen && f3.nr ? { nr: f3.nr } : {},
       ...!f3.schacht && !f3.eigen && f3.firma_id ? { firma_id: f3.firma_id } : {},
       ...!f3.schacht && !f3.eigen && (f3.kuerzel || "").trim() ? { kuerzel: f3.kuerzel.trim() } : {}

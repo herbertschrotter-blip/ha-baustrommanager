@@ -13,7 +13,7 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from .geraete import STATUS
+from .geraete import STATUS, rolle_passt
 from .symbol import sensor_eintragen
 
 # Die eine Kürzeltabelle (§3) – neue Kürzel nur hier, mit Test
@@ -317,13 +317,14 @@ def nicht_eingetragen(typ: str) -> str:
 
 def mit_zuordnung(eingabe: Mapping[str, Any], *, typ: str, geraet: Mapping[str, Any], entitaeten: list[dict[str, Any]],
                   labels_: list[str], schalter: Mapping[str, Any] | None = None, haengt: str | None = None,
-                  verdrahtet: bool = True) -> dict[str, Any]:
+                  verdrahtet: bool = True, shelly: bool = True) -> dict[str, Any]:
     """Eingabe der Vorschau, als wäre das HA-Gerät schon zugeordnet (Zuordnen: erst die Vorschau, dann schreiben).
 
     Ein Plug bekommt die nächste Gerätenummer nach den im Inventar gespeicherten (`gg_fest`, wie `naechste`) und
     Rolle/Typ nach „Was hängt an diesem Plug?“ (`HAENGT`); Fühler, Tür und Fenster kommen ans Ende ihrer Art. Steckt
     das Gerät schon im Container oder trägt das Zuordnen den Sensor nicht am Container ein (`verdrahtet` False, Regel
-    `sensor_verdrahtung`, z. B. zweiter Fühler), bleibt die Eingabe, wie sie ist."""
+    `sensor_verdrahtung`, z. B. zweiter Fühler), bleibt die Eingabe, wie sie ist. Ein Schalter, der kein Shelly ist
+    (`shelly` False, Herberts Entscheidung B 23.11.2026), hat keinen Namen im Gerät selbst – der Schritt „Plug-Name“ entfällt."""
     aus = {**eingabe, "plugs": list(eingabe.get("plugs") or []), "sensoren": list(eingabe.get("sensoren") or [])}
     gid = geraet.get("id")
     if any((x.get("geraet") or {}).get("id") == gid for x in aus["plugs"] + aus["sensoren"]):
@@ -338,7 +339,7 @@ def mit_zuordnung(eingabe: Mapping[str, Any], *, typ: str, geraet: Mapping[str, 
             "gg": gg, "gg_fest": True, "geraet_id": NEU_ZUGEORDNET, "name": geraet.get("name"),
             "rolle": rolle, "typ": heiztyp, "geraet": dict(geraet), "schalter": dict(schalter or {}),
             "entitaeten": [e for e in entitaeten if e.get("klasse") in ("power", "energy")],
-            "plug_name": geraet.get("original"), "labels": list(labels_)})
+            "plug_name": geraet.get("original") if shelly else None, "labels": list(labels_)})
     elif typ in AM_CONTAINER:
         if verdrahtet:
             aus["sensoren"].append({"typ": typ, "geraet": dict(geraet), "entitaeten": list(entitaeten), "labels": list(labels_)})
@@ -505,35 +506,40 @@ def abgleich(ha: Iterable[str], im_container: Mapping[str, str]) -> tuple[list[s
 
 # ---------------------------------------------------------------------- Assistent „+ Gerät hinzufügen“ (UI-Bericht M12)
 # Die eine Typenliste für alle Wege (Seite, Inventar, HA-Unter-Eintrag), Mockup ordnung.html as-3: Schlüssel → (Gruppe,
-# Text, Inventar-Typ, passt zu den Gerätetypen aus `typ_vorschlag`, „Was hängt an diesem Plug?“ (`HAENGT`), wo erlaubt
-# („container“, „schacht“ oder beide), Nennleistung fragen, Primär/Zusatz fragen)
-ASSISTENT_TYPEN: dict[str, tuple[str, str, str | None, tuple[str, ...], str | None, tuple[str, ...], bool, bool]] = {
-    "radiator": ("Am Plug", "🔥 Ölradiator", "PLUG", ("PLUG",), "radiator", ("container",), True, True),
-    "konvektor": ("Am Plug", "🔥 Konvektor", "PLUG", ("PLUG",), "konvektor", ("container",), True, True),
-    "bautrockner": ("Am Plug", "💨 Bautrockner", "PLUG", ("PLUG",), "bautrockner", ("container",), True, False),
-    "pumpe": ("Am Plug", "💧 Pumpe (nur Schacht)", "PLUG", ("PLUG",), "pumpe", ("schacht",), False, False),
-    "steckdose": ("Am Plug", "🔌 Steckdose / sonstiges", "PLUG", ("PLUG",), "nichts", ("container", "schacht"), False, False),
-    "fuehler": ("Sensor", "🌡 Temperaturfühler", "TEMP", ("TEMP",), None, ("container",), False, False),
-    "tuer": ("Sensor", "🚪 Tür", "DOOR", ("DOOR", "FEN"), None, ("container",), False, False),
-    "fenster": ("Sensor", "🪟 Fenster", "FEN", ("DOOR", "FEN"), None, ("container",), False, False),
-    "licht": ("Sensor", "💡 Licht", None, (), None, ("container",), False, False),
+# Text, Inventar-Typ, passt zu den Gerätetypen aus `typ_vorschlag`, „Was hängt an diesem Plug?“ (`HAENGT`), Nennleistung
+# fragen, Primär/Zusatz fragen). Wo ein Plug-Typ hindarf, folgt aus seiner Rolle (`HAENGT`) und `logik.geraete.rolle_passt`
+# – dieselbe Regel wie beim Anlegen (Gutachten 0.8.192: keine Steckdose im Pumpenschacht); Sensoren nur im Container.
+ASSISTENT_TYPEN: dict[str, tuple[str, str, str | None, tuple[str, ...], str | None, bool, bool]] = {
+    "radiator": ("Am Plug", "🔥 Ölradiator", "PLUG", ("PLUG",), "radiator", True, True),
+    "konvektor": ("Am Plug", "🔥 Konvektor", "PLUG", ("PLUG",), "konvektor", True, True),
+    "bautrockner": ("Am Plug", "💨 Bautrockner", "PLUG", ("PLUG",), "bautrockner", True, False),
+    "pumpe": ("Am Plug", "💧 Pumpe (nur Schacht)", "PLUG", ("PLUG",), "pumpe", False, False),
+    "steckdose": ("Am Plug", "🔌 Steckdose / sonstiges", "PLUG", ("PLUG",), "nichts", False, False),
+    "fuehler": ("Sensor", "🌡 Temperaturfühler", "TEMP", ("TEMP",), None, False, False),
+    "tuer": ("Sensor", "🚪 Tür", "DOOR", ("DOOR", "FEN"), None, False, False),
+    "fenster": ("Sensor", "🪟 Fenster", "FEN", ("DOOR", "FEN"), None, False, False),
+    "licht": ("Sensor", "💡 Licht", None, (), None, False, False),
 }
 
 
 def assistent_typen(geraet_typ: str | None, *, schacht: bool, geraet: str = "diesem Gerät") -> list[dict[str, Any]]:
     """Schritt 3 „Was hängt dran?“: alle Typen der einen Liste, nicht passende mit Grund (ausgegraut auf der Seite).
 
-    Passt, wenn der Gerätetyp des HA-Geräts (PLUG, TEMP, DOOR, FEN aus `typ_vorschlag`) dazugehört und der Ort stimmt
-    (Pumpe nur im Schacht, Heizungen und Sensoren nur im Container – wie `logik.geraete.pruefen`). Licht wählt man unter
-    🏠 Aussehen, nicht hier."""
+    Passt, wenn der Gerätetyp des HA-Geräts (PLUG, TEMP, DOOR, FEN aus `typ_vorschlag`) dazugehört und der Ort stimmt:
+    am Plug nach der Rolle (`logik.geraete.rolle_passt`: in den Schacht nur Pumpen, die Pumpe nur dorthin), Sensoren nur
+    im Container. Licht wählt man unter 🏠 Aussehen, nicht hier."""
     aus = []
-    for k, (gruppe, text, _typ, passt_zu, _haengt, orte, nenn, rolle) in ASSISTENT_TYPEN.items():
+    ort = "pumpenschacht" if schacht else "container"
+    for k, (gruppe, text, typ, passt_zu, haengt, nenn, rolle) in ASSISTENT_TYPEN.items():
+        plug_rolle = HAENGT[haengt][0] if typ == "PLUG" and haengt else None
         if k == "licht":
             grund: str | None = "Licht im Symbol wählt man unter 🏠 Aussehen"
         elif geraet_typ not in passt_zu:
             grund = f"passt nicht zu {geraet}"
-        elif ("schacht" if schacht else "container") not in orte:
-            grund = "nur im Pumpenschacht" if orte == ("schacht",) else "nicht im Pumpenschacht"
+        elif plug_rolle is not None and not rolle_passt(plug_rolle, ort):
+            grund = "nur im Pumpenschacht" if plug_rolle == "pumpe" else "nicht im Pumpenschacht"
+        elif plug_rolle is None and schacht:
+            grund = "nicht im Pumpenschacht"
         else:
             grund = None
         aus.append({"k": k, "gruppe": gruppe, "text": text, "passt": grund is None, "grund": grund, "nenn": nenn, "rolle": rolle})
@@ -552,6 +558,34 @@ def assistent_zuordnung(k: str) -> tuple[str, str | None]:
     return str(ASSISTENT_TYPEN[k][2]), ASSISTENT_TYPEN[k][4]
 
 
+def nur_geraet(v: Mapping[str, Any], refs: Iterable[str]) -> dict[str, Any]:
+    """Nur die Schritte des neuen Geräts (Herberts Entscheidung A, 23.11.2026): aus der Vorschau des ganzen Containers die
+    Gruppe(n) mit einem Schritt an `refs` (Plug: sein Schalter; Fühler, Tür, Fenster: das HA-Gerät) – Gerätename, seine
+    Entity-IDs, Shelly-Name, Heizkörper-Name. Andere Geräte des Containers bleiben, wie sie sind (auch ein früher mit
+    eigenem Namen angelegtes). Teilt sich das HA-Gerät mit einer anderen Gruppe (zweiter Kanal z. B. eines Shelly 2PM),
+    bleiben Gerätename, Labels und Shelly-Name unangetastet – sie gehören auch dem anderen Kanal.
+    Ergebnis wie `vorschau`: `schritte`, `konflikte` (nur die dieser Schritte), `zaehler`."""
+    refs_ = set(refs)
+    alle = list(v.get("schritte") or [])
+    gruppen = {s.get("gruppe") for s in alle if s["ref"] in refs_}
+    fremd = {s["ref"] for s in alle if s["ziel"] == "geraet" and s.get("gruppe") not in gruppen}
+    geteilt = {s.get("gruppe") for s in alle if s["ziel"] == "geraet" and s.get("gruppe") in gruppen and s["ref"] in fremd}
+    schritte = [dict(s) for s in alle if s.get("gruppe") in gruppen
+                and not (s.get("gruppe") in geteilt and s["ziel"] in ("geraet", "label", "plug"))]
+    ids = {s["alt"] for s in schritte if s["ziel"] == "entitaet_id"}
+    konfl = {a: n for a, n in (v.get("konflikte") or {}).items() if a in ids}
+    zaehler = {z: sum(1 for s in schritte if s["zustand"] == z) for z in ("aendern", "neu", "gleich", "konflikt")}
+    return {"schritte": schritte, "konflikte": konfl, "zaehler": zaehler}
+
+
+def kandidat_reihenfolge(k: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Reihenfolge in Schritt 1 (Entscheidung B): Shellys oben, dann andere Schalter, dann Fühler, Tür, Fenster; je nach
+    Name und Kanal."""
+    reihe = ("PLUG", "TEMP", "DOOR", "FEN")
+    return (not k.get("shelly"), reihe.index(k["typ"]) if k.get("typ") in reihe else len(reihe),
+            str(k.get("name") or ""), str(k.get("kanal") or ""))
+
+
 def frei_setzen(schritte: Iterable[Mapping[str, Any]], device_id: str, name: str | None) -> list[dict[str, Any]]:
     """Eigener Name statt Schema (Herberts Entscheidung 3): gilt nur für den Gerätenamen des neuen HA-Geräts, die
     Entity-IDs folgen weiter dem Schema. Der Schritt bekommt `frei` und wird als „⚠ weicht ab“ gezeigt, nicht gesperrt."""
@@ -567,15 +601,21 @@ def frei_setzen(schritte: Iterable[Mapping[str, Any]], device_id: str, name: str
 
 # ---------------------------------------------------------------------- „+ Container“ (UI-Bericht M12, Entscheidung 2)
 def container_vorschau(*, schacht: bool, eigen: bool, art: str | None, nr: int | None = None, firma: str | None = None,
-                       nummern: Iterable[int | None] = (), fremd_nummern: Iterable[int | None] = ()) -> dict[str, Any]:
+                       nummern: Iterable[int | None] = (), fremd_nummern: Iterable[int | None] = (),
+                       ohne_inventar: bool = False) -> dict[str, Any]:
     """Name und Nummer eines neuen Containers vor dem Anlegen (Mockup ordnung.html cn-eigen/cn-fremd/cn-belegt).
 
     Eigen: Nummer frei wählbar, vorbelegt die nächste (`naechste`); jede je vergebene ist gesperrt (eine Nummer gilt für
     immer, `nummer_frei`). Fremd: die nächste Nummer dieser Firma auf der Baustelle, wie das Anlegen sie vergibt.
-    Pumpenschächte stehen nicht im Inventar (die Kürzeltabelle kennt nur Container) – nur der Bereich in HA."""
-    if schacht:
-        return {"im_inventar": False, "inventar": None, "nummer": None, "naechste": None, "belegt": False, "grund": None,
-                "geraete": None, "hinweis": "Pumpenschächte stehen nicht im Inventar – angelegt wird der Bereich in HA"}
+    Pumpenschächte stehen nicht im Inventar (die Kürzeltabelle kennt nur Container) – nur der Bereich in HA; ebenso ein
+    Container „ohne Inventar“ (`ohne_inventar`, z. B. Datenbank nicht erreichbar), aufzunehmen später über den Chip.
+    `nummer_text`/`naechste_text`: die Nummer so, wie sie im Namen steht (`006` bzw. `02`) – die Seite rechnet nichts."""
+    if schacht or ohne_inventar:
+        return {"im_inventar": False, "inventar": None, "nummer": None, "naechste": None, "nummer_text": None,
+                "naechste_text": None, "belegt": False, "grund": None, "geraete": None,
+                "hinweis": "Pumpenschächte stehen nicht im Inventar – angelegt wird der Bereich in HA" if schacht else
+                "Ohne Inventar – angelegt wird nur der Bereich in HA; aufnehmen später über den Chip „Nicht im Inventar – "
+                "aufnehmen ›“ am Container"}
     art_ = _art(art or "")
     if eigen:
         vorhanden = [n for n in nummern if n]
@@ -592,5 +632,6 @@ def container_vorschau(*, schacht: bool, eigen: bool, art: str | None, nr: int |
         naechste_ = nummer = naechste(fremd_nummern)
         grund = None
         p = praefix(firma=kuerzel, fremd_nr=nummer)
+    breite = 3 if eigen else 2
     return {"im_inventar": True, "inventar": f"{p}_C_{art_}", "nummer": nummer, "naechste": naechste_,
-            "belegt": grund is not None, "grund": grund, "geraete": geraet_name(p, art_, "PLUG", 1), "hinweis": None}
+            "nummer_text": f"{nummer:0{breite}d}", "naechste_text": f"{naechste_:0{breite}d}", "belegt": grund is not None, "grund": grund, "geraete": geraet_name(p, art_, "PLUG", 1), "hinweis": None}

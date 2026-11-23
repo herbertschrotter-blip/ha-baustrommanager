@@ -29,6 +29,7 @@ from .const import (
     ART_CONTAINER,
     ART_PUMPENSCHACHT,
     CONF_ART,
+    CONF_BEREICH,
     CONF_FUEHLER,
     CONF_SCHALTER,
     DOMAIN,
@@ -42,9 +43,11 @@ from .geraete import _geladen
 from .inventar import verwirft_namen, zuordnen_vorschau
 from .inventar_geraete import (
     _entitaeten,
+    _kennung,
     _klasse,
     _schalter,
     _verdrahten,
+    assistent_kandidaten,
     async_verweise,
     async_zuordnen,
     sensor_plan,
@@ -60,7 +63,10 @@ from .logik.inventar import (
     container_vorschau,
     firmenkuerzel_pruefen,
     frei_setzen,
+    nicht_eingetragen,
+    nur_geraet,
     typ_vorschlag,
+    verweise_tauschen,
 )
 from .logik.rechte import darf
 from .umbenennen import async_ausfuehren as async_umbenennen
@@ -87,10 +93,13 @@ async def _neu_laden(hass: HomeAssistant, entry_id: str) -> Steuerung | None:
     return getattr(entry, "runtime_data", None) if entry is not None else None
 
 
-def _setzen(hass: HomeAssistant, st: Steuerung, bid: str, feld: str, wert: Any, benutzer: str | None) -> None:
-    """Einstellung des Bereichs setzen, ohne auszuwerten (Steuerung angehalten, neu geladen wird danach)."""
-    st.e["bereiche"].setdefault(bid, {})[feld] = wert
-    einstellung_merken(hass, st.entry.entry_id, f"bereiche.{bid}.{feld}", wert, benutzer, bereich_id=bid, quelle="assistent")
+def _setzen(hass: HomeAssistant, st: Steuerung, pfad: tuple[str, ...], wert: Any, benutzer: str | None) -> None:
+    """Einstellung (`bereiche.<bid>.<feld>` oder `geraete.<gid>.<feld>`) setzen, ohne auszuwerten (Steuerung angehalten,
+    neu geladen wird danach)."""
+    ziel = st.e.setdefault(pfad[0], {}).setdefault(pfad[1], {})
+    ziel[pfad[2]] = wert
+    einstellung_merken(hass, st.entry.entry_id, ".".join(pfad), wert, benutzer, quelle="assistent",
+                       **({"bereich_id": pfad[1]} if pfad[0] == "bereiche" else {"geraet_id": pfad[1]}))
     st.einstellungen.speichern()
 
 
@@ -110,20 +119,29 @@ def _container_id(roh: dict[str, Any] | None, bid: str) -> str | None:
                  if e.get("bereich_id") == bid and not e.get("bis") and e["container_id"] in aktiv), None)
 
 
-def _geraet(hass: HomeAssistant, device_id: str) -> tuple[dr.DeviceEntry, str | None]:
+def _wahl(hass: HomeAssistant, device_id: str, schalter: str | None) -> dict[str, Any]:
+    """Das gewählte HA-Gerät und – bei einem Schalter – der gewählte Kanal (Entscheidung B: jeder freie `switch.*`,
+    auch kein Shelly). Ohne `schalter` der erste Shelly-Schalter bzw. Fühler/Tür/Fenster des Geräts."""
     geraet = dr.async_get(hass).async_get(device_id)
     if not isinstance(geraet, dr.DeviceEntry):
         raise LookupError("HA-Gerät nicht gefunden")
     ents = _entitaeten(hass, geraet.id)
-    return geraet, typ_vorschlag(schalter=_schalter(ents) is not None, klassen=[_klasse(e) for e in ents])
+    name = geraet.name_by_user or geraet.name or device_id
+    if schalter:
+        e = next((x for x in ents if x.entity_id == schalter and x.domain == "switch"), None)
+        if e is None:
+            raise LookupError("Diesen Schalter hat das HA-Gerät nicht (mehr)")
+        return {"geraet": geraet, "typ": "PLUG", "schalter": schalter, "shelly": e.platform == "shelly", "name": name}
+    erster = _schalter(ents)
+    return {"geraet": geraet, "typ": typ_vorschlag(schalter=erster is not None, klassen=[_klasse(e) for e in ents]),
+            "schalter": erster, "shelly": erster is not None, "name": name}
 
 
-def _typen(hass: HomeAssistant, st: Steuerung, bid: str, device_id: str) -> tuple[dr.DeviceEntry, str | None, list[dict[str, Any]]]:
+def _typen(hass: HomeAssistant, st: Steuerung, bid: str, msg: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if bid not in st.bereiche:
         raise LookupError("Container nicht gefunden")
-    geraet, geraet_typ = _geraet(hass, device_id)
-    name = geraet.name_by_user or geraet.name or "diesem Gerät"
-    return geraet, geraet_typ, assistent_typen(geraet_typ, schacht=st.bereiche[bid].art == ART_PUMPENSCHACHT, geraet=name)
+    w = _wahl(hass, msg["device_id"], msg.get("schalter"))
+    return w, assistent_typen(w["typ"], schacht=st.bereiche[bid].art == ART_PUMPENSCHACHT, geraet=w["name"])
 
 
 def _typ(typen: list[dict[str, Any]], k: str) -> dict[str, Any]:
@@ -133,7 +151,70 @@ def _typ(typen: list[dict[str, Any]], k: str) -> dict[str, Any]:
     return t
 
 
-SCHEMA_GERAET = {vol.Required("entry_id"): str, vol.Required("bereich_id"): str, vol.Required("device_id"): str}
+def _anderer_kanal(st: Steuerung, roh: dict[str, Any], cid: str, w: dict[str, Any]) -> bool:
+    """Steht das HA-Gerät schon mit einem anderen Kanal in diesem Container im Inventar (z. B. 1. Kanal eines Shelly 2PM)?
+    Das Inventar führt ein Gerät nur einmal – der neue Kanal wird dann nur eingehängt, Inventar und Namen bleiben."""
+    if w["typ"] != "PLUG":
+        return False
+    a = next((x for x in roh.get("ausruestung") or [] if x.get("kennung") == _kennung(w["geraet"])), None)
+    e = next((x for x in roh.get("ausruestung_einsaetze") or [] if a and x["ausruestung_id"] == a["id"] and not x.get("bis")), None)
+    g = st.geraete.get((e or {}).get("geraet_id") or "")
+    return e is not None and e["container_id"] == cid and g is not None and g.schalter != w["schalter"]
+
+
+def _refs(w: dict[str, Any]) -> set[str]:
+    """Woran die Schritte des neuen Geräts hängen (`logik.inventar.nur_geraet`): Plug am Schalter, sonst das HA-Gerät."""
+    return {w["schalter"]} if w["typ"] == "PLUG" and w["schalter"] else {w["geraet"].id}
+
+
+def _plan(hass: HomeAssistant, st: Steuerung, bid: str, w: dict[str, Any], inv_typ: str, haengt: str | None,
+          db: Any, roh: dict[str, Any] | None, name: str | None) -> dict[str, Any]:
+    """Was das Hinzufügen tut – für Vorschau und Hinzufügen dieselbe Rechnung, schreibt nichts. `inventar`: ins Inventar
+    zuordnen; `eingetragen`: am Container eingehängt (Unter-Eintrag bzw. Fühler/Tür/Fenster); `umbenennen`: die Schritte
+    des neuen Geräts (nur sie, Entscheidung A) ausführen."""
+    cid = _container_id(roh, bid)
+    leer = {"cid": cid, "im_inventar": False, "inventar": False, "umbenennen": False, "frei_moeglich": False, "container": None,
+            "schritte": [], "konflikte": {}, "zaehler": {}}
+    if cid is None or roh is None:
+        eingetragen = inv_typ == "PLUG" or sensor_plan(st, bid, inv_typ, _entitaeten(hass, w["geraet"].id)) is not None
+        schacht = st.bereiche[bid].art == ART_PUMPENSCHACHT
+        hinweis = ("Pumpenschächte stehen nicht im Inventar – die Namen bleiben, wie sie sind" if schacht else
+                   "Der Container steht nicht im Inventar – die Namen bleiben; erst aufnehmen, dann einheitlich benennen"
+                   if db is not None else "Datenbank nicht erreichbar – die Namen bleiben, wie sie sind")
+        if not eingetragen:   # Gutachten 0.8.192: dieselbe Regel wie beim Hinzufügen (`sensor_verdrahtung`)
+            hinweis = nicht_eingetragen(inv_typ).split(" – ", 1)[0] + " – ohne Inventar gibt es nichts einzutragen"
+        return {**leer, "eingetragen": eingetragen, "moeglich": eingetragen, "hinweis": hinweis}
+    container = next((c for c in roh.get("container") or [] if c["id"] == cid), {})
+    try:
+        cname: str | None = container_name(container["art"], nr=container.get("nr"), firma=container.get("firma_kuerzel"),
+                                           fremd_nr=container.get("fremd_nr"))
+    except (InventarFehler, KeyError):
+        cname = None
+    if _anderer_kanal(st, roh, cid, w):
+        return {**leer, "im_inventar": True, "container": cname, "eingetragen": True, "moeglich": True,
+                "hinweis": "Ein weiterer Kanal eines Geräts, das schon in diesem Container im Inventar steht – er wird "
+                           "eingehängt, Inventar und Namen bleiben"}
+    v, zu = zuordnen_vorschau(hass, roh, cid, w["geraet"].id, inv_typ, haengt, schalter=w["schalter"])
+    eigen = nur_geraet(v, _refs(w))
+    if zu["eingetragen"]:
+        eigen["schritte"] = frei_setzen(eigen["schritte"], w["geraet"].id, name)
+    # eigener Name nur, wo das neue Gerät einen eigenen Gerätenamen-Schritt hat (nicht beim geteilten HA-Gerät)
+    frei_moeglich = zu["eingetragen"] and any(x["ziel"] == "geraet" and x["ref"] == w["geraet"].id for x in eigen["schritte"])
+    return {**leer, **eigen, "im_inventar": True, "inventar": True, "umbenennen": zu["eingetragen"], "container": cname,
+            "eingetragen": zu["eingetragen"], "moeglich": True, "frei_moeglich": frei_moeglich, "hinweis": zu.get("hinweis")}
+
+
+SCHEMA_GERAET = {vol.Required("entry_id"): str, vol.Required("bereich_id"): str, vol.Required("device_id"): str,
+                 vol.Optional("schalter"): vol.Any(None, str)}
+
+
+@websocket_api.websocket_command({vol.Required("type"): "baustelle/geraet_kandidaten"})
+@websocket_api.async_response
+async def ws_geraet_kandidaten(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Schritt 1: jeder freie Schalter einzeln (je Kanal), Shellys oben, dazu Fühler, Türen, Fenster – alle Benutzer;
+    geht auch ohne Datenbank (dann ohne Status aus dem Inventar)."""
+    _db_, roh = await _roh(hass)
+    connection.send_result(msg["id"], {"geraete": assistent_kandidaten(hass, roh or {})})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/geraet_typen", **SCHEMA_GERAET})
@@ -145,71 +226,55 @@ async def ws_geraet_typen(hass: HomeAssistant, connection: websocket_api.ActiveC
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Baustelle nicht gefunden oder nicht geladen")
         return
     try:
-        geraet, geraet_typ, typen = _typen(hass, st, msg["bereich_id"], msg["device_id"])
+        w, typen = _typen(hass, st, msg["bereich_id"], msg)
     except LookupError as err:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
         return
     connection.send_result(msg["id"], {"typen": typen, "vorschlag": assistent_vorschlag(typen),
-                                       "geraet": {"name": geraet.name_by_user or geraet.name, "typ": geraet_typ}})
+                                       "geraet": {"name": w["name"], "typ": w["typ"], "shelly": w["shelly"]}})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/geraet_vorschau", **SCHEMA_GERAET,
                                   vol.Required("typ"): str, vol.Optional("name"): vol.Any(None, str)})
 @websocket_api.async_response
 async def ws_geraet_vorschau(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Schritt 4: so heißt es danach (alt → neu), noch ohne zu schreiben; `name` = eigener Name statt Schema (nur der
-    Gerätename, markiert als `frei`). Ohne Inventar-Container (Schacht, nicht aufgenommen) bleiben die Namen."""
+    """Schritt 4: so heißt das neue Gerät danach (alt → neu, nur seine Schritte – Entscheidung A), noch ohne zu
+    schreiben; `name` = eigener Name statt Schema (nur der Gerätename, markiert als `frei`). Ohne Inventar-Container
+    (Schacht, nicht aufgenommen) bleiben die Namen."""
     st = await _geladen(hass, msg["entry_id"])
     if st is None:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Baustelle nicht gefunden oder nicht geladen")
         return
     try:
-        _g, _gt, typen = _typen(hass, st, msg["bereich_id"], msg["device_id"])
+        w, typen = _typen(hass, st, msg["bereich_id"], msg)
         inv_typ, haengt = assistent_zuordnung(_typ(typen, msg["typ"])["k"])
         db, roh = await _roh(hass)
-        cid = _container_id(roh, msg["bereich_id"])
-        if cid is None or roh is None:
-            schacht = st.bereiche[msg["bereich_id"]].art == ART_PUMPENSCHACHT
-            connection.send_result(msg["id"], {
-                "im_inventar": False, "container": None, "schritte": [], "konflikte": {}, "zaehler": {}, "verweise": [],
-                "eingetragen": True, "abweichend": 0,
-                "hinweis": "Pumpenschächte stehen nicht im Inventar – die Namen bleiben, wie sie sind" if schacht else
-                "Der Container steht nicht im Inventar – die Namen bleiben; erst aufnehmen, dann einheitlich benennen"
-                if db is not None else "Datenbank nicht erreichbar – die Namen bleiben, wie sie sind"})
-            return
-        v, zuordnen = zuordnen_vorschau(hass, roh, cid, msg["device_id"], inv_typ, haengt)
+        plan = _plan(hass, st, msg["bereich_id"], w, inv_typ, haengt, db, roh, msg.get("name"))
     except LookupError as err:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
         return
     except ValueError as err:   # auch InventarFehler
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
         return
-    schritte = frei_setzen(v["schritte"], msg["device_id"], msg.get("name")) if zuordnen["eingetragen"] else v["schritte"]
-    ids = {s["alt"]: s["neu"] for s in schritte if s["ziel"] == "entitaet_id" and s["alt"] != s["neu"]}
-    container = next((c for c in roh.get("container") or [] if c["id"] == cid), {})
-    try:
-        cname = container_name(container["art"], nr=container.get("nr"), firma=container.get("firma_kuerzel"),
-                               fremd_nr=container.get("fremd_nr"))
-    except (InventarFehler, KeyError):
-        cname = None
+    schritte = plan["schritte"]
+    ids = {x["alt"]: x["neu"] for x in schritte if x["ziel"] == "entitaet_id" and x["alt"] != x["neu"]}
     connection.send_result(msg["id"], {
-        "im_inventar": True, "container": cname, "schritte": schritte, "konflikte": v["konflikte"], "zaehler": v["zaehler"],
-        "abweichend": abweichend(schritte), "verweise": await async_verweise(hass, ids),
-        "eingetragen": zuordnen["eingetragen"], "hinweis": zuordnen.get("hinweis"),
-        "frei": bool((msg.get("name") or "").strip()) and zuordnen["eingetragen"]})
+        "im_inventar": plan["im_inventar"], "container": plan["container"], "schritte": schritte,
+        "konflikte": plan["konflikte"], "zaehler": plan["zaehler"], "abweichend": abweichend(schritte),
+        "verweise": await async_verweise(hass, ids), "eingetragen": plan["eingetragen"], "umbenennen": plan["umbenennen"],
+        "hinweis": plan["hinweis"], "shelly": w["shelly"], "moeglich": plan["moeglich"], "frei_moeglich": plan["frei_moeglich"],
+        "frei": bool((msg.get("name") or "").strip()) and plan["frei_moeglich"]})
 
 
-def _vorher(hass: HomeAssistant, st: Steuerung, bid: str, geraet: dr.DeviceEntry, inv_typ: str) -> dict[str, Any]:
+def _vorher(hass: HomeAssistant, st: Steuerung, bid: str, w: dict[str, Any], inv_typ: str) -> dict[str, Any]:
     """Was das Hinzufügen gleich ändert, im Zustand vorher (für Rückgängig)."""
-    ents = _entitaeten(hass, geraet.id)
-    aus: dict[str, Any] = {"name_alt": geraet.name_by_user, "primaer_alt": st.einstellungen.bereich(bid).get("primaer")}
+    aus: dict[str, Any] = {}
     if inv_typ == "PLUG":
-        schalter = _schalter(ents)
         sub = next((x for x in st.entry.subentries.values()
-                    if x.subentry_type == SUB_GERAET and x.data.get(CONF_SCHALTER) == schalter), None)
-        aus.update(schalter=schalter, alt_sub={"id": sub.subentry_id, "data": dict(sub.data), "title": sub.title} if sub else None)
+                    if x.subentry_type == SUB_GERAET and x.data.get(CONF_SCHALTER) == w["schalter"]), None)
+        aus.update(schalter=w["schalter"], alt_sub={"id": sub.subentry_id, "data": dict(sub.data), "title": sub.title} if sub else None)
         return aus
-    plan = sensor_plan(st, bid, inv_typ, ents)
+    plan = sensor_plan(st, bid, inv_typ, _entitaeten(hass, w["geraet"].id))
     if plan is not None:
         alt = st.entry.subentries[bid].data.get(CONF_FUEHLER) if plan["feld"] == "fuehler" \
             else copy.deepcopy(st.einstellungen.bereich(bid).get(plan["feld"]))
@@ -226,16 +291,43 @@ def _rueck_merken(hass: HomeAssistant, daten: dict[str, Any]) -> str:
     return marke
 
 
+def _einstellungen(hass: HomeAssistant, st: Steuerung, bid: str, gid: str, t: dict[str, Any], msg: dict[str, Any],
+                   benutzer: str | None) -> dict[str, list[Any]]:
+    """Nennleistung und Rolle (Primär setzt `bereiche.<bid>.primaer`, Zusatz `geraete.<gid>.zusatz`, Gutachten 0.8.192)
+    – nur Heizkörper. Liefert {Pfad: [vorher, gesetzt]} für Rückgängig."""
+    gesetzt: dict[str, list[Any]] = {}
+    eg = (st.e.get("geraete") or {}).get(gid, {})
+
+    def setze(pfad: tuple[str, ...], alt: Any, wert: Any) -> None:
+        if alt != wert:
+            st.e.setdefault(pfad[0], {}).setdefault(pfad[1], {})
+            st.einstellung_setzen(pfad, wert)
+            einstellung_merken(hass, st.entry.entry_id, ".".join(pfad), wert, benutzer, quelle="assistent",
+                               **({"bereich_id": pfad[1]} if pfad[0] == "bereiche" else {"geraet_id": pfad[1]}))
+            gesetzt[".".join(pfad)] = [alt, wert]
+
+    if t["nenn"] and msg.get("nenn_kw"):
+        setze(("geraete", gid, "nenn_kw"), eg.get("nenn_kw"), round(float(msg["nenn_kw"]), 1))
+    if t["rolle"]:
+        primaer = (msg.get("rolle") or "zusatz") == "primaer"
+        if primaer:
+            setze(("bereiche", bid, "primaer"), st.einstellungen.bereich(bid).get("primaer"), gid)
+        setze(("geraete", gid, "zusatz"), eg.get("zusatz"), None if primaer and eg.get("zusatz") is None else not primaer)
+    return gesetzt
+
+
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/geraet_hinzufuegen", **SCHEMA_GERAET,
                                   vol.Required("typ"): str, vol.Optional("name"): vol.Any(None, str),
                                   vol.Optional("nenn_kw"): vol.Any(None, vol.All(vol.Coerce(float), vol.Range(0.1, 10))),
-                                  vol.Optional("rolle"): vol.In(["primaer", "zusatz"])})
+                                  vol.Optional("rolle"): vol.In(["primaer", "zusatz"]),
+                                  vol.Optional("umbenennen", default=True): bool})
 @websocket_api.async_response
 @verwirft_namen
 async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Schritt 5 „Anlegen und umbenennen“ in einem: einhängen (Unter-Eintrag bzw. Fühler/Tür am Container), ins Inventar,
-    Nennleistung und Primär, umbenennen nach dem Schema, eigener Gerätename – nur Admins. Antwort mit Marke für
-    Rückgängig; was nicht ging, steht in `umbenannt.fehler` (eingehängt ist es dann schon)."""
+    Nennleistung und Rolle, umbenennen nach dem Schema – nur das neue Gerät (Entscheidung A), mit eigenem Gerätenamen;
+    `umbenennen` False = „Nur anlegen, Namen lassen“. Nur Admins. Antwort mit Marke für Rückgängig; was nicht ging,
+    steht in `umbenannt.fehler` (eingehängt ist es dann schon)."""
     if not _admin(connection, msg, "geraet_hinzufuegen"):
         return
     entry_id, bid, device_id = msg["entry_id"], msg["bereich_id"], msg["device_id"]
@@ -244,21 +336,21 @@ async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.A
     if st is None:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Baustelle nicht gefunden oder nicht geladen")
         return
-    try:   # alles prüfen, bevor etwas geschrieben wird
-        geraet, _gt, typen = _typen(hass, st, bid, device_id)
+    frei = (msg.get("name") or "").strip() or None if msg["umbenennen"] else None
+    try:   # alles prüfen, bevor etwas geschrieben wird – auch die Konflikte der Vorschau (Gutachten 0.8.192)
+        w, typen = _typen(hass, st, bid, msg)
         t = _typ(typen, msg["typ"])
         inv_typ, haengt = assistent_zuordnung(t["k"])
         db, roh = await _roh(hass)
-        cid = _container_id(roh, bid)
-        if cid is not None and roh is not None:
-            _v, zu = zuordnen_vorschau(hass, roh, cid, device_id, inv_typ, haengt)
-            eingetragen = zu["eingetragen"]
-        else:
-            eingetragen = inv_typ == "PLUG" or sensor_plan(st, bid, inv_typ, _entitaeten(hass, device_id)) is not None
-            if not eingetragen:
-                raise InventarFehler("Der Container hat dafür schon einen Platz belegt (z. B. einen Fühler) – ohne Inventar "
-                                     "gibt es nichts einzutragen")
-        vorher = _vorher(hass, st, bid, geraet, inv_typ)
+        plan = _plan(hass, st, bid, w, inv_typ, haengt, db, roh, frei)
+        if not plan["moeglich"]:
+            raise InventarFehler(plan["hinweis"])
+        if plan["konflikte"] and msg["umbenennen"]:
+            raise InventarFehler("Entity-ID schon vergeben: " + ", ".join(f"{a} → {n}" for a, n in plan["konflikte"].items())
+                                 + " – erst lösen (umbenennen oder löschen) oder „Nur anlegen, Namen lassen“")
+        vorher = _vorher(hass, st, bid, w, inv_typ)
+        if not plan["frei_moeglich"]:
+            frei = None   # eigener Name nur mit seinem Schritt – nie ein Gerät überschreiben, das mehr trägt (Entscheidung A)
     except LookupError as err:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
         return
@@ -266,56 +358,72 @@ async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.A
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
         return
 
+    cid, geraet = plan["cid"], w["geraet"]
     rueck: dict[str, Any] = {"entry_id": entry_id, "bereich_id": bid, "device_id": device_id, "container_id": cid,
-                             "inv_typ": inv_typ, "ausruestung_id": None, "umbenennung_id": None, "geraet_id": None, **vorher}
+                             "inv_typ": inv_typ, "ausruestung_id": None, "umbenennung_id": None, "geraet_id": None,
+                             "gesetzt": {}, "getauscht": {}, **vorher}
+    db_fehler: str | None = None
     st.neu_laden_folgt = True   # ein Neu-Laden nach dem Einhängen statt je Unter-Eintrag (wie Umbenennen)
     try:   # 1. einhängen (und ins Inventar)
-        if cid is not None and roh is not None:
-            z = await async_zuordnen(hass, db, roh, cid, device_id, inv_typ, haengt)
-            rueck["ausruestung_id"] = z["id"] if z.get("neu", True) else None
+        if plan["inventar"]:
+            z = await async_zuordnen(hass, db, roh or {}, str(cid), device_id, inv_typ, haengt, schalter=w["schalter"], teilweise=True)
+            rueck["ausruestung_id"] = z["id"] if z.get("neu") else None
+            rueck["geraet_id"] = z.get("geraet_id")
+            db_fehler = z.get("fehler")
         else:
-            _verdrahten(hass, st, bid, geraet, inv_typ, haengt)
+            rueck["geraet_id"], _text = _verdrahten(hass, st, bid, geraet, inv_typ, haengt, w["schalter"])
     except (LookupError, ValueError) as err:
         st.neu_laden_folgt = False
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, f"Nicht hinzugefügt: {err}")
         return
     marke = _rueck_merken(hass, rueck)
-    name = geraet.name_by_user or geraet.name or device_id
+    name = w["name"]
     if (st := await _neu_laden(hass, entry_id)) is None or bid not in st.bereiche:
         connection.send_result(msg["id"], {"ok": True, "name": name, "rueck": marke, "umbenannt": {
             "fehler": "eingehängt, aber die Baustelle lädt nicht – Namen bitte unter 🏷 Namen in HA prüfen"}})
         return
-    # 2. Nennleistung und Primär (nur Heizkörper; das Gerät ist sein Unter-Eintrag)
-    gid = next((g.id for g in st.geraete.values() if g.schalter == vorher.get("schalter")), None) if vorher.get("schalter") else None
-    rueck["geraet_id"] = gid
-    if gid and t["nenn"] and msg.get("nenn_kw"):
-        st.e.setdefault("geraete", {}).setdefault(gid, {})
-        st.einstellung_setzen(("geraete", gid, "nenn_kw"), round(float(msg["nenn_kw"]), 1))
-    if gid and t["rolle"] and msg.get("rolle") == "primaer":
-        st.einstellung_setzen(("bereiche", bid, "primaer"), gid)
-    frei = (msg.get("name") or "").strip() or None
-    st.protokoll("einstellung", bid, f"{frei or name} hinzugefügt ({t['text'].split(' ', 1)[-1]})"
-                 + (" – eigener Name, weicht vom Schema ab" if frei else ""))
+    # 2. Nennleistung und Rolle (nur Heizkörper; das Gerät ist sein Unter-Eintrag)
+    gid = rueck["geraet_id"] if rueck["geraet_id"] in st.geraete else None
+    if gid:
+        rueck["gesetzt"] = _einstellungen(hass, st, bid, gid, t, msg, benutzer)
     container = st.bereiche[bid].name
-    # 3. umbenennen nach dem Schema (der ganze Container, wie die Vorschau zeigte), eigener Gerätename danach
-    umbenannt: dict[str, Any] = {"status": "ohne_inventar" if cid is None else "nur_inventar"}
-    if cid is not None and eingetragen:
+    # 3. umbenennen nach dem Schema – nur die Schritte des neuen Geräts, mit eigenem Gerätenamen (Entscheidung A)
+    umbenannt: dict[str, Any] = {"status": "ohne_inventar" if cid is None else "nur_inventar" if plan["inventar"] else "eingehaengt"}
+    if db_fehler:   # Gutachten 0.8.192: ehrlich sagen, was geschah
+        umbenannt = {"status": "ohne_inventar", "fehler": f"eingehängt, aber nicht ins Inventar ({db_fehler}) – die Namen "
+                     "bleiben; aufnehmen später über den Chip am Container"}
+    elif not msg["umbenennen"]:
+        umbenannt = {"status": "namen_gelassen"}
+    elif plan["umbenennen"]:
+        refs = _refs(w)
+
+        def auswahl(v: dict[str, Any]) -> dict[str, Any]:   # nur das neue Gerät, mit eigenem Gerätenamen
+            eigen = nur_geraet(v, refs)
+            return {**eigen, "schritte": frei_setzen(eigen["schritte"], device_id, frei)}
+
         try:
-            u = await async_umbenennen(hass, db, cid, benutzer, neu_laden=False)
-            rueck["umbenennung_id"] = u.get("id")
-            umbenannt = {"status": u["status"], "anzahl": sum(1 for s in u["schritte"] if s.get("ergebnis") == "ok"),
-                         "offen": sum(1 for s in u["schritte"] if s.get("ergebnis") == "fehler"), "getauscht": u.get("getauscht", {})}
+            u = await async_umbenennen(hass, db, str(cid), benutzer, neu_laden=False, auswahl=auswahl)
+            rueck["umbenennung_id"], rueck["getauscht"] = u.get("id"), u.get("getauscht", {})
+            umbenannt = {"status": u["status"], "anzahl": sum(1 for x in u["schritte"] if x.get("ergebnis") == "ok"),
+                         "offen": sum(1 for x in u["schritte"] if x.get("ergebnis") == "fehler"), "getauscht": u.get("getauscht", {})}
+            if not any(x["ziel"] == "geraet" and x["ref"] == device_id and x.get("ergebnis") == "ok" for x in u["schritte"]):
+                frei = None   # der eigene Name kam nicht an – nicht behaupten
         except (LookupError, ValueError) as err:
             umbenannt = {"fehler": f"hinzugefügt, aber nicht umbenannt: {err} – unter 🏷 Namen in HA nachholen"}
+            frei = None
         finally:
-            if frei:
-                dr.async_get(hass).async_update_device(device_id, name_by_user=frei)
             if st.neu_laden_folgt:   # Umbenennen hat angehalten – einmal neu laden
                 await _neu_laden(hass, entry_id)
-    elif frei:
-        dr.async_get(hass).async_update_device(device_id, name_by_user=frei)
+    if (st_neu := hass.config_entries.async_get_entry(entry_id)) is not None and getattr(st_neu, "runtime_data", None) is not None:
+        st_neu.runtime_data.protokoll("einstellung", bid, f"{frei or name} hinzugefügt ({t['text'].split(' ', 1)[-1]})"
+                                      + (" – eigener Name, weicht vom Schema ab" if frei else ""))
     connection.send_result(msg["id"], {"ok": True, "name": frei or name, "typ": t["text"], "container": container,
                                        "frei": frei, "umbenannt": umbenannt, "rueck": marke})
+
+
+def _unveraendert(jetzt: Any, gesetzt: Any, getauscht: dict[str, str]) -> bool:
+    """Steht noch, was das Hinzufügen gesetzt hat (auch mit den Entity-IDs nach dem Umbenennen)?"""
+    return jetzt == gesetzt or jetzt == verweise_tauschen(copy.deepcopy(gesetzt), getauscht)
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/geraet_hinzufuegen_rueckgaengig", vol.Required("rueck"): str})
@@ -324,10 +432,13 @@ async def ws_geraet_hinzufuegen(hass: HomeAssistant, connection: websocket_api.A
 async def ws_geraet_hinzufuegen_rueckgaengig(hass: HomeAssistant, connection: websocket_api.ActiveConnection,
                                              msg: dict[str, Any]) -> None:
     """Das eben Hinzugefügte zurücknehmen: Umbenennung zurück, Gerät aus dem Container (Unter-Eintrag bzw. Fühler/Tür
-    wie vorher), Inventar-Einsatz beendet, Gerätename, Primär – nur direkt danach (Marke im Speicher), nur Admins."""
+    wie vorher), Inventar-Einsatz beendet, Gerätename, Nennleistung, Rolle – nur direkt danach (Marke im Speicher), nur
+    Admins. Zurückgesetzt wird nur, was seit dem Hinzufügen niemand geändert hat; der Rest steht in `fehler`.
+    `getauscht` {alt: neu} der Entity-IDs, die das Zurücknehmen getauscht hat (für offene Entwürfe der Seite)."""
     if not _admin(connection, msg, "geraet_hinzufuegen"):
         return
-    r = hass.data.get(DATA_RUECK, {}).pop(msg["rueck"], None)
+    speicher: dict[str, Any] = hass.data.get(DATA_RUECK, {})
+    r = speicher.pop(msg["rueck"], None)   # sofort nehmen – zwei gleichzeitige Rückgängig laufen nie beide
     if r is None:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Rückgängig geht nur direkt nach dem Hinzufügen")
         return
@@ -335,63 +446,96 @@ async def ws_geraet_hinzufuegen_rueckgaengig(hass: HomeAssistant, connection: we
     fehler: list[str] = []
     bid, db = r["bereich_id"], hass.data.get(DATA_DB)
     st = await _geladen(hass, r["entry_id"])
-    if st is None or bid not in st.bereiche:
+    if st is None or bid not in st.bereiche:   # die Marke kommt zurück – später nochmal versuchen (Gutachten 0.8.192)
+        speicher[msg["rueck"]] = r
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Baustelle nicht geladen – nichts zurückgenommen")
         return
-    entry = st.entry
+    entry, vor = st.entry, dict(r.get("getauscht") or {})
+    zurueck: dict[str, str] = {}
     st.neu_laden_folgt = True   # alles zurück, dann einmal neu laden
     try:
         if r.get("umbenennung_id") and db is not None and db.bereit:
             letzte = await db.async_ausfuehren(lambda v: db_inventar.umbenennung_letzte(v, r["container_id"]))
             if letzte is not None and letzte["id"] == r["umbenennung_id"]:
                 try:
-                    await async_rueckgaengig(hass, db, r["container_id"], benutzer, neu_laden=False)
+                    zurueck = (await async_rueckgaengig(hass, db, r["container_id"], benutzer, neu_laden=False)).get("getauscht", {})
                 except (LookupError, ValueError) as err:
                     fehler.append(f"Namen: {err}")
             else:
                 fehler.append("Namen: inzwischen wieder umbenannt – bitte unter 🏷 Namen in HA prüfen")
+        vor = {a: n for a, n in vor.items() if zurueck.get(n) != a}   # was jetzt noch umbenannt ist
+        gid, entfernt = r.get("geraet_id"), False
         if r["inv_typ"] == "PLUG":
-            sub = next((x for x in entry.subentries.values()   # Verweise sind schon zurückgetauscht: alter Schalter
-                        if x.subentry_type == SUB_GERAET and x.data.get(CONF_SCHALTER) == r["schalter"]), None)
-            if r.get("alt_sub") is None and sub is not None:
-                hass.config_entries.async_remove_subentry(entry, sub.subentry_id)
-                if db is not None and db.bereit:
-                    await db.async_ausfuehren(lambda v: db_inventar.geraet_entfernt(v, sub.subentry_id, dt_util.utcnow()))
-            elif r.get("alt_sub") is not None and (alt := entry.subentries.get(r["alt_sub"]["id"])) is not None:
-                hass.config_entries.async_update_subentry(entry, alt, data=r["alt_sub"]["data"], title=r["alt_sub"]["title"])
+            sub = entry.subentries.get(gid or "")
+            if r.get("alt_sub") is None:
+                if sub is not None and sub.data.get(CONF_BEREICH) == bid:
+                    hass.config_entries.async_remove_subentry(entry, sub.subentry_id)
+                    entfernt = True
+                    if db is not None and db.bereit:
+                        await db.async_ausfuehren(lambda v: db_inventar.geraet_entfernt(v, sub.subentry_id, dt_util.utcnow()))
+                elif sub is not None:
+                    fehler.append("Gerät: inzwischen in einem anderen Container – bleibt dort")
+            elif sub is not None and sub.data.get(CONF_BEREICH) == bid:
+                data = {**r["alt_sub"]["data"], CONF_SCHALTER: sub.data.get(CONF_SCHALTER)}   # Schalter: wie er jetzt heißt
+                hass.config_entries.async_update_subentry(entry, sub, data=data, title=r["alt_sub"]["title"])
+            elif sub is not None:
+                fehler.append("Gerät: inzwischen in einem anderen Container – bleibt dort")
         elif (s := r.get("sensor")) is not None:
             if s["feld"] == "fuehler" and (sub := entry.subentries.get(bid)) is not None:
-                data = {k: w for k, w in sub.data.items() if k != CONF_FUEHLER}
-                hass.config_entries.async_update_subentry(entry, sub, data={**data, **({CONF_FUEHLER: s["alt"]} if s["alt"] else {})})
+                if _unveraendert(sub.data.get(CONF_FUEHLER), s["wert"], vor):
+                    data = {k: x for k, x in sub.data.items() if k != CONF_FUEHLER}
+                    hass.config_entries.async_update_subentry(entry, sub, data={**data, **({CONF_FUEHLER: s["alt"]} if s["alt"] else {})})
+                else:
+                    fehler.append("Fühler: inzwischen geändert – bleibt")
             elif s["feld"] != "fuehler":
-                _setzen(hass, st, bid, s["feld"], s["alt"], benutzer)
-        if r.get("ausruestung_id") and r["inv_typ"] != "PLUG" and db is not None and db.bereit:   # Plug: geraet_entfernt
+                if _unveraendert(st.einstellungen.bereich(bid).get(s["feld"]), s["wert"], vor):
+                    _setzen(hass, st, ("bereiche", bid, s["feld"]), s["alt"], benutzer)
+                else:
+                    fehler.append(f"{'Tür' if s['feld'] == 'tuer' else 'Aussehen'}: inzwischen geändert – bleibt")
+        # der Inventar-Einsatz, den das Hinzufügen begann, endet immer (Plug entfernt: schon über geraet_entfernt)
+        if r.get("ausruestung_id") and not entfernt and db is not None and db.bereit:
             await db.async_ausfuehren(lambda v: db_inventar.ausruestung_entfernen(v, r["ausruestung_id"], dt_util.utcnow()))
-        if r.get("geraet_id") and st.einstellungen.bereich(bid).get("primaer") != r.get("primaer_alt"):
-            _setzen(hass, st, bid, "primaer", r.get("primaer_alt"), benutzer)
-        if (g := dr.async_get(hass).async_get(r["device_id"])) is not None and g.name_by_user != r.get("name_alt"):
-            dr.async_get(hass).async_update_device(r["device_id"], name_by_user=r.get("name_alt"))
+        for pfad, (alt, gesetzt) in (r.get("gesetzt") or {}).items():   # Nennleistung, Rolle
+            teile = tuple(pfad.split("."))
+            if teile[0] == "geraete" and teile[1] not in entry.subentries:
+                continue   # Gerät entfernt – seine Einstellungen räumt das Laden auf
+            jetzt = (st.e.get(teile[0]) or {}).get(teile[1], {}).get(teile[2])
+            if jetzt == gesetzt:
+                _setzen(hass, st, teile, alt, benutzer)
+            else:
+                fehler.append(f"{ {'nenn_kw': 'Nennleistung', 'zusatz': 'Rolle', 'primaer': 'Primär'}.get(teile[2], teile[2])}: "
+                              "inzwischen geändert – bleibt")
     finally:
         await st.einstellungen.async_jetzt_speichern()
         st = await _neu_laden(hass, r["entry_id"])
     if st is not None:
         st.protokoll("einstellung", bid, "Hinzufügen zurückgenommen" + (f" ({'; '.join(fehler)})" if fehler else ""))
-    connection.send_result(msg["id"], {"ok": not fehler, "fehler": fehler})
+    connection.send_result(msg["id"], {"ok": not fehler, "fehler": fehler, "getauscht": zurueck})
 
 
 # ---------------------------------------------------------------------- „+ Container“
 SCHEMA_CONTAINER = {vol.Required("entry_id"): str, vol.Optional("schacht", default=False): bool,
                     vol.Optional("eigen", default=True): bool, vol.Optional("art"): vol.Any(None, vol.In(list(CONTAINER_ARTEN))),
                     vol.Optional("nr"): vol.Any(None, vol.All(int, vol.Range(min=1, max=999))),
-                    vol.Optional("firma_id"): vol.Any(None, str), vol.Optional("kuerzel"): vol.Any(None, str)}
+                    vol.Optional("firma_id"): vol.Any(None, str), vol.Optional("kuerzel"): vol.Any(None, str),
+                    vol.Optional("ohne_inventar", default=False): bool}
 
 
-def _container_plan(roh: dict[str, Any] | None, msg: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """(Vorschau, Firma) aus `logik.container_vorschau` mit den Nummern der Datenbank; `InventarFehler` bei falscher Angabe."""
-    if msg["schacht"]:
-        return container_vorschau(schacht=True, eigen=True, art=None), None
+def _container_plan(st: Steuerung | None, roh: dict[str, Any] | None, msg: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """(Vorschau, Firma) aus `logik.container_vorschau` mit den Nummern der Datenbank; `InventarFehler` bei falscher Angabe.
+    Ohne Inventar (`ohne_inventar`, Gutachten 0.8.192: z. B. Datenbank nicht erreichbar) nur der Bereich – eine fremde
+    Firma kommt dann aus der Firmenliste der Baustelle (ohne Kürzel)."""
+    if msg["schacht"] or msg["ohne_inventar"]:
+        v = container_vorschau(schacht=msg["schacht"], eigen=True, art=None, ohne_inventar=msg["ohne_inventar"])
+        if msg["schacht"] or msg["eigen"]:
+            return v, None
+        firmen = (st.e.get("firmen") or []) if st is not None else []
+        firma = next((f for f in firmen if f.get("id") == msg.get("firma_id") and not f.get("eigen")), None)
+        if firma is None:
+            raise InventarFehler("Bitte eine fremde Firma wählen (⚙ › Firmen)")
+        return v, {**firma, "kuerzel": None, "kuerzel_neu": False}
     if roh is None:
-        raise InventarFehler("Datenbank nicht erreichbar – das Inventar braucht sie")
+        raise InventarFehler("Datenbank nicht erreichbar – ohne sie gibt es kein Inventar")
     if msg["eigen"]:
         return container_vorschau(schacht=False, eigen=True, art=msg.get("art"), nr=msg.get("nr"),
                                   nummern=[c.get("nr") for c in roh.get("container") or []]), None
@@ -405,18 +549,27 @@ def _container_plan(roh: dict[str, Any] | None, msg: dict[str, Any]) -> tuple[di
         {**firma, "kuerzel": kuerzel, "kuerzel_neu": not firma.get("kuerzel")}
 
 
+def _ohne_db(msg: dict[str, Any], roh: dict[str, Any] | None) -> bool:
+    """Ein Container ohne Inventar ist möglich (die Seite bietet „Ohne Inventar anlegen“ an): Datenbank nicht erreichbar."""
+    return not msg["schacht"] and not msg["ohne_inventar"] and roh is None
+
+
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/container_vorschau", **SCHEMA_CONTAINER})
 @websocket_api.async_response
 async def ws_container_vorschau(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Name, Nummer (nächste freie, belegt?) und Muster der Gerätenamen eines neuen Containers – ändert nichts.
-    Falsche Angaben kommen als `fehler` in der Antwort (die Seite zeigt sie am Formular)."""
-    _db_, roh = (None, None) if msg["schacht"] else await _roh(hass)
+    Falsche Angaben kommen als `fehler` in der Antwort (die Seite zeigt sie am Formular); `ohne_inventar_moeglich`:
+    ohne Datenbank lässt sich der Container ohne Inventar anlegen."""
+    entry = hass.config_entries.async_get_entry(msg["entry_id"])
+    st = getattr(entry, "runtime_data", None) if entry is not None and entry.domain == DOMAIN else None   # nur für Firmen ohne Inventar
+    _db_, roh = (None, None) if msg["schacht"] or msg["ohne_inventar"] else await _roh(hass)
     try:
-        v, firma = _container_plan(roh, msg)
+        v, firma = _container_plan(st, roh, msg)
     except InventarFehler as err:
-        connection.send_result(msg["id"], {"fehler": str(err), "belegt": True})
+        connection.send_result(msg["id"], {"fehler": str(err), "belegt": True, "ohne_inventar_moeglich": _ohne_db(msg, roh)})
         return
-    connection.send_result(msg["id"], {**v, "firma": {"name": firma["name"], "kuerzel": firma["kuerzel"]} if firma else None})
+    connection.send_result(msg["id"], {**v, "firma": {"name": firma["name"], "kuerzel": firma["kuerzel"]} if firma else None,
+                                       "ohne_inventar_moeglich": False})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/container_neu", **SCHEMA_CONTAINER,
@@ -424,8 +577,9 @@ async def ws_container_vorschau(hass: HomeAssistant, connection: websocket_api.A
 @websocket_api.async_response
 @verwirft_namen
 async def ws_container_neu(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Container (mit Inventar-Container, Entscheidung 2) oder Pumpenschacht anlegen – nur Admins. Erst alles prüfen
-    (Name frei, Nummer frei, Firma mit Kürzel), dann Bereich in HA und Inventar; fremd: Verbrauch gehört der Firma."""
+    """Container (mit Inventar-Container, Entscheidung 2; ohne mit `ohne_inventar`) oder Pumpenschacht anlegen – nur
+    Admins. Erst alles prüfen (Name frei, Nummer frei, Firma mit Kürzel), dann Bereich in HA und Inventar; fremd: Verbrauch
+    gehört der Firma."""
     if not _admin(connection, msg, "container_neu"):
         return
     st = await _geladen(hass, msg["entry_id"])
@@ -437,15 +591,16 @@ async def ws_container_neu(hass: HomeAssistant, connection: websocket_api.Active
     if not name or any(s.title == name for s in entry.subentries.values() if s.subentry_type == SUB_BEREICH):
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, "Diesen Namen gibt es auf der Baustelle schon" if name else "Bitte einen Namen eingeben")
         return
-    db, roh = (None, None) if msg["schacht"] else await _roh(hass)
+    inventar = not msg["schacht"] and not msg["ohne_inventar"]
+    db, roh = await _roh(hass) if inventar else (None, None)
     try:
-        v, firma = _container_plan(roh, msg)
+        v, firma = _container_plan(st, roh, msg)
         if v["belegt"]:
             raise InventarFehler(v["grund"])
     except InventarFehler as err:
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
         return
-    if firma is not None and firma["kuerzel_neu"] and not await db.async_ausfuehren(
+    if inventar and firma is not None and firma["kuerzel_neu"] and not await db.async_ausfuehren(
             lambda x: db_inventar.firma_kuerzel(x, msg["entry_id"], firma["id"], firma["kuerzel"])):
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, db.fehler or "Kürzel der Firma nicht gespeichert")
         return
@@ -456,7 +611,7 @@ async def ws_container_neu(hass: HomeAssistant, connection: websocket_api.Active
         hass.config_entries.async_add_subentry(entry, sub)
         bid = sub.subentry_id
         aus: dict[str, Any] = {"ok": True, "bereich_id": bid, "name": name, "inventar": None, "container_id": None}
-        if not msg["schacht"]:
+        if inventar:
             jetzt: datetime = dt_util.utcnow()
             c = await db.async_ausfuehren(lambda x: db_inventar.container_anlegen(
                 x, art=msg["art"], baustelle_id=msg["entry_id"], instanz_id=db.instanz_id, jetzt=jetzt,
@@ -464,7 +619,7 @@ async def ws_container_neu(hass: HomeAssistant, connection: websocket_api.Active
                 bereich_name=name))
             if c is None:
                 aus.update(ok=False, fehler=f"Bereich angelegt, aber nicht ins Inventar: {db.fehler or 'Datenbank'} – "
-                                            "über den Chip „Nicht im Inventar – aufnehmen“ nachholen")
+                                            "über den Chip „Nicht im Inventar – aufnehmen ›“ nachholen")
             else:
                 aus.update(container_id=c["id"], inventar=v["inventar"])
         if firma is not None:   # fremd: der Verbrauch gehört ab jetzt der Firma (Abrechnung)
@@ -473,10 +628,11 @@ async def ws_container_neu(hass: HomeAssistant, connection: websocket_api.Active
     finally:
         st = await _neu_laden(hass, msg["entry_id"])
     if st is not None:
-        st.protokoll("einstellung", bid, f"{name} angelegt" + (f" – Inventar {v['inventar']}" if aus["inventar"] else ""))
+        st.protokoll("einstellung", bid, f"{name} angelegt" + (f" – Inventar {v['inventar']}" if aus["inventar"] else
+                                                              " – ohne Inventar" if msg["ohne_inventar"] else ""))
         hass.async_create_task(async_spiegeln(hass, struktur(hass, st.entry)), "baustelle_datenbank_spiegeln")
     connection.send_result(msg["id"], aus)
 
 
-BEFEHLE = (ws_geraet_typen, ws_geraet_vorschau, ws_geraet_hinzufuegen, ws_geraet_hinzufuegen_rueckgaengig,
+BEFEHLE = (ws_geraet_kandidaten, ws_geraet_typen, ws_geraet_vorschau, ws_geraet_hinzufuegen, ws_geraet_hinzufuegen_rueckgaengig,
            ws_container_vorschau, ws_container_neu)

@@ -42,6 +42,12 @@ FEHLER_TEXT = {   # wie translations (config_subentries.geraet.error), für die 
 }
 
 
+def rolle_passt(rolle: str, bereich_art: str | None) -> bool:
+    """Eine Pumpe nur in einen Pumpenschacht und in einen Pumpenschacht nur Pumpen (BSM-034.02) – die eine Regel für
+    HA-Dialog, Seite, Inventar und die Typenliste des Assistenten (`logik.inventar.assistent_typen`)."""
+    return (bereich_art == "pumpenschacht") == (rolle == "pumpe")
+
+
 def pruefen(*, schalter: str, rolle: str, bereich_art: str | None, vergeben_hier: bool, andere_baustelle: bool,
             name: str = "x", schalter_fehlt: bool = False) -> str | None:
     """Darf dieser Shelly mit dieser Rolle in diesen Bereich? Fehlerschlüssel (wie im HA-Dialog, translations) oder None.
@@ -60,7 +66,7 @@ def pruefen(*, schalter: str, rolle: str, bereich_art: str | None, vergeben_hier
         return "schalter_vergeben"
     if bereich_art is None:
         return "kein_bereich"
-    if (bereich_art == "pumpenschacht") != (rolle == "pumpe"):
+    if not rolle_passt(rolle, bereich_art):
         return "rolle_passt_nicht"
     if not name.strip():
         return "kein_name"

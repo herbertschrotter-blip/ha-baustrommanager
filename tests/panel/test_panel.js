@@ -120,15 +120,67 @@ const erwarte = (text, bedingung) => { if (!bedingung) fehler.push('erwartet: ' 
 const letzte = typ => aufrufe.filter(a => a.type === typ);
 const neu = () => { aufrufe.length = 0; api.length = 0; };
 
+/* Gutachten 0.8.192 Befund 1: Assistent aus „Bearbeiten“ – nach Hinzufügen und Rückgängig wird der Entwurf aus frischen Daten
+   neu gebildet; Tipp auf den Hintergrund und „Speichern“ setzen Fühler, Tür und Primär nicht auf den alten Stand zurück */
+async function entwurfFrischPruefen() {
+  const b = panel.d.bereiche.find(x => x.namen && x.namen.container_id && !x.pumpe), C2 = panel.d.bereiche.find(x => !x.pumpe && !(x.namen && x.namen.container_id) && !x.fuehler && !x.tuer);
+  if (!b || !C2) return erwarte('Befund 1: Beispiel mit Container im Inventar und Container ohne Fühler', false);
+  // Primär: Radiator am Container mit Inventar, Rolle Primär
+  neu(); panel.bereichEinst(b.id); await ruhe(10); const altPrimaer = panel.s.sheet.edit && panel.s.sheet.edit.primaer;
+  await klick('.sheet [data-k="assistent"]', 20);
+  Object.assign(panel.s.sheet, { dev: 'd6', schalter: 'switch.shelly_pro_2pm_kanal_2', schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
+  Object.assign(panel.s.sheet, { typ: 'radiator', rolle: 'primaer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
+  await klick('.sheet [data-k="anlegen"]', 60);
+  erwarte('Befund 1: Hinzufügen aus „Bearbeiten“', panel.s.sheet && panel.s.sheet.schritt === 5 && panel.d.bereiche.find(x => x.id === b.id).primaer === 'g-d6');
+  await klick({ act: 'zu' }, 10);   // Tipp auf den Hintergrund → zurück in „Bearbeiten“
+  const e1 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
+  erwarte('Befund 1: Entwurf aus frischen Daten (Primär)', e1 && e1.primaer === 'g-d6' && altPrimaer !== 'g-d6');
+  neu(); await panel.bereichSpeichern(); await ruhe(40);
+  erwarte('Befund 1: „Speichern“ setzt Primär nicht zurück', !letzte('baustelle/setzen').some(m => m.pfad && m.pfad[2] === 'primaer'));
+  // Rückgängig aus „Bearbeiten“: danach kommt der Entwurf wieder aus frischen Daten (Primär wie vorher)
+  panel.bereichEinst(b.id); await ruhe(10); await klick('.sheet [data-k="assistent"]', 20);
+  Object.assign(panel.s.sheet, { dev: 'd5', schalter: 'switch.steckdose_werkstatt', schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
+  Object.assign(panel.s.sheet, { typ: 'konvektor', rolle: 'primaer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
+  await klick('.sheet [data-k="anlegen"]', 60); const vorRueck = panel.s.sheet.zurueck && panel.s.sheet.zurueck.edit;
+  await klick('.sheet [data-k="rueck"]', 60);
+  erwarte('Befund 2: „wieder entfernt“ nach Rückgängig, kein zweites Rückgängig', /wieder entfernt/.test(ui.innerHTML) && !litEl('.sheet [data-k="rueck"]'));
+  await klick({ act: 'zu' }, 10);
+  const e3 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
+  erwarte('Befund 1: nach Rückgängig Entwurf aus frischen Daten', e3 && e3 !== vorRueck && e3.primaer === 'g-d6');
+  await klick({ act: 'zu' }, 5);
+  // Fühler: Fühler an einen Container ohne Fühler, danach Rückgängig
+  neu(); panel.bereichEinst(C2.id); await ruhe(10);
+  await klick('.sheet [data-k="assistent"]', 20);
+  Object.assign(panel.s.sheet, { dev: 'd8', schalter: null, schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
+  Object.assign(panel.s.sheet, { typ: 'fuehler', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
+  await klick('.sheet [data-k="anlegen"]', 60); await klick({ act: 'zu' }, 10);
+  await klick('.sheet [data-k="assistent"]', 20);   // dazu eine Tür
+  Object.assign(panel.s.sheet, { dev: 'd4', schalter: null, schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
+  Object.assign(panel.s.sheet, { typ: 'tuer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
+  await klick('.sheet [data-k="anlegen"]', 60); await klick({ act: 'zu' }, 10);
+  const e2 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
+  erwarte('Befund 1: Entwurf aus frischen Daten (Fühler, Tür)', e2 && e2.fuehler === 'sensor.shelly_h_t_gen3_temperatur' && e2.tuer === 'binary_sensor.tuer_neu');
+  neu(); await panel.bereichSpeichern(); await ruhe(40);
+  erwarte('Befund 1: „Speichern“ leert Fühler und Tür nicht', !aufrufe.some(m => m.type === 'config/config_entries/subentries/flow') && !api.some(([, pfad]) => /subentries\/flow/.test(pfad))
+    && !letzte('baustelle/setzen').some(m => m.pfad && m.pfad[2] === 'tuer'));
+  await klick({ act: 'zu' }, 5);
+  for (const rueck of ['r-d4', 'r-d8']) await panel._hass.callWS({ type: 'baustelle/geraet_hinzufuegen_rueckgaengig', rueck });   // Beispiel wieder wie vorher
+  await panel._laden();
+}
+
 /* UI-Bericht M12: Assistent „+ Gerät hinzufügen“ in 5 Schritten (Mockup ordnung.html as-1 … as-5) und Rückgängig */
 async function assistentPruefen() {
   neu(); panel.assistentAuf({ zurueck: null }); await ruhe(30);
   const s = () => panel.s.sheet;
-  erwarte('M12 as-1: Kandidaten „neu in HA, noch nicht zugeordnet“ mit Suche', !!litEl('.sheet .ga-suche') && !!litEl('.sheet .ga-wahl[data-id="d9"]') && /noch nicht zugeordnet/.test(ui.innerHTML));
+  const D9 = '.sheet .ga-wahl[data-id="switch.plug_lager_09"]';
+  erwarte('M12 as-1: Kandidaten „frei in HA, noch nicht zugeordnet“ mit Suche', !!litEl('.sheet .ga-suche') && !!litEl(D9) && /noch nicht zugeordnet/.test(ui.innerHTML)
+    && letzte('baustelle/geraet_kandidaten').length === 1);
+  erwarte('Entscheidung B: jeder freie Schalter einzeln (Kanal), auch ohne Shelly', !!litEl('.sheet .ga-wahl[data-id="switch.shelly_pro_2pm_kanal_2"]') && /Kanal 2/.test(ui.innerHTML)
+    && /kein Shelly – Name im Gerät bleibt/.test(ui.innerHTML));
   erwarte('M12 as-1: ohne Gerät kein Weiter', !!litEl('.sheet [data-k="weiter"][disabled]'));
-  eingabe('.sheet .ga-suche', 'H&T'); await ruhe(5); erwarte('M12 as-1: Suche filtert', !litEl('.sheet .ga-wahl[data-id="d9"]') && !!litEl('.sheet .ga-wahl[data-id="d8"]'));
+  eingabe('.sheet .ga-suche', 'H&T'); await ruhe(5); erwarte('M12 as-1: Suche filtert', !litEl(D9) && !!litEl('.sheet .ga-wahl[data-id="d8"]'));
   eingabe('.sheet .ga-suche', ''); await ruhe(5);
-  await klick('.sheet .ga-wahl[data-id="d9"]', 5); await klick('.sheet [data-k="weiter"]', 10);
+  await klick(D9, 5); erwarte('Entscheidung B: Kanal gewählt', s().dev === 'd9' && s().schalter === 'switch.plug_lager_09'); await klick('.sheet [data-k="weiter"]', 10);
   erwarte('M12 as-2: Container wählen', s().schritt === 2 && !!litEl('.sheet [data-k="cn-neu"]'));
   const b = panel.d.bereiche.find(x => x.namen && x.namen.container_id); if (!b) return erwarte('M12: Container mit Inventar im Beispiel', false);
   await klick(`.sheet .ga-wahl[data-id="${b.id}"]`, 5); await klick('.sheet [data-k="weiter"]', 30);
@@ -138,21 +190,25 @@ async function assistentPruefen() {
   erwarte('M12 as-3: Nennleistung und Primär/Zusatz', s().nenn === 2 && s().rolle === 'primaer' && /2,0 kW/.test(ui.innerHTML));
   await klick('.sheet [data-k="weiter"]', 30);
   erwarte('M12 as-4: Namensvorschau alt → neu vor dem Schreiben', s().schritt === 4 && /Noch ist nichts geschrieben/.test(ui.innerHTML) && /_C_PLUG_/.test(ui.innerHTML) && !letzte('baustelle/geraet_hinzufuegen').length
-    && letzte('baustelle/geraet_vorschau').some(m => m.typ === 'konvektor' && m.device_id === 'd9' && m.bereich_id === b.id && !m.name));
+    && letzte('baustelle/geraet_vorschau').some(m => m.typ === 'konvektor' && m.device_id === 'd9' && m.schalter === 'switch.plug_lager_09' && m.bereich_id === b.id && !m.name));
+  erwarte('Entscheidung A: Vorschau nur des neuen Geräts, „Nur anlegen, Namen lassen“', /Andere Geräte des Containers bleiben/.test(ui.innerHTML) && !/Heizung 01/.test((litEl('.sheet .ga-vorschau') || {}).innerHTML || '')
+    && !!litEl('.sheet [data-k="namen-lassen"]'));
   await klick('.sheet [data-zeile="frei"] .sw', 5); eingabe('.sheet .ga-frei', 'Konvektor Polier'); { const e = litEl('.sheet .ga-frei'); e.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } await ruhe(30);
   erwarte('M12 as-4-frei: eigener Name „⚠ weicht ab“, Vorschau von der Integration', /⚠ weicht ab/.test(ui.innerHTML) && letzte('baustelle/geraet_vorschau').some(m => m.name === 'Konvektor Polier') && /Anlegen \(freier Name\)/.test(ui.innerHTML));
   pruefe('Assistent Namen');
   await klick('.sheet [data-k="anlegen"]', 40);
   const h = letzte('baustelle/geraet_hinzufuegen')[0];
-  erwarte('M12 as-5: anlegen und umbenennen in einem Befehl', h && h.typ === 'konvektor' && h.nenn_kw === 2 && h.rolle === 'primaer' && h.name === 'Konvektor Polier' && h.bereich_id === b.id && s().schritt === 5);
+  erwarte('M12 as-5: anlegen und umbenennen in einem Befehl', h && h.typ === 'konvektor' && h.nenn_kw === 2 && h.rolle === 'primaer' && h.name === 'Konvektor Polier' && h.bereich_id === b.id && h.schalter === 'switch.plug_lager_09' && h.umbenennen === undefined && s().schritt === 5);
   erwarte('M12 as-5: Ergebnis mit Rückgängig', /hängt an/.test(ui.innerHTML) && !!litEl('.sheet [data-k="rueck"]')); pruefe('Assistent fertig');
   await klick('.sheet [data-k="rueck"]', 30);
   erwarte('M12: Rückgängig mit der Marke der Integration', letzte('baustelle/geraet_hinzufuegen_rueckgaengig').some(m => m.rueck === 'r-d9') && /wieder entfernt/.test(ui.innerHTML));
   await klick('.sheet [data-k="zum-container"]', 10); erwarte('M12: „Zum Container ›“ öffnet „Bearbeiten“', s() && s().art === 'bereich' && panel.s.cid === b.id);
   await klick({ act: 'zu' }, 5);
+  await entwurfFrischPruefen();
   // „+ Container“ mit Nummer: belegte Nummer gesperrt (Regel der Integration), danach weiter in den Assistenten
   neu(); await klick({ act: 'sheet', s: 'container-neu' }, 20); await ruhe(20);
-  erwarte('M12 cn-eigen: nächste freie Nummer und Vorschau', /nächste freie: \d{3}/.test(ui.innerHTML) && /\d{3}_C_MAN/.test(ui.innerHTML));
+  erwarte('M12 cn-eigen: nächste freie Nummer und Vorschau (Text von der Integration)', /nächste freie: \d{3}/.test(ui.innerHTML) && /\d{3}_C_MAN/.test(ui.innerHTML)
+    && (litEl('.sheet [data-zeile="nummer"] .stepper b') || {}).textContent === (await panel.containerVorschau(panel.s.sheet.form)).nummer_text);
   panel.s.sheet.form.nr = 1; panel.neuZeichnen(); await ruhe(20);
   erwarte('M12 cn-belegt: belegte Nummer gesperrt', /schon vergeben/.test(ui.innerHTML) && !!litEl('.sheet [data-k="anlegen-weiter"][disabled]'));
   panel.s.sheet.form.nr = null; panel.s.sheet.form.name = 'Mannschaft 2'; panel.neuZeichnen(); await ruhe(20);
@@ -2275,7 +2331,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   erwarte('Tagesverlauf um 16:20: Morgen und Mittag vorbei, Nachmittag nicht', (ui.innerHTML.match(/class="vorbei"/g) || []).length === 2);
   for (const s of ['name', 'baustelle-neu', 'wetterquelle']) { await klick({ act: 'sheet', s }, 20); erwarte(`Einblendung ${s}: nur „Speichern“ wie im Mockup`, !/data-act="zu">Abbrechen/.test(ui.innerHTML)); }
   await klick({ act: 'sheet', s: 'container-neu' }, 20); await ruhe(20);   // M12: Vorschau der Integration im Formular
-  erwarte('M12: „+ Container“ mit Namensvorschau und Verwendung wie im Mockup', /_C_MAN/.test(ui.innerHTML) && !!litEl('.sheet [data-f="art"]') && /Alternative in Home Assistant/.test(ui.innerHTML));
+  erwarte('M12: „+ Container“ mit Namensvorschau und Verwendung wie im Mockup', /_C_MAN/.test(ui.innerHTML) && !!litEl('.sheet [data-f="art"]') && /aus Home Assistant/.test(ui.innerHTML));
   await klick({ act: 'zu' }); struktur = vorher; await panel._laden(); await ruhe(20);
 
   /* Adresse aus einer Handy-Nachricht */

@@ -1,8 +1,9 @@
 // Assistent „+ Gerät hinzufügen“ und „+ Container“ (UI-Bericht M12, Mockup ordnung.html as-1 … as-5, cn-eigen/-fremd/-belegt,
-// abgenommen 23.11.2026). Fünf Schritte: HA-Gerät → Container → was hängt dran (eine Typenliste) → Namensvorschau vor dem
-// Schreiben (eigener Name „⚠ weicht ab“) → anlegen und umbenennen in einem, danach Rückgängig. Kandidaten, Typen (passt / passt
-// nicht mit Grund), Namen, Nummern und das Muster der Namen liefert die Integration (baustelle/geraet_*, baustelle/container_*,
-// docs/api-0.7.md §13); die Seite zeigt nur an und schickt Befehle.
+// abgenommen 23.11.2026). Fünf Schritte: freier Schalter (je Kanal) oder Sensor → Container → was hängt dran (eine Typenliste) →
+// Namensvorschau des neuen Geräts vor dem Schreiben (eigener Name „⚠ weicht ab“) → anlegen und umbenennen in einem (oder „Nur
+// anlegen, Namen lassen“), danach Rückgängig. Herberts Entscheidungen A/B (23.11.2026): umbenannt wird nur das neue Gerät; Schritt 1
+// bietet jeden freien Schalter einzeln an. Kandidaten, Typen (passt / passt nicht mit Grund), Namen, Nummern und das Muster der
+// Namen liefert die Integration (baustelle/geraet_*, baustelle/container_*, docs/api-0.7.md §13); die Seite zeigt nur an.
 import { html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { de } from '../hilfen.js';
@@ -26,18 +27,19 @@ function kopf(p, s) {
     <ol class="ga-schritte">${SCHRITTE.map((t, i) => html`<li class=${i + 1 === s.schritt ? 'an' : i + 1 < s.schritt ? 'fertig' : ''} data-n=${i + 1}><span>${i + 1 < s.schritt ? '✓' : i + 1}</span>${t}</li>`)}</ol>`;
 }
 
-/* Schritt 1: HA-Gerät aus „neu in Home Assistant, noch nicht zugeordnet“, mit Suche */
+/* Schritt 1: jeder freie Schalter einzeln (je Kanal, Shellys oben) und Fühler, Türen, Fenster – Liste der Integration, mit Suche */
 function schrittGeraet(p, s) {
-  const K = p.invKandidaten(), z = () => p.neuZeichnen(), q = (s.q || '').trim().toLowerCase();
-  const frei = (K || []).filter(k => !k.verwendet), L = frei.filter(k => !q || `${k.name} ${k.modell || ''} ${k.entity_id || ''}`.toLowerCase().includes(q));
+  const K = p.assistentKandidaten(), z = () => p.neuZeichnen(), q = (s.q || '').trim().toLowerCase();
+  const frei = K || [], L = frei.filter(k => !q || `${k.name} ${k.kanal || ''} ${k.modell || ''} ${k.entity_id || ''}`.toLowerCase().includes(q));
+  const an = k => s.dev === k.device_id && (s.schalter || null) === (k.schalter || null);
   return html`<input class="ga-suche" type="search" placeholder="Suchen: Name, Modell, Entity-ID" .value=${live(s.q || '')} @input=${e => { s.q = e.target.value; z(); }}>
-    <div class="glas-panel liste ga-l"><div class="gruppe">Neu in Home Assistant, noch nicht zugeordnet · ${K ? frei.length : '…'}</div>
-      ${K === undefined ? html`<div class="leer">lädt …</div>` : !K ? html`<div class="leer">${p.invFehler('invk') || 'Geräte nicht lesbar'}</div>`
+    <div class="glas-panel liste ga-l"><div class="gruppe">Frei in Home Assistant, noch nicht zugeordnet · ${K ? frei.length : '…'}</div>
+      ${K === undefined ? html`<div class="leer">lädt …</div>` : !K ? html`<div class="leer">${p.invFehler('gak') || 'Geräte nicht lesbar'}</div>`
         : !L.length ? html`<div class="leer">${q ? 'Nichts gefunden' : 'Keine freien Geräte'}</div>`
         : L.map(k => { const defekt = k.status === 'defekt', seit = datum(k.seit), jetzt = zustand(p, k.entity_id);
-          return html`<button class="zeile ga-wahl ${s.dev === k.device_id ? 'on' : ''} ${defekt ? 'ga-aus' : ''}" data-id=${k.device_id} ?disabled=${defekt}
-            @click=${() => { if (s.dev !== k.device_id) { s.dev = k.device_id; s.typ = null; s.nenn = null; } z(); }}>
-            <div class="ga-zl"><b>${IC[k.typ] || '•'} ${k.name}</b><div class="leise">${[k.modell, seit && `neu seit ${seit}`, jetzt, defekt && 'defekt – nicht zuordenbar'].filter(Boolean).join(' · ')}</div></div>${radio(s.dev === k.device_id)}</button>`; })}</div>
+          return html`<button class="zeile ga-wahl ${an(k) ? 'on' : ''} ${defekt ? 'ga-aus' : ''}" data-id=${k.key} ?disabled=${defekt}
+            @click=${() => { if (!an(k)) Object.assign(s, { dev: k.device_id, schalter: k.schalter || null, typ: null, nenn: null }); z(); }}>
+            <div class="ga-zl"><b>${IC[k.typ] || '•'} ${k.name}${k.kanal ? html` · <span class="leise">${k.kanal}</span>` : nothing}</b><div class="leise">${[k.modell, k.typ === 'PLUG' && !k.shelly && 'kein Shelly – Name im Gerät bleibt', k.hinweis, seit && `neu seit ${seit}`, jetzt, defekt && 'defekt – nicht zuordenbar'].filter(Boolean).join(' · ')}</div></div>${radio(an(k))}</button>`; })}</div>
     <div class="leise ga-fuss">Nicht dabei? Erst in HA hinzufügen (Einstellungen › Geräte & Dienste › Shelly), dann erscheint es hier. Alternative in Home Assistant: Geräte & Dienste › Baustelle › „Gerät“.</div>
     <div class="ga-knoepfe">${knopf('Weiter ›', () => p.assistentSchritt(s, s.vorgabe && s.bid ? 3 : 2), 'amber', 'weiter', !s.dev)}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}</div>`;
 }
@@ -77,32 +79,37 @@ function schrittNamen(p, s) {
   if (V === undefined) return html`<div class="glas-panel liste ga-l"><div class="leer">Vorschau lädt …</div></div>${zurueck}`;
   if (!V) return html`<div class="glas-panel liste ga-l"><div class="leer">${p.invFehler(p.assistentSchluessel('gav', s)) || 'Keine Vorschau'}</div></div>${zurueck}`;
   const S = (V.schritte || []).filter(r => r.zustand !== 'gleich'), kon = Object.keys(V.konflikte || {}).length, gruppen = [...new Set(S.map(r => r.gruppe || ''))];
-  const umbenennen = V.im_inventar && V.eingetragen, text = !umbenennen ? 'Anlegen' : s.frei && (s.freiName || '').trim() ? 'Anlegen (freier Name)' : 'Anlegen und umbenennen';
+  const umbenennen = !!V.umbenennen, text = !umbenennen ? 'Anlegen' : s.frei && (s.freiName || '').trim() ? 'Anlegen (freier Name)' : 'Anlegen und umbenennen';
+  const nichts = V.moeglich === false;   // die Integration sagt, ob es so geht (Hinweis)
   const tabelle = gruppen.map(g => html`<div class="glas-panel liste inv-liste inv-gruppe"><div class="inv-g-kopf"><b class="inv-id">${g || '–'}</b></div>
       <div class="inv-tr inv-th"><span class="t-was">Was</span><span class="t-alt">heute</span><span class="t-neu">neu</span><span class="t-m"></span></div>
       ${S.filter(r => (r.gruppe || '') === g).map(r => html`<div class="inv-tr ${r.zustand}" data-ziel=${r.ziel}><span class="t-was">${r.was}</span><span class="t-alt ga-alt">${r.alt ?? '–'}</span>
         <span class="t-neu ${r.frei ? 'amber-t' : ''}">${r.neu ?? html`<span class="leise">entfernen</span>`}</span><span class="t-m">${r.frei ? html`<span class="ga-abw">⚠ weicht ab</span>` : r.zustand === 'konflikt' ? html`<span class="rot-t">✕ Konflikt</span>` : nothing}</span></div>`)}</div>`);
-  return html`<div class="leise ga-fuss">${umbenennen ? html`So heißt es danach in Home Assistant${V.container ? html` (Schema, Container <code>${V.container}</code>)` : ''}. <b>Noch ist nichts geschrieben.</b>${gruppen.length > 1 ? ' Andere Geräte des Containers, die abweichen, werden mit benannt.' : ''}` : V.hinweis}</div>
+  return html`<div class="leise ga-fuss">${umbenennen ? html`So heißt das neue Gerät danach in Home Assistant${V.container ? html` (Schema, Container <code>${V.container}</code>)` : ''}. <b>Noch ist nichts geschrieben.</b> Andere Geräte des Containers bleiben, wie sie sind.` : V.hinweis}</div>
     ${V.im_inventar && !V.eingetragen ? html`<div class="glas-panel liste ga-l inv-warn"><div class="zeile"><div><b class="amber-t">⚠ Nicht am Container eingetragen</b><div class="leise">${V.hinweis || ''}</div></div></div></div>` : nothing}
+    ${nichts ? html`<div class="leise rot-t ga-fuss">So lässt es sich nicht hinzufügen – bitte einen anderen Container oder Typ wählen.</div>` : nothing}
     ${umbenennen ? html`<div class="ga-vorschau">${S.length ? tabelle : html`<div class="glas-panel liste ga-l"><div class="leer">Alles schon nach Schema</div></div>`}</div>` : nothing}
-    ${kon ? html`<div class="leise rot-t ga-fuss">${kon} Entity-ID ist schon vergeben – erst lösen (umbenennen oder löschen), dann anlegen.</div>` : nothing}
+    ${kon ? html`<div class="leise rot-t ga-fuss">${kon} Entity-ID ist schon vergeben – erst lösen (umbenennen oder löschen) oder „Nur anlegen, Namen lassen“.</div>` : nothing}
     ${(V.verweise || []).length ? html`<div class="leise amber-t ga-fuss">⚠ ${V.verweise.length} Automation/Skript/Dashboard nennt alte Entity-IDs – danach dort die neue eintragen.</div>` : nothing}
-    ${umbenennen ? html`<div class="glas-panel liste ga-l"><div class="zeile" data-zeile="frei"><div class="ga-zl"><b>Eigenen Namen statt Schema</b><div class="leise">${s.frei
+    ${V.frei_moeglich ? html`<div class="glas-panel liste ga-l"><div class="zeile" data-zeile="frei"><div class="ga-zl"><b>Eigenen Namen statt Schema</b><div class="leise">${s.frei
         ? html`<input class="ga-frei" data-f="frei" .value=${live(s.freiName || '')} placeholder="Name des Geräts" @input=${e => { s.freiName = e.target.value; }} @change=${e => { s.freiName = e.target.value; z(); }}> <span class="ga-abw">⚠ weicht ab – wird markiert, nicht gesperrt</span><div>gilt für den Gerätenamen; die Entity-IDs folgen dem Schema</div>`
         : 'erlaubt, wird dann am Container als „⚠ weicht ab“ gezeigt'}</div></div>
       <button class="sw ${s.frei ? 'on' : ''}" role="switch" aria-checked=${s.frei ? 'true' : 'false'} aria-label="Eigenen Namen statt Schema" @click=${() => { s.frei = !s.frei; z(); }}><i></i></button></div></div>` : nothing}
-    <div class="ga-knoepfe">${knopf(text, p.nurAdmin(() => kon ? p.toast('Erst den Konflikt lösen') : p.assistentAnlegen(s)), `amber nur-admin`, 'anlegen', !!kon || !!s.laeuft)}${zurueck}</div>${rechteHinweis(p)}
-    <div class="leise ga-fuss">${s.laeuft ? html`<b>${s.laeuft}</b>` : 'Ein Schritt: legt das Gerät und den Inventar-Eintrag an und benennt um. Geht etwas nicht, steht hier genau, was schon geschehen ist.'}</div>`;
+    <div class="ga-knoepfe">${knopf(text, p.nurAdmin(() => kon ? p.toast('Erst den Konflikt lösen') : p.assistentAnlegen(s)), `amber nur-admin`, 'anlegen', !!kon || nichts || !!s.laeuft)}${umbenennen ? knopf('Nur anlegen, Namen lassen', p.nurAdmin(() => p.assistentAnlegen(s, true)), 'nur-admin', 'namen-lassen', !!s.laeuft) : nothing}${zurueck}</div>${rechteHinweis(p)}
+    <div class="leise ga-fuss">${s.laeuft ? html`<b>${s.laeuft}</b>` : 'Ein Schritt: legt das Gerät und den Inventar-Eintrag an und benennt es um. Geht etwas nicht, steht hier genau, was schon geschehen ist.'}</div>`;
 }
 
-/* Schritt 5: Ergebnis mit Rückgängig */
+/* Schritt 5: Ergebnis mit Rückgängig (Gutachten 0.8.192: „wieder entfernt“ nur bei Erfolg, sonst was blieb) */
 function schrittFertig(p, s) {
   const r = s.erg || {}, u = r.umbenannt || {}, b = p.d.bereiche.find(x => x.id === s.bid);
-  const namen = u.fehler ? html`<span class="amber-t">${u.fehler}</span>` : u.status === 'ohne_inventar' ? 'Namen bleiben (nicht im Inventar)' : u.status === 'nur_inventar' ? 'nur im Inventar zugeordnet, Namen bleiben'
+  const namen = u.fehler ? html`<span class="amber-t">${u.fehler}</span>` : u.status === 'ohne_inventar' ? 'Namen bleiben (nicht im Inventar)'
+    : u.status === 'nur_inventar' ? 'nur im Inventar zugeordnet, Namen bleiben' : u.status === 'eingehaengt' ? 'eingehängt, Inventar und Namen bleiben'
+    : u.status === 'namen_gelassen' ? 'Namen bleiben, wie sie sind'
     : u.status === 'teilweise' ? html`<span class="amber-t">${u.anzahl} Namen geändert, ${u.offen} offen – „Nachholen“ unter 🏷 Namen in HA</span>` : `${u.anzahl || 0} Namen geändert`;
   return html`<div class="glas-panel ga-fertig"><div class="ga-gross">${s.zurueckGenommen ? '↺' : '✓'}</div>
       <b>${s.zurueckGenommen ? `${r.name} wieder entfernt` : `${r.name} hängt an ${r.container || (b ? b.name : '')}`}</b>
       ${s.zurueckGenommen ? nothing : html`<div class="leise">${r.typ || ''} · ${r.frei ? html`Name „${r.frei}“ <span class="ga-abw">⚠ weicht ab</span> · ` : nothing}${namen}</div>`}
+      ${s.rueckFehler ? html`<div class="leise amber-t ga-rueck-fehler">Teilweise zurückgenommen – bleibt: ${s.rueckFehler.join('; ')}</div>` : nothing}
       <div class="ga-knoepfe">${knopf('Zum Container ›', () => p.assistentZumContainer(s), 'amber', 'zum-container')}${knopf('+ Noch ein Gerät', () => p.assistentAuf({ bid: s.vorgabe ? s.bid : null, vorgabe: s.vorgabe, zurueck: s.zurueck }), '', 'noch-eins')}
         ${s.zurueckGenommen || !r.rueck ? nothing : knopf('↺ Rückgängig', p.nurAdmin(() => p.assistentRueck(s)), 'nur-admin', 'rueck', !!s.laeuft)}</div>${s.laeuft ? html`<div class="leise">${s.laeuft}</div>` : nothing}</div>`;
 }
@@ -119,29 +126,32 @@ function containerNeu(p, s) {
   const fremde = p.d.firmen.filter(x => !x.eigen), fi = I && (I.firmen || []).find(x => x.id === f.firma_id && x.baustelle_id === p.d.entry);
   const seg = (opts, wert, fn) => html`<div class="seg klein">${opts.map(([v, t]) => html`<button data-v=${v} class=${v === wert ? 'on' : ''} @click=${() => { fn(v); z(); }}>${t}</button>`)}</div>`;
   const zeile = (t, sub, rechts, k) => html`<div class="zeile" data-zeile=${k}><div class="ga-zl"><b>${t}</b>${sub ? html`<div class="leise">${sub}</div>` : nothing}</div><div class="ga-zr">${rechts}</div></div>`;
+  // Nummer und ihr Text (z. B. „006“) kommen von der Integration (Gutachten 0.8.192); die Seite zählt nur die Eingabe weiter
   const nr = V && V.nummer, sperre = !V || V.fehler || V.belegt || !f.name.trim() || s.laeuft;
-  const nummer = f.schacht ? nothing : f.eigen
-    ? zeile('Nummer', V && V.belegt ? html`<span class="rot-t">${V.grund}</span>` : V && V.naechste ? `nächste freie: ${String(V.naechste).padStart(3, '0')}` : '',
-      html`<span class="stepper klein"><button data-d="-1" @click=${() => { f.nr = Math.max(1, (f.nr || nr || 1) - 1); z(); }}>−</button><b>${nr ? String(nr).padStart(3, '0') : '…'}</b><button data-d="1" @click=${() => { f.nr = Math.min(999, (f.nr || nr || 0) + 1); z(); }}>+</button></span>`, 'nummer')
-    : zeile('Nummer', 'vergibt die Integration: die nächste dieser Firma auf der Baustelle', html`<b class="inv-id">${nr ? String(nr).padStart(2, '0') : '–'}</b>`, 'nummer');
-  return html`${GRIFF}<div class="block-kopf ga-kopf"><h3>+ Container</h3><span class="leise">auf der Seite und im Inventar</span></div>
+  const nummer = f.schacht || f.ohneInventar ? nothing : f.eigen
+    ? zeile('Nummer', V && V.belegt ? html`<span class="rot-t">${V.grund}</span>` : V && V.naechste_text ? `nächste freie: ${V.naechste_text}` : '',
+      html`<span class="stepper klein"><button data-d="-1" @click=${() => { f.nr = Math.max(1, (f.nr || nr || 1) - 1); z(); }}>−</button><b>${(V && V.nummer_text) || '…'}</b><button data-d="1" @click=${() => { f.nr = Math.min(999, (f.nr || nr || 0) + 1); z(); }}>+</button></span>`, 'nummer')
+    : zeile('Nummer', 'vergibt die Integration: die nächste dieser Firma auf der Baustelle', html`<b class="inv-id">${(V && V.nummer_text) || '–'}</b>`, 'nummer');
+  return html`${GRIFF}<div class="block-kopf ga-kopf"><h3>+ Container</h3><span class="leise">${f.ohneInventar ? 'nur auf der Seite – ohne Inventar' : 'auf der Seite und im Inventar'}</span></div>
     <div class="glas-panel liste ga-l">
       ${zeile('Art', null, seg([['container', 'Container'], ['schacht', 'Pumpenschacht']], f.schacht ? 'schacht' : 'container', v => { f.schacht = v === 'schacht'; }), 'art')}
       ${f.schacht ? nothing : zeile('Gehört', 'eigen = Nummer der Baustelle; fremd = Kürzel und Nummer der Firma', seg([['eigen', 'eigen'], ['fremd', 'fremd']], f.eigen ? 'eigen' : 'fremd', v => { f.eigen = v === 'eigen'; f.nr = null; }), 'gehoert')}
       ${f.schacht || f.eigen ? nothing : zeile('Firma', fremde.length ? 'Kürzel aus dem Inventar' : 'Zuerst unter ⚙ › Firmen anlegen', html`<select data-f="firma" @change=${e => { f.firma_id = e.target.value; z(); }}><option value="">– wählen –</option>${fremde.map(x => { const k = I && (I.firmen || []).find(y => y.id === x.id); return html`<option value=${x.id} ?selected=${x.id === f.firma_id}>${x.name}${k && k.kuerzel ? ` · ${k.kuerzel}` : ''}</option>`; })}</select>`, 'firma')}
       ${!f.schacht && !f.eigen && f.firma_id && fi && !fi.kuerzel ? zeile('Firmenkürzel', '2–5 Buchstaben, gilt dann für alle Container der Firma', html`<input data-f="kuerzel" size="6" .value=${live(f.kuerzel || '')} @change=${e => { f.kuerzel = e.target.value; z(); }}>`, 'kuerzel') : nothing}
       ${nummer}
-      ${f.schacht ? nothing : zeile('Verwendung', 'Kürzel im Namen', html`<select data-f="art" @change=${e => { f.art = e.target.value; z(); }}>${Object.entries((I && I.arten) || { [f.art]: f.art }).map(([k, t]) => html`<option value=${k} ?selected=${f.art === k}>${t} · ${k}</option>`)}</select>`, 'verwendung')}
+      ${f.schacht || f.ohneInventar ? nothing : zeile('Verwendung', 'Kürzel im Namen', html`<select data-f="art" @change=${e => { f.art = e.target.value; z(); }}>${Object.entries((I && I.arten) || { [f.art]: f.art }).map(([k, t]) => html`<option value=${k} ?selected=${f.art === k}>${t} · ${k}</option>`)}</select>`, 'verwendung')}
       ${zeile('Name auf der Seite', 'frei wählbar, z. B. für die Kachel', html`<input data-f="name" size="14" placeholder="z. B. Mannschaft 2" .value=${live(f.name)} @input=${e => { f.name = e.target.value; }} @change=${e => { f.name = e.target.value; z(); }}>`, 'name')}
     </div>
     <div class="glas-panel ga-vorschau-c"><div class="gruppe">Vorschau</div>
-      ${V === undefined ? html`<div class="leer">lädt …</div>` : !V ? html`<div class="leer">${p.invFehler(p.containerSchluessel(f)) || 'Keine Vorschau'}</div>` : V.fehler ? html`<div class="ga-vz"><span class="rot-t">${V.fehler}</span></div>`
+      ${V === undefined ? html`<div class="leer">lädt …</div>` : !V ? html`<div class="leer">${p.invFehler(p.containerSchluessel(f)) || 'Keine Vorschau'}</div>` : V.fehler ? html`<div class="ga-vz"><span class="rot-t">${V.fehler}</span></div>
+          ${V.ohne_inventar_moeglich ? html`<div class="ga-knoepfe">${knopf('Ohne Inventar anlegen …', () => { f.ohneInventar = true; z(); }, '', 'ohne-inventar')}</div>` : nothing}`
         : html`${V.inventar ? html`<div class="ga-vz"><span class="leise">Inventar</span><code>${V.inventar}</code></div>` : html`<div class="ga-vz"><span class="leise">${V.hinweis}</span></div>`}
+          ${f.ohneInventar ? html`<div class="ga-knoepfe">${knopf('‹ Doch mit Inventar', () => { f.ohneInventar = false; z(); }, '', 'mit-inventar')}</div>` : nothing}
           <div class="ga-vz"><span class="leise">Kachel auf der Seite</span><span>${f.name.trim() || '–'}</span></div>
           ${V.geraete ? html`<div class="ga-vz"><span class="leise">Geräte heißen dann</span><code>${V.geraete} …</code></div>` : nothing}`}</div>
     <div class="ga-knoepfe">${knopf('Anlegen und Gerät hinzufügen ›', p.nurAdmin(() => p.containerAnlegen(s, true)), 'amber nur-admin', 'anlegen-weiter', !!sperre)}${knopf('Nur anlegen', p.nurAdmin(() => p.containerAnlegen(s, false)), 'nur-admin', 'anlegen', !!sperre)}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}</div>
     ${rechteHinweis(p, 'Anlegen dürfen nur Admins')}${s.laeuft ? html`<div class="leise ga-fuss"><b>${s.laeuft}</b></div>` : nothing}
-    <div class="leise ga-fuss">Alle Wege (Übersicht, ⚙ › Container, Baustelle bearbeiten) öffnen dieses eine Formular. Alternative in Home Assistant: Geräte & Dienste › Baustelle › „Bereich“ – dort ohne Inventar; aufnehmen dann über den Chip „Nicht im Inventar“.</div>`;
+    <div class="leise ga-fuss">„+ Container“ in der Übersicht, unter ⚙ und im Assistenten öffnet dieses Formular. Container aus dem Firmen-Dialog oder aus Home Assistant (Geräte & Dienste › Baustelle › „Bereich“) stehen noch nicht im Inventar – aufnehmen dann über den Chip „Nicht im Inventar – aufnehmen ›“ am Container.</div>`;
 }
 
 export const ASSISTENT_EINBLENDUNGEN = { 'geraet-assistent': assistent, 'container-neu': containerNeu };
@@ -169,7 +179,7 @@ export const ASSISTENT_CSS = `
 .ga-alt { color: var(--ink2); text-decoration: line-through; text-decoration-color: rgba(127,127,127,.6); overflow-wrap: anywhere; }
 .ga-abw { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); white-space: nowrap; }
 .ga-frei { margin: 4px 0; max-width: 100%; box-sizing: border-box; }
-.ga-fertig { padding: 18px; text-align: center; } .ga-gross { font-size: 40px; color: #30d158; }
+.ga-fertig { padding: 18px; text-align: center; } .ga-rueck-fehler { margin-top: 6px; } .ga-gross { font-size: 40px; color: #30d158; }
 .ga-vorschau-c { padding: 8px 14px; margin: 8px 0; }
 .ga-vz { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr; gap: 8px; padding: 5px 0; border-top: 1px solid rgba(120,120,128,.15); align-items: baseline; }
 .ga-vz code { word-break: break-all; }

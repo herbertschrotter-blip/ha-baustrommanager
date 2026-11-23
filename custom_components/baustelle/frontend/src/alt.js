@@ -1770,35 +1770,42 @@ class BaustellePanel extends LitElement {
   invVorschau(id) { return this._holen('invv:' + id, () => this._hass.callWS({ type: 'baustelle/inventar_vorschau', container_id: id }), 30000); }
   invRueckVorschau(id) { return this._holen('invr:' + id, () => this._hass.callWS({ type: 'baustelle/inventar_rueckgaengig', container_id: id, vorschau: true }), 30000); }
   invKandidaten() { const r = this._holen('invk', () => this._hass.callWS({ type: 'baustelle/inventar_kandidaten' }), 30000); return r && r.geraete; }
-  invNeu() { for (const k of Object.keys(this.cache)) if (k === 'inv' || k === 'invk' || k.startsWith('invv:') || k.startsWith('invr:') || k.startsWith('invz:')) delete this.cache[k]; }
+  invNeu() { for (const k of Object.keys(this.cache)) if (k === 'inv' || k === 'invk' || k === 'gak' || ['invv:', 'invr:', 'invz:', 'gat:', 'gav:'].some(v => k.startsWith(v))) delete this.cache[k]; }
   invAuf(sheet) { this.s.sheet = sheet; return this.neuZeichnen(); }
   /* Assistent „+ Gerät hinzufügen“ und „+ Container“ (src/ansichten/assistent.js, UI-Bericht M12): Typen, Vorschau, Namen und
      Nummern kommen von der Integration (baustelle/geraet_*, baustelle/container_*); hier nur Zustand des Dialogs und Befehle */
   assistentAuf(o = {}) {
     const S = this.s, zurueck = 'zurueck' in o ? o.zurueck : S.sheet && ['bereich', 'inv-container'].includes(S.sheet.art) ? S.sheet : null;
     this.invNeu();
-    S.sheet = { art: 'geraet-assistent', schritt: 1, bid: null, vorgabe: false, dev: null, typ: null, nenn: null, rolle: 'zusatz', frei: false, freiName: '', q: '', ...o, zurueck };
+    S.sheet = { art: 'geraet-assistent', schritt: 1, bid: null, vorgabe: false, dev: null, schalter: null, typ: null, nenn: null, rolle: 'zusatz', frei: false, freiName: '', q: '', ...o, zurueck };
     return this.neuZeichnen();
   }
   assistentSchritt(s, n) { s.schritt = n; return this.neuZeichnen(); }
-  assistentSchluessel(k, s) { return `${k}:${s.bid}:${s.dev}${k === 'gav' ? `:${s.typ}:${s.frei ? (s.freiName || '').trim() : ''}` : ''}`; }
-  assistentTypen(s) { return this._holen(this.assistentSchluessel('gat', s), () => this._hass.callWS({ type: 'baustelle/geraet_typen', entry_id: this.d.entry, bereich_id: s.bid, device_id: s.dev }), 30000); }
+  /* Schritt 1 (Herberts Entscheidung B): jeder freie Schalter einzeln, je Kanal – von der Integration (baustelle/geraet_kandidaten) */
+  assistentKandidaten() { const r = this._holen('gak', () => this._hass.callWS({ type: 'baustelle/geraet_kandidaten' }), 30000); return r && r.geraete; }
+  assistentGeraet(s) { return { device_id: s.dev, ...(s.schalter ? { schalter: s.schalter } : {}) }; }
+  assistentSchluessel(k, s) { return `${k}:${s.bid}:${s.dev}:${s.schalter || ''}${k === 'gav' ? `:${s.typ}:${s.frei ? (s.freiName || '').trim() : ''}` : ''}`; }
+  assistentTypen(s) { return this._holen(this.assistentSchluessel('gat', s), () => this._hass.callWS({ type: 'baustelle/geraet_typen', entry_id: this.d.entry, bereich_id: s.bid, ...this.assistentGeraet(s) }), 30000); }
   assistentVorschau(s) {
     const frei = s.frei ? (s.freiName || '').trim() : '';
-    return this._holen(this.assistentSchluessel('gav', s), () => this._hass.callWS({ type: 'baustelle/geraet_vorschau', entry_id: this.d.entry, bereich_id: s.bid, device_id: s.dev, typ: s.typ, ...(frei ? { name: frei } : {}) }), 15000);
+    return this._holen(this.assistentSchluessel('gav', s), () => this._hass.callWS({ type: 'baustelle/geraet_vorschau', entry_id: this.d.entry, bereich_id: s.bid, ...this.assistentGeraet(s), typ: s.typ, ...(frei ? { name: frei } : {}) }), 15000);
   }
+  /* Gutachten 0.8.192: nach Hinzufügen und Rückgängig den Entwurf von „Bearbeiten“ darunter verwerfen – er wird beim nächsten
+     Zeichnen aus den frischen Daten neu gebildet (sonst setzte „Speichern“ Fühler, Tür und Primär auf den alten Stand zurück) */
+  entwurfNeu(sheet) { for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) if (x.art === 'bereich') delete x.edit; }
+  async assistentNachher(s) { this.entwurfNeu(s.zurueck); this.invNeu(); this.neuZeichnen(); await this._laden(); this.entwurfNeu(s.zurueck); }
   assistentNenn(s, dd) { const v = s.nenn ? Math.round((s.nenn + dd) * 10) / 10 : dd > 0 ? 2 : null; s.nenn = v && v >= 0.1 ? Math.min(10, v) : null; return this.neuZeichnen(); }
-  async assistentAnlegen(s) {
+  async assistentAnlegen(s, namenLassen = false) {
     if (s.laeuft) return undefined;
-    const T = this.assistentTypen(s), t = T && T.typen.find(x => x.k === s.typ), frei = s.frei ? (s.freiName || '').trim() : '';
-    s.laeuft = 'Wird angelegt und umbenannt … das Schalten des Containers pausiert kurz'; this.neuZeichnen();   // sofort sperren (Doppelklick)
+    const T = this.assistentTypen(s), t = T && T.typen.find(x => x.k === s.typ), frei = s.frei && !namenLassen ? (s.freiName || '').trim() : '';
+    s.laeuft = namenLassen ? 'Wird angelegt … die Namen bleiben' : 'Wird angelegt und umbenannt … das Schalten des Containers pausiert kurz'; this.neuZeichnen();   // sofort sperren (Doppelklick)
     try {
-      const r = await this._hass.callWS({ type: 'baustelle/geraet_hinzufuegen', entry_id: this.d.entry, bereich_id: s.bid, device_id: s.dev, typ: s.typ,
-        ...(frei ? { name: frei } : {}), ...(t && t.nenn && s.nenn ? { nenn_kw: s.nenn } : {}), ...(t && t.rolle ? { rolle: s.rolle || 'zusatz' } : {}) });
-      this.idsTauschen(s.zurueck, r.umbenannt && r.umbenannt.getauscht);   // offener Entwurf (Bearbeiten) bekommt die neuen Entity-IDs
-      Object.assign(s, { erg: r, schritt: 5, laeuft: null, zurueckGenommen: false });
+      const r = await this._hass.callWS({ type: 'baustelle/geraet_hinzufuegen', entry_id: this.d.entry, bereich_id: s.bid, ...this.assistentGeraet(s), typ: s.typ,
+        ...(frei ? { name: frei } : {}), ...(namenLassen ? { umbenennen: false } : {}), ...(t && t.nenn && s.nenn ? { nenn_kw: s.nenn } : {}), ...(t && t.rolle ? { rolle: s.rolle || 'zusatz' } : {}) });
+      this.idsTauschen(s.zurueck, r.umbenannt && r.umbenannt.getauscht);   // Formulare darunter bekommen die neuen Entity-IDs
+      Object.assign(s, { erg: r, schritt: 5, laeuft: null, zurueckGenommen: false, rueckFehler: null });
       this.toast(r.umbenannt && r.umbenannt.fehler ? r.umbenannt.fehler : `${r.name} hinzugefügt`);
-      this.invNeu(); this._laden();
+      await this.assistentNachher(s);
     } catch (e) { s.laeuft = null; this.toast(this.fehlerText(e)); }
     return this.neuZeichnen();
   }
@@ -1807,17 +1814,19 @@ class BaustellePanel extends LitElement {
     s.laeuft = 'Wird zurückgenommen …'; this.neuZeichnen();
     try {
       const r = await this._hass.callWS({ type: 'baustelle/geraet_hinzufuegen_rueckgaengig', rueck: s.erg.rueck });
-      this.idsTauschen(s.zurueck, Object.fromEntries(Object.entries((s.erg.umbenannt && s.erg.umbenannt.getauscht) || {}).map(([a, b]) => [b, a])));
-      Object.assign(s, { laeuft: null, zurueckGenommen: true }); this.toast(r.ok ? 'Zurückgenommen' : `Teilweise zurückgenommen: ${r.fehler.join('; ')}`);
-      this.invNeu(); this._laden();
+      this.idsTauschen(s.zurueck, r.getauscht);   // nur, was die Integration wirklich zurückgetauscht hat
+      // Gutachten 0.8.192: „wieder entfernt“ nur bei Erfolg; sonst steht da, was blieb (die Marke ist verbraucht)
+      Object.assign(s, { laeuft: null, zurueckGenommen: !!r.ok, rueckFehler: r.ok ? null : (r.fehler || []), erg: { ...s.erg, rueck: null } });
+      this.toast(r.ok ? 'Zurückgenommen' : `Teilweise zurückgenommen: ${(r.fehler || []).join('; ')}`);
+      await this.assistentNachher(s);
     } catch (e) { s.laeuft = null; this.toast(this.fehlerText(e)); }
     return this.neuZeichnen();
   }
   assistentZumContainer(s) { this.s.sheet = null; return this.bereichEinst(s.bid); }
-  containerForm() { return { schacht: false, eigen: true, art: 'MAN', nr: null, firma_id: '', kuerzel: '', name: '' }; }
+  containerForm() { return { schacht: false, eigen: true, art: 'MAN', nr: null, firma_id: '', kuerzel: '', name: '', ohneInventar: false }; }
   containerNeuAuf(zurueck) { this.s.sheet = { art: 'container-neu', form: this.containerForm(), zurueck }; return this.neuZeichnen(); }
   containerFelder(f) {
-    return { schacht: !!f.schacht, eigen: !!f.eigen, ...(f.schacht ? {} : { art: f.art }), ...(!f.schacht && f.eigen && f.nr ? { nr: f.nr } : {}),
+    return { schacht: !!f.schacht, eigen: !!f.eigen, ...(f.schacht ? {} : { art: f.art }), ...(!f.schacht && f.ohneInventar ? { ohne_inventar: true } : {}), ...(!f.schacht && f.eigen && f.nr ? { nr: f.nr } : {}),
       ...(!f.schacht && !f.eigen && f.firma_id ? { firma_id: f.firma_id } : {}), ...(!f.schacht && !f.eigen && (f.kuerzel || '').trim() ? { kuerzel: f.kuerzel.trim() } : {}) };
   }
   containerSchluessel(f) { return 'cnv:' + JSON.stringify(this.containerFelder(f)); }
