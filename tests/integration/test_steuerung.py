@@ -967,7 +967,8 @@ async def test_zusatz_heizkoerper_nur_bei_bedarf(hass: HomeAssistant, freezer, s
     s = struktur(hass, entry)["laufzeit"]["container"][C1]["stufen"]
     assert s["an"] is True and s["haupt"] == [HK1] and s["zusatz"] == [HK2] and s["zusatz_an"] is False
     # mehr als 1 °C unter dem Soll: zuerst voll aufheizen mit beiden (0.8.178) – bis zum Soll, dann Zusatz wieder aus
-    hass.states.async_set("sensor.temp_c1", "18.0")
+    # (18,9 statt 18,0: 1 °C in einer Minute wäre seit 0.8.181 „Tür vermutlich offen“)
+    hass.states.async_set("sensor.temp_c1", "18.9")
     await _zu(hass, freezer, "2026-09-29 10:01:00+02:00", st)
     assert an("switch.hk1") and an("switch.hk2")
     assert struktur(hass, entry)["laufzeit"]["container"][C1]["stufen"]["grund"] == "aufheizen"
@@ -1011,6 +1012,7 @@ async def test_lernen_tuer_offen(hass: HomeAssistant, baustelle, freezer, shelly
     st.einstellungen.bereich(C1)["soll"] = 20.0
     st.einstellung_setzen(("bereiche", C1, "lernen"), True)
     hass.states.async_set("sensor.aussen", "5.0")
+    hass.states.async_set("sensor.temp_c1", "16.0")   # 0.8.181: ein Sprung von der Vorgabe auf 16 °C wäre „schnell kälter“
     freezer.move_to(ZEHN_UHR)
     st.einstellung_setzen(("automatik",), True)
     await hass.async_block_till_done()

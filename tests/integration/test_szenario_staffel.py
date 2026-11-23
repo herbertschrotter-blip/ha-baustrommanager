@@ -457,7 +457,7 @@ async def test_zusatz_bekommt_platz_am_grossen_anschluss(hass: HomeAssistant, fr
                              bereiche={C1: {"stufen": True}})
     await _minuten(hass, freezer, st, 1)
     assert _an(hass, "switch.hk1") and _an(hass, "switch.hk3") and not _an(hass, "switch.hk2")
-    hass.states.async_set("sensor.temp_c1", "18.0")
+    hass.states.async_set("sensor.temp_c1", "18.9")                   # 0.8.181: 1 °C je Minute wäre „Tür vermutlich offen“
     await _minuten(hass, freezer, st, 1)
     assert _an(hass, "switch.hk2")                                     # Platz da → sofort dazu
 
@@ -615,7 +615,7 @@ async def test_plan_und_thermo_mit_eigenem_soll(hass: HomeAssistant, freezer, sh
     assert not _an(hass, "switch.hk1")        # Thermostat: über Soll
     assert _an(hass, "switch.hk2")            # Zeitplan: heizt in der Heizzeit trotz 23 °C (Heizkörper regelt selbst)
     assert st.daten.grund[C1] == "arbeitszeit" and st.daten.grund[C2] == "arbeitszeit"
-    hass.states.async_set("sensor.temp_c1", "20.5")   # 21 − 0,3 = 20,7 → ein
+    hass.states.async_set("sensor.temp_c1", "20.6")   # 21 − 0,3 = 20,7 → ein (1 °C in 1 min wäre „Tür vermutlich offen“)
     await _minuten(hass, freezer, st, 1)
     assert _an(hass, "switch.hk1") and _an(hass, "switch.hk2")
 

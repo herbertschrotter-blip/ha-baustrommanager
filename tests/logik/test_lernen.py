@@ -10,6 +10,9 @@ from logik.lernen import (
     AUF_N,
     OFFEN_LANG_MIN,
     OFFEN_RUHE_MIN,
+    OFFEN_SCHNELL_ABFALL,
+    OFFEN_SCHNELL_MIN,
+    SPERRE_NACH_MIN,
     STOPP_AB_MIN,
     Tpi,
     anzeige,
@@ -17,6 +20,7 @@ from logik.lernen import (
     band,
     ein_minuten,
     klasse,
+    lern_sperre,
     mittel_neu,
     nachlauf_erwartet,
     neuer_stand,
@@ -25,6 +29,7 @@ from logik.lernen import (
     zyklus_minute,
     tuer_verlauf,
     tuer_vermutet,
+    tuer_vermutet_grund,
     tpi_anteil,
     tpi_ein,
 )
@@ -344,8 +349,8 @@ def _auskuehlen(stand, ab, stunden, tau=15.0, innen=18.0, aussen=5.0, **takt_daz
     return s, t
 
 
-def _heizen_an(s, t):
-    return takt(s, jetzt=t, heizt=True, innen=15.0, soll=20.0, aussen=5.0, art="oel", regelt=True)
+def _heizen_an(s, t, innen=15.0):
+    return takt(s, jetzt=t, heizt=True, innen=innen, soll=20.0, aussen=5.0, art="oel", regelt=True)
 
 
 def test_tau_lernt_aus_der_nacht():
@@ -360,7 +365,7 @@ def test_tau_lernt_aus_der_nacht():
     a = anzeige(s)["tau"]
     assert a["n"] == 1 and a["n_noetig"] == TAU_N and a["h"] == s["tau"][0]
     s2, t2 = _auskuehlen(s, abend + timedelta(days=1), 3, tau=20.0)
-    s2 = _heizen_an(s2, t2)
+    s2 = _heizen_an(s2, t2, innen=16.2)   # nach 3 h bei τ 20 h: 16,2 °C (ein Sprung auf 15 °C wäre „schnell kälter“)
     assert s2["tau"][1] == 2 and s["tau"][0] < s2["tau"][0] < 20.5     # Mittel aus beiden
 
 
@@ -409,3 +414,118 @@ def test_tau_mit_echter_zeit_und_luecke():
     s = kuehlen(1, 5, luecke_nach_h=3, luecke_min=60)
     assert s["tau"] is not None and s["tau"][1] == 1 and s["tau"][0] == pytest.approx(15.0, rel=0.05)
     assert s["ab"]["min"] < 60 + 1 and TAU_LUECKE_MIN < 60
+
+
+# ---------------------------------------------------- 0.8.181 (Prüfpunkt 1): Lernen nur aus echten Regelphasen
+def test_lern_sperre_je_grund():
+    assert lern_sperre() is None and lern_sperre(modus="bedarf") is None
+    assert lern_sperre(baseline=True, hand=True, modus="aus", tuer=True) == "baseline"
+    assert lern_sperre(hand=True) == "hand" and lern_sperre(modus="hand") == "hand"
+    assert lern_sperre(modus="aus") == "aus" and lern_sperre(modus="plan") == "zeitplan"
+    assert lern_sperre(tuer=True) == "tuer"
+
+
+def _minuten(s, t, temps, heizt, **kw):
+    for temp in temps:
+        s = takt(s, jetzt=t, heizt=heizt, innen=temp, soll=20.0, aussen=0.0, art="oel", regelt=True, **kw)
+        t += timedelta(minutes=1)
+    return s, t
+
+
+def _gelernt(s):
+    return (s["nachlauf"], s["treffer"], s["kint"], s["n_kint"], s["kext"], s["n_kext"], s["aufheizen"], s["tau"], s["zyklen"])
+
+
+@pytest.mark.parametrize("sperre", [dict(baseline=True), dict(hand=True), dict(modus="aus"), dict(modus="plan"),
+                                    dict(modus="hand"), dict(tuer_offen=True), dict(vermutet=True)])
+def test_gesperrt_wird_nichts_gelernt(sperre):
+    """Je Ausschlussgrund: Aufheizen, Nachlauf, Treffer, K innen und K außen bleiben, wie sie waren."""
+    s, t = neuer_stand(), T0
+    s, t = _minuten(s, t, [16.0 + 0.1 * i for i in range(40)], True, **sperre)                 # Aufheizen 16 → 20
+    s, t = _minuten(s, t, [19.6] + [19.6 + 0.2 * i for i in range(1, 8)] + [20.5] * 30, False, **sperre)   # aus, Spitze 21
+    assert _gelernt(s) == _gelernt(neuer_stand())
+    assert s["auf"] is None and s["beob"] is None and s["zyklus"] is None
+    assert s["sperre"]["grund"] == lern_sperre(baseline=sperre.get("baseline", False), hand=sperre.get("hand", False),
+                                               modus=sperre.get("modus", "thermo"), tuer=True if "tuer_offen" in sperre or "vermutet" in sperre else False)
+    assert anzeige(s)["sperre"]["grund"] == s["sperre"]["grund"]
+
+
+def test_befund_ende_baseline_lernt_keinen_treffer_und_kein_k_innen():
+    """23.11.2026: Am Ende eines Baseline-Laufs (Thermostat am Gerät, 32 °C) schaltet die Automatik aus – die Spitze danach
+    ist kein Überschwingen der Regelung (Treffer +10,6, K innen 0,419 → 0,398). Jetzt: nichts gelernt, auch nicht
+    innerhalb von SPERRE_NACH_MIN nach dem Wechsel."""
+    s = {**neuer_stand(), "kint": 0.419, "n_kint": 7, "treffer": [0.1]}
+    t = T0
+    s, t = _minuten(s, t, [19.5] * 60, True, baseline=True)          # Baseline: Plug an, Fühler nahe am Soll
+    s, t = _minuten(s, t, [19.5, 20.5, 25.0, 30.0, 30.5, 30.6] + [30.6 - 0.1 * i for i in range(10)], False)   # Wechsel: aus
+    assert s["kint"] == 0.419 and s["n_kint"] == 7 and s["treffer"] == [0.1] and s["nachlauf"] == {}
+    assert s["sperre"]["grund"] == "baseline"                          # Nachlaufzeit läuft noch
+    # nach der Nachlaufzeit regelt der Container wieder selbst: dann wird wieder gelernt
+    s, t = _minuten(s, t + timedelta(minutes=SPERRE_NACH_MIN), [19.4] * 30, True)
+    assert s["sperre"] is None
+    s, t = _minuten(s, t, [19.4, 19.8, 20.2, 20.4, 20.6, 20.3], False)
+    assert s["n_kint"] == 8 and len(s["treffer"]) == 2
+
+
+def test_wechsel_zu_baseline_verwirft_laufende_messungen():
+    """Nachlauf wird beobachtet, dann beginnt ein Baseline-Lauf (Plug an): die Beobachtung ist verworfen, nicht gelernt."""
+    s, t = _lauf(neuer_stand(), 30, [19.6, 19.8, 20.0])
+    assert s["beob"] is not None
+    s, t = _minuten(s, t + timedelta(minutes=STOPP_AB_MIN), [20.0] * 5, True, baseline=True)
+    assert s["beob"] is None and s["zyklen"] == 0 and s["nachlauf"] == {} and s["n_kint"] == 0
+
+
+def test_alter_stand_ohne_sperre_bleibt_erhalten():
+    """Gelerntes aus einer Vorversion (ohne Feld „sperre“) bleibt unverändert und wird weiter benutzt."""
+    alt = {k: v for k, v in neuer_stand().items() if k != "sperre"}
+    alt.update(kint=0.398, n_kint=12, kext=0.02, n_kext=5, treffer=[10.64, 0.2], nachlauf={"oel|lang|kalt": [1.1, 12, 4]},
+               aufheizen={"kalt|1": [3.0, 4]}, tau=[18.0, 3])
+    s = takt(alt, jetzt=T0, heizt=False, innen=19.0, soll=20.0, aussen=0.0, art="oel", regelt=True, baseline=True)
+    assert _gelernt(s) == (alt["nachlauf"], alt["treffer"], 0.398, 12, 0.02, 5, alt["aufheizen"], [18.0, 3], 0)
+    assert anzeige(alt)["sperre"] is None
+
+
+def test_tau_bei_sperre_verworfen():
+    """Läuft eine Auskühlmessung und der Container geht in eine Sperre (Hand ohne Heizen, Tür), zählt sie nicht – vorher
+    wurde sie bis dahin übernommen."""
+    abend = datetime(2026, 10, 28, 19, 0, tzinfo=timezone(timedelta(hours=1)))
+    s, t = _auskuehlen(neuer_stand(), abend, 4)
+    assert s["ab"] is not None
+    for grund in (dict(hand=True), dict(tuer_offen=True), dict(modus="aus")):
+        s2 = takt(s, jetzt=t, heizt=False, innen=13.0, soll=20.0, aussen=5.0, art="oel", regelt=False, **grund)
+        assert s2["ab"] is None and s2["tau"] is None
+
+
+# ------------------------------------------------------- 0.8.181 (Prüfpunkt 7): Tür offen, wenn es schnell kälter wird
+def test_tuer_vermutet_schnell_kaelter_auch_ohne_heizen():
+    t, v = T0, []
+    for temp in (20.0, 20.0, 19.6, 19.3, 19.0):                  # 1,0 °C in 4 min, Heizung aus
+        v = tuer_verlauf(v, jetzt=t, innen=temp, aussen=5.0, heizt=False, an=False)
+        t += timedelta(minutes=1)
+    jetzt = t - timedelta(minutes=1)
+    assert tuer_vermutet_grund(v, jetzt) == "schnell" and tuer_vermutet(v, jetzt)
+    assert OFFEN_SCHNELL_ABFALL == 1.0 and OFFEN_SCHNELL_MIN == 5
+    # 0,9 °C in 4 min oder 1,0 °C über länger als OFFEN_SCHNELL_MIN: nicht schnell (und ohne Heizen sonst keine Vermutung)
+    v2 = [x[:1] + [x[1] + 0.1 if i == len(v) - 1 else x[1]] + x[2:] for i, x in enumerate(v)]
+    assert tuer_vermutet_grund(v2, jetzt) is None
+    v3, t3 = [], T0
+    for i in range(8):
+        v3 = tuer_verlauf(v3, jetzt=t3, innen=round(20.0 - 0.15 * i, 2), aussen=5.0, heizt=False, an=False)
+        t3 += timedelta(minutes=1)
+    assert tuer_vermutet_grund(v3, t3 - timedelta(minutes=1)) is None
+    # beim Heizen langsam kälter: weiter die Erkennung von FE-0025
+    w = [[(T0 + timedelta(minutes=i)).isoformat(), 17.0 - 0.04 * i, 5.0, True] for i in range(11)]
+    assert tuer_vermutet_grund(w, T0 + timedelta(minutes=10)) == "heizen"
+
+
+def test_schnell_kaelter_sperrt_lernen_mit_nachlaufzeit():
+    """Fällt der Raum schnell, verwirft takt die Nachlauf-Beobachtung; bis OFFEN_RUHE_MIN danach beginnt keine neue."""
+    s, t = _lauf(neuer_stand(), 30, [19.6, 19.8, 20.0])
+    assert s["beob"] is not None
+    s, t = _minuten(s, t, [18.9], False)                         # Spitze noch nicht vorbei, da fällt der Raum um 1,1 °C
+    assert s["offen"]["art"] == "vermutet" and s["sperre"]["grund"] == "tuer" and s["beob"] is None and s["nachlauf"] == {}
+    # vermutet, solange der Abfall im Fenster von OFFEN_SCHNELL_MIN liegt, danach noch OFFEN_RUHE_MIN gesperrt
+    s, t = _minuten(s, t, [18.9] * (OFFEN_SCHNELL_MIN - 1 + OFFEN_RUHE_MIN - 1), False)
+    assert s["sperre"] is not None
+    s, t = _minuten(s, t, [18.9], False)
+    assert s["sperre"] is None and s["offen"] is None

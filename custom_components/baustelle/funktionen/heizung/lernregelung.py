@@ -114,20 +114,22 @@ def _tuer_vermuten(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
         verlauf = lernen.tuer_verlauf(verlauf, jetzt=jetzt.replace(second=0, microsecond=0), innen=hz.st.temperatur(info.fuehler),
                                       aussen=wetter.aussen, heizt=any(hz._zieht_strom(g) for g in heizer), an=an)
         hz._tuer_verlauf[info.id] = verlauf
-        vorher, vermutet = hz._vermutet.get(info.id, False), lernen.tuer_vermutet(verlauf, jetzt.replace(second=0, microsecond=0))
-        hz._vermutet[info.id] = vermutet
+        vorher, grund = hz._vermutet.get(info.id, False), lernen.tuer_vermutet_grund(verlauf, jetzt.replace(second=0, microsecond=0))
+        hz._vermutet[info.id] = vermutet = grund is not None
         if vermutet and not vorher and hz.st.kontakt_offen_seit(info.id) is None:
             hz._vermutet_bis[info.id] = jetzt + timedelta(minutes=lernen.VERMUTET_PAUSE_MIN)
-            hz.st.protokoll("warnung", info.id, "Tür vermutlich offen – der Raum kühlt beim Heizen ab, Heizung "
+            hz.st.protokoll("warnung", info.id, f"{lernen.VERMUTET_TEXT[grund or 'heizen']}, Heizung "
                                                 f"pausiert {lernen.VERMUTET_PAUSE_MIN} min")
 
 
 def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
-    """Einmal je Minute: Ein-Zeiten, Nachlauf nach dem Ausschalten und K-Werte fortschreiben."""
+    """Einmal je Minute: Ein-Zeiten, Nachlauf nach dem Ausschalten und K-Werte fortschreiben. Läuft auch in den Modi
+    ohne Regelung und im Baseline-Lauf – dort sperrt `logik/lernen.lern_sperre` das Lernen und verwirft laufende Messungen
+    (0.8.181: Lernen nur aus echten Regelphasen)."""
     minute = int(jetzt.timestamp() // 60)
     for info in hz.bereiche():
         e = hz.st.einstellungen.bereich(info.id)
-        if not e.get("lernen") or not info.fuehler or hz._lern_minute.get(info.id) == minute or hz.modus(info.id) not in ("thermo", "bedarf"):
+        if not e.get("lernen") or not info.fuehler or hz._lern_minute.get(info.id) == minute:
             continue
         hz._lern_minute[info.id] = minute
         heizer = [g for g in hz.st.geraete_in(info.id) if g.rolle == ROLLE_HEIZKOERPER]
@@ -157,6 +159,7 @@ def _lernen(hz: Heizung, jetzt: datetime, wetter: WetterWerte) -> None:
             an=any((z := hz.st.hass.states.get(g.schalter)) is not None and z.state == STATE_ON for g in heizer),
             # FE-0025: erkannt in _tuer_vermuten (Warnung steht dort); während der Pause bleibt die Vermutung stehen
             vermutet=hz._vermutet.get(info.id, False) or ((bis := hz._vermutet_bis.get(info.id)) is not None and jetzt < bis),
+            baseline=h_baseline.laeuft(hz, info.id, jetzt), modus=hz.modus(info.id),   # 0.8.181: lern_sperre
         )
         vorher, jetzt_offen = (alt.get("offen") or {}).get("art"), (neu.get("offen") or {}).get("art")
         if vorher == "vermutet" and jetzt_offen is None:   # WU-0009

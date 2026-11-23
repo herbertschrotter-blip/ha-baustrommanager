@@ -37,6 +37,18 @@ Heizen“ heißt (FE-0025): der Plug ist jede Minute an und ein Heizkörper zieh
 eigenem Thermostat taktet (etwa 3 min an, 4 min aus), ohne dass der Raum dadurch kälter werden dürfte. Die Heizung
 pausiert dann `VERMUTET_PAUSE_MIN` Minuten (Aufrufer).
 
+Schnell kälter (0.8.181, wie die Fenster-offen-Erkennung von Tado und Netatmo): fällt der Raum in höchstens
+`OFFEN_SCHNELL_MIN` Minuten um mindestens `OFFEN_SCHNELL_ABFALL` °C, ist die Tür vermutlich offen – auch wenn gerade
+nicht geheizt wird. So schnell kühlt ein Container sonst nie ab: mit dem kleinsten gemessenen τ von 2 h (`TAU_GRENZEN`)
+und 15 K Abstand nach außen wären es in 5 min 0,6 °C, real (τ 10–40 h) unter 0,1 °C. Ein Fühlersprung von 1 °C in
+5 min kommt nur von kalter Außenluft im Raum. Draußen muss dafür nichts verglichen werden.
+
+**Lernen nur aus echten Regelphasen** (0.8.181, `lern_sperre`): Jede Messung (Nachlauf, Treffer und K innen, K außen,
+Aufheizrate, τ) zählt nur, wenn der Container in ihrem ganzen Zeitraum selbst geregelt hat. Läuft ein Baseline-Lauf, ist
+er von Hand geschaltet, im Modus Aus oder Zeitplan oder ist die Tür (Kontakt oder vermutet) offen, werden laufende
+Messungen verworfen und keine neuen begonnen – nach der Tür noch `OFFEN_RUHE_MIN`, nach den anderen Gründen noch
+`SPERRE_NACH_MIN` Minuten (der Wechsel von und zu Baseline, Hand oder Modus). Gelerntes bleibt dabei stehen.
+
 Alle Werte sind begrenzt; ohne Messung gilt Nachlauf 0 und die Startwerte – dann verhält sich die Regelung wie TPI.
 Zeiten sind `datetime` (mit Zone), Temperaturen °C.
 """
@@ -85,6 +97,8 @@ OFFEN_LANG_ABFALL = 0.6        # … so viel °C kälter (langsamer Abfall bei t
 OFFEN_LANG_AUSSEN = 0.4        # … draußen höchstens so viel kälter
 OFFEN_RUHE_MIN = 10            # danach so lange nichts lernen
 VERMUTET_PAUSE_MIN = 10        # FE-0025: so lange pausiert die Heizung bei „Tür vermutlich offen“, dann neuer Versuch
+OFFEN_SCHNELL_MIN = 5          # 0.8.181: oder in so wenigen Minuten – geheizt oder nicht – …
+OFFEN_SCHNELL_ABFALL = 1.0     # … mindestens so viel °C kälter (siehe `tuer_vermutet_grund`)
 TAU_START_H = 12.0             # FE-0031/32: Auskühlzeit τ (h), solange nichts gemessen ist (vorsichtig: kühlt eher zu schnell)
 TAU_N = 2                      # ab so vielen Messungen gilt τ als gelernt
 TAU_GRENZEN = (2.0, 100.0)     # plausibles τ in Stunden – sonst wird die Messung verworfen
@@ -94,6 +108,18 @@ TAU_MIN_ABFALL = 0.5           # … und der Raum kühlt mindestens so viel ab (
 TAU_AB_DIFF = 4.0              # … bei mindestens so viel Abstand innen − außen im Mittel
 TAU_TAG = (8, 16)              # von 8 bis 16 Uhr wird nicht gemessen (Sonne wärmt den Container)
 TAU_LUECKE_MIN = 10            # fehlen länger Werte (Neustart, Fühler weg), endet die Messung an der Lücke
+LERN_MODI = ("thermo", "bedarf")   # nur in diesen Modi regelt der Container selbst (lernende Regelung)
+SPERRE_NACH_MIN = BEOBACHTEN_MAX_MIN   # 0.8.181: so lange nach einer Lernsperre (Baseline, Hand, Modus) nichts lernen
+"""Nach einem Baseline-Lauf, einer Hand- oder Zeitplan-Phase steckt noch deren Wärme im Container: Ein Ölradiator gibt
+sie bis zu `BEOBACHTEN_MAX_MIN` Minuten nach dem Ausschalten ab (so lange wird auch ein Nachlauf höchstens beobachtet).
+Erst danach misst die Regelung wieder sich selbst – sonst sähe das Abkühlen nach dem Baseline-Lauf aus wie ein
+Überschwingen der Regelung (23.11.2026: Treffer +10,6 / +12,7 / +22,1 °C, K innen 001 0,419 → 0,398)."""
+SPERRE_TEXT = {"baseline": "Baseline-Lauf", "hand": "von Hand", "aus": "Modus Aus", "zeitplan": "Modus Zeitplan",
+               "tuer": "Tür offen"}
+VERMUTET_TEXT = {   # Protokoll bei „Tür vermutlich offen“ je Erkennung (`tuer_vermutet_grund`)
+    "heizen": "Tür vermutlich offen – der Raum kühlt beim Heizen ab",
+    "schnell": "Tür vermutlich offen – der Raum kühlt schnell ab",
+}
 
 
 # ---------------------------------------------------------------------------------------------------------- Regeln
@@ -236,7 +262,21 @@ def neuer_stand() -> dict[str, Any]:
     """Lernstand eines Containers (JSON-fähig, im Store unter laufzeit.lernen.<container>)."""
     return {"kint": KINT_START, "kext": KEXT_START, "n_kint": 0, "n_kext": 0, "nachlauf": {}, "treffer": [], "zyklen": 0,
             "ein": [], "beob": None, "zyklus": None, "letzte": None, "aufheizen": {}, "auf": None,
-            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None}
+            "verlauf": [], "ruhe_bis": None, "offen": None, "tau": None, "ab": None, "sperre": None}
+
+
+def lern_sperre(*, baseline: bool = False, hand: bool = False, modus: str = "thermo", tuer: bool = False) -> str | None:
+    """Warum gerade nicht gelernt werden darf (Schlüssel aus `SPERRE_TEXT`), None = echte Regelphase. Die eine Regel für
+    alle Messungen (siehe Modul-Docstring): Baseline-Lauf vor Hand vor Modus vor Tür (der erste Grund wird angezeigt)."""
+    if baseline:
+        return "baseline"
+    if hand or modus == "hand":
+        return "hand"
+    if modus not in LERN_MODI:
+        return "aus" if modus == "aus" else "zeitplan"
+    if tuer:
+        return "tuer"
+    return None
 
 
 @overload
@@ -254,7 +294,7 @@ def _iso(zeit: datetime) -> str:
 def takt(
     stand: dict[str, Any], *, jetzt: datetime, heizt: bool, innen: float | None, soll: float, aussen: float | None,
     art: str, regelt: bool, anzahl: int = 1, tuer_offen: bool = False, hand: bool = False, kint_ok: bool = True,
-    an: bool | None = None, vermutet: bool | None = None,
+    an: bool | None = None, vermutet: bool | None = None, baseline: bool = False, modus: str = "thermo",
 ) -> dict[str, Any]:
     """Eine Minute Lernen: Ein-Zeiten mitschreiben, Nachlauf nach dem Ausschalten beobachten, K-Werte anpassen.
 
@@ -265,6 +305,7 @@ def takt(
     nicht die Regelung ausschaltet (z. B. Ende von „Schnell aufheizen“) – dann kein K innen aus diesem Ausschalten.
     `an`: ein Heizkörper ist eingeschaltet (ohne Angabe: `heizt`). `vermutet`: „Tür vermutlich offen“, wenn der Aufrufer
     es schon erkannt hat (FE-0025: auch ohne Lernen); ohne Angabe rechnet `takt` es selbst aus dem Verlauf.
+    `baseline`: ein Baseline-Lauf läuft; `modus`: Modus des Containers – beide sperren das Lernen (`lern_sperre`).
     Gibt den neuen Stand zurück (der alte bleibt unverändert).
     """
     s = {**neuer_stand(), **stand}
@@ -279,9 +320,21 @@ def takt(
         s["auf"] = s["beob"] = s["zyklus"] = None
     elif s["offen"] is not None and (s["ruhe_bis"] is None or jetzt >= _zeit(s["ruhe_bis"])):
         s["offen"] = None
-    if hand:   # von Hand geschaltet: laufende Messungen verwerfen, keine neuen
-        s["auf"] = s["beob"] = s["zyklus"] = None
-    ruhe = hand or (s["ruhe_bis"] is not None and jetzt < _zeit(s["ruhe_bis"]))
+    # 0.8.181: Lernen nur aus echten Regelphasen – gesperrt: laufende Messungen (auch τ) verwerfen, keine neuen
+    sperre = lern_sperre(baseline=baseline, hand=hand, modus=modus, tuer=tuer_offen or vermutet)
+    alt_sperre = s["sperre"]
+    if sperre is not None:
+        nach = OFFEN_RUHE_MIN if sperre == "tuer" else SPERRE_NACH_MIN
+        bis = datetime.fromtimestamp(jetzt.timestamp() + nach * 60, jetzt.tzinfo)
+        if alt_sperre is not None and alt_sperre.get("bis") and _zeit(alt_sperre["bis"]) > bis:
+            bis = _zeit(alt_sperre["bis"])   # eine längere Nachlaufzeit (nach Baseline) kürzt die Tür nicht
+        seit = alt_sperre["seit"] if alt_sperre is not None and alt_sperre.get("grund") == sperre else _iso(jetzt)
+        s["sperre"] = {"grund": sperre, "seit": seit, "bis": _iso(bis)}
+        s["auf"] = s["beob"] = s["zyklus"] = s["ab"] = None
+    elif alt_sperre is not None and (not alt_sperre.get("bis") or jetzt >= _zeit(alt_sperre["bis"])):
+        s["sperre"] = None
+    ruhe = (sperre is not None or (s["sperre"] is not None and jetzt < _zeit(s["sperre"]["bis"]))
+            or (s["ruhe_bis"] is not None and jetzt < _zeit(s["ruhe_bis"])))
     log = [(_zeit(a), _zeit(e)) for a, e in s["ein"]]
     lief = bool(log) and log[-1][1] is None
     # Ein-Zeiten der letzten zwei Stunden
@@ -352,11 +405,30 @@ def tuer_verlauf(
 
 
 def tuer_vermutet(verlauf: list[list[Any]], jetzt: datetime) -> bool:
-    """Raum in den letzten `OFFEN_FENSTER_MIN` Minuten beim Heizen um `OFFEN_ABFALL` °C kälter, draußen höchstens
-    `OFFEN_AUSSEN` °C kälter – oder in `OFFEN_LANG_MIN` Minuten um `OFFEN_LANG_ABFALL` °C, draußen höchstens
-    `OFFEN_LANG_AUSSEN` (ohne Außenwert: nur der Raum). Beim Heizen: jede Minute an, mindestens einmal Strom (FE-0025)."""
-    return (_kaelter_beim_heizen(verlauf, jetzt, OFFEN_FENSTER_MIN, OFFEN_ABFALL, OFFEN_AUSSEN)
-            or _kaelter_beim_heizen(verlauf, jetzt, OFFEN_LANG_MIN, OFFEN_LANG_ABFALL, OFFEN_LANG_AUSSEN))
+    """Tür vermutlich offen (`tuer_vermutet_grund` ist nicht None)."""
+    return tuer_vermutet_grund(verlauf, jetzt) is not None
+
+
+def tuer_vermutet_grund(verlauf: list[list[Any]], jetzt: datetime) -> str | None:
+    """„schnell“: in höchstens `OFFEN_SCHNELL_MIN` Minuten um `OFFEN_SCHNELL_ABFALL` °C kälter, geheizt oder nicht
+    (0.8.181). „heizen“: Raum in den letzten `OFFEN_FENSTER_MIN` Minuten beim Heizen um `OFFEN_ABFALL` °C kälter, draußen
+    höchstens `OFFEN_AUSSEN` °C kälter – oder in `OFFEN_LANG_MIN` Minuten um `OFFEN_LANG_ABFALL` °C, draußen höchstens
+    `OFFEN_LANG_AUSSEN` (ohne Außenwert: nur der Raum). Beim Heizen: jede Minute an, mindestens einmal Strom (FE-0025).
+    Sonst None."""
+    if _schnell_kaelter(verlauf, jetzt):
+        return "schnell"
+    if (_kaelter_beim_heizen(verlauf, jetzt, OFFEN_FENSTER_MIN, OFFEN_ABFALL, OFFEN_AUSSEN)
+            or _kaelter_beim_heizen(verlauf, jetzt, OFFEN_LANG_MIN, OFFEN_LANG_ABFALL, OFFEN_LANG_AUSSEN)):
+        return "heizen"
+    return None
+
+
+def _schnell_kaelter(verlauf: list[list[Any]], jetzt: datetime) -> bool:
+    """Der höchste Wert der letzten `OFFEN_SCHNELL_MIN` Minuten liegt mindestens `OFFEN_SCHNELL_ABFALL` über dem jetzigen."""
+    fenster = [v[1] for v in verlauf if v[1] is not None and 0 <= (jetzt - _zeit(v[0])).total_seconds() / 60 <= OFFEN_SCHNELL_MIN]
+    if len(fenster) < 2 or verlauf[-1][1] is None:
+        return False
+    return round(max(fenster[:-1]) - verlauf[-1][1], 3) >= OFFEN_SCHNELL_ABFALL
 
 
 def _kaelter_beim_heizen(verlauf: list[list[Any]], jetzt: datetime, minuten: int, abfall: float, aussen_max: float) -> bool:
@@ -482,6 +554,7 @@ def anzeige(stand: Mapping[str, Any]) -> dict[str, Any]:
         "treffer": list(s["treffer"]),
         "aufheizen": {k: {"rate": v[0], "n": v[1]} for k, v in s["aufheizen"].items()},
         "offen": s["offen"], "ruhe_bis": s["ruhe_bis"],
+        "sperre": s["sperre"],   # 0.8.181: warum gerade nicht gelernt wird ({grund, seit, bis}), sonst None
         "auf_n": AUF_N,
         # FE-0031/32: Auskühlzeit τ (h) mit Anzahl Messungen; `gelernt` ab TAU_N, sonst gilt der Startwert
         "tau": {"h": float(s["tau"][0]) if s["tau"] else None, "n": int(s["tau"][1]) if s["tau"] else 0,

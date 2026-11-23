@@ -369,3 +369,14 @@ def test_zuerst_voll_aufheizen_dann_regeln():
     assert soll(temperatur=8.0, frei=True, frei_modus="absenk", absenk=10.0).aufheizen
     assert soll(temperatur=15.0, bedarf=True, bedarf_aktiv=True).aufheizen
     assert not soll(temperatur=None).aufheizen and not soll(temperatur=15.0, modus="plan").aufheizen
+
+
+def test_tuer_vermutet_pausiert_auch_im_aufheizen_frost_geht_vor():
+    """0.8.181 (Prüfpunkt 7): „Tür vermutlich offen“ (schnell kälter) kommt als `tuer_offen_min` = Pause und steht in der
+    Reihenfolge nach Frostschutz, vor Hand-freiem Rest: pausiert auch das volle Aufheizen; Frostschutz heizt weiter;
+    ohne Heizwunsch ist es nur ein Hinweis (der Grund bleibt)."""
+    kalt = dict(temperatur=15.0, soll=20.0)
+    assert soll(**kalt).aufheizen is True
+    assert soll(**kalt, tuer_offen_min=TUER_PAUSE) == Soll(False, SollGrund.TUER_OFFEN)
+    assert soll(temperatur=4.0, tuer_offen_min=TUER_PAUSE) == Soll(True, SollGrund.FROST)
+    assert soll(**kalt, minute=t(22), tuer_offen_min=TUER_PAUSE) == Soll(False, SollGrund.AUSSERHALB)

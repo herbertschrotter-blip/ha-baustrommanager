@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.8.181",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Heizung: **Lernen nur aus echten Regelphasen** (Prüfpunkt 1): Am Ende eines Baseline-Laufs (Thermostat am Gerät, ohne Automatik) lernte die Regelung beim Ausschalten Nachlauf, Treffer und K innen mit – Treffer +10,6 / +12,7 / +22,1 °C, K innen von 001 0,419 → 0,398. Jetzt zählt jede Messung (Nachlauf, Treffer und K innen, K außen, Aufheizrate, Auskühlzeit τ) nur, wenn der Container in ihrem ganzen Zeitraum selbst geregelt hat: Baseline-Lauf, von Hand, Modus Aus, Hand oder Zeitplan und offene Tür sperren das Lernen, laufende Messungen werden verworfen. Nach der Tür gilt wie bisher 10 min Ruhe, nach den anderen Gründen 90 min (die Wärme aus dem Lauf kommt noch heraus). Gelerntes bleibt unverändert stehen; der Lernstand zeigt den Grund der Sperre (`lernen.sperre`).",
+      "Heizung: **Tür offen, wenn es schnell kälter wird** (Prüfpunkt 7, wie Tado und Netatmo): Fällt der Raum in höchstens 5 min um 1 °C oder mehr, ist die Tür vermutlich offen – auch wenn gerade nicht geheizt wird. Die Heizung pausiert 10 min („Tür offen – Heizung pausiert“) und heizt danach normal weiter; die Phase und 10 min danach zählen nicht fürs Lernen. Im Baseline-Lauf und von Hand gilt weiter nur der echte Kontakt. Die Erkennung beim Heizen (FE-0025) bleibt."
+    ]
+  },
+  {
     "version": "0.8.180",
     "datum": "2026-11-21",
     "punkte": [

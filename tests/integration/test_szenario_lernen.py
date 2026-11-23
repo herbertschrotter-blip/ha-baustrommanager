@@ -568,9 +568,12 @@ async def test_warm_ab_zusatz_reicht_nicht(hass: HomeAssistant, freezer, shellys
     hass.states.async_set("sensor.temp_c1", "20.0")
     await _zu(hass, freezer, "2026-09-30 07:05:00+02:00", st)
     assert not _an(hass, "switch.hk2") and _c(hass, entry)["stufen"]["zusatz_an"] is False
-    # nach dem Lüften mehr als 1 °C darunter: wieder zuerst voll aufheizen mit beiden
+    # Lüften: in einer Minute 2 °C kälter – „Tür vermutlich offen“ (0.8.181), die Heizung pausiert kurz
     hass.states.async_set("sensor.temp_c1", "18.0")
     await _zu(hass, freezer, "2026-09-30 07:06:00+02:00", st)
+    assert not _an(hass, "switch.hk1") and not _an(hass, "switch.hk2") and st.daten.grund[C1] == "tuer_offen"
+    # nach der Pause mehr als 1 °C darunter: wieder zuerst voll aufheizen mit beiden
+    await _zu(hass, freezer, "2026-09-30 07:17:00+02:00", st)
     assert _an(hass, "switch.hk2") and _c(hass, entry)["stufen"]["grund"] == "aufheizen"
 
 
@@ -862,6 +865,7 @@ async def test_tuer_vermutet_offen_dann_weiter_lernen(hass: HomeAssistant, freez
     entry, st = await _einrichten(hass, freezer, shellys)
     st.lz["lernen"][C1] = {"kext": 0.05}
     hass.states.async_set("sensor.aussen", "5.0")
+    hass.states.async_set("sensor.temp_c1", "16.0")   # 0.8.181: ein Sprung von der Vorgabe auf 16 °C wäre „schnell kälter“
     freezer.move_to(ZEHN_UHR)
     st.einstellung_setzen(("automatik",), True)
     await hass.async_block_till_done()
@@ -1143,3 +1147,27 @@ async def test_eingestellt_im_kopf(hass: HomeAssistant, freezer, shellys, nachri
     await hass.async_block_till_done()
     ks = [x["k"] for x in _c(hass, entry)["eingestellt"]]
     assert "lernen" not in ks and {"vorheizen", "nachheizen"} <= set(ks)
+
+
+async def test_lernsperre_im_modus_ohne_regelung_und_danach(hass: HomeAssistant, freezer, shellys, nachrichten) -> None:
+    """0.8.181 (Prüfpunkt 1): Im Modus Zeitplan (der Thermostat am Gerät regelt, wie im Baseline-Lauf) lernt der Container
+    nichts – auch nicht beim Ausschalten danach; der Lernstand bleibt, die Sperre steht für die Seite im Lernstand."""
+    entry, st = await _einrichten(hass, freezer, shellys, modus="plan")
+    st.lz["lernen"][C1] = {"kint": 0.419, "n_kint": 7, "treffer": [0.1]}
+    hass.states.async_set("sensor.temp_c1", "19.5")
+    freezer.move_to(ZEHN_UHR)
+    st.einstellung_setzen(("automatik",), True)
+    await hass.async_block_till_done()
+    uhr = Uhr(hass, freezer, st, ZEHN_UHR)
+    await uhr.minute(19.5, n=30)
+    assert _an(hass, "switch.hk1")
+    assert st.lz["lernen"][C1]["sperre"]["grund"] == "zeitplan"
+    st.einstellung_setzen(("bereiche", C1, "modus"), "thermo")   # Wechsel: regelt jetzt selbst, warm vom Zeitplan
+    await hass.async_block_till_done()
+    for temp in (20.6, 21.0, 21.4, 21.6, 21.5, 21.3, 21.1):
+        await uhr.minute(temp)
+    stand = st.lz["lernen"][C1]
+    assert not _an(hass, "switch.hk1")
+    assert stand["kint"] == 0.419 and stand["n_kint"] == 7 and stand["treffer"] == [0.1] and stand["nachlauf"] == {}
+    assert stand["sperre"]["grund"] == "zeitplan"                 # Nachlaufzeit nach dem Wechsel
+    assert _c(hass, entry)["lernen"]["sperre"]["grund"] == "zeitplan"
