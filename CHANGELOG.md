@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.8.189] – 2026-11-23
+
+- Fix: **Der Pfeil bei „Kosten“ zeigt die Veränderung der Kosten** (UI-Bericht, Stufe 1, Maßnahme 6), nicht mehr die der
+  kWh. Jeder Zeitraum zählt zu seinem eigenen Strompreis – bei einem neuen Preis weichen die beiden Pfeile voneinander ab.
+  Die Zahl liefert die Integration (`baustelle/auswertung`, `summen.veraenderung.eur`, `logik/auswertung`).
+- Fix: **„Je Gerät“ nennt den gewählten Zeitraum** samt Blättern (z. B. „Oktober 2026“) statt nur „dieser Monat“.
+- Fix: **Heizperiode zweimal in der Auswertung:** „Heizperiode“ und „Heizperiode · Signatur“ merken ihren Reiter getrennt;
+  ein Klick in der einen Karte schaltet die andere nicht mehr mit um.
+- Auswertung, Alle laufenden: Bausteine, die es nur für eine Baustelle gibt (Je Gerät, Temperaturen, Leistung heute,
+  Heizperiode), fallen nicht mehr still weg – ein Hinweis nennt sie, „Diese Baustelle zeigen ›“ wechselt zurück.
+- Übersicht: Der Knopf „⚡ x kW“ zeigt jetzt „Verbrauch ›“ – er zeigt die Leistung jetzt und öffnet den Verbrauch in kWh.
+- Fix (Gutachten zu 0.8.187–0.8.189): **Zuordnen eines zweiten Fühlers** verspricht keine Umbenennung mehr. Die
+  Vorschau nutzt dieselbe Regel wie das Zuordnen (`logik/inventar.sensor_verdrahtung`): Hat der Container schon einen
+  Fühler (oder ist eine Tür bzw. ein Fenster schon eingetragen), sagt sie es und bietet nur „Nur zuordnen, Namen
+  lassen“. Das Warten nach dem Zuordnen lässt sich abbrechen („Warten abbrechen – Namen lassen“), ein Doppelklick ordnet
+  nur einmal zu.
+- Fix: `baustelle/struktur` antwortet auch, wenn die Namen für den Chip nicht zu ermitteln sind (dann ohne Chip, eine
+  Warnung im Log), und fragt die Datenbank dafür höchstens alle 60 s – nach einer Änderung am Inventar sofort neu.
+- Fix: Frostschutz „aus über“ erlaubt wie die Integration ab −3 °C; den Standard für Frostschutz ohne Fühler liefert die
+  Integration (`baustelle.standard.frost_aussen`), die Seite hat keine eigene Kopie mehr. Die Zuordnen-Vorschau meldet
+  eine nicht lesbare Datenbank als „nicht bereit“. Die Diagnose schwärzt die Liste der Handys (`empfaenger_dienste`).
+
+## [0.8.188] – 2026-11-23
+
+- Meldungen: **Empfänger auf der Seite wählbar** (UI-Bericht, Stufe 1, Maßnahme 2): ⚙ › Meldungen zeigt je Handy mit der
+  Home-Assistant-App einen Schalter; ein eingetragener Dienst, den es nicht mehr gibt, ist als „nicht gefunden“ markiert.
+  Die Liste der Dienste liefert die Integration (`baustelle/struktur`, `baustelle.empfaenger_dienste`).
+- Fix: **Die Option „Empfänger“ in Home Assistant wirkt bei der nächsten Änderung wieder.** Bisher wurde sie nur
+  übernommen, solange noch kein Empfänger gespeichert war, danach ließ er sich nirgends mehr ändern. Ab dieser Version
+  gilt die Option, sobald sie geändert wird; sonst bleibt, was zuletzt eingestellt wurde – auch von der Seite
+  (`logik/empfaenger`). Eine Änderung der Option von vor dem Update holt die Integration nicht nach: Beim ersten Start
+  bleibt der gespeicherte Empfänger; wer ihn ändern will, wählt ihn auf der Seite oder ändert die Option noch einmal.
+- Fix: **Frostschutz ohne Fühler lässt sich wieder einschalten.** War er aus, stand dort nur „aus“ ohne Regler. Jetzt
+  schaltet ein Schalter ihn ein (−3 °C, wie der Standard) und wieder aus.
+- Meldungen: Schalter für die Nachricht zum **Kälte-Frühstart** am Vorabend (gab es bisher nur in der Integration);
+  die Kurzzeile zählt jetzt 12 Meldungsarten.
+- Fix: Die Regler erlauben dieselben Grenzen wie die Integration: Kälte-Frühstart bis −30 °C, Frostschutz „ein unter“
+  ab −5 °C, Nutzbar je Anschluss ab 10 %, Wechsel im Rundlauf ab 1 min.
+- Fix: Bei gleitendem Soll zeigen die Kurzzeile unter ⚙ › Heizung („Soll gleitend, heute 21,7 °C“) und der Hinweis
+  unter Je Container („sonst gilt das gleitende Soll der Baustelle, heute …“) den Wert der Integration statt des festen
+  Solls.
+
+## [0.8.187] – 2026-11-23
+
+- Geräte, Inventar: **Umbenennen ist sichtbar** (UI-Bericht, Stufe 1, Maßnahme 1): Der Knopf „Namen prüfen“ heißt jetzt
+  „In Home Assistant einheitlich benennen …“ (auch „Anlegen und …“, „Zuordnen und …“), die Vorschau trägt denselben
+  Titel. Ein Chip „Namen ✓“ bzw. „⚠ n weichen ab“ steht am Kopf des Containers, im Dialog „Bearbeiten“, im Dialog
+  „Gerät bearbeiten“ und in ⚙ › Geräte je Container; er öffnet direkt die Vorschau, Schließen führt dorthin zurück.
+  Container ohne Eintrag im Inventar zeigen „Nicht im Inventar – aufnehmen ›“. Die Zahl liefert die Integration
+  (`baustelle/struktur`, `bereiche[].namen`) – dieselbe wie „Übernehmen (n)“ in der Vorschau.
+- Wer nicht übernehmen darf, liest es jetzt am Knopf („Übernehmen dürfen nur Admins“) statt eines grauen Knopfs ohne
+  Grund.
+- Fix: **Zuordnen schreibt erst nach dem Bestätigen.** Bisher hängte „Zuordnen und Namen prüfen“ das Gerät schon vor der
+  Vorschau in den Container. Jetzt zeigt die Integration zuerst, wie die Namen danach heißen
+  (`baustelle/inventar_zuordnen_vorschau`, ändert nichts); erst „Zuordnen und umbenennen“ ordnet zu und benennt um,
+  sobald die Baustelle das Gerät kennt. „Nur zuordnen, Namen lassen“ bleibt möglich.
+
 ## [0.8.186] – 2026-11-23
 
 - Heizung: **Aufheizzeit bei taktenden Ölradiatoren stimmt** (Gutachten zu 0.8.181–0.8.185): Die gelernte Aufheizrate

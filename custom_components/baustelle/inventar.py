@@ -6,6 +6,10 @@ Datenbank über allen Baustellen; Namen, Labels und Nummern kommen aus `logik/in
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+import functools
+import logging
+import time
 from typing import Any
 
 import voluptuous as vol
@@ -19,12 +23,19 @@ from .const import DOMAIN
 from .db import DATA_DB
 from .db import inventar as db_inventar
 from .abgleich import nicht_in_ha
-from .inventar_geraete import async_bestand, async_verweise, async_zuordnen, kandidaten, status_uebernehmen
+from .inventar_geraete import (
+    _entitaeten, _schalter, async_bestand, async_verweise, async_zuordnen, kandidaten, sensor_plan, status_uebernehmen,
+    zuordnen_pruefen,
+)
 from .logik.inventar import (
-    CONTAINER_ARTEN, GERAETE, HAENGT, SENSOR_TYP, STATUS_AUSRUESTUNG, InventarFehler, aufbereiten, firmenkuerzel_pruefen, nummer_frei,
-    praefix, vorschau,
+    AM_CONTAINER, CONTAINER_ARTEN, GERAETE, HAENGT, SENSOR_TYP, STATUS_AUSRUESTUNG, InventarFehler, abweichend,
+    aufbereiten, firmenkuerzel_pruefen, mit_zuordnung, nicht_eingetragen, nummer_frei, praefix, vorschau,
 )
 from .logik.rechte import darf
+
+_LOGGER = logging.getLogger(__name__)
+DATA_NAMEN = f"{DOMAIN}_namen"   # Zwischenspeicher der Namen für `baustelle/struktur`: {"stand", "zeit", "namen", "gewarnt"}
+NAMEN_GUELTIG = 60.0   # Sekunden; Änderungen am Inventar (Anlegen, Zuordnen, Umbenennen) verwerfen ihn sofort
 
 AKTIONEN = ("container_anlegen", "container_status", "ausruestung_status", "firma_kuerzel", "ausruestung_zuordnen",
             "ausruestung_entfernen")
@@ -36,6 +47,24 @@ def _db(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: di
         connection.send_error(msg["id"], "nicht_bereit", "Datenbank nicht erreichbar – das Inventar braucht sie")
         return None
     return db
+
+
+def namen_verwerfen(hass: HomeAssistant) -> None:
+    """Zwischenspeicher der Namen verwerfen (nach jeder Änderung am Inventar oder an den Namen)."""
+    m = hass.data.setdefault(DATA_NAMEN, {"stand": 0})
+    m["stand"] = m.get("stand", 0) + 1
+    m.pop("zeit", None)
+
+
+def verwirft_namen(func: Callable[..., Awaitable[None]]) -> Callable[..., Awaitable[None]]:
+    """Für Befehle, die Inventar oder Namen ändern: danach (auch bei Fehler) den Zwischenspeicher verwerfen."""
+    @functools.wraps(func)
+    async def mit(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+        try:
+            await func(hass, connection, msg)
+        finally:
+            namen_verwerfen(hass)
+    return mit
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/inventar"})
@@ -75,6 +104,7 @@ async def ws_inventar(hass: HomeAssistant, connection: websocket_api.ActiveConne
     vol.Optional("haengt"): vol.In(list(HAENGT)),
 })
 @websocket_api.async_response
+@verwirft_namen
 async def ws_inventar_aendern(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Container anlegen (eigen oder fremd, optional mit Bereich – dann kommt dessen Ausrüstung mit – und eigener Nummer
     für den Bestand), Status setzen, Firmenkürzel, Ausrüstung zuordnen oder entfernen – nur Admins."""
@@ -229,7 +259,7 @@ def vorschau_eingabe(hass: HomeAssistant, roh: dict[str, Any], container_id: str
         geraet, entitaeten, namen = _geraet(hass, g.schalter)
         schalter = next((e for e in entitaeten if e["entity_id"] == g.schalter), None) or {"entity_id": g.schalter, "name": None}
         messwerte = [e for e in entitaeten if e["entity_id"] in (g.leistung, g.energie)]   # nur die, mit denen sie zählt
-        plugs.append({"gg": gg, "geraet_id": g.id, "name": g.name, "rolle": g.rolle, "typ": g.typ, "geraet": geraet,
+        plugs.append({"gg": gg, "gg_fest": g.id in gg_vorher, "geraet_id": g.id, "name": g.name, "rolle": g.rolle, "typ": g.typ, "geraet": geraet,
                       "schalter": schalter, "entitaeten": messwerte,
                       "plug_name": geraet["original"] if geraet else None, "labels": namen})
     sensoren = []
@@ -249,8 +279,61 @@ async def async_vorschau(hass: HomeAssistant, db: Any, container_id: str) -> tup
     eingabe = vorschau_eingabe(hass, roh, container_id) if roh is not None else None
     if eingabe is None:
         return None
-    belegt = set(er.async_get(hass).entities) | set(hass.states.async_entity_ids())
-    return eingabe, vorschau(eingabe, belegt)
+    return eingabe, vorschau(eingabe, _belegt(hass))
+
+
+def _belegt(hass: HomeAssistant) -> set[str]:
+    return set(er.async_get(hass).entities) | set(hass.states.async_entity_ids())
+
+
+async def async_namen_gemerkt(hass: HomeAssistant, db: Any) -> dict[str, dict[str, Any]] | None:
+    """`async_namen` für `baustelle/struktur`: höchstens alle 60 s neu (Datenbank und Vorschau je Container), sofort nach
+    einer Änderung am Inventar. Scheitert es, None (kein Chip) und eine Warnung im Log – einmal, bis es wieder klappt;
+    `baustelle/struktur` antwortet trotzdem."""
+    if db is None or not db.bereit:
+        return None
+    m = hass.data.setdefault(DATA_NAMEN, {"stand": 0})
+    jetzt, stand = time.monotonic(), m.get("stand", 0)
+    if "zeit" in m and jetzt - m["zeit"] < NAMEN_GUELTIG:
+        return m["namen"]
+    try:
+        namen = await async_namen(hass, db)
+    except Exception:   # noqa: BLE001 – der Chip darf die Struktur nie mitreißen
+        if not m.get("gewarnt"):
+            _LOGGER.warning("Namen für den Chip „Namen ✓“ nicht ermittelt – Seite ohne Chip", exc_info=True)
+        m["gewarnt"] = True
+        namen = None
+    else:
+        m["gewarnt"] = False
+    if m.get("stand", 0) == stand:   # während des Rechnens geändert → nicht merken
+        m.update(zeit=jetzt, namen=namen)
+    return namen
+
+
+async def async_namen(hass: HomeAssistant, db: Any) -> dict[str, dict[str, Any]] | None:
+    """Je Bereich (Container) der Stand der Namen für `baustelle/struktur` (Chip „Namen ✓“ / „⚠ n weichen ab“ /
+    „Nicht im Inventar“): {bereich_id: {container_id, container, abweichend}}; `container_id` None = nicht im Inventar,
+    `abweichend` None = Baustelle nicht geladen. None, wenn die Datenbank nicht bereit ist (dann kein Chip)."""
+    if db is None or not db.bereit or (roh := await db.async_ausfuehren(db_inventar.lesen)) is None:
+        return None
+    aus: dict[str, dict[str, Any]] = {b["id"]: {"container_id": None, "container": None, "abweichend": None}
+                                      for b in roh.get("bereiche_ohne") or []}
+    namen = {c["id"]: c for c in aufbereiten(roh)["container"]}
+    belegt = _belegt(hass)
+    for e in roh.get("einsaetze") or []:
+        if e.get("bis") or not e.get("bereich_id") or e["container_id"] not in namen:
+            continue
+        eingabe = vorschau_eingabe(hass, roh, e["container_id"])
+        aus[e["bereich_id"]] = {"container_id": e["container_id"], "container": namen[e["container_id"]]["name"],
+                                "abweichend": abweichend(vorschau(eingabe, belegt)["schritte"]) if eingabe else None}
+    return aus
+
+
+async def _vorschau_senden(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any],
+                           v: dict[str, Any], **mehr: Any) -> None:
+    ids = {s["alt"]: s["neu"] for s in v["schritte"] if s["ziel"] == "entitaet_id" and s["alt"] != s["neu"]}
+    connection.send_result(msg["id"], {**v, "verweise": await async_verweise(hass, ids),
+                                       "hinweis": "BTHome-Namen an den Plugs zieht die Kopplungspflege nach", **mehr})
 
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/inventar_vorschau", vol.Required("container_id"): str})
@@ -262,10 +345,52 @@ async def ws_inventar_vorschau(hass: HomeAssistant, connection: websocket_api.Ac
     if (ergebnis := await async_vorschau(hass, db, msg["container_id"])) is None:
         connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Container ohne Bereich auf einer geladenen Baustelle")
         return
-    v = ergebnis[1]
-    ids = {s["alt"]: s["neu"] for s in v["schritte"] if s["ziel"] == "entitaet_id" and s["alt"] != s["neu"]}
-    connection.send_result(msg["id"], {**v, "verweise": await async_verweise(hass, ids),
-                                       "hinweis": "BTHome-Namen an den Plugs zieht die Kopplungspflege nach"})
+    await _vorschau_senden(hass, connection, msg, ergebnis[1])
 
 
-BEFEHLE = (ws_inventar, ws_inventar_aendern, ws_inventar_vorschau, ws_inventar_kandidaten)
+@websocket_api.websocket_command({
+    vol.Required("type"): "baustelle/inventar_zuordnen_vorschau", vol.Required("container_id"): str,
+    vol.Required("device_id"): str, vol.Optional("typ"): vol.In(list(GERAETE)), vol.Optional("haengt"): vol.In(list(HAENGT)),
+})
+@websocket_api.async_response
+async def ws_inventar_zuordnen_vorschau(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Vorschau der Namen, als wäre das HA-Gerät schon zugeordnet – ändert nichts (Zuordnen: erst Vorschau, dann nach
+    Bestätigen `inventar_aendern` › `ausruestung_zuordnen` und `inventar_umbenennen`)."""
+    if (db := _db(hass, connection, msg)) is None:
+        return
+    if (roh := await db.async_ausfuehren(db_inventar.lesen)) is None:
+        connection.send_error(msg["id"], "nicht_bereit", db.fehler or "Datenbank nicht lesbar")
+        return
+    try:
+        geraet, typ, _ = zuordnen_pruefen(hass, roh, msg["container_id"], msg["device_id"], msg.get("typ"))
+    except LookupError as err:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
+        return
+    except ValueError as err:
+        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
+        return
+    if (eingabe := vorschau_eingabe(hass, roh, msg["container_id"])) is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Container ohne Bereich auf einer geladenen Baustelle")
+        return
+    ents = _entitaeten(hass, geraet.id)
+    eid = _schalter(ents) if typ == "PLUG" else next((e.entity_id for e in ents), None)
+    info, entitaeten, labels_ = _geraet(hass, eid)
+    if info is None:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "HA-Gerät ohne Entität")
+        return
+    schalter = next((e for e in entitaeten if e["entity_id"] == eid), None) if typ == "PLUG" else None
+    # dieselbe Regel wie das Zuordnen (`sensor_plan`): ein zweiter Fühler etc. kommt nur ins Inventar, nicht an den Container
+    st = hass.config_entries.async_get_entry(eingabe["baustelle_id"]).runtime_data
+    eingetragen = typ not in AM_CONTAINER or sensor_plan(st, eingabe["bereich_id"], typ, ents) is not None
+    try:
+        neu = mit_zuordnung(eingabe, typ=typ, geraet=info, entitaeten=entitaeten, labels_=labels_, schalter=schalter,
+                            haengt=msg.get("haengt"), verdrahtet=eingetragen)
+    except InventarFehler as err:
+        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
+        return
+    await _vorschau_senden(hass, connection, msg, vorschau(neu, _belegt(hass)),
+                           zuordnen={"device_id": geraet.id, "typ": typ, "name": info["name"], "eingetragen": eingetragen,
+                                     **({} if eingetragen else {"hinweis": nicht_eingetragen(typ)})})
+
+
+BEFEHLE = (ws_inventar, ws_inventar_aendern, ws_inventar_vorschau, ws_inventar_zuordnen_vorschau, ws_inventar_kandidaten)

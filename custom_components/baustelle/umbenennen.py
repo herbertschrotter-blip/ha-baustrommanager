@@ -34,7 +34,7 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 from .db import DATA_DB, einstellung_merken
 from .db import inventar as db_inventar
-from .inventar import _db, async_vorschau
+from .inventar import _db, async_vorschau, verwirft_namen
 from .logik.inventar import (
     RUECKGAENGIG_MOEGLICH, ausfuehrbar, fuer_plug, ids_getauscht, konflikte, nachholen_mischen, rueckgaengig, status,
     verweise_tauschen, zurueck_eintragen,
@@ -295,6 +295,7 @@ def nachholen_planen(hass: HomeAssistant, baustelle_id: str) -> CALLBACK_TYPE:
 
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/inventar_umbenennen", vol.Required("container_id"): str})
 @websocket_api.async_response
+@verwirft_namen
 async def ws_inventar_umbenennen(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Namen und Entity-IDs eines Containers nach dem Schema übernehmen bzw. fehlende Schritte nachholen (BSM-031.06b/c)
     – nur Admins."""
@@ -317,6 +318,7 @@ async def ws_inventar_umbenennen(hass: HomeAssistant, connection: websocket_api.
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/inventar_rueckgaengig", vol.Required("container_id"): str,
                                   vol.Optional("vorschau", default=False): bool})
 @websocket_api.async_response
+@verwirft_namen
 async def ws_inventar_rueckgaengig(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Jüngste Umbenennung eines Containers zurücknehmen (BSM-031.06d) – Vorschau alle, Ausführen nur Admins."""
     if not msg["vorschau"] and not darf(bool(connection.user and connection.user.is_admin), "inventar_rueckgaengig"):

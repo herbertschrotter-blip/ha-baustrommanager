@@ -21,7 +21,7 @@ from homeassistant.util import dt as dt_util
 
 from .abgleich import async_abgleich
 from . import auswertung
-from .const import DOMAIN, EVENT_PROTOKOLL
+from .const import ART_CONTAINER, DOMAIN, EVENT_PROTOKOLL
 from .daten import struktur
 from .db import DATA_DB, async_spiegeln, einstellung_merken, ereignis_merken
 from .einstellungen import ART_TEXT, EIGEN, TICKET_OFFEN, TICKET_STATUS, Meldungen
@@ -29,7 +29,7 @@ from .funktionen.heizung import Heizung
 from .funktionen.heizung import hochrechnung as hochrechnung_heizung, prognose_schatten, prognose_v2 as prognose_v2_heizung
 from .logik.prognose_typen import MODELL_VERSION
 from .geraete import BEFEHLE as GERAETE_BEFEHLE
-from .inventar import BEFEHLE as INVENTAR_BEFEHLE
+from .inventar import BEFEHLE as INVENTAR_BEFEHLE, async_namen_gemerkt
 from .umbenennen import BEFEHLE as UMBENENNEN_BEFEHLE
 from .logik import preise as preise_logik, ruecksprung
 from .logik.arbeitszeit import arbeitszeit_loeschen, arbeitszeiten_speichern
@@ -327,14 +327,17 @@ def _fehler(connection: websocket_api.ActiveConnection, msg: dict[str, Any], tex
 
 # ---------------------------------------------------------------------- struktur
 @websocket_api.websocket_command({vol.Required("type"): "baustelle/struktur"})
-@callback
-def ws_struktur(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
-    """Alle Baustellen (auch abgeschlossene) mit Einrichtung, Einstellungen, Zählern und Laufzeit."""
+@websocket_api.async_response
+async def ws_struktur(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Alle Baustellen (auch abgeschlossene) mit Einrichtung, Einstellungen, Zählern und Laufzeit; je Container der Stand
+    der Namen aus dem Inventar (`bereiche[].namen`, Chip „Namen ✓“ / „⚠ n weichen ab“; fehlt ohne Datenbank)."""
+    namen = await async_namen_gemerkt(hass, hass.data.get(DATA_DB))   # höchstens alle 60 s; Fehler → kein Chip
     version = hass.data.get(DATA_VERSION, "")
     r = rechte(bool(connection.user and connection.user.is_admin))   # Bauplan 0.7 §8: für den angemeldeten Benutzer
-    connection.send_result(
-        msg["id"], [{**struktur(hass, entry, version), "rechte": r} for entry in hass.config_entries.async_entries(DOMAIN)]
-    )
+    aus = [{**struktur(hass, entry, version), "rechte": r} for entry in hass.config_entries.async_entries(DOMAIN)]
+    for b in (b for x in aus for b in x["bereiche"] if namen is not None and b["art"] == ART_CONTAINER):
+        b["namen"] = namen.get(b["id"], {"container_id": None, "container": None, "abweichend": None})
+    connection.send_result(msg["id"], aus)
 
 
 # ---------------------------------------------------------------------- setzen

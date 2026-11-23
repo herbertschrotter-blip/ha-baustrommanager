@@ -233,6 +233,8 @@ async function allgemein() {
   const gesendet = async (typ, wo, ds, vorher) => { neu(); if (vorher) await vorher(); await klick(ds, 30); const a = letzte(typ).at(-1);
     erwarte(`${wo}: ${typ} gesendet (${JSON.stringify(ds)})`, a && (a.entry_id === entry || !typ.startsWith('baustelle/'))); return a; };
   await klick({ act: 'tab', v: 'uebersicht' });
+  { const kw = litEl('.seite .kw-knopf');   // UI-Bericht, Maßnahme 6: zeigt kW, öffnet den Verbrauch – das steht dran
+    erwarte('Übersicht: ⚡-Knopf sagt, dass er den Verbrauch (kWh) öffnet', kw && kw.querySelector('.kw-ziel') && /Verbrauch/.test(kw.textContent) && /kWh/.test(kw.getAttribute('aria-label') || '')); }
   for (const ds of [{ act: 'auto' }, { act: 'auto' }, { act: 'st', k: 'vorheizen', d: '5' }, { act: 'st', k: 'nutzbar', d: '-5' }, { act: 'st', k: 'soll', d: '0.5' },
     ...['nachheizen', 'grenze', 'frueh_temp', 'frueh_min', 'frost_temp', 'tr_mm', 'tr_laenger', 'tr_frueher', 'boost_min', 'tuer_pause', 'tuer_melden', 'max_gleich', 'min_lauf', 'min_pause', 'takt']
       .map(k => ({ act: 'st', k, d: '1' })),
@@ -403,7 +405,7 @@ async function allgemein() {
     erwarte('abgeschlossene Baustelle aus der Adresse', panel.s.view === 'bsdetail' && panel.s.bs === bs.baustelle.entry_id); }
   global.location = { search: '' };
 }
-const ARTEN_TEST = { m_selbst: 1, m_offline: 1, m_trocken: 1, m_dauer: 1, m_zyklen: 1, m_leistung: 1, m_frost: 1, m_kalt: 1, m_fuehler: 1, m_wetter: 1, m_hand: 1 };
+const ARTEN_TEST = { m_selbst: 1, m_offline: 1, m_trocken: 1, m_dauer: 1, m_zyklen: 1, m_leistung: 1, m_frost: 1, m_kalt: 1, m_fuehler: 1, m_wetter: 1, m_hand: 1, m_frueh: 1 };
 const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
 
 (async () => {
@@ -649,6 +651,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await setzen({ act: 'e-bool', k: 'knoepfe' }, ['meldungen_einst', 'knoepfe'], false, 'Knöpfe');
   await setzen({ act: 'e-bool', k: 'm_offline' }, ['meldungen_einst', 'arten', 'offline'], false, 'Meldungsart offline');
   await setzen({ act: 'e-bool', k: 'm_hand' }, ['meldungen_einst', 'arten', 'hand_zu_lange'], false, 'Meldungsart Handbetrieb');
+  await setzen({ act: 'e-bool', k: 'm_frueh' }, ['meldungen_einst', 'arten', 'fruehstart'], false, 'Meldungsart Kälte-Frühstart');
   await setzen({ act: 'basis', v: 'jetzt' }, ['heizung', 'heizgrenze_basis'], 'jetzt', 'Heizgrenze-Grundlage');
   await setzen({ act: 'e-wert', k: 'bericht', v: 'beides' }, ['bericht', 'haeufigkeit'], 'beides', 'Bericht');
   { await klick({ act: 'tab', v: 'einst' }, 10); await klick('.ev-nav button[data-v="strom"], .ev-chips button[data-v="strom"]', 10);   // Vorrang (Lit, 3e)
@@ -1625,8 +1628,20 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   erwarte('Auswertung: Leistung heute, Temperaturen, Je Gerät, Heizperiode', ['Leistung heute', 'Temperaturen', 'Je Gerät', 'hp-karte'].every(t => ui.innerHTML.includes(t)));
   for (const v of ['7', '30', 'heute']) { await klick(`.seite .seg [data-v="${v}"]`, 30); pruefe('Temperaturen ' + v); }
   erwarte('Temperaturen: alle Container mit Fühler und außen', ['Poliercontainer', 'Mannschaft', 'Außen'].every(t => ui.innerHTML.includes(t)) && ui.innerHTML.includes('data-chart="tp-heute"'));
+  { /* UI-Bericht, Maßnahme 6 */
+    const kosten = [...panel.shadowRoot.querySelectorAll('.kennz.vier > div')].find(x => /Kosten/.test(x.textContent));
+    erwarte('Kennzahlen: Pfeil bei Kosten zeigt die Veränderung der € (eur), nicht der kWh', kosten && /14 %/.test(kosten.textContent) && !/11 %/.test(kosten.textContent));
+    const jg = [...panel.shadowRoot.querySelectorAll('.block')].find(x => x.querySelector('.je-geraet')), z = panel.s.aw.zeitraum;
+    erwarte('Je Gerät: Kopf nennt den gewählten Zeitraum samt Blättern', jg && jg.querySelector('.block-kopf .leise').textContent === panel.zrText(z, panel.zrV('aw')) && !/dieser Monat/.test(jg.textContent));
+    const hp = () => [...panel.shadowRoot.querySelectorAll('.hp-karte .hp-reiter button.on')].map(b => b.dataset.v);
+    erwarte('Heizperiode zweimal: getrennte Reiter (Hochrechnung und Signatur)', hp().length === 2 && hp().includes('hoch') && hp().includes('sig'));
+    await klick('.hp-karte .hp-reiter [data-v="klima"]', 20);
+    erwarte('Heizperiode: ein Klick schaltet nur die eigene Karte um', hp().length === 2 && hp().filter(v => v === 'klima').length === 1);
+    panel.s.hpReiter = panel.s.hpReiterSig = null; await panel.neuZeichnen(); }
   await klick(AW.scope('alle'), 30); pruefe('Auswertung alle');
-  erwarte('Alle laufenden: ohne Je Gerät und Temperaturen', !ui.innerHTML.includes('Je Gerät') && !litEl('.seite .seg [data-v="30"]'));
+  erwarte('Alle laufenden: ohne Je Gerät und Temperaturen', !litEl('.je-geraet') && !litEl('.seite .seg [data-v="30"]'));
+  { const h = litEl('.aw-nur-diese');
+    erwarte('Alle laufenden: Hinweis nennt die ausgeblendeten Bausteine', h && ['Je Gerät', 'Temperaturen', 'Leistung heute'].every(t => h.textContent.includes(t)) && h.querySelector('[data-aw="nur-diese"]')); }
   await klick(AW.scope('diese'), 30);
   await klick({ act: 'tab', v: 'einst' }, 30);
   /* heizung-neu.html (Herbert 29.10.2026): AN-0019 C Übersichtskarten aus laufzeit.heute, „Wann heizt was“ eine Spur je Container,
@@ -1930,7 +1945,9 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         neu(); await klick('.sheet .inv-st', 10);
         erwarte('BSM-031.08: Status der Ausrüstung über inventar_aendern', aufrufe.some(m => m.type === 'baustelle/inventar_aendern' && m.aktion === 'ausruestung_status' && m.status === 'inaktiv'));
         erwarte('BSM-034.01: Seite lädt nach Inventar-Änderung neu', aufrufe.some(m => m.type === 'baustelle/struktur'));
-        await klick('.inv-c[data-id="c1"]', 20); await klick('.sheet [data-k="pruefen"]', 30);
+        await klick('.inv-c[data-id="c1"]', 20);
+        erwarte('UI-1: Knopf heißt „In Home Assistant einheitlich benennen …“ mit Zahl der Integration', (litEl('.sheet [data-k="pruefen"]') || {}).textContent.includes('In Home Assistant einheitlich benennen …') && !ui.innerHTML.includes('Namen prüfen'));
+        await klick('.sheet [data-k="pruefen"]', 30);
         let v = ui.innerHTML;
         erwarte('BSM-031.07: Vorschau als Tabelle Was/Alt/Neu/Zustand, breit', v.includes('inv-th') && v.includes('switch.001_01_c_plug_pol') && /class="sheet glas-panel an breit"/.test(v));
         erwarte('BSM-031.07: Vorschau nennt alte Entity-IDs in Automationen', v.includes('Polier morgens vorheizen') && v.includes('alte Entity-IDs'));
@@ -1946,7 +1963,29 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         await klick('.inv-c[data-id="c1"]', 20); await klick('.sheet [data-k="zuordnen-auf"]', 30);
         erwarte('BSM-031.07: Zuordnen zeigt Geräte aus HA', aufrufe.some(m => m.type === 'baustelle/inventar_kandidaten') && ui.innerHTML.includes('Plug Lager 09') && ui.innerHTML.includes('defekt – nicht zuordenbar'));
         await klick('.sheet .zeile[data-id="d9"]', 10); await klick('.sheet .inv-seg button[data-v="radiator"]', 10); neu(); await klick('.sheet [data-k="zuordnen"]', 30);
+        v = ui.innerHTML;
+        erwarte('UI-1: Zuordnen zeigt zuerst die Vorschau der Namen und schreibt nichts', aufrufe.some(m => m.type === 'baustelle/inventar_zuordnen_vorschau' && m.device_id === 'd9' && m.haengt === 'radiator')
+          && !aufrufe.some(m => m.aktion === 'ausruestung_zuordnen') && v.includes('Zuordnen und umbenennen') && v.includes('Plug Lager 09 wird zugeordnet') && v.includes('001-02_C_PLUG_POL'));
+        neu(); await klick('.sheet [data-k="ausfuehren"]', 60);
         erwarte('BSM-031.07: Zuordnen über inventar_aendern mit „was hängt dran“', aufrufe.some(m => m.type === 'baustelle/inventar_aendern' && m.aktion === 'ausruestung_zuordnen' && m.device_id === 'd9' && m.haengt === 'radiator'));
+        erwarte('UI-1: erst nach dem Bestätigen zugeordnet, dann umbenannt', aufrufe.findIndex(m => m.aktion === 'ausruestung_zuordnen') < aufrufe.findIndex(m => m.type === 'baustelle/inventar_umbenennen')
+          && aufrufe.some(m => m.type === 'baustelle/inventar_umbenennen' && m.container_id === 'c1') && /Erledigt|Teilweise erledigt/.test(ui.innerHTML));
+        { /* Gutachten N5: Doppelklick ordnet nur einmal zu – gesperrt wird vor dem await */
+          const Z = { device_id: 'd9', typ: 'PLUG', name: 'Plug Lager 09', haengt: 'radiator' }, s1 = { art: 'inv-vorschau', id: 'c1', zuordnen: Z };
+          panel.s.sheet = s1; neu(); const a = panel.invZuordnenAusfuehren(s1, false), b = panel.invZuordnenAusfuehren(s1, false); await Promise.all([a, b]); await ruhe(20);
+          erwarte('Gutachten N5: Doppelklick auf Zuordnen schickt nur einen Auftrag', aufrufe.filter(m => m.aktion === 'ausruestung_zuordnen').length === 1);
+          /* Gutachten M1: Warten nach dem Zuordnen lässt sich abbrechen */
+          panel.invAuf({ art: 'inv-vorschau', id: 'c1', laeuft: 'Plug Lager 09 zugeordnet – warte …' }); await ruhe(10);
+          erwarte('Gutachten M1: beim Warten steht „Warten abbrechen“', !!litEl('.sheet [data-k="warten-abbrechen"]'));
+          await klick('.sheet [data-k="warten-abbrechen"]', 20);
+          erwarte('Gutachten M1: Abbrechen zeigt die Vorschau des Containers', panel.s.sheet && panel.s.sheet.art === 'inv-vorschau' && !panel.s.sheet.laeuft && panel._invWarten === null);
+          /* Gutachten M1: zweiter Fühler – die Integration trägt ihn nicht ein, die Seite verspricht keine Umbenennung */
+          const ZT = { device_id: 'dT2', typ: 'TEMP', name: 'Fühler 2', haengt: null }, sT = { art: 'inv-vorschau', id: 'c1', zuordnen: ZT };
+          panel.cache[panel.invZuordnenSchluessel('c1', ZT)] = { daten: { schritte: [], konflikte: {}, verweise: [], zuordnen: { ...ZT, eingetragen: false, hinweis: 'Der Container hat schon einen Fühler – es wird nur im Inventar zugeordnet, seine Namen bleiben.' } }, zeit: Date.now(), laeuft: false };
+          panel.invAuf(sT); await ruhe(10);
+          erwarte('Gutachten M1: Vorschau nennt den Grund und bietet nur „Nur zuordnen“', ui.innerHTML.includes('schon einen Fühler') && ui.innerHTML.includes('Nicht am Container eingetragen')
+            && !!litEl('.sheet [data-k="nur-zuordnen"]') && !ui.innerHTML.includes('Zuordnen und umbenennen'));
+          panel.s.sheet = null; neu(); }
         await klick({ act: 'zu' }, 5); await gruppe('inventar'); await klick('.inv-bestand', 20);
         await klick('.sheet .inv-art[data-v="SAN"]', 10); eingabe('.sheet .inv-nr', '4'); neu(); await klick('.sheet [data-k="anlegen"]', 30);
         erwarte('BSM-031.07: Bestand übernehmen mit eigener Nummer', aufrufe.some(m => m.type === 'baustelle/inventar_aendern' && m.aktion === 'container_anlegen' && m.art === 'SAN' && m.nr === 4 && m.bereich_id));
@@ -1954,6 +1993,31 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         await klick('.sheet .inv-seg button:nth-child(2)', 10); neu(); await klick('.sheet [data-k="anlegen"]', 20);
         erwarte('BSM-031.07: Fremdcontainer braucht Firma', !aufrufe.some(m => m.aktion === 'container_anlegen'));
         await klick({ act: 'zu' }, 5);
+        /* UI-1: Chip „Namen ✓ / ⚠ n weichen ab / Nicht im Inventar“ – Zahl von der Integration (struktur bereiche[].namen) */
+        panel.cache = {}; await panel._laden(); await ruhe(20);
+        const mitC = panel.d.bereiche.find(b => b.namen && b.namen.container_id), ohneC = panel.d.bereiche.find(b => b.namen && !b.namen.container_id);
+        erwarte('UI-1: struktur liefert je Container den Stand der Namen', !!mitC && !!ohneC);
+        if (mitC) {
+          await klick({ act: 'container', id: mitC.id }, 30);
+          const chip = litEl('.ck-d .nm-chip');
+          erwarte('UI-1: Chip am Container-Kopf zeigt die Zahl der Integration', !!chip && (mitC.namen.abweichend ? chip.textContent.includes(`${mitC.namen.abweichend} weichen ab`) : chip.textContent.includes('Namen ✓')));
+          neu(); await klick('.ck-d .nm-chip', 30);
+          erwarte('UI-1: Chip öffnet direkt die Vorschau', panel.s.sheet && panel.s.sheet.art === 'inv-vorschau' && panel.s.sheet.id === mitC.namen.container_id && ui.innerHTML.includes('In Home Assistant einheitlich benennen'));
+          await klick('.sheet [data-k="abbrechen"]', 10);
+          erwarte('UI-1: Abbrechen schließt dorthin zurück, wo der Chip stand', !panel.s.sheet);
+          panel.einblenden('bereich'); await ruhe(20);
+          erwarte('UI-1: Chip im Dialog „Bearbeiten“', !!litEl('.sheet [data-zeile="namen"] .nm-chip'));
+          await klick('.sheet [data-zeile="namen"] .nm-chip', 20);
+          erwarte('UI-1: aus „Bearbeiten“ geöffnet, merkt sich den Dialog', panel.s.sheet.art === 'inv-vorschau' && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'bereich');
+          panel.schliessen(); await ruhe(10);
+          erwarte('UI-1: zurück in „Bearbeiten“', panel.s.sheet && panel.s.sheet.art === 'bereich'); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
+          const g = mitC.geraete[0];
+          if (g) { panel.geraetOeffnen(mitC.id, g.id); await ruhe(20); erwarte('UI-1: Chip im Dialog „Gerät bearbeiten“', !!litEl('.sheet .g-liste .nm-chip')); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5); }
+        }
+        await klick({ act: 'tab', v: 'einst' }, 20); await gruppe('geraete'); await klick('.g-reiter button[data-v="uebersicht"]', 10);
+        erwarte('UI-1: Chip in ⚙ › Geräte je Container', litEls('.g-gruppe .nm-chip').length >= 1);
+        if (ohneC) { const nicht = litEls('.nm-chip.nm-ohne'); erwarte('UI-1: Container ohne Inventar: „Nicht im Inventar – aufnehmen ›“', nicht.some(e => e.textContent.includes('Nicht im Inventar – aufnehmen ›')));
+          if (nicht[0]) { await klick('.nm-chip.nm-ohne', 20); erwarte('UI-1: „aufnehmen ›“ führt ins Aufnehmen ins Inventar', panel.s.sheet && panel.s.sheet.art === 'inv-neu' && panel.s.sheet.form.bereich_id); panel.schliessen(); await ruhe(5); } }
       } }
     await gruppe('dev'); await klick('.ev-dev-reiter button[data-v="werkzeuge"]', 20);
     erwarte('WU-0007: Entwicklung › Werkzeuge', ui.innerHTML.includes('Diagnose herunterladen') && !ui.innerHTML.includes('Melden-Knopf in jedem Fenster'));
@@ -1981,9 +2045,42 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   erwarte('Schalter „auch bei Automatik aus“', /auch bei Automatik aus[^]*?class="sw /.test(ui.innerHTML));
   neu(); await klick({ act: 'e-bool', k: 'frost_immer' });
   erwarte('frost_immer über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["heizung","frost_immer"]' && a.wert === true));
-  neu(); for (let k = 0; k < 20; k++) await klick({ act: 'st', k: 'frueh_temp', d: '-1' });
-  erwarte('Kälte-Frühstart bis −15 °C', panel.d.e.frueh_temp === -15 && letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["heizung","fruehstart_unter"]' && a.wert === -15)
-    && ui.innerHTML.includes('−15 °C'));
+  neu(); for (let k = 0; k < 40; k++) await klick({ act: 'st', k: 'frueh_temp', d: '-1' });   // Maßnahme 2: Grenzen wie die Integration (panel.py)
+  erwarte('Kälte-Frühstart bis −30 °C', panel.d.e.frueh_temp === -30 && letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["heizung","fruehstart_unter"]' && a.wert === -30)
+    && ui.innerHTML.includes('−30 °C'));
+  { const alt = panel.d.r.einstellungen.heizung.frost_aussen;   // Maßnahme 2: Frostschutz außen wieder einschaltbar
+    panel.d.r.einstellungen.heizung.frost_aussen = null; panel._neuBauen(); await panel.neuZeichnen(); panel.s.rvAuf = 'alle'; await klick({ act: 'hz-auf', k: 'regeln' }, 20);
+    erwarte('Frostschutz außen aus: Schalter statt Stepper', litEl('.fa-sw .sw') && !litEl('[data-k="frost_aussen"]') && ui.innerHTML.includes('keinen Frostschutz'));
+    neu(); await klick('.fa-sw .sw', 20);
+    erwarte('Frostschutz außen ein: baustelle/setzen heizung.frost_aussen = −3', letzte('baustelle/setzen').some(a => a.pfad.join('.') === 'heizung.frost_aussen' && a.wert === -3)
+      && litEl('[data-k="frost_aussen"]'));
+    neu(); await klick('.fa-sw .sw', 20);
+    erwarte('Frostschutz außen wieder aus: baustelle/setzen heizung.frost_aussen = null', letzte('baustelle/setzen').some(a => a.pfad.join('.') === 'heizung.frost_aussen' && a.wert === null));
+    panel.d.r.einstellungen.heizung.frost_aussen = alt; panel._neuBauen(); await panel.neuZeichnen(); }
+  for (const [x, y] of [['nutzbar', 10], ['takt', 1], ['frost_temp', -5]]) {   // Untergrenzen der Integration (panel.py SETZEN)
+    neu(); panel.d.e[x] = y + 1; if (x === 'frost_temp') panel.d.e.frost_aus = 5; await klick({ act: 'st', k: x, d: '-5' });
+    erwarte(`Untergrenze ${x} = ${y}`, letzte('baustelle/setzen').some(a => a.pfad.at(-1) === { nutzbar: 'nutzbar_prozent', takt: 'takt_min', frost_temp: 'frost_grenze' }[x] && a.wert === y)); }
+  { /* Maßnahme 2: Empfänger auf der Seite änderbar (Dienste von der Integration) */
+    const r0 = panel.d.r, me = r0.einstellungen.meldungen_einst, alt = me.empfaenger;
+    r0.baustelle.empfaenger_dienste = ['mobile_app_handy_herbert', 'mobile_app_tablet']; me.empfaenger = ['mobile_app_handy_herbert', 'mobile_app_weg'];
+    panel._neuBauen(); await klick({ act: 'tab', v: 'einst' }, 10); await klick('.ev-nav button[data-v="meldungen"], .ev-chips button[data-v="meldungen"]', 20);
+    erwarte('Empfänger: je Dienst ein Schalter, fehlender markiert', ['mobile_app_handy_herbert', 'mobile_app_tablet', 'mobile_app_weg'].every(d => litEl(`[data-empf="${d}"] .sw`))
+      && litEl('[data-empf="mobile_app_handy_herbert"] .sw.on') && !litEl('[data-empf="mobile_app_tablet"] .sw.on') && /weg[^]*?nicht gefunden/.test(litEl('[data-empf="mobile_app_weg"]').innerHTML));
+    neu(); await klick('[data-empf="mobile_app_tablet"] .sw', 20);
+    erwarte('Empfänger dazu: baustelle/setzen meldungen_einst.empfaenger', letzte('baustelle/setzen').some(a => a.pfad.join('.') === 'meldungen_einst.empfaenger' && JSON.stringify(a.wert) === '["mobile_app_handy_herbert","mobile_app_weg","mobile_app_tablet"]'));
+    neu(); await klick('[data-empf="mobile_app_weg"] .sw', 20);
+    erwarte('Empfänger weg: baustelle/setzen meldungen_einst.empfaenger', letzte('baustelle/setzen').some(a => a.pfad.join('.') === 'meldungen_einst.empfaenger' && JSON.stringify(a.wert) === '["mobile_app_handy_herbert","mobile_app_tablet"]'));
+    erwarte('Meldungen: 12 Arten mit Frühstart', ui.innerHTML.includes('Kälte-Frühstart morgen') && / von 12 an/.test(ui.innerHTML));
+    me.empfaenger = alt; delete r0.baustelle.empfaenger_dienste; panel._neuBauen(); await panel.neuZeichnen(); }
+  { /* Maßnahme 2: Kurzzeile und „sonst gilt …“ bei gleitendem Soll mit dem Wert der Integration */
+    const e = panel.d.e, art = e.soll_art, G = panel.d.sollG; e.soll_art = 'gleitend'; panel.d.sollG = { ...(G || {}), soll: 21.71 };
+    await klick('.ev-nav button[data-v="heizung"], .ev-chips button[data-v="heizung"]', 20);
+    erwarte('Kurzzeile ⚙ › Heizung: Soll gleitend, heute 21,7 °C', ui.innerHTML.includes('Soll gleitend, heute 21,7 °C'));
+    panel.d.sollG = null; await panel.neuZeichnen(); await ruhe(10);
+    erwarte('Kurzzeile ohne Außentemperatur: noch das feste Soll', ui.innerHTML.includes(`Soll gleitend, noch ${String(e.soll).replace('.', ',')} °C`));
+    panel.d.sollG = { ...(G || {}), soll: 21.71 }; await klick({ act: 'tab', v: 'heizung' }, 20); await klick({ act: 'hz-auf', k: 'container' }, 20);
+    erwarte('Je Container: sonst gilt das gleitende Soll von heute', ui.innerHTML.includes('sonst gilt das gleitende Soll der Baustelle, heute 21,7 °C'));
+    e.soll_art = art; panel.d.sollG = G; await klick({ act: 'zu' }); await panel.neuZeichnen(); }
   /* AN-0001: im Fenster „Baustelle wählen“ je Baustelle Bearbeiten und Löschen */
   await klick({ act: 'sheet', s: 'baustellen' }); pruefe('Baustelle wählen');
   erwarte('Baustelle wählen: Bearbeiten und Löschen je Baustelle', panel.alle.every(x => litEl(`.sheet .bs-ic[data-id="${x.entry}"]`) && litEl(`.sheet .bs-zeile .x[data-id="${x.entry}"]`)));

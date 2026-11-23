@@ -27,6 +27,7 @@ from .const import DOMAIN
 from .db import DATA_DB, instanz_von, meldungen_merken
 from .db.schreiber import arbeit
 from .db.speicher import OHNE, baustelle_laden, meldungen_laden
+from .logik import empfaenger as empfaenger_logik
 from .logik.arbeitszeit import arbeitszeiten_bereinigen, erste_arbeitszeit
 from .logik.geraete import reste_entfernen
 from .logik.warnungen import Art
@@ -114,6 +115,7 @@ STANDARD: dict[str, Any] = {
                  "np_plugs": {}},   # Notprogramm: Gerät → Schalter aller Plugs mit Skript (zum Abschalten, BSM-034.01)   # Soll gleitend: Tagesmittel außen, Rückmeldungen, + / −   # lernen: Lernstand je Container (logik/lernen, 0.8)
     "meldungen_einst": {
         "empfaenger": [],
+        "empfaenger_optionen": None,   # zuletzt übernommener Empfänger aus den HA-Optionen (logik/empfaenger)
         "knoepfe": True,
         "arten": {str(a): True for a in Art},
         "kalt_min": 60,
@@ -199,7 +201,8 @@ class Einstellungen:
         """Laden, fehlende Werte ergänzen, Einstellungen gelöschter Bereiche (mit `geraet_ids` auch Einstellungen, Zähler
         und „stumm“ gelöschter Geräte und Container, logik/geraete) entfernen.
 
-        `empfaenger` (aus den Optionen von 0.6) wird übernommen, solange im Store noch keiner eingetragen ist.
+        `empfaenger` (aus den Optionen der Baustelle) gilt, sobald er sich dort ändert; sonst bleibt der Empfänger, der
+        zuletzt eingestellt wurde, auch von der Seite (logik/empfaenger).
         """
         gespeichert = await self._db_laden()
         if gespeichert is None:   # Datenbank noch nicht Quelle (erster Start mit 0.8.61) oder nicht lesbar: Store
@@ -213,8 +216,11 @@ class Einstellungen:
         bereinigt = arbeitszeiten_bereinigen(self.daten["arbeitszeiten"])
         geaendert = bereinigt != self.daten["arbeitszeiten"]
         self.daten["arbeitszeiten"] = bereinigt
-        if empfaenger and not self.daten["meldungen_einst"]["empfaenger"]:
-            self.daten["meldungen_einst"]["empfaenger"] = list(empfaenger)
+        me = self.daten["meldungen_einst"]
+        gilt, gemerkt = empfaenger_logik.uebernehmen(me["empfaenger"], me["empfaenger_optionen"], empfaenger)
+        if gilt != me["empfaenger"] or gemerkt != me["empfaenger_optionen"]:
+            me["empfaenger"], me["empfaenger_optionen"] = gilt, gemerkt
+            geaendert = True
         bereiche = self.daten["bereiche"]
         for bid in list(bereiche):
             if bid not in bereich_ids:

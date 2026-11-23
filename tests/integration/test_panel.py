@@ -474,6 +474,20 @@ async def test_modus_frostschutz_urlaub_setzen(hass: HomeAssistant, baustelle, w
     assert (await ws.rufe("baustelle/setzen", pfad=["erklaer"], wert=False))["success"] and st.e["erklaer"] is False
 
 
+async def test_empfaenger_option_wirkt_bei_jeder_aenderung(hass: HomeAssistant, baustelle, ws) -> None:
+    """Maßnahme 2: Empfänger von der Seite bleibt über Neuladen; eine geänderte HA-Option gilt danach trotzdem."""
+    assert (await ws.rufe("baustelle/setzen", pfad=["meldungen_einst", "empfaenger"], wert=["mobile_app_seite"]))["success"]
+    hass.config_entries.async_update_entry(baustelle, options={**baustelle.options, "regen_sensor": "sensor.anders"})
+    await hass.async_block_till_done()   # andere Option geändert: Update-Listener lädt neu, Empfänger der Seite bleibt
+    assert baustelle.runtime_data.e["meldungen_einst"]["empfaenger"] == ["mobile_app_seite"]
+    hass.config_entries.async_update_entry(baustelle, options={**baustelle.options, "empfaenger": ["mobile_app_neu"]})
+    await hass.async_block_till_done()
+    assert baustelle.runtime_data.e["meldungen_einst"]["empfaenger"] == ["mobile_app_neu"]
+    hass.services.async_register("notify", "mobile_app_neu", lambda call: None)
+    b = (await ws.rufe("baustelle/struktur", mit_entry=False))["result"][0]["baustelle"]
+    assert "mobile_app_neu" in b["empfaenger_dienste"] and "send_message" not in b["empfaenger_dienste"]
+
+
 async def test_aktion_test_meldung(hass: HomeAssistant, baustelle, ws, nachrichten) -> None:
     st = baustelle.runtime_data
     st.einstellung_setzen(("meldungen_einst", "empfaenger"), ["mobile_app_test"])

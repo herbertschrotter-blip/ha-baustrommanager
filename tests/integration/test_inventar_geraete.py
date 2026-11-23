@@ -200,3 +200,163 @@ async def test_abgleich_traegt_nach_und_zeigt_fremdes(hass: HomeAssistant, baust
     pol = next(x for x in alles["container"] if x["id"] == c["id"])
     assert pol["nicht_in_ha"] == 1 and next(a for a in pol["ausruestung"] if a["id"] == plug["id"])["nicht_in_ha"] is True
     assert entry.runtime_data.lz["np_plugs"].get(f"inventar:{plug['id']}") == "switch.hk1"   # Notprogramm schaltet ab
+
+
+async def test_zuordnen_vorschau_vor_dem_schreiben(hass: HomeAssistant, baustelle_register, hass_ws_client) -> None:
+    """Zuordnen: erst die Vorschau der Namen (als wäre das Gerät schon drin), geschrieben wird nichts; nach dem Zuordnen
+    zeigt die echte Vorschau dieselben Namen für das neue Gerät."""
+    entry = baustelle_register
+    device_id = _neuer_shelly(hass)
+    ws = await hass_ws_client(hass)
+    c = await _anlegen(ws, 1, entry, art="MAN", bereich_id=C2)
+    subs_vorher, ents_vorher = set(entry.subentries), dict(er.async_get(hass).entities)
+    v = await _senden(ws, 2, type="baustelle/inventar_zuordnen_vorschau", container_id=c["id"], device_id=device_id,
+                      haengt="radiator")
+    assert v["success"], v
+    assert v["result"]["zuordnen"] == {"device_id": device_id, "typ": "PLUG", "name": "Plug Lager 09", "eingetragen": True}
+    neu = [s for s in v["result"]["schritte"] if s["ziel"] == "geraet" and s["ref"] == device_id]
+    assert len(neu) == 1 and neu[0]["alt"] == "Plug Lager 09"
+    assert set(entry.subentries) == subs_vorher and dict(er.async_get(hass).entities) == ents_vorher   # nichts geschrieben
+    inv = (await _senden(ws, 3, type="baustelle/inventar"))["result"]
+    assert len(next(x for x in inv["container"] if x["id"] == c["id"])["ausruestung"]) == len(c["ausruestung"])
+
+    z = await _senden(ws, 4, type="baustelle/inventar_aendern", aktion="ausruestung_zuordnen", container_id=c["id"],
+                      device_id=device_id, haengt="radiator")
+    await hass.async_block_till_done()
+    assert z["success"], z
+    echt = (await _senden(ws, 5, type="baustelle/inventar_vorschau", container_id=c["id"]))["result"]
+    nach = next(s for s in echt["schritte"] if s["ziel"] == "geraet" and s["ref"] == device_id)
+    assert nach["neu"] == neu[0]["neu"]   # Vorschau vorher = Namen nachher
+
+    falsch = await _senden(ws, 6, type="baustelle/inventar_zuordnen_vorschau", container_id="gibt-es-nicht", device_id=device_id)
+    assert not falsch["success"] and falsch["error"]["code"] == "not_found"
+
+
+async def test_struktur_namen_je_container(hass: HomeAssistant, baustelle_register, hass_ws_client) -> None:
+    """Chip am Container: struktur liefert je Container, ob er im Inventar ist und wie viele Schritte vom Schema abweichen
+    (dieselbe Zahl wie „Übernehmen (n)“ der Vorschau)."""
+    entry = baustelle_register
+    ws = await hass_ws_client(hass)
+
+    def bereich(r, bid):
+        return next(b for x in r if x["baustelle"]["entry_id"] == entry.entry_id for b in x["bereiche"] if b["id"] == bid)
+
+    vorher = bereich((await _senden(ws, 1, type="baustelle/struktur"))["result"], C1)
+    assert vorher["namen"] == {"container_id": None, "container": None, "abweichend": None}   # nicht im Inventar
+    c = await _anlegen(ws, 2, entry, art="MAN", bereich_id=C1)
+    v = (await _senden(ws, 3, type="baustelle/inventar_vorschau", container_id=c["id"]))["result"]
+    nachher = bereich((await _senden(ws, 4, type="baustelle/struktur"))["result"], C1)
+    offen = sum(1 for s in v["schritte"] if s["zustand"] != "gleich")
+    assert offen > 0
+    assert nachher["namen"] == {"container_id": c["id"], "container": "001_C_MAN", "abweichend": offen}
+
+
+def _neuer_fuehler(hass: HomeAssistant) -> str:
+    """Ein zweiter Temperaturfühler, den HA kennt, aber keine Baustelle; liefert die Geräte-ID."""
+    quelle = MockConfigEntry(domain="bthome", title="Fühler 2", data={})
+    quelle.add_to_hass(hass)
+    geraet = dr.async_get(hass).async_get_or_create(config_entry_id=quelle.entry_id, identifiers={("bthome", "ht9")},
+                                                    name="Fühler Lager 09", model="Shelly H&T")
+    er.async_get(hass).async_get_or_create("sensor", "bthome", "ht9-t", suggested_object_id="temp_lager_09",
+                                           config_entry=quelle, device_id=geraet.id, original_device_class="temperature")
+    hass.states.async_set("sensor.temp_lager_09", "18.5", {"device_class": "temperature", "unit_of_measurement": "°C"})
+    return geraet.id
+
+
+async def test_zuordnen_vorschau_zweiter_fuehler(hass: HomeAssistant, baustelle_register, hass_ws_client) -> None:
+    """Gutachten M1: Der Container hat schon einen Fühler – das Zuordnen trägt den zweiten nicht ein (`sensor_verdrahtung`),
+    also verspricht die Vorschau auch keine Umbenennung, sondern sagt es."""
+    entry = baustelle_register
+    device_id = _neuer_fuehler(hass)
+    ws = await hass_ws_client(hass)
+    c = await _anlegen(ws, 1, entry, art="MAN", bereich_id=C1)   # C1 hat schon einen Fühler
+    fuehler_vorher = entry.subentries[C1].data.get("fuehler")
+    assert fuehler_vorher
+    v = await _senden(ws, 2, type="baustelle/inventar_zuordnen_vorschau", container_id=c["id"], device_id=device_id)
+    assert v["success"], v
+    z = v["result"]["zuordnen"]
+    assert z["typ"] == "TEMP" and z["eingetragen"] is False and "schon einen Fühler" in z["hinweis"]
+    assert not any(s["ref"] == device_id for s in v["result"]["schritte"])
+    a = await _senden(ws, 3, type="baustelle/inventar_aendern", aktion="ausruestung_zuordnen", container_id=c["id"],
+                      device_id=device_id)
+    await hass.async_block_till_done()
+    assert a["success"], a
+    assert a["result"]["verdrahtet"] is None and entry.subentries[C1].data.get("fuehler") == fuehler_vorher
+    echt = (await _senden(ws, 4, type="baustelle/inventar_vorschau", container_id=c["id"]))["result"]
+    assert not any(s["ref"] == device_id for s in echt["schritte"])   # Vorschau vorher = Stand nachher
+
+    c2 = await _anlegen(ws, 5, entry, art="MAN", bereich_id=C2)   # C2 ohne Fühler: der erste wird eingetragen
+    assert not entry.subentries[C2].data.get("fuehler")
+    geraet2 = _neuer_fuehler_2(hass)
+    v2 = (await _senden(ws, 6, type="baustelle/inventar_zuordnen_vorschau", container_id=c2["id"], device_id=geraet2))["result"]
+    assert v2["zuordnen"]["eingetragen"] is True and "hinweis" not in v2["zuordnen"]
+    assert any(s["ref"] == geraet2 for s in v2["schritte"])
+
+
+def _neuer_fuehler_2(hass: HomeAssistant) -> str:
+    quelle = MockConfigEntry(domain="bthome", title="Fühler 3", data={})
+    quelle.add_to_hass(hass)
+    geraet = dr.async_get(hass).async_get_or_create(config_entry_id=quelle.entry_id, identifiers={("bthome", "ht8")},
+                                                    name="Fühler Lager 08", model="Shelly H&T")
+    er.async_get(hass).async_get_or_create("sensor", "bthome", "ht8-t", suggested_object_id="temp_lager_08",
+                                           config_entry=quelle, device_id=geraet.id, original_device_class="temperature")
+    hass.states.async_set("sensor.temp_lager_08", "18.5", {"device_class": "temperature", "unit_of_measurement": "°C"})
+    return geraet.id
+
+
+async def test_zuordnen_vorschau_datenbank_nicht_lesbar(hass: HomeAssistant, baustelle_register, hass_ws_client,
+                                                        monkeypatch) -> None:
+    """Gutachten N4: scheitert das Lesen, meldet die Vorschau „nicht_bereit“ statt eines unbekannten Fehlers."""
+    from custom_components.baustelle import inventar
+
+    entry = baustelle_register
+    device_id = _neuer_shelly(hass)
+    ws = await hass_ws_client(hass)
+    c = await _anlegen(ws, 1, entry, art="MAN", bereich_id=C2)
+    db = hass.data[inventar.DATA_DB]
+
+    async def kaputt(arbeit):
+        return None
+
+    monkeypatch.setattr(db, "async_ausfuehren", kaputt)
+    v = await _senden(ws, 2, type="baustelle/inventar_zuordnen_vorschau", container_id=c["id"], device_id=device_id)
+    assert not v["success"] and v["error"]["code"] == "nicht_bereit"
+
+
+async def test_struktur_namen_zwischenspeicher_und_fehler(hass: HomeAssistant, baustelle_register, hass_ws_client,
+                                                          monkeypatch, caplog) -> None:
+    """Gutachten M2: struktur fragt die Namen höchstens alle 60 s (sofort neu nach einer Änderung am Inventar) und
+    antwortet auch, wenn das Ermitteln scheitert – dann ohne Chip und mit einer Warnung, nur einmal."""
+    from custom_components.baustelle import inventar
+
+    entry = baustelle_register
+    ws = await hass_ws_client(hass)
+    aufrufe = []
+    echt = inventar.async_namen
+
+    async def gezaehlt(h, db):
+        aufrufe.append(1)
+        return await echt(h, db)
+
+    monkeypatch.setattr(inventar, "async_namen", gezaehlt)
+
+    def bereich(r):
+        return next(b for x in r for b in x["bereiche"] if b["id"] == C1)
+
+    assert "namen" in bereich((await _senden(ws, 1, type="baustelle/struktur"))["result"])
+    assert "namen" in bereich((await _senden(ws, 2, type="baustelle/struktur"))["result"])
+    assert len(aufrufe) == 1   # zweites Mal aus dem Zwischenspeicher
+    c = await _anlegen(ws, 3, entry, art="MAN", bereich_id=C1)
+    assert bereich((await _senden(ws, 4, type="baustelle/struktur"))["result"])["namen"]["container_id"] == c["id"]
+    assert len(aufrufe) == 2   # Änderung am Inventar verwirft den Zwischenspeicher
+
+    async def kaputt(h, db):
+        raise RuntimeError("kaputt")
+
+    monkeypatch.setattr(inventar, "async_namen", kaputt)
+    inventar.namen_verwerfen(hass)
+    for nr in (5, 6):
+        inventar.namen_verwerfen(hass)
+        r = await _senden(ws, nr, type="baustelle/struktur")
+        assert r["success"] and "namen" not in bereich(r["result"])   # Struktur kommt, nur ohne Chip
+    assert sum("Namen für den Chip" in m for m in caplog.messages) == 1   # Warnung einmal

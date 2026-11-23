@@ -15,7 +15,9 @@ Zeiten: ISO 8601 mit Zeitzone; Uhrzeiten `"HH:MM"`; Minuten seit Mitternacht als
 {
   "baustelle": {"entry_id": "", "titel": "", "status": "aktiv|abgeschlossen", "optionen": {}, "geladen": true,
                 "version": "0.7.0", "zeitzone": "Europe/Vienna", "heute": "2026-09-29", "jetzt": "ISO",
-                "beginn": "2026-09-08", "beginn_auto": false},   // geltender Beginn; auto = ohne `beginn` → Tag der Anlage (AN-0002)
+                "beginn": "2026-09-08", "beginn_auto": false,   // geltender Beginn; auto = ohne `beginn` → Tag der Anlage (AN-0002)
+                "empfaenger_dienste": ["mobile_app_handy"],   // notify-Dienste zur Auswahl des Empfängers (⚙ › Meldungen)
+                "standard": {"frost_aussen": -3.0}},   // Standard, den die Seite beim Einschalten setzt (Frostschutz ohne Fühler)
   "entitaeten": {"<unique_id>": "<entity_id>"},
   "bereiche": [{"id": "", "name": "", "art": "container|pumpenschacht", "fuehler": "sensor.x|null", "nr": 0,
                 "sensoren": [{"art": "fuehler|tuer|fenster|licht", "entity_id": "", "nr": 1, "name": "Tür 1", "batterie": 87,
@@ -23,6 +25,9 @@ Zeiten: ISO 8601 mit Zeitzone; Uhrzeiten `"HH:MM"`; Minuten seit Mitternacht als
                 // sensoren (0.8.118, BSM-034.03): die eine Liste aus Fühler, Türkontakt (= Tür 1) und Aussehen; batterie in % oder null;
                 // batterie_stufe null|"schwach"|"kritisch" (logik/sensoren.batterie_stufe: < 25 % schwach, < 10 % kritisch) –
                 // die Seite färbt danach (Geräteliste, Hinweise im Container-Kopf) und kennt keine Grenze
+                // namen (0.8.187, nur Container, fehlt ohne Datenbank): {"container_id": ""|null, "container": "001_C_POL"|null,
+                //   "abweichend": 3|null} – Stand der Namen nach dem Schema (logik/inventar.abweichend = „Übernehmen (n)“ der
+                //   Vorschau; 0 = Chip „Namen ✓“); container_id null = nicht im Inventar; abweichend null = Baustelle nicht geladen
   "geraete": [{"id": "", "name": "", "bereich": "", "schalter": "switch.x", "rolle": "heizung|trockner|pumpe|steckdose",
                "typ": "oelradiator|konvektor|…", "leistung": "sensor.x|null", "energie": "sensor.x|null", "nenn_kw": 2.0}],
   "einstellungen": {"…": "Store v2 ohne zaehler, protokoll, meldungen, laufzeit (siehe bauplan §1)"},
@@ -104,7 +109,7 @@ Fehler `unauthorized` („Nur Admins dürfen ändern“). Auch ohne Admin gehen 
 
 | type | Felder | Wirkung |
 |---|---|---|
-| `baustelle/setzen` | `pfad: [str]`, `wert` | Einstellung setzen, geprüft nach Schema (erlaubte Pfade: `automatik`, `preis`, `melden_knopf`, `termine_kalender`, `heizung.*`, `staffel.*`, `bericht.*`, `meldungen_einst.*`, `bereiche.<bid>.(auto\|trocknen\|soll\|bedarf\|prio\|anschluss\|tuer)`; `meldungen_einst.empfaenger` = Namen von notify-Diensten, z. B. `mobile_app_handy`) |
+| `baustelle/setzen` | `pfad: [str]`, `wert` | Einstellung setzen, geprüft nach Schema (erlaubte Pfade: `automatik`, `preis`, `melden_knopf`, `termine_kalender`, `heizung.*`, `staffel.*`, `bericht.*`, `meldungen_einst.*`, `bereiche.<bid>.(auto\|trocknen\|soll\|bedarf\|prio\|anschluss\|tuer)`; `meldungen_einst.empfaenger` = Namen von notify-Diensten, z. B. `mobile_app_handy`; gilt, bis die Option `empfaenger` der Baustelle geändert wird, `logik/empfaenger`) |
 | `baustelle/liste` | `liste: arbeitszeiten\|ausnahmen\|anschluesse\|firmen`, `aktion: speichern\|loeschen`, `eintrag` | Eintrag anlegen/ändern/löschen. `firmen`/`anschluesse` mit `container: [bid]` ordnen zu (Firma: neuer `zuordnung`-Eintrag „ab jetzt“). Arbeitszeit mit gleichem `ab` → Fehler; ändern mit `alt_ab` (bisheriges `ab`). Neue Anschlüsse/Firmen antworten `{ok, id}`. |
 | `baustelle/aktion` | `aktion` + Felder | `bedarf` (`bereich`, `minuten` oder `bis`, `boost`), `bedarf_aus` (`bereich`), `boost` (`bereich`, `an`), `jetzt_heizen` (`minuten` oder null = beenden), `schalten` (`geraet`, `an` → Handbetrieb bis zum nächsten Schaltpunkt), `automatik` (`geraet` → Handbetrieb beenden), `warnung_stumm` (`key`, `bis` oder null; ohne `bis` = morgen 07:00), `bericht_senden` (`art`: woche\|monat), `baseline_absagen` (`lauf_id`, §8), `baseline_einplanen` (`bereich`, `von` Datum, `tage` 1–2 → `{ok, lauf_id, schaetzung_eur}`; einmalig von Hand, Fehlertext mit Grund, 0.8.179) |
 | `baustelle/protokoll` | `filter: alle\|warnung\|schalten\|wetter\|nachricht\|einstellung`, `vor: ISO\|null`, `limit` (Standard 50) | Liste `[ISO, art, bid\|null, Text]`, neueste zuerst; `warnung` enthält auch `ok`; `vor` = nur ältere Einträge (Nachladen) |
@@ -407,7 +412,7 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
 ```json
 {"zeitraum": {}, "preis": 0.28,
  "summen": {"kwh": 0, "eur": 0, "heizzeit": 0, "pumpzeit": 0, "ohne": 0,
-            "vorher": {"kwh": 0, "heizzeit": 0, "pumpzeit": 0}, "veraenderung": {"kwh": 5, "heizzeit": null, "pumpzeit": null},
+            "vorher": {"kwh": 0, "heizzeit": 0, "pumpzeit": 0}, "veraenderung": {"kwh": 5, "eur": 7, "heizzeit": null, "pumpzeit": null},
             "ohne_automatik": {"ohne_eur": 0, "gespart_eur": 0, "prozent": 0} },
  "je_geraet": [{"bereich": "<bid>", "geraet": "<gid>", "mittel": 1.98, "kwh": 12.1, "std": 6.1, "eur": 3.39}],
  "wetter": {"punkte": [[4.2, 18.5]], "gerade": {"k": -1.2, "d0": 20, "null0": 16.7, "eur_je_grad": 0.34}},
@@ -426,7 +431,7 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
   Regeln in `logik/auswertung.erkenntnisse`; nur Daten, den Text macht die Seite) – WU-0005. `bauart` (0.8.176):
   `{bereich, name, prozent}` – der Container braucht `prozent` % mehr (+) bzw. weniger (−) als gleich gebaute.
 - `summen` über `scope`; `heizzeit` nur Container, `pumpzeit` nur Pumpen; `veraenderung` in ganzen % zum Zeitraum davor
-  (`null` ohne Wert davor); `ohne_automatik` `null`, solange „ohne Automatik“ 0 ist, sonst mit `ohne_eur` (Kosten im
+  (`null` ohne Wert davor; `eur` ab 0.8.189: € gegen €, jeder Zeitraum zu seinem Preis – Pfeil bei „Kosten“); `ohne_automatik` `null`, solange „ohne Automatik“ 0 ist, sonst mit `ohne_eur` (Kosten im
   Dauerbetrieb, 0.7.24).
 - `gespart_reihen` (Kachel „Gespart“, Mockup `gespart.html` Variante B, Herbert 28.10.2026) über `scope` (auch „alle
   laufenden“): je Periode des Zeitraums (`zeitraum.n`: Tag je Stunde, Woche/Monat je Tag, Jahr je Monat) „mit
@@ -613,6 +618,13 @@ Energie, mit denen die Integration rechnet; eigene Entitäten der Integration un
 bleiben, wie sie sind. Eigene Labels (Bauplan Inventar §5), die nicht mehr passen, stehen als Schritt mit `neu: null`.
 Ab 0.8.112 dazu `verweise` [{art (Automation/Skript/Dashboard), name, alt, neu}]: eigene Automationen, Skripte und
 Dashboards, die eine Entity-ID nennen, die sich ändern würde – HA passt sie nicht an (Bauplan §6.2).
+
+**`baustelle/inventar_zuordnen_vorschau`** (alle Benutzer, 0.8.187), `container_id`, `device_id`, optional `typ`,
+`haengt` → wie `inventar_vorschau` plus `zuordnen` {device_id, typ, name} – **ändert nichts**: die Namen, als wäre das
+HA-Gerät schon zugeordnet (logik/inventar.mit_zuordnung: ein Plug bekommt die nächste Gerätenummer nach den im
+Inventar gespeicherten, Fühler/Tür/Fenster kommen ans Ende ihrer Art). Prüft wie `ausruestung_zuordnen` (defekt, in
+einem anderen Container → `invalid_format`; Container ohne Einsatz → `not_found`). Die Seite ordnet erst nach dem
+Bestätigen zu und benennt dann mit `inventar_umbenennen` um, sobald die Vorschau des Containers das Gerät enthält.
 
 **`baustelle/inventar_umbenennen`** (nur Admins, sonst `unauthorized`; 0.8.109, BSM-031.06b), `container_id` →
 `{id, status, schritte, geaendert, nachgeholt}`. Bildet die Vorschau selbst neu (übernimmt nie die der Seite); bei einem Konflikt

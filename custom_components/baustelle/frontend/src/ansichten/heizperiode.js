@@ -248,11 +248,13 @@ function klima(p, h) {
 
 /* ---------- Karte ---------- */
 const REITER = [['hoch', 'Hochrechnung', 'Prognose'], ['sig', 'Signatur'], ['klima', 'Klima'], ['bl', 'Baseline']];   // Baseline: J4b (hochrechnung-j4b.html)
-export function heizperiodeVorlage(p, A, start = 'hoch') {
-  const d = p.d, h = A && A.hochrechnung, r = p.s.hpReiter || start, [von, bis] = d.hp;
+// `merk`: wo der gewählte Reiter steht – die Bausteine „Heizperiode“ und „Heizperiode · Signatur“ merken ihn getrennt,
+// sonst schaltet ein Klick in der einen Karte die andere mit um (UI-Bericht, Maßnahme 6)
+export function heizperiodeVorlage(p, A, start = 'hoch', merk = 'hpReiter') {
+  const d = p.d, h = A && A.hochrechnung, r = p.s[merk] || start, [von, bis] = d.hp;
   return html`<div class="glas-panel block hp-karte"><div class="block-kopf"><b>Heizperiode</b>
       <button class="chip glas-panel hp-zeit-chip nur-admin" @click=${p.nurAdmin(() => p.einblenden('zeitraum-bs'))}>${MONATE[von - 1]}–${MONATE[bis - 1]}${h && h.ende ? ` · bis ${tagText(h.ende)}` : ''} ✎</button></div>
-    <div class="seg glas-panel hp-reiter">${REITER.map(([k, t, kurz]) => html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s.hpReiter = k; p.neuZeichnen(); }}>${p.narrow && kurz ? kurz : t}</button>`)}</div>
+    <div class="seg glas-panel hp-reiter">${REITER.map(([k, t, kurz]) => html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s[merk] = k; p.neuZeichnen(); }}>${p.narrow && kurz ? kurz : t}</button>`)}</div>
     ${r === 'bl' ? baselineReiter(p) : !A ? LAEDT : !h || !zahl(h.mit_kwh) ? html`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>`
       : r === 'sig' ? signatur(p, h) : r === 'klima' ? klima(p, h)
       : hochrechnung(p, h)}</div>`;

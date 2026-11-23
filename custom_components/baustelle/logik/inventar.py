@@ -14,6 +14,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from .geraete import STATUS
+from .symbol import sensor_eintragen
 
 # Die eine Kürzeltabelle (§3) – neue Kürzel nur hier, mit Test
 CONTAINER_ARTEN: dict[str, str] = {
@@ -277,6 +278,73 @@ def vorschau(eingabe: Mapping[str, Any], belegt: Iterable[str] = ()) -> dict[str
             s["zustand"] = "konflikt"
     zaehler = {z: sum(1 for s in schritte if s["zustand"] == z) for z in ("aendern", "neu", "gleich", "konflikt")}
     return {"schritte": schritte, "konflikte": konfl, "zaehler": zaehler}
+
+
+def abweichend(schritte: Iterable[Mapping[str, Any]]) -> int:
+    """Wie viele Schritte der Vorschau vom Schema abweichen (Chip „⚠ n weichen ab“ an Container, Dialogen und Geräten):
+    alles, was nicht schon gleich ist – dieselbe Zahl wie „Übernehmen (n)“ in der Vorschau; 0 = „Namen ✓“."""
+    return sum(1 for s in schritte if s.get("zustand") != "gleich")
+
+
+NEU_ZUGEORDNET = "neu"   # Platzhalter für den Unter-Eintrag eines Plugs, den erst das Zuordnen anlegt (Vorschau)
+
+
+def sensor_verdrahtung(typ: str, entity_id: str | None, *, fuehler: str | None, tuer: str | None,
+                       symbol: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Was das Zuordnen eines Fühlers, Tür- oder Fensterkontakts am Container einträgt – die eine Regel für Zuordnen
+    (`_verdrahten`) und Vorschau. None = nichts (kein Messwert, Container hat schon einen Fühler, Tür/Fenster schon
+    eingetragen oder kein Platz im Aussehen); sonst `{"feld": "fuehler"|"tuer"|"symbol", "wert": …, "text": …}`."""
+    if not entity_id or typ not in AM_CONTAINER:
+        return None
+    if typ == "TEMP":
+        return None if fuehler else {"feld": "fuehler", "wert": entity_id, "text": "als Fühler des Containers eingetragen"}
+    if typ == "DOOR" and not tuer:
+        return {"feld": "tuer", "wert": entity_id, "text": "als Türkontakt des Containers eingetragen"}
+    art = "tuer" if typ == "DOOR" else "fenster"
+    if (neu := sensor_eintragen(dict(symbol) if symbol else None, art, entity_id, tuer)) is None:
+        return None
+    nr = next(i + 1 for i, x in enumerate(neu["tueren" if art == "tuer" else "fenster"]) if x["sensor"] == entity_id)
+    return {"feld": "symbol", "wert": neu, "text": f"als {'Tür' if art == 'tuer' else 'Fenster'} {nr} des Containers eingetragen"}
+
+
+def nicht_eingetragen(typ: str) -> str:
+    """Hinweis in der Zuordnen-Vorschau, wenn `sensor_verdrahtung` nichts einträgt: das Gerät kommt nur ins Inventar."""
+    was = {"TEMP": "Der Container hat schon einen Fühler", "DOOR": "Der Türkontakt ist schon eingetragen oder es ist kein "
+           "Platz für eine weitere Tür", "FEN": "Das Fenster ist schon eingetragen oder es ist kein Platz für ein weiteres"}
+    return f"{was.get(typ, 'Das Gerät wird am Container nicht eingetragen')} – es wird nur im Inventar zugeordnet, " \
+           "seine Namen bleiben."
+
+
+def mit_zuordnung(eingabe: Mapping[str, Any], *, typ: str, geraet: Mapping[str, Any], entitaeten: list[dict[str, Any]],
+                  labels_: list[str], schalter: Mapping[str, Any] | None = None, haengt: str | None = None,
+                  verdrahtet: bool = True) -> dict[str, Any]:
+    """Eingabe der Vorschau, als wäre das HA-Gerät schon zugeordnet (Zuordnen: erst die Vorschau, dann schreiben).
+
+    Ein Plug bekommt die nächste Gerätenummer nach den im Inventar gespeicherten (`gg_fest`, wie `naechste`) und
+    Rolle/Typ nach „Was hängt an diesem Plug?“ (`HAENGT`); Fühler, Tür und Fenster kommen ans Ende ihrer Art. Steckt
+    das Gerät schon im Container oder trägt das Zuordnen den Sensor nicht am Container ein (`verdrahtet` False, Regel
+    `sensor_verdrahtung`, z. B. zweiter Fühler), bleibt die Eingabe, wie sie ist."""
+    aus = {**eingabe, "plugs": list(eingabe.get("plugs") or []), "sensoren": list(eingabe.get("sensoren") or [])}
+    gid = geraet.get("id")
+    if any((x.get("geraet") or {}).get("id") == gid for x in aus["plugs"] + aus["sensoren"]):
+        return aus
+    if typ == "PLUG":
+        rolle, heiztyp = HAENGT.get(haengt or "konvektor", HAENGT["konvektor"])
+        # wie das Inventar: nächste nach den gespeicherten Nummern; Plugs ohne gespeicherte (`gg_fest` False) zählen danach
+        gg = naechste(x.get("gg") for x in aus["plugs"] if x.get("gg_fest", True))
+        lose = [x for x in aus["plugs"] if not x.get("gg_fest", True)]
+        aus["plugs"] = [x for x in aus["plugs"] if x.get("gg_fest", True)] + [{**x, "gg": gg + i} for i, x in enumerate(lose, 1)]
+        aus["plugs"].append({
+            "gg": gg, "gg_fest": True, "geraet_id": NEU_ZUGEORDNET, "name": geraet.get("name"),
+            "rolle": rolle, "typ": heiztyp, "geraet": dict(geraet), "schalter": dict(schalter or {}),
+            "entitaeten": [e for e in entitaeten if e.get("klasse") in ("power", "energy")],
+            "plug_name": geraet.get("original"), "labels": list(labels_)})
+    elif typ in AM_CONTAINER:
+        if verdrahtet:
+            aus["sensoren"].append({"typ": typ, "geraet": dict(geraet), "entitaeten": list(entitaeten), "labels": list(labels_)})
+    else:
+        raise InventarFehler(f"Gerätetyp {typ} lässt sich nicht zuordnen")
+    return aus
 
 
 # ---------------------------------------------------------------------- Umbenennen ausführen (BSM-031.06b, §6)

@@ -248,6 +248,10 @@ const GLAS_CSS = `:host { display: block; height: 100%; }
 .kw-knopf { cursor: pointer; border-radius: 14px !important; padding: 4px 8px !important; margin: -4px -8px -4px 0 !important; transition: background .2s; }
 .kw-knopf:hover { background: rgba(255,255,255,.12) !important; } .kw-pfeil { font-size: 22px; opacity: .5; margin-left: 4px; align-self: center; }
 .c-kw.kw-knopf { margin: 4px 0 0 -8px !important; }
+/* UI-Bericht, Maßnahme 6: der Knopf zeigt die Leistung jetzt, öffnet aber den Verbrauch (kWh) – das steht dran */
+.kw-ziel { font-size: 13px; font-weight: 400; letter-spacing: 0; opacity: .75; margin-left: 6px; align-self: center; display: inline-flex; align-items: center; }
+.kw-ziel .kw-pfeil { margin-left: 2px; }
+.aw-nur-diese { margin: 0 0 10px; }
 .vb-wer { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
 .vb-wer button { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; font-size: 12px; padding: 5px 10px !important; border-radius: 14px !important;
   border: 1px solid var(--panel-rand) !important; color: var(--ink2) !important; transition: background .2s, color .2s; }
@@ -985,11 +989,12 @@ const PFAD = { preis: ['preis'], melden: ['melden_knopf'], feiertag_frei: ['heiz
   frost_aus: ['heizung', 'frost_aus'], urlaub: ['heizung', 'frei_modus'], absenk: ['heizung', 'absenk'], offline_min: ['meldungen_einst', 'offline_min'],
   trocken_w: ['meldungen_einst', 'trocken_unter_w'], erklaer: ['erklaer'], frost_immer: ['heizung', 'frost_immer'], notprogramm: ['heizung', 'notprogramm'], taste: ['heizung', 'taste'] };
 /* Grenzen der Stepper: Untergrenze wie im Mockup, sonst die erlaubten Werte der Integration (panel.py SETZEN) –
-   so schickt die Seite nie einen Wert, den die Integration ablehnt */
-const GRENZEN = { nutzbar: [30, 100], max_gleich: [1, 50], min_lauf: [1, 120], min_pause: [0, 120], takt: [5, 240], tuer_pause: [1, 120], tuer_melden: [1, 240],
-  vorheizen: [0, 240], nachheizen: [0, 240], soll: [5, 30], gleit_min: [5, 30], gleit_max: [5, 30], gleit_je: [0, 0.5], gleit_bezug: [0, 20], gleit_tage: [1, 7], grenze: [0, 30], frueh_temp: [-15, 20], frueh_min: [0, 240], frost_temp: [0, 15],
+   so schickt die Seite nie einen Wert, den die Integration ablehnt; Frühstart, Frostschutz, Nutzbar und Rundlauf wie die
+   Integration (UI-Bericht, Maßnahme 2) */
+const GRENZEN = { nutzbar: [10, 100], max_gleich: [1, 50], min_lauf: [1, 120], min_pause: [0, 120], takt: [1, 240], tuer_pause: [1, 120], tuer_melden: [1, 240],
+  vorheizen: [0, 240], nachheizen: [0, 240], soll: [5, 30], gleit_min: [5, 30], gleit_max: [5, 30], gleit_je: [0, 0.5], gleit_bezug: [0, 20], gleit_tage: [1, 7], grenze: [0, 30], frueh_temp: [-30, 20], frueh_min: [0, 240], frost_temp: [-5, 15],
   tr_mm: [0, 100], tr_laenger: [0, 480], tr_frueher: [0, 240], boost_min: [5, 480], toleranz: [0.1, 3], hand_nachfrist: [0, 240], fuehler_halten: [0, 120], zieht_w: [5, 500],
-  frost_aus: [1, 20], absenk: [5, 20], offline_min: [1, 1440], trocken_w: [5, 5000], dauer_min: [5, 1440], zyklen_h: [2, 200], kalt_min: [15, 1440], hand_h: [1, 240], warm_vor: [0, 240], warm_nach: [0, 240], frost_aussen: [-20, 10], warm_max: [15, 480], stufen_abstand: [0.5, 10], stufen_min: [5, 240], stufen_anstieg: [0, 5], stufen_kalt: [-30, 15] };
+  frost_aus: [-3, 20], absenk: [5, 20], offline_min: [1, 1440], trocken_w: [5, 5000], dauer_min: [5, 1440], zyklen_h: [2, 200], kalt_min: [15, 1440], hand_h: [1, 240], warm_vor: [0, 240], warm_nach: [0, 240], frost_aussen: [-20, 10], warm_max: [15, 480], stufen_abstand: [0.5, 10], stufen_min: [5, 240], stufen_anstieg: [0, 5], stufen_kalt: [-30, 15] };
 const MODUS_TEXT = { plan: 'an in der Heizzeit – der Thermostat am Heizkörper regelt', thermo: 'in der Heizzeit auf das Soll nach dem Fühler',
   bedarf: 'nur per Schalter oder Termin, sonst Frostschutz', hand: 'die Automatik schaltet nicht – Schalter unten', aus: 'alles aus, Frostschutz bleibt' };
 const STUNDEN = [...Array(24)].map((_, h) => String(h).padStart(2, '0'));
@@ -1750,7 +1755,7 @@ class BaustellePanel extends LitElement {
   invVorschau(id) { return this._holen('invv:' + id, () => this._hass.callWS({ type: 'baustelle/inventar_vorschau', container_id: id }), 30000); }
   invRueckVorschau(id) { return this._holen('invr:' + id, () => this._hass.callWS({ type: 'baustelle/inventar_rueckgaengig', container_id: id, vorschau: true }), 30000); }
   invKandidaten() { const r = this._holen('invk', () => this._hass.callWS({ type: 'baustelle/inventar_kandidaten' }), 30000); return r && r.geraete; }
-  invNeu() { for (const k of Object.keys(this.cache)) if (k === 'inv' || k === 'invk' || k.startsWith('invv:') || k.startsWith('invr:')) delete this.cache[k]; }
+  invNeu() { for (const k of Object.keys(this.cache)) if (k === 'inv' || k === 'invk' || k.startsWith('invv:') || k.startsWith('invr:') || k.startsWith('invz:')) delete this.cache[k]; }
   invAuf(sheet) { this.s.sheet = sheet; return this.neuZeichnen(); }
   async invSenden(felder, text, schliessen = false) {
     try {
@@ -1766,11 +1771,38 @@ class BaustellePanel extends LitElement {
       ...(f.bereich_id ? { bereich_id: f.bereich_id } : {}), ...(f.eigen && f.bereich_id && +f.nr ? { nr: +f.nr } : {}) }, 'Container angelegt');
     if (r) this.invAuf(f.bereich_id ? { art: 'inv-vorschau', id: r.id } : { art: 'inv-container', id: r.id });
   }
-  async invZuordnen(c, s) {
+  /* Zuordnen: erst die Vorschau der Namen (baustelle/inventar_zuordnen_vorschau, schreibt nichts), nach dem Bestätigen
+     zuordnen und – sobald die Integration das Gerät im Container kennt – umbenennen */
+  invZuordnenSchluessel(id, Z) { return `invz:${id}:${Z.device_id}:${Z.haengt || ''}`; }
+  invZuordnenDaten(id, Z) { return this._holen(this.invZuordnenSchluessel(id, Z), () => this._hass.callWS({ type: 'baustelle/inventar_zuordnen_vorschau', container_id: id, device_id: Z.device_id, ...(Z.haengt ? { haengt: Z.haengt } : {}) }), 30000); }
+  invZuordnenVorschau(c, s) {
     const k = (this.invKandidaten() || []).find(x => x.device_id === s.wahl); if (!k) return this.toast('Bitte ein Gerät wählen');
-    const r = await this.invSenden({ aktion: 'ausruestung_zuordnen', container_id: c.id, device_id: k.device_id, ...(k.typ === 'PLUG' ? { haengt: s.haengt || 'konvektor' } : {}) },
-      `${k.name} zugeordnet`);
-    if (r) this.invAuf({ art: 'inv-vorschau', id: c.id });
+    return this.invAuf({ art: 'inv-vorschau', id: c.id, zuordnen: { device_id: k.device_id, typ: k.typ, name: k.name, haengt: k.typ === 'PLUG' ? s.haengt || 'konvektor' : null } });
+  }
+  async invZuordnenAusfuehren(s, umbenennen) {
+    const Z = s.zuordnen; if (!Z || s.laeuft) return undefined;
+    const marke = {}; this._invWarten = marke;   // „Warten abbrechen“ setzt eine neue Marke – dann wird nicht mehr umbenannt
+    s.laeuft = `${Z.name} wird zugeordnet …`; this.neuZeichnen();   // sofort sperren (Doppelklick), noch vor dem await
+    const r = await this.invSenden({ aktion: 'ausruestung_zuordnen', container_id: s.id, device_id: Z.device_id, ...(Z.haengt ? { haengt: Z.haengt } : {}) }, umbenennen ? null : `${Z.name} zugeordnet`);
+    if (!r) { s.laeuft = null; this.neuZeichnen(); return undefined; }
+    if (!umbenennen) return this.invAuf({ art: 'inv-container', id: s.id });
+    const weiter = { art: 'inv-vorschau', id: s.id, ...(s.zurueck !== undefined ? { zurueck: s.zurueck } : {}) };
+    if (this._invWarten !== marke) return undefined;   // schon abgebrochen
+    this.invAuf({ ...weiter, laeuft: `${Z.name} zugeordnet – warte, bis die Integration es im Container kennt …` });
+    for (let i = 0; i < 20; i++) {   // der neue Unter-Eintrag lädt die Baustelle neu; umbenannt wird erst danach (sonst fehlte das Gerät)
+      let v = null; try { v = await this._hass.callWS({ type: 'baustelle/inventar_vorschau', container_id: s.id }); } catch (e) { v = null; }
+      if (this._invWarten !== marke) return undefined;
+      if (v && (v.schritte || []).some(x => x.ziel === 'geraet' && x.ref === Z.device_id)) return this.invAusfuehren(weiter);
+      await new Promise(f => setTimeout(f, 1500));
+      if (this._invWarten !== marke) return undefined;
+    }
+    this._invWarten = null;
+    this.toast(`${Z.name} zugeordnet – erscheint noch nicht im Container, Namen bitte in der Vorschau prüfen`);
+    this.invNeu(); return this.invAuf(weiter);
+  }
+  invWartenAbbrechen(s) {   // Warten nach dem Zuordnen beenden: zugeordnet ist es, umbenannt wird nicht – Vorschau des Containers
+    this._invWarten = null; this.invNeu();
+    return this.invAuf({ art: 'inv-vorschau', id: s.id, ...(s.zurueck !== undefined ? { zurueck: s.zurueck } : {}) });
   }
   async invAusfuehren(s) {
     try {
@@ -1971,6 +2003,13 @@ class BaustellePanel extends LitElement {
   baselineAbsagen(l) { return this.aktion('baseline_absagen', { lauf_id: l.id }, l.status === 'laeuft' ? 'Lauf abgebrochen – die Automatik übernimmt' : 'Lauf abgesagt'); }
   einstellungUmschalten(k) { const e = this.d.e; if (ARTEN[k]) return this.setzen(['meldungen_einst', 'arten', ARTEN[k]], !e[k]); return this.setzen(PFAD[k], !e[k]); }
   einstellungWert(k, v) { return this.setzen(PFAD[k], isNaN(+v) ? v : +v); }
+  /* Frostschutz ohne Fühler nach Außentemperatur: aus = null, ein = Standard der Integration (Maßnahme 2) */
+  frostAussenUmschalten() {   // ein: Standard der Integration (baustelle.standard.frost_aussen), keine Kopie in der Seite
+    const e = this.d.e; if (e.frost_aussen === null && e.frost_aussen_std === null) return this.toast('Standardwert fehlt – Seite neu laden');
+    return this.setzen(PFAD.frost_aussen, e.frost_aussen === null ? e.frost_aussen_std : null);
+  }
+  /* Empfänger der Meldungen (notify-Dienste) an/aus – gilt, bis die HA-Option geändert wird (logik/empfaenger) */
+  empfaengerUmschalten(dienst) { const l = this.d.e.empfaengerListe; return this.setzen(['meldungen_einst', 'empfaenger'], l.includes(dienst) ? l.filter(x => x !== dienst) : [...l, dienst], 'Gespeichert'); }
   heizgrenzeBasis(v) { return this.setzen(PFAD.basis, v === 'jetzt' ? 'jetzt' : 'tageshoechst'); }
   gefuehlVergessen() { return this.aktion('gefuehl_vergessen', {}, 'Gelerntes Gefühl vergessen – es gilt der Startwert nach draußen'); }
   containerSoll(x, dd) { const [min, max] = GRENZEN.soll; return this.setzen(['bereiche', x.id, 'soll'], Math.min(max, Math.max(min, Math.round(((x.soll ?? this.d.e.soll) + dd) * 2) / 2))); }

@@ -22,7 +22,10 @@
    "version": "0.7.0",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
-   "jetzt": "2026-09-29T16:20:00+02:00"
+   "jetzt": "2026-09-29T16:20:00+02:00",
+   "standard": {
+    "frost_aussen": -3.0
+   }
   },
   "funktionen": [
    "heizung",
@@ -4052,7 +4055,10 @@
    "version": "0.7.0",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
-   "jetzt": "2026-09-29T16:20:00+02:00"
+   "jetzt": "2026-09-29T16:20:00+02:00",
+   "standard": {
+    "frost_aussen": -3.0
+   }
   },
   "funktionen": [
    "heizung",
@@ -5179,7 +5185,10 @@
    "version": "0.7.0",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
-   "jetzt": "2026-09-29T16:20:00+02:00"
+   "jetzt": "2026-09-29T16:20:00+02:00",
+   "standard": {
+    "frost_aussen": -3.0
+   }
   },
   "funktionen": [
    "heizung",
@@ -5507,7 +5516,10 @@
    "version": "0.7.0",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
-   "jetzt": "2026-09-29T16:20:00+02:00"
+   "jetzt": "2026-09-29T16:20:00+02:00",
+   "standard": {
+    "frost_aussen": -3.0
+   }
   },
   "funktionen": [
    "heizung",

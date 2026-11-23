@@ -224,7 +224,7 @@ function regelnInhalt(p) {
     warm_nach: z('Warm halten (lernende)', 'nach Arbeitsende; Kleidung trocknen kommt dazu', st('warm_nach', 5, v => v ? `${v} min länger` : 'bis Ende'), true),
     trocknen: z('👕 Kleidung trocknen', `nach Regen in der Arbeitszeit · ${p.d.trocknen ? p.d.trocknen.stufen_text : `ab ${de(e.tr_mm, 1)} mm: +${e.tr_laenger} min, morgen ${e.tr_frueher} min früher`}`, link(() => p.hzAuf('trocknen'))),
     hand: z('✋ Handbetrieb übernehmen nach', 'Läuft ein Heizkörper zu lange von Hand, kommt eine Nachricht – ohne „So lassen“ übernimmt die Automatik so viel später', st('hand_nachfrist', 5, min)),
-    frost: html`${z('❄ Frostschutz', 'hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit', bool('frost'), false, 'frost')}${e.frost ? html`${z('ein unter', '', st('frost_temp', .5, grad), true)}${z('aus über', '', st('frost_aus', .5, grad), true)}${z('ohne Fühler: ein, wenn draußen unter', 'aus erst 2 °C darüber; der Heizkörperthermostat regelt dann selbst', e.frost_aussen === null ? html`<span class="leise">aus</span>` : st('frost_aussen', 1, minus), true)}${z('auch bei Automatik aus', 'schaltet dann nur den Frostschutz, sonst nichts', bool('frost_immer'), true)}` : nothing}`,
+    frost: html`${z('❄ Frostschutz', 'hält jeden Container über der Grenze, auch außerhalb der Arbeitszeit', bool('frost'), false, 'frost')}${e.frost ? html`${z('ein unter', '', st('frost_temp', .5, grad), true)}${z('aus über', '', st('frost_aus', .5, grad), true)}${z('ohne Fühler nach Außentemperatur', e.frost_aussen === null ? 'aus – Container ohne Fühler bekommen keinen Frostschutz' : 'der Heizkörperthermostat regelt dann selbst', html`<span class="fa-sw">${schalterVorlage(e.frost_aussen !== null, () => p.frostAussenUmschalten())}</span>`, true)}${e.frost_aussen === null ? nothing : z('ein, wenn draußen unter', 'aus erst 2 °C darüber', st('frost_aussen', 1, minus), true)}${z('auch bei Automatik aus', 'schaltet dann nur den Frostschutz, sonst nichts', bool('frost_immer'), true)}` : nothing}`,
     urlaub: z('🏖 Urlaub & freie Feiertage', { frost: 'nur Frostschutz', absenk: `absenken auf ${de(e.absenk)} °C`, aus: 'alles aus' }[e.urlaub], link(() => p.hzAuf('urlaub'))),
     zieht: z('Heizt tatsächlich ab', 'Leistung, ab der ein Heizkörper als „heizt“ zählt – Heizzeit geheizt, Heiztage, Warm ab, Lernen, Wann heizt was', st('zieht_w', 5, v => `${v} W`)),
     fuehler: z('🌡 Fühler ohne Wert', 'meldet ein Fühler nichts, gilt sein letzter Wert noch so lange – danach regelt der Container wie ohne Fühler', st('fuehler_halten', 5, min)),
@@ -282,6 +282,11 @@ function trocknen(p, cls) {
 }
 
 /* Je Container: Modus, Kleidung trocknen, eigenes Soll */
+/* Soll der Baustelle für Hinweise: bei gleitendem Soll der Wert von heute (laufzeit.soll_gleitend), sonst das feste */
+export const sollSonst = p => { const e = p.d.e, G = p.d.sollG;
+  if (e.soll_art !== 'gleitend') return `${de(e.soll)} °C`;
+  return G ? `das gleitende Soll der Baustelle, heute ${de(G.soll, 1)} °C` : `das gleitende Soll der Baustelle (bis zur ersten Außentemperatur ${de(e.soll)} °C)`; };
+
 function jeContainer(p, cls) {
   const e = p.d.e, C = p.d.bereiche.filter(b => !b.pumpe);
   return html`<div class=${cls}><div class="block-kopf"><b>Je Container</b><span class="leise">Modus · Trocknen · Soll</span></div>
@@ -291,7 +296,7 @@ function jeContainer(p, cls) {
               <span class="jc-l">👕</span>${schalterVorlage(b.trocknen, () => p.trocknenUmschalten(b), 'klein')}
               ${b.fuehler ? html`<span class="stepper klein"><button data-d="-0.5" @click=${() => p.containerSoll(b, -0.5)}>−</button><b class=${b.soll !== undefined ? 'eigen' : ''}>${de(sl)}°</b><button data-d="0.5" @click=${() => p.containerSoll(b, 0.5)}>+</button></span>`
                 : html`<span class="leise jc-th">Thermostat</span>`}</div></div>`; })}
-        <div class="leise">Ein eigener Sollwert (bernstein) gilt nur für diesen Container, sonst gilt ${de(e.soll)} °C.</div>
+        <div class="leise">Ein eigener Sollwert (bernstein) gilt nur für diesen Container, sonst gilt ${sollSonst(p)}.</div>
         ${unsafeHTML(erkl(e.erklaer, 'Zeitplan: an in der Heizzeit, der Heizkörper regelt selbst. Thermostat: in der Heizzeit nach dem Fühler auf das Soll (nur mit Fühler). Bei Bedarf: nur per Schalter oder Termin. Hand: die Automatik schaltet nicht. Aus: nur Frostschutz.'))}</div>`;
 }
 

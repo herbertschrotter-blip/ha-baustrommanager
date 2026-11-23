@@ -181,7 +181,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     const ende = (b.baustelle.optionen || {}).ende;
     return { zeitraum: abr.zeitraum, preis,
       summen: { kwh, eur: kwh * preis, heizzeit: 42.5, pumpzeit: pumpen ? 3.25 : 0, ohne: kwh * 3, vorher: { kwh: kwh * .9, heizzeit: 40, pumpzeit: pumpen ? 3 : 0 },
-        veraenderung: { kwh: kwh ? 11 : null, heizzeit: 6, pumpzeit: pumpen ? 8 : null }, ohne_automatik: kwh ? { ohne_eur: kwh * 3 * preis, gespart_eur: kwh * 2 * preis, prozent: 66.7, hinweis: 'grobe Obergrenze, nicht belastbar' } : null },
+        veraenderung: { kwh: kwh ? 11 : null, eur: kwh ? 14 : null, heizzeit: 6, pumpzeit: pumpen ? 8 : null }, ohne_automatik: kwh ? { ohne_eur: kwh * 3 * preis, gespart_eur: kwh * 2 * preis, prozent: 66.7, hinweis: 'grobe Obergrenze, nicht belastbar' } : null },
       je_geraet: (g ? g.erwartet.zeilen : b.geraete.map(x => ({ bereich: x.bereich, geraet: x.id, mittel: null, kwh: 1.5, std: null }))).map(z => ({ ...z, eur: z.kwh === null ? null : z.kwh * preis })),
       wetter: w ? { punkte: w.erwartet.punkte, gerade: w.erwartet.regression && { ...w.erwartet.regression, eur_je_grad: w.erwartet.regression.k < 0 ? -w.erwartet.regression.k * preis : null } } : { punkte: [], gerade: null },
       // AN-0008: fairer Vergleich (kWh je Gradstunde, nur Thermostat mit Fühler, ein Typ je Container)
@@ -236,7 +236,8 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     const schritte = [s(g, 'geraet', 'dev1', 'HA-Gerät', 'Heizung 01', g, 'aendern'), s(g, 'label', 'dev1', 'Label', null, 'Container', 'neu'), s(g, 'label', 'dev1', 'Label', 'Lager', null, 'aendern'),
       s(g, 'entitaet_name', 'switch.heizung_01', 'Name', null, g, 'neu'), s(g, 'entitaet_id', 'switch.heizung_01', 'Entity-ID', 'switch.heizung_01', 'switch.001_01_c_plug_pol', 'aendern'),
       s(g, 'plug', 'g1', 'Plug-Name', 'heizung-01', g, fertig ? 'gleich' : 'aendern'), s(g, 'unter_eintrag', 'g1', 'Heizkörper (Integration)', 'Radiator 1', '001-01_C_HZ_POL_Radiator01', 'aendern'),
-      s(t, 'geraet', 'dev2', 'HA-Gerät', 'BLU H&T', t, 'aendern'), s(t, 'entitaet_id', 'sensor.polier_temperatur', 'Entity-ID', 'sensor.polier_temperatur', 'sensor.001_c_temp_pol_temperatur', 'aendern')];
+      s(t, 'geraet', 'dev2', 'HA-Gerät', 'BLU H&T', t, 'aendern'), s(t, 'entitaet_id', 'sensor.polier_temperatur', 'Entity-ID', 'sensor.polier_temperatur', 'sensor.001_c_temp_pol_temperatur', 'aendern'),
+      ...c.ausruestung.filter(a => a.device_id).map(a => s(a.name_neu, 'geraet', a.device_id, 'HA-Gerät', a.name_alt, a.name_neu, 'aendern'))];   // zugeordnet (wie neu geladen)
     const z = k => schritte.filter(x => x.zustand === k).length;
     return { schritte, konflikte: {}, zaehler: { aendern: z('aendern'), neu: z('neu'), gleich: z('gleich'), konflikt: 0 },
       verweise: fertig ? [] : [{ art: 'Automation', name: 'Polier morgens vorheizen', alt: 'switch.heizung_01', neu: 'switch.001_01_c_plug_pol' }],
@@ -277,11 +278,34 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         const a = k.ausruestung.find(x => x.id === m.ausruestung_id); k.ausruestung = k.ausruestung.filter(x => x !== a); I.ausruestung_frei.push({ id: a.id, typ: a.typ, typ_label: a.typ_label, status: a.status, modell: a.modell }); return { ok: true }; }
       case 'ausruestung_zuordnen': { const k = invKandidaten().find(x => x.device_id === m.device_id); if (!c || !k) nichtGefunden('Container oder Gerät nicht gefunden');
         const gg = k.typ === 'PLUG' ? 1 + Math.max(0, ...c.ausruestung.map(a => a.gg || 0)) : null;
-        c.ausruestung.push({ id: 'z' + m.device_id, typ: k.typ, typ_label: GERAETE[k.typ], name: null, gg, status: 'aktiv', modell: k.modell, geraet_id: null, seit: '2026-09-29T14:20:00+00:00' });
+        c.ausruestung.push({ id: 'z' + m.device_id, typ: k.typ, typ_label: GERAETE[k.typ], name: null, gg, status: 'aktiv', modell: k.modell, geraet_id: null, seit: '2026-09-29T14:20:00+00:00',
+          device_id: m.device_id, name_alt: k.name, name_neu: zuordnenName(c, k, gg) });
         return { id: 'z' + m.device_id, gg, neu: true, typ: k.typ, verdrahtet: k.typ === 'PLUG' ? 'Shelly im Bereich angelegt' : null }; }
       case 'firma_kuerzel': { const f = I.firmen.find(x => x.id === m.firma_id); if (!f) nichtGefunden('nicht gefunden'); f.kuerzel = String(m.kuerzel).toUpperCase(); return { ok: true }; }
       default: return { ok: true };
     }
+  }
+  /* Zuordnen: Vorschau, als wäre das Gerät schon drin (baustelle/inventar_zuordnen_vorschau) – ändert nichts */
+  const zuordnenName = (c, k, gg) => k.typ === 'PLUG' ? `${c.name.split('_C_')[0]}-${String(gg).padStart(2, '0')}_C_PLUG_${c.art}` : `${c.name.split('_C_')[0]}_C_${k.typ}_${c.art}`;
+  function invZuordnenVorschau(m) {
+    const c = inventar().container.find(x => x.id === m.container_id), k = invKandidaten().find(x => x.device_id === m.device_id);
+    if (!c || !k) nichtGefunden('Container oder Gerät nicht gefunden');
+    if (k.status === 'defekt') throw { code: 'invalid_format', message: 'Ausrüstung ist defekt – nicht zuordenbar' };
+    const v = invVorschau(m.container_id), gg = k.typ === 'PLUG' ? 1 + Math.max(0, ...c.ausruestung.map(a => a.gg || 0)) : null, n = zuordnenName(c, k, gg);
+    v.schritte.push({ gruppe: n, ziel: 'geraet', ref: k.device_id, was: 'HA-Gerät', alt: k.name, neu: n, zustand: 'aendern' },
+      { gruppe: n, ziel: 'entitaet_id', ref: k.entity_id, was: 'Entity-ID', alt: k.entity_id, neu: `${k.entity_id.split('.')[0]}.${n.toLowerCase().replace(/-/g, '_')}`, zustand: 'aendern' });
+    v.zaehler.aendern += 2;
+    return { ...v, zuordnen: { device_id: k.device_id, typ: k.typ, name: k.name, eingetragen: true } };
+  }
+  /* struktur: je Container der Stand der Namen (bereiche[].namen, wie panel.ws_struktur mit logik/inventar.abweichend) */
+  function mitNamen(w) {
+    const b = w[0]; if (!b) return w;
+    const I = inventar(), verkn = Object.fromEntries(I.container.filter(c => c.status === 'aktiv' && c.einsatz && c.einsatz.bereich_id).map(c => [c.einsatz.bereich_id, c]));
+    for (const x of b.bereiche.filter(y => y.art === 'container')) {
+      const c = verkn[x.id];
+      x.namen = c ? { container_id: c.id, container: c.name, abweichend: invVorschau(c.id).schritte.filter(q => q.zustand !== 'gleich').length } : { container_id: null, container: null, abweichend: null };
+    }
+    return w;
   }
   function invKandidaten() {
     const belegt = new Set(inventar().container.flatMap(c => c.ausruestung.map(a => a.id)));
@@ -296,7 +320,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     callWS: async m => {
       mit(m);
       switch (m.type) {
-        case 'baustelle/struktur': if (fehlt()) throw { code: 'unknown_command', message: 'Unknown command.' }; if (haengt()) return new Promise(() => {}); return JSON.parse(JSON.stringify(welt()));
+        case 'baustelle/struktur': if (fehlt()) throw { code: 'unknown_command', message: 'Unknown command.' }; if (haengt()) return new Promise(() => {}); return mitNamen(JSON.parse(JSON.stringify(welt())));
         case 'recorder/statistics_during_period': case 'baustelle/statistik': return statistik(m);   // BSM-014: Statistik aus der Datenbank (gleiche Form)
         case 'baustelle/auswertung': return fakeAuswertung(m);
         case 'baustelle/abrechnung': return fakeAbrechnung(m);
@@ -335,6 +359,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
           return { ok: true }; }
         case 'baustelle/inventar': return kopie(inventar());
         case 'baustelle/inventar_vorschau': return kopie(invVorschau(m.container_id));
+        case 'baustelle/inventar_zuordnen_vorschau': return kopie(invZuordnenVorschau(m));
         case 'baustelle/inventar_umbenennen': return kopie(invUmbenennen(m.container_id));
         case 'baustelle/inventar_rueckgaengig': return kopie(invRueck(m));
         case 'baustelle/inventar_kandidaten': return { geraete: kopie(invKandidaten()) };

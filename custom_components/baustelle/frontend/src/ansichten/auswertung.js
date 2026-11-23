@@ -59,11 +59,11 @@ function temperaturen(p) {
 
 /* Je Gerät: Ø kW, kWh, Stunden, € – rechnet die Integration (je_geraet) */
 function geraeteBlock(p, z, A) {
-  const d = p.d;
+  const d = p.d, wann = p.zrText(z, p.zrV('aw'));   // gewählter Zeitraum samt ‹ › (z. B. „Oktober 2026“)
   if (!A) return html`<div class="glas-panel block"><div class="block-kopf"><b>Je Gerät</b></div>${LAEDT}</div>`;
   const zeilen = (A.je_geraet || []).map(r => { const b = d.bereiche.find(x => x.id === r.bereich), g = b && b.geraete.find(x => x.id === r.geraet); return g ? { ...r, b, g } : null; }).filter(Boolean);
   const f = (v, k) => zahl(v) ? de(v, k) : '–';
-  return html`<div class="glas-panel block"><div class="block-kopf"><b>Je Gerät</b><span class="leise">${WANN[z]}</span></div>
+  return html`<div class="glas-panel block"><div class="block-kopf"><b>Je Gerät</b><span class="leise">${wann}</span></div>
       ${zeilen.length ? html`<div class="tab-scroll"><table class="vergleich je-geraet"><tr><th>Gerät</th><th>Ø kW</th><th>Stunden</th><th>kWh</th><th>€</th></tr>
         ${zeilen.map(({ b, g, mittel, kwh, std, eur }) => html`<tr><td><b>${g.n}</b><div class="leise">${b.name} · ${g.typ}</div></td><td>${f(mittel, 2)}</td><td>${f(std, 1)}</td><td>${f(kwh, 1)}</td><td>${zahl(kwh) ? de(eur, 2) : '–'}</td></tr>`)}</table></div>`
         : html`<div class="leer">Noch keine Geräte</div>`}
@@ -147,7 +147,7 @@ function bausteine(p) {
     : teile.length ? `Der Ölradiator ${teile.length > 1 ? `${teile.slice(0, -1).join(', ')} und ${teile.at(-1)}` : teile[0]}.` : 'Noch zu wenige Messungen für einen Vergleich.';
   // leer ('') = nur für diese Baustelle (Anpassen zeigt den Hinweis, Detail „Nur für diese Baustelle“)
   const B = {
-    kennzahlen: html`<div class="glas-panel kennz vier">${kz(zahl(kwh) ? de(kwh, 0) : '–', 'kWh', vd('kwh'))}${kz(zahl(kwh) ? `${de(S.eur, 0)} €` : '–', 'Kosten', vd('kwh'))}${kz(zahl(hz) ? `${de(hz, 0)} h` : '–', 'Heizzeit', vd('heizzeit'))}${kz(zahl(pz) ? `${de(pz, 1)} h` : '–', 'Pumpzeit', vd('pumpzeit'))}</div>
+    kennzahlen: html`<div class="glas-panel kennz vier">${kz(zahl(kwh) ? de(kwh, 0) : '–', 'kWh', vd('kwh'))}${kz(zahl(kwh) ? `${de(S.eur, 0)} €` : '–', 'Kosten', vd('eur'))}${kz(zahl(hz) ? `${de(hz, 0)} h` : '–', 'Heizzeit', vd('heizzeit'))}${kz(zahl(pz) ? `${de(pz, 1)} h` : '–', 'Pumpzeit', vd('pumpzeit'))}</div>
       <div class="leise vgl">Pfeile: im Vergleich zu ${vgl}</div>`,
     verlauf: html`<div class="glas-panel block">${verbrauchVorlage(p, aw, 'aw', false)}</div>`,
     leistung: alle ? '' : leistungHeute(p),
@@ -155,7 +155,7 @@ function bausteine(p) {
     abrechnung: abrechnung(p, z),
     geraete: alle ? '' : geraeteBlock(p, z, A),
     // BSM-033.03: „Wetter-Einfluss“ und „Hochrechnung“ sind jetzt die Karte „Heizperiode“ (Reiter Signatur bzw. Hochrechnung)
-    wetter: alle ? '' : heizperiodeVorlage(p, A, 'sig'),
+    wetter: alle ? '' : heizperiodeVorlage(p, A, 'sig', 'hpReiterSig'),
     ohne: html`<div class="glas-panel block"><div class="block-kopf"><b>Ohne Automatik</b><span class="leise">wenn alles rund um die Uhr liefe</span></div>
         ${!zahl(ohne) || !zahl(kwh) ? (ohne === null || kwh === null ? LAEDT : html`<div class="leer">Noch keine Werte</div>`) : !oa ? html`<div class="leer">Noch keine Werte</div>` : html`
         <div class="hbar"><span class="hb-n">mit Automatik</span><span class="hb-spur"><i style="width:${Math.min(100, kwh / ohne * 100)}%;background:var(--s1)"></i></span><span class="hb-w">${de(S.eur, 0)} €</span></div>
@@ -258,8 +258,12 @@ export function auswertungVorlage(p) {
   if (p.s.awBearb) return html`${k}${l}
       ${anpassen(p, L, B, alle)}`;
   const an = L.filter(x => x.an), c = p.kkCtx('aw');
-  const teile = an.map((x, i) => ({ x, i, inhalt: KK[x.k] ? kachelVorlage(p, x, i, 'aw', c) : stueck(p, x.k, B, A, z, x) })).filter(t => t.inhalt);
+  const alleTeile = an.map((x, i) => ({ x, i, inhalt: KK[x.k] ? kachelVorlage(p, x, i, 'aw', c) : stueck(p, x.k, B, A, z, x) }));
+  const teile = alleTeile.filter(t => t.inhalt);
+  // Alle laufenden: Bausteine nur für eine Baustelle nicht still weglassen, sondern nennen (UI-Bericht, Maßnahme 6)
+  const weg = alle ? alleTeile.filter(t => !t.inhalt && B[t.x.k] === '').map(t => p.kkName(t.x)) : [];
   return html`${k}${l}
+      ${weg.length ? html`<div class="leise aw-nur-diese">Nur für eine Baustelle, hier ausgeblendet: ${weg.join(', ')} · <button class="rv-link" data-aw="nur-diese" @click=${() => p.awScopeWahl('diese')}>Diese Baustelle zeigen ›</button></div>` : nothing}
       ${layout ? html`<div class="leise aw-hinweis">Kachel am Griff ⠿ ziehen zum Verschieben · am Griff ◢ ziehen für die Größe (rastet im Raster ein) · 📈 Diagramm der großen Kachel ein/aus · ✕ blendet aus</div>` : nothing}
       ${teile.length || !layout ? rasterVorlage(p, 'aw', teile, layout) : html`<div class="leer">Nichts ausgewählt – „＋ Kachel“</div>`}`;
 }

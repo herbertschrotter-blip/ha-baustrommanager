@@ -25,6 +25,8 @@ from .logik.arbeitszeit import Plan, abweichung, gueltige_arbeitszeit, uhrzeit
 from .logik.regelung import heizgrenze_bezug
 from .logik.sensoren import batterie_stufe, kontakte
 from .logik.warnungen import titel as warn_titel
+from .einstellungen import STANDARD
+from .nachrichten import empfaenger_dienste
 from .notprogramm import DATA_NOTPROGRAMM
 from . import texte
 
@@ -304,6 +306,9 @@ def struktur(hass: HomeAssistant, entry: ConfigEntry, version: str = "") -> dict
             "beginn": beginn.isoformat(), "beginn_auto": beginn_auto,
             "geladen": getattr(entry, "runtime_data", None) is not None, "version": version,
             "zeitzone": str(hass.config.time_zone), "heute": jetzt.date().isoformat(), "jetzt": _iso(jetzt),
+            "empfaenger_dienste": empfaenger_dienste(hass),   # zur Auswahl in ⚙ › Meldungen (Maßnahme 2)
+            # Standardwerte, die die Seite beim Einschalten setzt (Frostschutz ohne Fühler) – keine Kopie in der Seite
+            "standard": {"frost_aussen": STANDARD["heizung"]["frost_aussen"]},
         },
         "funktionen": aktive(entry.options),  # eingeschaltete Funktionen (api-0.7 §8), auch nicht geladen
         "entitaeten": {e.unique_id: e.entity_id for e in er.async_entries_for_config_entry(registry, entry.entry_id)},

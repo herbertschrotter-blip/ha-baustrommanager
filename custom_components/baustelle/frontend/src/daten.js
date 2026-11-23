@@ -43,6 +43,8 @@ export function bauen(r, hass, ersatzZone) {
     WOCHE: WOCHE_ISO.map((iso, k) => [TAGE[k], kurzDatum(iso)]), zone, jetztMs: Number.isFinite(Date.parse(jetztIso)) ? Date.parse(jetztIso) : Date.now() };
   const h = e0.heizung || {}, st = e0.staffel || {}, me = e0.meldungen_einst || {}, ar = me.arten || {}, be = e0.bericht || {};
   const v = (x, std) => zahl(x) ? Number(x) : std;
+  const std0 = bs.standard || {}, faStd = zahl(std0.frost_aussen) ? Number(std0.frost_aussen) : null;   // Standard der Integration
+  const empf = Array.isArray(me.empfaenger) ? me.empfaenger : Array.isArray(opt.empfaenger) ? opt.empfaenger : [], dienste = Array.isArray(bs.empfaenger_dienste) ? bs.empfaenger_dienste : [];
   const namen = s => { const x = hass && hass.states[`notify.${s}`]; return (x && x.attributes.friendly_name) || String(s).replace(/^mobile_app_/, '').replace(/_/g, ' '); };
   const e = { preis: v(e0.preis, 0), preise: Array.isArray(e0.preise) ? e0.preise : [], feiertag_frei: h.feiertag_frei !== false, boost_min: v(h.boost_min, 30), soll_art: h.soll_art === 'gleitend' ? 'gleitend' : 'fest', gleit_min: v(h.gleit_min, 21), gleit_max: v(h.gleit_max, 24),
     gleit_je: v(h.gleit_je, 0.1), gleit_bezug: v(h.gleit_bezug, 12), gleit_tage: v(h.gleit_tage, 3), toleranz: v(h.toleranz, 0.3), hand_nachfrist: v(h.hand_nachfrist_min, 30),
@@ -50,10 +52,12 @@ export function bauen(r, hass, ersatzZone) {
     staffel: st.an !== false, nutzbar: v(st.nutzbar_prozent, 67), max_gleich: v(st.max_gleichzeitig, 5), min_lauf: v(st.min_lauf_min, 10), min_pause: v(st.min_pause_min, 5), takt: v(st.takt_min, 15),
     tuer_pause: v(h.tuer_pause_min, 3), tuer_melden: v(h.tuer_melden_min, 10), knoepfe: me.knoepfe !== false,
     bericht: be.haeufigkeit || 'aus', bericht_handy: be.handy !== false, bericht_mail: !!be.mail, mail: be.mail_an || '', mail_dienst: be.mail_dienst || '', bericht_csv: be.csv !== false,
-    vorheizen: v(h.vorheizen_min, 45), nachheizen: v(h.nachheizen_min, 15), warm_vor: v(h.warm_vor_min, 0), frost_aussen: h.frost_aussen === null ? null : v(h.frost_aussen, -3), warm_nach: v(h.warm_nach_min, 0), warm_max: v(h.warm_max_min, 120), stufen_abstand: v(h.stufen_abstand, 1.5), stufen_min: v(h.stufen_min, 30), stufen_anstieg: v(h.stufen_anstieg, 0.3), stufen_kalt: v(h.stufen_kalt, -5), soll: v(h.soll, 20), grenze: v(h.heizgrenze, 15), basis: h.heizgrenze_basis === 'jetzt' ? 'jetzt' : 'Tageshöchstwert',
+    vorheizen: v(h.vorheizen_min, 45), nachheizen: v(h.nachheizen_min, 15), warm_vor: v(h.warm_vor_min, 0), frost_aussen: h.frost_aussen === null ? null : v(h.frost_aussen, faStd), frost_aussen_std: faStd, warm_nach: v(h.warm_nach_min, 0), warm_max: v(h.warm_max_min, 120), stufen_abstand: v(h.stufen_abstand, 1.5), stufen_min: v(h.stufen_min, 30), stufen_anstieg: v(h.stufen_anstieg, 0.3), stufen_kalt: v(h.stufen_kalt, -5), soll: v(h.soll, 20), grenze: v(h.heizgrenze, 15), basis: h.heizgrenze_basis === 'jetzt' ? 'jetzt' : 'Tageshöchstwert',
     fruehstart: h.fruehstart !== false, frueh_temp: v(h.fruehstart_unter, 0), frueh_min: v(h.fruehstart_min, 30), frost: h.frost !== false, frost_temp: v(h.frost_grenze, 5),
     tr_mm: v(h.trocknen_ab_mm, 2), tr_laenger: v(h.trocknen_laenger_min, 45), tr_frueher: v(h.trocknen_frueher_min, 15),
-    empfaenger: (me.empfaenger || opt.empfaenger || []).map(namen).join(', ') || 'keiner gewählt',
+    empfaenger: empf.map(namen).join(', ') || 'keiner gewählt', empfaengerListe: empf,
+    // zur Auswahl: Dienste aus HA (baustelle.empfaenger_dienste) und die schon eingetragenen (auch wenn es sie nicht mehr gibt)
+    empfaengerWahl: [...new Set([...dienste, ...empf])].map(s => ({ dienst: s, name: namen(s), an: empf.includes(s), fehlt: dienste.length > 0 && !dienste.includes(s) })),
     dauer_min: v(me.dauerlauf_min, 20), kalt_min: v(me.kalt_min, 60), hand_h: v(me.hand_h, 8), zyklen_h: v(me.zyklen_h, 10), trocken_w: v(me.trocken_unter_w, 30),
     auto: !!e0.automatik,
     frost_aus: v(h.frost_aus, v(h.frost_grenze, 5) + 2), urlaub: FREI_TEXT[h.frei_modus] ? h.frei_modus : 'frost', absenk: v(h.absenk, 10),
@@ -75,7 +79,7 @@ export function bauen(r, hass, ersatzZone) {
     if (offline) zst = 'offline';
     const tuerS = eb.tuer && hass && hass.states[eb.tuer];
     const tuer = eb.tuer ? { eid: eb.tuer, sensor: (tuerS && tuerS.attributes.friendly_name) || eb.tuer, offen: c.tuer && c.tuer.offen ? Math.max(1, minSeitAb(c.tuer.seit, jetztMs) ?? 1) : 0 } : undefined;
-    return { id: b.id, name: b.name || b.id, f: zahl(b.nr) ? Number(b.nr) : i, art: b.art, pumpe, fuehler: b.fuehler || null, sensoren: b.sensoren || [], z: zst, grund: c.grund || null,
+    return { id: b.id, name: b.name || b.id, f: zahl(b.nr) ? Number(b.nr) : i, art: b.art, pumpe, fuehler: b.fuehler || null, sensoren: b.sensoren || [], namen: b.namen || null, z: zst, grund: c.grund || null,
       t: zahl(c.temperatur) ? Number(c.temperatur) : null, kw: zahl(c.kw) ? Number(c.kw) : null, text: c.text || '', geraete,
       auto: eb.auto !== false, trocknen: !!eb.trocknen, stufenAn: !!eb.stufen, primaer: eb.primaer || null, stufen: c.stufen || null, sollJ: c.soll || null, bedarfGrad: c.bedarf || null, soll: zahl(eb.soll) ? Number(eb.soll) : undefined, bedarf: !!eb.bedarf, prio: eb.prio || 'normal',
       anschluss: eb.anschluss || (anschluesse[0] && anschluesse[0].id) || null, firma: c.firma || 'eigen', tuer, offline,

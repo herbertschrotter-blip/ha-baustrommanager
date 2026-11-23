@@ -146,6 +146,14 @@ def test_veraenderung_und_ohne_automatik():
     assert a.veraenderung(115, 100) == 15 and a.veraenderung(99.5, 100) == 0 and a.veraenderung(98.5, 100) == -1
     assert a.veraenderung(5, 0) is None and a.veraenderung(None, 5) is None
     assert a.veraenderung(528, 4.6, vorher_ganz=False) is None   # Vormonat nur teilweise in der Baustelle
+
+
+def test_kosten_veraenderung_mit_eigenem_preis():
+    # gleiche kWh, Preis von 0,20 auf 0,25 €: die Kosten steigen um 25 %, die kWh nicht (UI-Bericht, Maßnahme 6)
+    assert a.veraenderung(100, 100) == 0 and a.kosten_veraenderung(100, 0.25, 100, 0.20) == 25
+    assert a.kosten_veraenderung(115, 0.2, 100, 0.2) == a.veraenderung(115, 100) == 15   # gleicher Preis = wie die kWh
+    assert a.kosten_veraenderung(5, 0.2, 0, 0.2) is None and a.kosten_veraenderung(None, 0.2, 5, 0.2) is None
+    assert a.kosten_veraenderung(528, 0.2, 4.6, 0.2, vorher_ganz=False) is None
     grob = a.OHNE_HINWEIS
     oa = lambda mit, ohne, preis: a.ohne_automatik(a.gespart_reihen([mit], [ohne], preis))
     assert oa(40, 100, 0.25) == {"ohne_eur": 25.0, "gespart_eur": 15.0, "prozent": 60.0, "hinweis": grob}

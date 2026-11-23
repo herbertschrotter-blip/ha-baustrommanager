@@ -457,6 +457,7 @@ async def test_diagnose(hass: HomeAssistant, baustelle) -> None:
     assert d["baustelle"]["titel"] == "B1"
     assert d["baustelle"]["optionen"]["empfaenger"] == "**REDACTED**"
     assert d["einstellungen"]["meldungen_einst"]["empfaenger"] == "**REDACTED**"
+    assert d["baustelle"]["empfaenger_dienste"] == "**REDACTED**"   # Handy-Namen der notify-Dienste (Gutachten N1)
     assert d["entitaeten"][f"{baustelle.entry_id}_status"].startswith("sensor.")
     assert {g["id"] for g in d["geraete"]} == {HK1, HK2, P1}
     assert d["laufzeit"]["status"] == "automatik_aus"

@@ -8,7 +8,7 @@ import { html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { de, zahl } from '../hilfen.js';
 import { IC_POWER, sigHtml } from '../symbole.js';
-import { invGruppeVorlage } from './inventar.js';
+import { invGruppeVorlage, namenChip } from './inventar.js';
 
 const GRIFF = html`<div class="griff"></div>`;
 const IC = { heizung: '♨', trockner: '💨', pumpe: '💧', steckdose: '🔌', fuehler: '🌡', tuer: '🚪', fenster: '🪟', licht: '💡' };
@@ -67,7 +67,7 @@ function uebersicht(p) {
       ${Z.nicht ? html`<span class="chip glas-panel">${Z.nicht} nicht aktiv</span>` : nothing}</div>
     <div class="seg glas-panel g-filter">${FILTER.map(([k, t]) => html`<button data-v=${k} class=${f === k ? 'on' : ''} @click=${() => { p.s.gerFilter = k; p.neuZeichnen(); }}>${t}</button>`)}</div>
     ${nachC.map(([b, l]) => html`<div class="glas-panel liste"><div class="gruppe g-gruppe"><span>${b.pumpe ? '💧' : '🏠'} ${b.name}</span>
-        <button class="link blau" @click=${() => p.containerOeffnen(b.id)}>${l.length} · Container ›</button></div>${l.map(x => zeile(p, x))}</div>`)}
+        <span class="g-gruppe-r">${namenChip(p, b)}<button class="link blau" @click=${() => p.containerOeffnen(b.id)}>${l.length} · Container ›</button></span></div>${l.map(x => zeile(p, x))}</div>`)}
     ${nachC.length ? nothing : html`<div class="glas-panel liste"><div class="leer">Keine Geräte in diesem Filter</div></div>`}
     <div class="leise p-fuss">Ein Gerät antippen: Zustand, Warnungen, Status, Einstellungen und Inventar an einer Stelle.</div>`;
 }
@@ -172,7 +172,7 @@ export function jetztVorlage(p, x) {
 export function inventarVorlage(p, x) {
   const I = p.invDaten(), z = I && I.container.flatMap(c => c.ausruestung.map(a => ({ c, a }))).find(({ a }) => x.art === 'schalt' && a.geraet_id === x.id);
   const zl = (k, v) => html`<div class="zeile"><span>${k}</span><span class="leise">${v}</span></div>`;
-  return html`<div class="glas-panel liste g-liste"><div class="gruppe">Inventar</div>
+  return html`<div class="glas-panel liste g-liste"><div class="gruppe g-gruppe"><span>Inventar</span>${namenChip(p, x.b)}</div>
     ${I === undefined ? html`<div class="leer">lädt …</div>` : !I ? html`<div class="leer">Datenbank nicht erreichbar</div>`
       : z ? html`${zl('Name', html`<b class="inv-id">${z.a.name || z.a.typ_label}</b>`)}${zl('Container', z.c.name)}${z.a.modell ? zl('Modell', z.a.modell) : nothing}${z.a.nicht_in_ha ? html`<div class="zeile amber-t">nicht in HA</div>` : nothing}
         <button class="zeile" @click=${() => p.invAuf({ art: 'inv-container', id: z.c.id, zurueck: p.s.sheet })}><span class="blau">Container im Inventar ›</span></button>`
@@ -199,7 +199,7 @@ export const GERAETE_EINBLENDUNGEN = { sensor };
 export const GERAETE_CSS = `
 .g-zahlen { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; } .g-zahlen .chip { font-size: 12px; padding: 5px 10px; }
 .g-filter, .g-reiter { margin: 0 0 10px; }
-.g-gruppe { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .g-gruppe .link { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+.g-gruppe { display: flex; justify-content: space-between; align-items: center; gap: 8px; } .g-gruppe-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; } .g-gruppe .nm-chip { text-transform: none; letter-spacing: 0; font-weight: 500; } .g-gruppe .link { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
 .zeile.ger.g-zeile { width: 100%; text-align: left; }
 .g-w { font-size: 12px; margin-top: 2px; } .g-w.stoerung { color: var(--rot); } .g-w.hinweis { color: var(--amber); }
 .g-z2 { display: flex; gap: 6px; align-items: center; justify-content: flex-end; font-size: 11px; }

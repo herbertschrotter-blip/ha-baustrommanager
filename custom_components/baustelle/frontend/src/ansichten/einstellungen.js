@@ -7,6 +7,7 @@ import { MONATE, de, zahl } from '../hilfen.js';
 import { BEREICH_FARBEN } from '../symbole.js';
 import { kopfVorlage, schalterVorlage, stepperVorlage } from './allgemein.js';
 import { HZ_BLOECKE } from './heizung.js';
+import { ARTEN } from '../tabellen.js';
 import { preisListeVorlage } from './einblendungen-baustelle.js';
 import { devVorlage } from './dev.js';
 import { ueberVorlage } from '../ueber.js';
@@ -67,14 +68,16 @@ function meldungen(p) {
   const e = p.d.e, st = (k, s, fmt) => stepperVorlage(p, k, s, fmt), sw = k => schalterVorlage(e[k], () => p.einstellungUmschalten(k));
   const m = (t, k) => html`<div class="zeile"><span>${t}</span>${sw(k)}</div>`;
   return html`<div class="glas-panel liste"><div class="gruppe">Meldungen · Störungen</div>
-        <div class="zeile"><span>Empfänger</span><span class="leise">${e.empfaenger}</span></div>
+        <div class="zeile"><div><b>Empfänger</b><div class="leise">Handys mit der Home-Assistant-App; eine geänderte Auswahl in den Optionen der Baustelle gilt danach wieder</div></div></div>
+        ${e.empfaengerWahl.length ? e.empfaengerWahl.map(x => html`<div class="zeile unter" data-empf=${x.dienst}><span>${x.name}${x.fehlt ? html` <span class="amber-t">nicht gefunden</span>` : nothing}</span>${schalterVorlage(x.an, () => p.empfaengerUmschalten(x.dienst))}</div>`)
+          : html`<div class="zeile unter"><span class="leise">kein Handy mit der Home-Assistant-App gefunden</span></div>`}
         <div class="zeile"><div><b>Knöpfe in der Nachricht</b><div class="leise">direkt aus der Nachricht reagieren, z. B. „bis morgen stumm“</div></div>${sw('knoepfe')}</div>
         <button class="zeile" @click=${() => p.einblenden('nachrichten')}><span class="blau">Beispiele ansehen</span><span class="chev">›</span></button>
         <button class="zeile" @click=${() => p.testMeldung()}><span class="blau">Test-Nachricht senden</span></button>
         ${m(`Stromausfall / offline (nach ${de(e.offline_min, 0)} min)`, 'm_offline')}${m(`Pumpe Trockenlauf (unter ${de(e.trocken_w, 0)} W)`, 'm_trocken')}${m(`Pumpe Dauerlauf über ${e.dauer_min} min`, 'm_dauer')}${m(`Pumpe schaltet oft (ab ${e.zyklen_h} je Stunde)`, 'm_zyklen')}${m('Heizkörper zieht keinen Strom', 'm_leistung')}${m('Frostgefahr trotz Frostschutz', 'm_frost')}${m('Gerät schaltet sich selbst wieder ein (Auto-ON am Shelly?)', 'm_selbst')}
         <div class="gruppe">Hinweise</div>
-        ${m(`Zu kalt trotz Heizung (nach ${e.kalt_min} min)`, 'm_kalt')}${m('Fühler meldet nichts / Batterie schwach', 'm_fuehler')}${m('Keine Wettervorhersage', 'm_wetter')}${m(`Handbetrieb länger als ${e.hand_h} h`, 'm_hand')}
-        <div class="leise p-fuss">Störungen, offene Tür und langer Handbetrieb kommen aufs Handy, andere Hinweise nur ins Protokoll und in den Warnung-Chip.</div></div>
+        ${m(`Zu kalt trotz Heizung (nach ${e.kalt_min} min)`, 'm_kalt')}${m('Fühler meldet nichts / Batterie schwach', 'm_fuehler')}${m('Keine Wettervorhersage', 'm_wetter')}${m(`Handbetrieb länger als ${e.hand_h} h`, 'm_hand')}${m('Kälte-Frühstart morgen (Nachricht am Vorabend)', 'm_frueh')}
+        <div class="leise p-fuss">Störungen, offene Tür, langer Handbetrieb und der Kälte-Frühstart kommen aufs Handy, andere Hinweise nur ins Protokoll und in den Warnung-Chip.</div></div>
       ${liste('Schwellen der Hinweise', html`${zeile('Zu kalt trotz Heizung nach', st('kalt_min', 15, v => `${v} min`))}${zeile('Handbetrieb länger als', st('hand_h', 1, v => `${de(v)} h`))}${zeile('Tür offen – Nachricht nach', st('tuer_melden', 5, v => `${v} min`))}`)}`;
 }
 
@@ -100,21 +103,25 @@ function entwicklung(p) {
     ${dev ? devVorlage(p, { teil: 'meldungen' }) : html`${devVorlage(p, { teil: 'werkzeuge' })}${liste('Für Tests', html`<button class="zeile" @click=${() => p.testMeldung()}><span class="blau">Test-Nachricht senden</span></button><button class="zeile" @click=${() => p.einblenden('nachrichten')}><span>Beispiel-Nachrichten</span><span class="chev">›</span></button>`)}`}`;
 }
 
+/* Kurzwert Soll: fest oder gleitend mit dem Wert von heute (laufzeit.soll_gleitend) */
+const sollKurz = p => { const e = p.d.e, G = p.d.sollG;
+  return e.soll_art !== 'gleitend' ? `Soll ${de(e.soll)} °C` : G ? `Soll gleitend, heute ${de(G.soll, 1)} °C` : `Soll gleitend, noch ${de(e.soll)} °C`; };
+
 /* Gruppen: Schlüssel, Symbol, Titel, Kurzwert, Inhalt */
 function gruppen(p) {
   const d = p.d, e = d.e, M = p.meldungen(), P = d.bereiche.filter(b => b.pumpe), C = d.bereiche.filter(b => !b.pumpe), geraete = d.bereiche.reduce((a, b) => a + b.geraete.length, 0);
-  const mAn = ['m_offline', 'm_trocken', 'm_dauer', 'm_zyklen', 'm_leistung', 'm_frost', 'm_selbst', 'm_kalt', 'm_fuehler', 'm_wetter', 'm_hand'].filter(k => e[k]).length;
+  const mAn = Object.keys(ARTEN).filter(k => e[k]).length;
   const offen = M === null ? '–' : M.filter(m => p.meldungOffen(m)).length, np = npGruppeVorlage(p);
   return [
     { k: 'baustelle', ic: '🏗', t: 'Baustelle', kurz: `${d.titel} · ${p.bsZeit(d)}`, inhalt: () => baustelle(p) },
-    { k: 'heizung', ic: '🔥', t: 'Heizung', kurz: `Automatik ${e.auto ? 'an' : 'aus'} · Soll ${de(e.soll)} °C · Vorheizen ${e.vorheizen} min`, inhalt: () => heizung(p) },
+    { k: 'heizung', ic: '🔥', t: 'Heizung', kurz: `Automatik ${e.auto ? 'an' : 'aus'} · ${sollKurz(p)} · Vorheizen ${e.vorheizen} min`, inhalt: () => heizung(p) },
     np,
     { k: 'container', ic: '🏠', t: 'Container & Geräte', kurz: `${C.length} Container · ${P.length} ${P.length === 1 ? 'Schacht' : 'Schächte'} · ${geraete} Geräte`, inhalt: () => container(p) },
     geraeteGruppeVorlage(p),   // BSM-034.05: Übersicht und 📦 Inventar in einer Gruppe
     { k: 'pumpen', ic: '💧', t: 'Pumpen', kurz: P.length ? `offline nach ${e.offline_min} min · Trockenlauf unter ${e.trocken_w} W` : 'keine Schächte', inhalt: () => pumpen(p) },
     { k: 'strom', ic: '⚡', t: 'Strom & Staffelung', kurz: `${de(e.preis, 2)} €/kWh · Staffelung ${e.staffel ? 'an' : 'aus'}`, inhalt: () => strom(p) },
     { k: 'firmen', ic: '🏢', t: 'Firmen', kurz: `${d.firmen.length} ${d.firmen.length === 1 ? 'Firma' : 'Firmen'} für die Abrechnung`, inhalt: () => firmen(p) },
-    { k: 'meldungen', ic: '🔔', t: 'Meldungen', kurz: `${mAn} von 11 an${e.empfaenger ? ` · ${e.empfaenger}` : ''}`, inhalt: () => meldungen(p) },
+    { k: 'meldungen', ic: '🔔', t: 'Meldungen', kurz: `${mAn} von ${Object.keys(ARTEN).length} an${e.empfaenger ? ` · ${e.empfaenger}` : ''}`, inhalt: () => meldungen(p) },
     { k: 'bericht', ic: '📊', t: 'Bericht', kurz: { aus: 'aus', woche: 'jede Woche', monat: 'jeden Monat', beides: 'Woche und Monat' }[e.bericht] || e.bericht, inhalt: () => bericht(p) },
     { k: 'app', ic: '🖥', t: 'Ansicht', kurz: `Erklärungen ${e.erklaer ? 'an' : 'aus'} · Melden-Knopf ${e.melden ? 'an' : 'aus'}`, inhalt: () => ansicht(p) },
     { k: 'dev', ic: '🛠', t: 'Entwicklung', kurz: `${offen} offene Meldungen · Diagnose`, dev: true, inhalt: () => entwicklung(p) },

@@ -22,7 +22,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.core import CALLBACK_TYPE, Event, callback
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
@@ -50,6 +50,11 @@ def _ist_datum(wert: str) -> bool:
     except ValueError:
         return False
     return True
+
+
+def empfaenger_dienste(hass: HomeAssistant) -> list[str]:
+    """Benachrichtigungsdienste, die als Empfänger taugen, z. B. mobile_app_<handy> der Companion App."""
+    return sorted(s for s in hass.services.async_services_for_domain("notify") if s != "send_message")
 
 
 def empfaenger_name(dienst: str) -> str:

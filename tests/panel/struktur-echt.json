@@ -23,10 +23,16 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.186",
+   "version": "0.8.189",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
-   "jetzt": "2026-09-29T16:20:00+02:00"
+   "jetzt": "2026-09-29T16:20:00+02:00",
+   "empfaenger_dienste": [
+    "mobile_app_handy"
+   ],
+   "standard": {
+    "frost_aussen": -3.0
+   }
   },
   "funktionen": [
    "heizung",
@@ -110,7 +116,12 @@
       "batterie": null,
       "batterie_stufe": null
      }
-    ]
+    ],
+    "namen": {
+     "container_id": null,
+     "container": null,
+     "abweichend": null
+    }
    },
    {
     "id": "mannschaft",
@@ -118,7 +129,12 @@
     "art": "container",
     "fuehler": null,
     "nr": 1,
-    "sensoren": []
+    "sensoren": [],
+    "namen": {
+     "container_id": null,
+     "container": null,
+     "abweichend": null
+    }
    },
    {
     "id": "magazin",
@@ -143,7 +159,12 @@
       "batterie": null,
       "batterie_stufe": null
      }
-    ]
+    ],
+    "namen": {
+     "container_id": null,
+     "container": null,
+     "abweichend": null
+    }
    },
    {
     "id": "schacht",
@@ -499,6 +520,9 @@
    },
    "meldungen_einst": {
     "empfaenger": [
+     "mobile_app_handy"
+    ],
+    "empfaenger_optionen": [
      "mobile_app_handy"
     ],
     "knoepfe": true,
@@ -2613,10 +2637,16 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.186",
+   "version": "0.8.189",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
-   "jetzt": "2026-09-29T16:20:00+02:00"
+   "jetzt": "2026-09-29T16:20:00+02:00",
+   "empfaenger_dienste": [
+    "mobile_app_handy"
+   ],
+   "standard": {
+    "frost_aussen": -3.0
+   }
   },
   "funktionen": [
    "heizung"
@@ -2661,7 +2691,12 @@
     "art": "container",
     "fuehler": null,
     "nr": 0,
-    "sensoren": []
+    "sensoren": [],
+    "namen": {
+     "container_id": null,
+     "container": null,
+     "abweichend": null
+    }
    }
   ],
   "geraete": [
@@ -2779,6 +2814,7 @@
    },
    "meldungen_einst": {
     "empfaenger": [],
+    "empfaenger_optionen": [],
     "knoepfe": true,
     "arten": {
      "offline": true,

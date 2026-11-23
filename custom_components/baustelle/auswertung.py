@@ -480,6 +480,7 @@ async def async_auswertung(
     davor = {k: sum(s[k] for s in vorher) for k in ("kwh", "heizzeit", "pumpzeit")}
     vorher_ganz = all(x.beginn <= zr_vorher.von for x in quellen)   # Zeitraum davor ganz in der Baustelle?
     preis = preis_sim if preis_sim is not None else await _preis_zeitraum(hass, quellen, zr)
+    preis_vorher = preis_sim if preis_sim is not None else await _preis_zeitraum(hass, quellen, zr_vorher)
     # Je Gerät (diese Baustelle): kWh aus den Energiezählern der Geräte, Pumpzeit aus der Statistik
     eigene = next((s for x, s in zip(quellen, jetzt, strict=True) if x is q), None) or await _summen(hass, q, zr)
     g_ids = sorted({g["energie"] for g in q.geraete if g["energie"]})
@@ -518,7 +519,9 @@ async def async_auswertung(
     return {
         "zeitraum": _zeitraum_dict(zr), "preis": preis, "simuliert": preis_sim is not None,
         "summen": {**summen, "eur": a.geld(summen["kwh"], preis), "vorher": davor,
-                   "veraenderung": {k: a.veraenderung(summen[k], davor[k], vorher_ganz) for k in davor},
+                   # „eur“: Pfeil bei „Kosten“ – € gegen €, jeder Zeitraum zu seinem Preis (UI-Bericht, Maßnahme 6)
+                   "veraenderung": {**{k: a.veraenderung(summen[k], davor[k], vorher_ganz) for k in davor},
+                                    "eur": a.kosten_veraenderung(summen["kwh"], preis, davor["kwh"], preis_vorher, vorher_ganz)},
                    "ohne_automatik": oa},
         # Kachel „Gespart“ (Herbert 28.10.2026): je Periode mit, ohne (24/7) und gespart in kWh und € – über `scope`
         "gespart_reihen": gespart,

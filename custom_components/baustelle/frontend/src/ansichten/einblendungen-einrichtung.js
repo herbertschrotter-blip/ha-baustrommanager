@@ -3,6 +3,7 @@
 // von den Serverdaten; gespeichert wird über die Seite (Options-/Unterdialoge der Integration, baustelle/liste, setzen).
 import { html, nothing } from 'lit';
 import { geraeteZeilen, inventarVorlage, jetztVorlage } from './geraete.js';
+import { namenChip } from './inventar.js';
 import { live } from 'lit/directives/live.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { de, zahl } from '../hilfen.js';
@@ -109,6 +110,7 @@ function bereich(p, s) {
             <div class="ge-zwei">${text(g, 'n', 'Name', null, { i })}${auswahl(g, 'typ', typen.map(t => html`<option ?selected=${g.typ === t}>${t}</option>`), null, null, i)}</div></div>
             ${g.neu ? nothing : html`<button class="bs-ic nur-admin" title="Gerät bearbeiten" aria-label="${g.n} bearbeiten" @click=${p.nurAdmin(() => p.geraetBearbeiten(b, i))}>✎</button>`}<button class="x nur-admin" title="Gerät entfernen" @click=${p.nurAdmin(() => { if (g.neu) e.geraete.splice(i, 1); else g.weg = true; z(); })}>✕</button></div>`;
   return html`${GRIFF}<div class="block-kopf"><h3>Bearbeiten</h3><span class="leise">${b.pumpe ? 'Pumpenschacht' : 'Container'}</span></div>
+        ${b.namen ? html`<div class="nm-zeile" data-zeile="namen"><span class="leise">Namen in Home Assistant</span>${namenChip(p, b)}</div>` : nothing}
         <label class="feld">Name${text(e, 'name')}</label>
         ${!b.pumpe && b.geraete.filter(g => g.heizer).length >= 2 ? html`<div class="zeile" data-zeile="stufen"><div><b>🔥 Zusatz-Heizkörper nur bei Bedarf</b><div class="leise">zuerst heizt der Primärheizkörper; der Zusatz kommt bei Kälte, weit unter dem Soll oder wenn einer es nicht schafft.</div></div>${schalterVorlage(e.stufen, () => { e.stufen = !e.stufen; z(); })}</div>
         ${primaerWahl()}` : nothing}

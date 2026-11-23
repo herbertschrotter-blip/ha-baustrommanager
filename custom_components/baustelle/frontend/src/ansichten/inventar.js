@@ -24,6 +24,29 @@ const sichtbar = (I, f) => I.container.filter(c => f === 'ausgeschieden' ? c.sta
 const statusChip = (p, a) => html`<button class="inv-st ${a.status} nur-admin" title="Status ändern (aktiv → inaktiv → verliehen → defekt)"
     @click=${p.nurAdmin(() => p.invSenden({ aktion: 'ausruestung_status', ausruestung_id: a.id, status: ST_WEITER[a.status] || 'aktiv' }, `Status: ${ST_WEITER[a.status] || 'aktiv'}`))}>${ST_TEXT[a.status] || a.status}</button>`;
 
+/* ---------- Chip „Namen ✓ / ⚠ n weichen ab / Nicht im Inventar“ ----------
+   Am Container-Kopf, in „Bearbeiten“, in „Gerät bearbeiten“ und in ⚙ › Geräte. Container und Zahl liefert die Integration
+   (baustelle/struktur bereiche[].namen, logik/inventar.abweichend = „Übernehmen (n)“ der Vorschau); die Seite zeigt nur an.
+   Antippen öffnet die Vorschau „In Home Assistant einheitlich benennen“ bzw. das Aufnehmen ins Inventar; Schließen führt
+   dorthin zurück, wo der Chip stand. `kopf`: im Container-Kopf als ck-chip (kurz am Handy). */
+export function namenChip(p, b, kopf = false) {
+  const N = b && b.namen; if (!N) return nothing;
+  const zurueck = p.s.sheet || null;
+  const inhalt = (ic, lang, kurz) => kopf ? html`<span class="ck-ic">${ic}</span><span class="ck-l">${lang}</span><span class="ck-k">${kurz}</span>` : html`${ic} ${lang}`;
+  const art = kopf ? 'ck-chip' : 'chip glas-panel';
+  if (!N.container_id) return html`<button class="${art} nm-chip nm-ohne nur-admin" data-k="namen" title=${p.nurLesen() ? NUR_AUFNEHMEN : 'Ins Inventar aufnehmen – danach lassen sich die Namen in Home Assistant einheitlich benennen'}
+      @click=${p.nurAdmin(() => p.invAuf({ art: 'inv-neu', form: { eigen: true, art: 'MAN', bereich_id: b.id, nr: '' }, zurueck }))}>${inhalt('📦', 'Nicht im Inventar – aufnehmen ›', 'aufnehmen ›')}</button>`;
+  if (N.abweichend === null || N.abweichend === undefined) return nothing;   // Baustelle nicht geladen – keine Zahl
+  const ok = !N.abweichend;
+  return html`<button class="${art} nm-chip ${ok ? 'nm-ok' : 'nm-ab amber-t'}" data-k="namen" data-n=${N.abweichend} title="In Home Assistant einheitlich benennen · ${N.container}"
+      @click=${() => p.invAuf({ art: 'inv-vorschau', id: N.container_id, zurueck })}>${ok ? inhalt('✓', 'Namen ✓', 'Namen ✓') : inhalt('⚠', `${N.abweichend} weichen ab`, `${N.abweichend} ab`)}</button>`;
+}
+const NUR_ADMINS = 'Übernehmen dürfen nur Admins – du siehst die Vorschau', NUR_AUFNEHMEN = 'Ins Inventar aufnehmen dürfen nur Admins';
+/* Rechte: wer nicht übernehmen darf, liest es am Knopf (statt eines grauen Knopfs ohne Grund) */
+const rechteHinweis = (p, t = NUR_ADMINS) => p.nurLesen() ? html`<div class="leise amber-t inv-p nm-rechte">🔒 ${t}</div>` : nothing;
+const benennenText = (p, c) => { const b = c && c.einsatz && p.d.bereiche.find(x => x.id === c.einsatz.bereich_id), n = b && b.namen && b.namen.abweichend;
+  return `In Home Assistant einheitlich benennen …${n ? ` · ⚠ ${n}` : b && b.namen && n === 0 ? ' · ✓' : ''}`; };
+
 /* ---------- Gruppe der Einstellungen ---------- */
 export function invGruppeVorlage(p) {
   const I = p.invDaten(), C = I ? sichtbar(I, 'alle') : [];
@@ -62,7 +85,7 @@ function containerSheet(p, s) {
     <div class="glas-panel liste inv-liste"><div class="gruppe">Ausrüstung · ${c.ausruestung.length}${c.nicht_in_ha ? html` · <span class="amber-t">${c.nicht_in_ha} nicht in HA</span>` : nothing}</div>${c.ausruestung.length ? c.ausruestung.map(zeileA) : html`<div class="leer">Noch keine Ausrüstung</div>`}
       ${aktiv ? html`<button class="zeile nur-admin" data-k="zuordnen-auf" @click=${p.nurAdmin(() => p.invAuf({ art: 'inv-zuordnen', id: c.id, haengt: 'konvektor' }))}><span class="blau">+ Gerät zuordnen</span></button>` : nothing}</div>
     <div class="glas-panel liste inv-liste"><div class="gruppe">Geschichte</div>${c.geschichte.slice().reverse().map(e => html`<div class="zeile"><span>${ort(p, e)}</span><span class="leise">${e.bis ? datum(e.von) + ' – ' + datum(e.bis) : 'seit ' + datum(e.von)}</span></div>`)}</div>
-    ${aktiv && c.einsatz && c.einsatz.bereich_id ? html`${knopf('Namen prüfen', () => p.invAuf({ art: 'inv-vorschau', id: c.id }), 'amber', 'pruefen')}${knopf('Rückgängig …', p.nurAdmin(() => p.invAuf({ art: 'inv-vorschau', id: c.id, rueck: true })), 'nur-admin', 'rueck')}` : nothing}
+    ${aktiv && c.einsatz && c.einsatz.bereich_id ? html`${knopf(benennenText(p, c), () => p.invAuf({ art: 'inv-vorschau', id: c.id }), 'amber', 'pruefen')}${knopf('Rückgängig …', p.nurAdmin(() => p.invAuf({ art: 'inv-vorschau', id: c.id, rueck: true })), 'nur-admin', 'rueck')}` : nothing}
     ${aktiv ? (s.sicher ? knopf(`${c.name} wirklich ausscheiden`, p.nurAdmin(() => p.invSenden({ aktion: 'container_status', container_id: c.id, status: 'ausgeschieden' }, 'Ausgeschieden', true)), 'rot nur-admin', 'ausscheiden')
       : knopf('Ausscheiden …', p.nurAdmin(() => { s.sicher = true; p.neuZeichnen(); }), 'leise-k nur-admin', 'ausscheiden')) : nothing}
     ${knopf('Schließen', () => p.schliessen(), 'leise-k')}`;
@@ -83,7 +106,7 @@ function anlegenSheet(p, s) {
         ${fi && !fi.kuerzel ? html`<label class="feld">Firmenkürzel (2–5 Buchstaben)<input .value=${f.kuerzel || ''} @input=${e => { f.kuerzel = e.target.value; }}></label>` : nothing}
         ${firmen.length ? nothing : html`<div class="leise inv-p">Zuerst die Firma unter Einstellungen › Firmen anlegen</div>`}`}
     <label class="feld">Bereich der Baustelle<select @change=${e => { f.bereich_id = e.target.value || null; z(); }}><option value="">– keiner (nur Inventar) –</option>${hier.map(b => html`<option value=${b.id} ?selected=${b.id === f.bereich_id}>${b.name}</option>`)}</select></label>
-    ${knopf(f.bereich_id ? 'Anlegen und Namen prüfen' : 'Anlegen', p.nurAdmin(() => p.invAnlegen(f, fi)), 'amber nur-admin', 'anlegen')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
+    ${knopf(f.bereich_id ? 'Anlegen und einheitlich benennen …' : 'Anlegen', p.nurAdmin(() => p.invAnlegen(f, fi)), 'amber nur-admin', 'anlegen')}${rechteHinweis(p, 'Anlegen dürfen nur Admins')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
 }
 
 /* ---------- Einblendung: Gerät zuordnen ---------- */
@@ -97,7 +120,8 @@ function zuordnenSheet(p, s) {
         : K.map(k => html`<button class="zeile" data-id=${k.device_id} @click=${() => { if (k.status === 'defekt') return; s.wahl = k.device_id; z(); }}><div><b>${IC[k.typ] || ''} ${k.name}</b><div class="leise">${k.modell || ''}${k.status === 'defekt' ? ' · defekt – nicht zuordenbar' : ''}${k.verwendet ? ' · heute in ' + k.verwendet : ''}</div></div><span class=${s.wahl === k.device_id ? 'blau' : 'leise'}>${k.status === 'defekt' ? '–' : s.wahl === k.device_id ? '✓' : '○'}</span></button>`)}
       <div class="zeile"><span class="leise">Neue Shellys und Fühler erscheinen hier, sobald Home Assistant sie kennt</span></div></div>
     ${wahl && wahl.typ === 'PLUG' ? html`<div class="feld">Was hängt an diesem Plug?<div class="seg klein inv-seg">${HAENGT.map(([k, t]) => html`<button class=${s.haengt === k ? 'on' : ''} data-v=${k} @click=${() => { s.haengt = k; z(); }}>${t}</button>`)}</div></div>` : nothing}
-    ${knopf('Zuordnen und Namen prüfen', p.nurAdmin(() => p.invZuordnen(c, s)), 'amber nur-admin', 'zuordnen')}${knopf('Abbrechen', () => p.invAuf({ art: 'inv-container', id: c.id }), 'leise-k')}`;
+    ${knopf('Zuordnen und einheitlich benennen …', () => p.invZuordnenVorschau(c, s), 'amber', 'zuordnen')}
+    <div class="leise inv-p">Zuerst die Vorschau der Namen – zugeordnet und umbenannt wird erst nach dem Bestätigen.</div>${knopf('Abbrechen', () => p.invAuf({ art: 'inv-container', id: c.id }), 'leise-k')}`;
 }
 
 /* ---------- Einblendung: Vorschau (Tabelle) mit Übernehmen, Nachholen, Rückgängig ---------- */
@@ -112,13 +136,16 @@ function zustand(r) {
 }
 
 function vorschauSheet(p, s) {
-  const I = p.invDaten(), c = I && I.container.find(x => x.id === s.id), rueck = !!s.rueck, erg = s.ergebnis;
-  const V = erg ? erg : rueck ? p.invRueckVorschau(s.id) : p.invVorschau(s.id);
+  const I = p.invDaten(), c = I && I.container.find(x => x.id === s.id), rueck = !!s.rueck, erg = s.ergebnis, Z = s.zuordnen;
+  const V = erg ? erg : rueck ? p.invRueckVorschau(s.id) : Z ? p.invZuordnenDaten(s.id, Z) : p.invVorschau(s.id);
+  // zurück: dorthin, wo der Chip stand (Container, Bearbeiten, Gerät) – sonst zum Inventar-Container; Zuordnen: zur Auswahl
+  const zu = () => Z ? p.invAuf({ art: 'inv-zuordnen', id: s.id, wahl: Z.device_id, haengt: Z.haengt }) : s.zurueck !== undefined ? p.schliessen() : p.invAuf({ art: 'inv-container', id: s.id });
   const halb = erg && (erg.status === 'teilweise' || erg.status === 'zurueck_teilweise');
-  const titel = erg ? (rueck ? (halb ? 'Teilweise zurückgenommen' : 'Zurückgenommen') : halb ? 'Teilweise erledigt' : 'Erledigt') : rueck ? 'Umbenennung zurücknehmen' : 'Namen prüfen';
-  const kopf = html`${GRIFF}<div class="block-kopf"><h3>${titel}</h3></div><div class="leise inv-unterzeile"><span class="inv-id">${c ? c.name : ''}</span> · ${rueck ? 'neu → alt, in umgekehrter Reihenfolge' : 'alt → neu, gruppiert nach Gerät'}</div>`;
-  if (V === undefined) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer">Vorschau lädt …</div></div>${knopf('Schließen', () => p.schliessen(), 'leise-k')}`;
-  if (!V) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer">${p.invFehler(rueck ? 'invr:' + s.id : 'invv:' + s.id) || 'Keine Vorschau'}</div></div>${knopf('Schließen', () => p.schliessen(), 'leise-k')}`;
+  const titel = erg ? (rueck ? (halb ? 'Teilweise zurückgenommen' : 'Zurückgenommen') : halb ? 'Teilweise erledigt' : 'Erledigt') : rueck ? 'Umbenennung zurücknehmen' : 'In Home Assistant einheitlich benennen';
+  const kopf = html`${GRIFF}<div class="block-kopf"><h3>${titel}</h3></div><div class="leise inv-unterzeile"><span class="inv-id">${c ? c.name : ''}</span> · ${rueck ? 'neu → alt, in umgekehrter Reihenfolge' : Z ? `${Z.name || 'Gerät'} wird zugeordnet · alt → neu, gruppiert nach Gerät` : 'alt → neu, gruppiert nach Gerät'}</div>`;
+  if (s.laeuft) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer nm-laeuft">${s.laeuft}</div></div>${knopf('Warten abbrechen – Namen lassen', () => p.invWartenAbbrechen(s), 'leise-k', 'warten-abbrechen')}`;   // nach dem Zuordnen: wartet aufs Neu-Laden
+  if (V === undefined) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer">Vorschau lädt …</div></div>${knopf('Schließen', zu, 'leise-k')}`;
+  if (!V) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer">${p.invFehler(rueck ? 'invr:' + s.id : Z ? p.invZuordnenSchluessel(s.id, Z) : 'invv:' + s.id) || 'Keine Vorschau'}</div></div>${knopf('Schließen', zu, 'leise-k')}`;
   const S = V.schritte || [], offen = S.filter(r => !['gleich', 'ok', 'entfaellt'].includes(zustand(r)));
   const kon = Object.keys(V.konflikte || {}).length, gruppen = [...new Set(S.map(r => r.gruppe || ''))];
   const zahlen = html`<div class="inv-zahlen"><span class="chip glas-panel">${rueck ? '↶' : '✎'} ${offen.length} ${rueck ? 'Schritte zurück' : offen.length === 1 ? 'Änderung' : 'Änderungen'}</span>
@@ -132,11 +159,18 @@ function vorschauSheet(p, s) {
         ${r.fehler ? html`<span class="inv-hinweis amber-t">${r.fehler}</span>` : st === 'konflikt' ? html`<span class="inv-hinweis rot-t">${r.neu} ist schon vergeben – Schritt bleibt aus, bis sie umbenannt oder gelöscht ist</span>` : nothing}</div>`; })}</div>`; });
   let ende;
   if (erg) ende = html`${halb ? html`<div class="leise amber-t inv-p">${rueck ? 'Nochmal „Zurücknehmen“ holt den Rest nach.' : 'Fehlende Schritte holt „Nachholen“ – Plug-Namen auch die Integration selbst, sobald der Plug erreichbar ist.'}</div>
-      ${knopf(rueck ? 'Rest zurücknehmen' : 'Nachholen', p.nurAdmin(() => p.invAusfuehren(s)), 'amber nur-admin', 'ausfuehren')}` : nothing}${knopf('Schließen', () => p.invAuf({ art: 'inv-container', id: s.id }), 'leise-k')}`;
+      ${knopf(rueck ? 'Rest zurücknehmen' : 'Nachholen', p.nurAdmin(() => p.invAusfuehren({ ...s, zuordnen: null })), 'amber nur-admin', 'ausfuehren')}${rechteHinweis(p)}` : nothing}${knopf('Schließen', () => s.zurueck !== undefined ? p.schliessen() : p.invAuf({ art: 'inv-container', id: s.id }), 'leise-k')}`;
+  else if (Z && V.zuordnen && V.zuordnen.eingetragen === false) ende = html`<div class="glas-panel liste inv-liste inv-warn"><div class="zeile"><div><b class="amber-t">⚠ Nicht am Container eingetragen</b><div class="leise">${V.zuordnen.hinweis || ''}</div></div></div></div>
+    ${knopf('Nur zuordnen, Namen lassen', p.nurAdmin(() => p.invZuordnenAusfuehren(s, false)), 'amber nur-admin', 'nur-zuordnen')}${rechteHinweis(p)}
+    ${knopf('Zurück', zu, 'leise-k')}`;   // Regel der Integration (sensor_verdrahtung): z. B. zweiter Fühler – nichts umzubenennen
+  else if (Z) ende = html`${knopf(kon ? 'Erst den Konflikt lösen' : `Zuordnen und umbenennen (${offen.length})`, p.nurAdmin(() => kon ? p.toast('Erst den Konflikt lösen – oder nur zuordnen') : p.invZuordnenAusfuehren(s, true)), `amber nur-admin ${kon ? 'aus' : ''}`, 'ausfuehren')}
+    ${knopf('Nur zuordnen, Namen lassen', p.nurAdmin(() => p.invZuordnenAusfuehren(s, false)), 'nur-admin', 'nur-zuordnen')}${rechteHinweis(p)}
+    <div class="leise inv-p">nur Admins · zugeordnet wird erst jetzt · danach wie beim Umbenennen: das Schalten des Containers pausiert kurz, die Automatik bleibt an</div>
+    ${knopf('Zurück', zu, 'leise-k')}`;
   else ende = html`${knopf(rueck ? 'Zurücknehmen' : offen.length ? `Übernehmen (${offen.length})` : 'Alles nach Schema', p.nurAdmin(() => (kon || !offen.length) ? p.toast(kon ? 'Erst den Konflikt lösen' : 'Nichts zu tun') : p.invAusfuehren(s)), `amber nur-admin ${kon || !offen.length ? 'aus' : ''}`, 'ausfuehren')}
-    ${!rueck ? knopf('Rückgängig …', p.nurAdmin(() => p.invAuf({ art: 'inv-vorschau', id: s.id, rueck: true })), 'nur-admin', 'rueck') : nothing}
+    ${!rueck ? knopf('Rückgängig …', p.nurAdmin(() => p.invAuf({ art: 'inv-vorschau', id: s.id, rueck: true, zurueck: s.zurueck })), 'nur-admin', 'rueck') : nothing}${rechteHinweis(p)}
     <div class="leise inv-p">nur Admins · das Schalten des Containers pausiert dafür kurz, die Automatik bleibt an${rueck ? ' · nur die jüngste Umbenennung des Containers' : ' · Verweise der Integration (Schalter, Leistung, Energie, Fühler, Tür) ziehen mit, der Bereich bleibt'}</div>
-    ${knopf('Abbrechen', () => p.invAuf({ art: 'inv-container', id: s.id }), 'leise-k')}`;
+    ${knopf('Abbrechen', zu, 'leise-k', 'abbrechen')}`;
   return html`${kopf}${zahlen}${verweise}<div class="inv-inhalt">${tabelle}</div>${!erg && V.hinweis ? html`<div class="leise inv-p">${V.hinweis}</div>` : nothing}${ende}`;
 }
 
@@ -167,6 +201,8 @@ export const INV_CSS = `
 .inv-hinweis { grid-column: 1 / -1; font-size: 12px; }
 .inv-m { white-space: nowrap; font-size: 12px; }
 .knopf.aus { opacity: .5; }
+.nm-chip { white-space: nowrap; } .chip.nm-chip { font-size: 12px; padding: 4px 10px; } .nm-ok { color: var(--gruen, #30d158); }
+.nm-zeile { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 2px 4px 8px; }
 @container (max-width: 520px) {
   .inv-tr { grid-template-columns: 1fr 1fr; } .inv-tr .t-was { grid-column: 1 / -1; color: var(--ink2); font-size: 12px; } .inv-th { display: none; }
   .inv-arten { grid-template-columns: repeat(2, 1fr); }

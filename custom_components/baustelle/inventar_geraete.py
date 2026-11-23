@@ -25,8 +25,7 @@ from .const import (
 from .db import inventar as db_inventar
 from .kern import geraete as k_geraete
 from .logik.geraete import FEHLER_TEXT
-from .logik.inventar import HAENGT, SENSOR_TYP, typ_vorschlag
-from .logik.symbol import sensor_eintragen
+from .logik.inventar import HAENGT, SENSOR_TYP, sensor_verdrahtung, typ_vorschlag
 
 if TYPE_CHECKING:
     from .steuerung import Steuerung
@@ -109,6 +108,17 @@ def _steuerung(hass: HomeAssistant, baustelle_id: str | None) -> Steuerung | Non
     return getattr(entry, "runtime_data", None) if entry is not None and entry.domain == DOMAIN else None
 
 
+def sensor_plan(st: Steuerung, bid: str, typ: str, ents: list[er.RegistryEntry]) -> dict[str, Any] | None:
+    """Was das Zuordnen eines Fühlers, Tür- oder Fensterkontakts im Bereich `bid` einträgt (logik `sensor_verdrahtung`)
+    – für Zuordnen und Vorschau; None = nichts (z. B. Container hat schon einen Fühler)."""
+    sub = st.entry.subentries.get(bid)
+    if sub is None or sub.subentry_type != SUB_BEREICH:
+        return None
+    e = st.einstellungen.bereich(bid)
+    return sensor_verdrahtung(typ, _messwert(ents, typ) if typ in KLASSE_FUER else None,
+                              fuehler=sub.data.get(CONF_FUEHLER), tuer=e.get("tuer"), symbol=e.get("symbol"))
+
+
 def _verdrahten(hass: HomeAssistant, st: Steuerung, bid: str, geraet: dr.DeviceEntry, typ: str, haengt: str | None
                 ) -> tuple[str | None, str | None]:
     """Gerät im Bereich `bid` einhängen; liefert (Unter-Eintrag des Shelly, Text was geschah). Fremde Baustelle → Fehler."""
@@ -139,29 +149,21 @@ def _verdrahten(hass: HomeAssistant, st: Steuerung, bid: str, geraet: dr.DeviceE
                                                     CONF_TYP: heiztyp}), subentry_type=SUB_GERAET, title=name, unique_id=None)
         hass.config_entries.async_add_subentry(st.entry, neu)
         return neu.subentry_id, "Shelly im Bereich angelegt"
-    eid = _messwert(ents, typ) if typ in KLASSE_FUER else None
-    if typ == "TEMP" and eid:
-        sub = st.entry.subentries.get(bid)
-        if sub is not None and sub.subentry_type == SUB_BEREICH and not sub.data.get(CONF_FUEHLER):
-            hass.config_entries.async_update_subentry(st.entry, sub, data={**sub.data, CONF_FUEHLER: eid})
-            return None, "als Fühler des Containers eingetragen"
-    if typ == "DOOR" and eid and not st.einstellungen.bereich(bid).get("tuer"):
-        st.einstellung_setzen(("bereiche", bid, "tuer"), eid)
-        return None, "als Türkontakt des Containers eingetragen"
-    if typ in ("DOOR", "FEN") and eid:   # BSM-034.03: weitere Tür bzw. Fenster ins Aussehen – pausiert dann auch
-        e = st.einstellungen.bereich(bid)
-        art = "tuer" if typ == "DOOR" else "fenster"
-        if (symbol := sensor_eintragen(e.get("symbol"), art, eid, e.get("tuer"))) is not None:
-            st.einstellung_setzen(("bereiche", bid, "symbol"), symbol)
-            nr = next(i + 1 for i, x in enumerate(symbol["tueren" if art == "tuer" else "fenster"]) if x["sensor"] == eid)
-            return None, f"als {'Tür' if art == 'tuer' else 'Fenster'} {nr} des Containers eingetragen"
-    return None, None
+    plan = sensor_plan(st, bid, typ, ents)
+    if plan is None:
+        return None, None
+    if plan["feld"] == "fuehler":
+        sub = st.entry.subentries[bid]
+        hass.config_entries.async_update_subentry(st.entry, sub, data={**sub.data, CONF_FUEHLER: plan["wert"]})
+    else:
+        st.einstellung_setzen(("bereiche", bid, plan["feld"]), plan["wert"])
+    return None, plan["text"]
 
 
-async def async_zuordnen(hass: HomeAssistant, db: Any, roh: dict[str, Any], container_id: str, device_id: str,
-                         typ: str | None = None, haengt: str | None = None) -> dict[str, Any]:
-    """Ein HA-Gerät einem Container zuordnen (Inventar und, steht der Container auf einer geladenen Baustelle mit
-    Bereich, die Verdrahtung dort). `LookupError`/`ValueError` bei falscher Angabe."""
+def zuordnen_pruefen(hass: HomeAssistant, roh: dict[str, Any], container_id: str, device_id: str, typ: str | None = None
+                     ) -> tuple[dr.DeviceEntry, str, dict[str, Any]]:
+    """Ob sich das HA-Gerät dem Container zuordnen lässt (vor Vorschau und Zuordnen): (Gerät, Typ, Einsatz) oder
+    `LookupError`/`ValueError` – schreibt nichts."""
     geraet = dr.async_get(hass).async_get(device_id)
     if not isinstance(geraet, dr.DeviceEntry):
         raise LookupError("HA-Gerät nicht gefunden")
@@ -179,6 +181,14 @@ async def async_zuordnen(hass: HomeAssistant, db: Any, roh: dict[str, Any], cont
     if a is not None and any(e["ausruestung_id"] == a["id"] and not e.get("bis") and e["container_id"] != container_id
                              for e in roh["ausruestung_einsaetze"]):
         raise ValueError("Ausrüstung steckt schon in einem anderen Container – dort erst entfernen")
+    return geraet, typ, einsatz
+
+
+async def async_zuordnen(hass: HomeAssistant, db: Any, roh: dict[str, Any], container_id: str, device_id: str,
+                         typ: str | None = None, haengt: str | None = None) -> dict[str, Any]:
+    """Ein HA-Gerät einem Container zuordnen (Inventar und, steht der Container auf einer geladenen Baustelle mit
+    Bereich, die Verdrahtung dort). `LookupError`/`ValueError` bei falscher Angabe."""
+    geraet, typ, einsatz = zuordnen_pruefen(hass, roh, container_id, device_id, typ)
     st, geraet_id, text = _steuerung(hass, einsatz["baustelle_id"]), None, None
     if st is not None and einsatz.get("bereich_id") in st.bereiche:
         geraet_id, text = _verdrahten(hass, st, einsatz["bereich_id"], geraet, typ, haengt)

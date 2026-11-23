@@ -88,8 +88,10 @@ def _eigene_entitaeten(hass: HomeAssistant) -> list[str]:
 
 
 def _empfaenger(hass: HomeAssistant) -> list[str]:
-    """Benachrichtigungsdienste, z. B. mobile_app_<handy> der Companion App."""
-    return sorted(s for s in hass.services.async_services_for_domain("notify") if s != "send_message")
+    """Benachrichtigungsdienste, z. B. mobile_app_<handy> der Companion App (nachrichten.empfaenger_dienste)."""
+    from .nachrichten import empfaenger_dienste  # noqa: PLC0415
+
+    return empfaenger_dienste(hass)
 
 
 def geraet_pruefen(hass: HomeAssistant, entry: ConfigEntry, schalter: str, rolle: str, bereich_id: str,

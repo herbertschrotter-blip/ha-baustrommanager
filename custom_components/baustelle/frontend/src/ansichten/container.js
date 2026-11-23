@@ -11,6 +11,7 @@ import { IC_MINUS, IC_PLUS } from '../symbole.js';
 import { zeitraumVorlage } from './zeitraum.js';
 import { blaetterZeile } from './wischen.js';   // WU-0020
 import { baselineChip } from './baseline.js';   // J4b
+import { namenChip } from './inventar.js';   // Namen in HA einheitlich (Chip)
 
 const OHNE_SOLL = { plan: 'Zeitplan – der Heizkörperthermostat regelt', hand: 'Hand – kein Soll', aus: 'Aus – nur Frostschutz' };
 
@@ -184,7 +185,7 @@ function kopf(p, b) {
   const gruppe = ([t, fest, dazu, X]) => fest || X.length ? html`<div class="ckd-g ${X.some(c => String(c.lang).length >= LANG_AB) ? 'ckd-lang' : ''}" data-g=${t}><div class="ckd-gt">${t}</div><div class="ck-chips">${fest || nothing}${X.map(c => chip(p, c))}</div>${dazu || info(p, X)}</div>` : nothing;
   const mitRad = b.fuehler && b.t !== null, mitSoll = mitRad && p.sollAktiv(b) && !b.baseline;
   return html`<div class="glas-panel ck ck-d ck-d2 ${b.z}" style="--c:${FARBE[b.z]}">
-      <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b.name}</span></div>${eingestellt(p, b)}</div>
+      <div class="ckd-name ei-name"><div class="ck-name"><span class="ck-art">Container</span><span class="ck-titel">${b.name}</span></div>${eingestellt(p, b)}${namenChip(p, b, true)}</div>
       <div class="ckd-rad c-kern">${mitRad ? rad(p, b) : ohneFuehler(b)}${mitSoll ? html`<div class="ckd-soll"><div class="ckd-gt">Soll</div>${sollChips(p, b)}${gefuehl(p, b)}</div>` : nothing}</div>
       <div class="ckd-gruppen">${GR.map(gruppe)}</div></div>`;
 }

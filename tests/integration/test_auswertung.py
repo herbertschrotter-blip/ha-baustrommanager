@@ -189,6 +189,7 @@ async def test_auswertung_befehl(hass: HomeAssistant, baustelle, ws, statistik) 
     assert s["kwh"] > 0 and s["heizzeit"] > 0 and s["pumpzeit"] > 0 and s["ohne"] > s["kwh"]
     assert set(s["vorher"]) == {"kwh", "heizzeit", "pumpzeit"} and s["vorher"]["kwh"] > s["kwh"]   # Woche erst angebrochen
     assert s["veraenderung"]["kwh"] == round((s["kwh"] - s["vorher"]["kwh"]) / s["vorher"]["kwh"] * 100)
+    assert s["veraenderung"]["eur"] == s["veraenderung"]["kwh"]   # gleicher Preis in beiden Wochen: € wie kWh
     container_kwh = sum(c["kwh"] for c in r["rangliste"]) if isinstance(r.get("rangliste"), list) else None
     # „gespart“ nur mit den Containern (Herbert 30.10.2026): der Schacht zählt in kWh und €, nicht in „gespart“
     assert container_kwh is not None and container_kwh < s["kwh"]

@@ -250,3 +250,81 @@ def test_abgleich_ha_gilt_inventar_nur_anzeigen() -> None:
     nach, fremd = abgleich(["mac:1", "mac:2", "mac:2", "bt:3"], {"mac:1": "a1", "mac:9": "a9"})
     assert nach == ["mac:2", "bt:3"] and fremd == ["a9"]
     assert abgleich([], {}) == ([], [])
+
+
+def test_abweichend_zaehlt_wie_uebernehmen():
+    from logik.inventar import abweichend, vorschau
+    roh = vorschau({"art": "MAN", "praefix": "002", "plugs": [_plug(entitaeten=[], bthome=[])]}, belegt=set())
+    assert abweichend(roh["schritte"]) == sum(1 for s in roh["schritte"] if s["zustand"] != "gleich") > 0
+    fertig = _plug(geraet={"id": "dev1", "name": "002-01_C_PLUG_MAN"},
+                   schalter={"entity_id": "switch.002_01_c_plug_man", "name": "002-01_C_PLUG_MAN"}, entitaeten=[], bthome=[],
+                   plug_name="002-01_C_PLUG_MAN", name="002-01_C_HZ_MAN_Konvektor01",
+                   labels=["Container", "Mannschaft", "Shelly Plug"])
+    assert abweichend(vorschau({"art": "MAN", "praefix": "002", "plugs": [fertig]}, belegt=set())["schritte"]) == 0   # „Namen ✓“
+    konfl = vorschau({"art": "MAN", "praefix": "002", "plugs": [_plug(entitaeten=[], bthome=[])]},
+                     belegt={"switch.mannschaft_k", "switch.002_01_c_plug_man"})
+    assert abweichend(konfl["schritte"]) == abweichend(roh["schritte"])   # Konflikt zählt mit (weicht ab)
+    assert abweichend([]) == 0
+
+
+def test_mit_zuordnung_plug_naechste_nummer_und_vorschau():
+    from logik.inventar import NEU_ZUGEORDNET, mit_zuordnung, vorschau
+    eingabe = {"art": "MAN", "praefix": "002", "plugs": [_plug(gg=3, bthome=[])], "sensoren": []}
+    neu = mit_zuordnung(eingabe, typ="PLUG", haengt="radiator", geraet={"id": "dev9", "name": "shellyplug-9", "original": "shellyplug-9"},
+                        schalter={"entity_id": "switch.shellyplug_9", "name": None}, labels_=[],
+                        entitaeten=[{"entity_id": "sensor.shellyplug_9_power", "name": None, "klasse": "power"},
+                                    {"entity_id": "sensor.shellyplug_9_rssi", "name": None, "klasse": "signal_strength"}])
+    assert len(eingabe["plugs"]) == 1   # Eingabe bleibt unverändert
+    plug = neu["plugs"][-1]
+    assert (plug["gg"], plug["geraet_id"], plug["rolle"], plug["typ"]) == (4, NEU_ZUGEORDNET, "heizkoerper", "oelradiator")
+    assert [e["entity_id"] for e in plug["entitaeten"]] == ["sensor.shellyplug_9_power"]
+    v = vorschau(neu, belegt=set())
+    ids = {s["alt"]: s["neu"] for s in v["schritte"] if s["ziel"] == "entitaet_id"}
+    assert ids["switch.shellyplug_9"] == "switch.002_04_c_plug_man"
+    assert any(s["neu"] == "002-04_C_HZ_MAN_Radiator01" for s in v["schritte"] if s["ziel"] == "unter_eintrag")
+    # Plugs ohne gespeicherte Nummer zählen wie im Inventar nach dem neuen weiter
+    lose = mit_zuordnung({**eingabe, "plugs": [_plug(gg=1, gg_fest=False, bthome=[])]}, typ="PLUG",
+                         geraet={"id": "dev9", "name": "x"}, schalter={"entity_id": "switch.x"}, entitaeten=[], labels_=[])
+    assert [(x["geraet_id"], x["gg"]) for x in lose["plugs"]] == [("sub_g1", 2), (NEU_ZUGEORDNET, 1)]
+    # schon im Container: nichts doppelt
+    assert mit_zuordnung(eingabe, typ="PLUG", geraet={"id": "dev1", "name": "Heizung 02"}, entitaeten=[], labels_=[])["plugs"] == eingabe["plugs"]
+
+
+def test_mit_zuordnung_sensor_ans_ende_seiner_art():
+    from logik.inventar import InventarFehler as Fehler, mit_zuordnung, vorschau
+    tuer = {"typ": "DOOR", "geraet": {"id": "d1", "name": "Tür"}, "entitaeten": [], "labels": []}
+    eingabe = {"art": "MAN", "praefix": "002", "plugs": [], "sensoren": [tuer]}
+    neu = mit_zuordnung(eingabe, typ="DOOR", geraet={"id": "d2", "name": "Tür hinten"}, labels_=[],
+                        entitaeten=[{"entity_id": "binary_sensor.tuer_hinten", "name": None, "klasse": "door"}])
+    v = vorschau(neu, belegt=set())
+    assert {s["gruppe"] for s in v["schritte"]} == {"002_C_DOOR_MAN", "002_C_DOOR_MAN_2"}
+    assert next(s for s in v["schritte"] if s["alt"] == "binary_sensor.tuer_hinten")["neu"] == "binary_sensor.002_c_door_man_2_tuer"
+    with pytest.raises(Fehler):
+        mit_zuordnung(eingabe, typ="PUMP", geraet={"id": "d3"}, entitaeten=[], labels_=[])
+
+
+def test_sensor_verdrahtung_dieselbe_regel_wie_zuordnen():
+    """Gutachten M1: ein zweiter Fühler wird nicht eingetragen – die Vorschau darf ihn dann nicht umbenennen."""
+    from logik.inventar import nicht_eingetragen, sensor_verdrahtung
+    leer = {"fuehler": None, "tuer": None, "symbol": None}
+    assert sensor_verdrahtung("TEMP", "sensor.t2", **leer)["feld"] == "fuehler"
+    assert sensor_verdrahtung("TEMP", "sensor.t2", **{**leer, "fuehler": "sensor.t1"}) is None   # zweiter Fühler
+    assert sensor_verdrahtung("TEMP", None, **leer) is None   # kein Messwert
+    assert sensor_verdrahtung("DOOR", "binary_sensor.d1", **leer) == {
+        "feld": "tuer", "wert": "binary_sensor.d1", "text": "als Türkontakt des Containers eingetragen"}
+    weitere = sensor_verdrahtung("DOOR", "binary_sensor.d2", **{**leer, "tuer": "binary_sensor.d1"})
+    assert weitere["feld"] == "symbol" and weitere["text"].startswith("als Tür ")
+    assert sensor_verdrahtung("DOOR", "binary_sensor.d1", **{**leer, "tuer": "binary_sensor.d1"}) is None   # schon drin
+    assert sensor_verdrahtung("FEN", "binary_sensor.f1", **leer)["text"] == "als Fenster 1 des Containers eingetragen"
+    assert sensor_verdrahtung("PLUG", "switch.x", **leer) is None
+    assert "Fühler" in nicht_eingetragen("TEMP") and "Inventar" in nicht_eingetragen("FEN")
+
+
+def test_mit_zuordnung_nicht_verdrahtet_bleibt_eingabe():
+    from logik.inventar import mit_zuordnung, vorschau
+    t1 = {"typ": "TEMP", "geraet": {"id": "t1", "name": "Fühler"}, "entitaeten": [], "labels": []}
+    eingabe = {"art": "MAN", "praefix": "002", "plugs": [], "sensoren": [t1]}
+    neu = mit_zuordnung(eingabe, typ="TEMP", geraet={"id": "t2", "name": "Fühler 2"}, labels_=[], verdrahtet=False,
+                        entitaeten=[{"entity_id": "sensor.t2", "name": None, "klasse": "temperature"}])
+    assert neu["sensoren"] == [t1]
+    assert not any(s.get("ref") == "t2" for s in vorschau(neu, belegt=set())["schritte"])

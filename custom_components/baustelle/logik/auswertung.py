@@ -431,6 +431,13 @@ def veraenderung(jetzt: float | None, vorher: float | None, vorher_ganz: bool = 
     return js_runden((jetzt - vorher) / vorher * 100)
 
 
+def kosten_veraenderung(kwh: float | None, preis: float, kwh_vorher: float | None, preis_vorher: float,
+                        vorher_ganz: bool = True) -> int | None:
+    """Veränderung der Kosten zum Zeitraum davor in ganzen % (Pfeil bei „Kosten“): € jetzt gegen € davor, jeder Zeitraum
+    zu seinem eigenen Preis – bei einem neuen Strompreis weicht das von der Veränderung der kWh ab."""
+    return veraenderung(geld(kwh, preis), geld(kwh_vorher, preis_vorher), vorher_ganz)
+
+
 def perioden_grenzen(zr: Zeitraum, zone: tzinfo) -> list[datetime]:
     """Beginn jeder Periode des Zeitraums und das Ende (n + 1 Zeitpunkte, UTC) – Stunde, Tag oder Monat."""
     beginn = mitternacht(zr.von, zone)
