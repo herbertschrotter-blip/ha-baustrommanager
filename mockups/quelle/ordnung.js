@@ -25,7 +25,7 @@
 //           feste Abschnitte Verbrauch & Kosten · Ersparnis · Heizperiode & Wetter · Abrechnung & Export · Geräte & Pumpen;
 //           Ausnahmen vom gewählten Zeitraum sind gekennzeichnet („⏱ eigener Zeitraum“). Filter „Container“, wenn man von
 //           einer Kachel kommt. Eine Definition von „Gespart“, € überall zum Tagespreis aus der Integration.
-//   M15     Karte „Was fehlt noch“ oben in der Übersicht; jeder Punkt springt in Assistent, Container-Seite oder Umbenennen.
+//   M15     Karte „Was fehlt noch“ ganz unten in der Übersicht (Herbert, 23.11.2026); jeder Punkt springt in Assistent, Container-Seite oder Umbenennen.
 //   M16     Entitätswahl mit Suche (Fühler & Kontakte), Anordnung der Auswertung in der Integration, Speichern sofort überall.
 //
 // DATEN – die Seite rechnet nichts: Herkunft je Einstellung, Anzahl abweichender Namen, Namensvorschau (Schema), Kandidaten
@@ -290,7 +290,7 @@ function browser(R) {
   const fehltKarte = () => html`<div class="glas-panel or-fehlt" data-or="fehlt"><div class="or-fehlt-k"><b>Was fehlt noch · ${FEHLT.length}</b>${R.marke}<span class="leise">prüft die Integration beim Start und täglich</span></div>
       ${FEHLT.map(x => html`<div class="or-fz"><span class="or-fic">${x.ic}</span><div class="or-zl"><b>${x.t}</b><div class="leise">${x.s}</div></div><button class="chip glas-panel" @click=${x.f}>${x.los}</button></div>`)}
       ${sprung('Einstellungen › Notprogramm')}</div>`;
-  R.abschnitt({ ansicht: 'uebersicht', wann: () => G.fehlt !== false, vor: () => fehltKarte() });
+  R.abschnitt({ ansicht: 'uebersicht', wann: () => G.fehlt !== false, nach: () => fehltKarte() });
 
   /* ================= Container-Ansicht: Kennzahlen springen gefiltert in die Auswertung (M13) ================= */
   const auswertungFilter = () => { G.aw = { ...G.aw, filter: 'Poliercontainer' }; for (const q of R.P()) { q.s.sheet = null; q.gehe('auswertung'); } };
@@ -447,7 +447,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
 .or-klima { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 12px 10px; }
 .or-klima label { display: flex; flex-direction: column; font-size: 12px; gap: 2px; }
 .or-grundlagen { margin-top: 14px; }
-.or-fehlt { padding: 12px 16px; margin-bottom: 14px; }
+.or-fehlt { padding: 12px 16px; margin-top: 14px; }
 .or-fehlt-k { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
 .or-fehlt-k .leise { margin-left: auto; font-size: 11.5px; }
 .or-fz { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--gridc); }
