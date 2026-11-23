@@ -145,7 +145,7 @@ def start(hz: Heizung, bid: str, jetzt: datetime | None = None) -> start_logik.S
     heute, minute = jetzt.date(), jetzt.hour * 60 + jetzt.minute
     f = fest(hz, bid)
     warm = warm_einst(hz, bid)
-    tag = start_logik.tag_waehlen(heute, minute, lambda t: _plan_ohne(hz, bid, t), warm.vor_min,
+    tag = start_logik.tag_waehlen(heute, minute, lambda t: _plan_ohne(hz, bid, t),
                                   gestartet_heute=f is not None and f.get("tag") == heute.isoformat())
     plan = _plan_ohne(hz, bid, tag) if tag is not None else None
     if tag is None or plan is None:
@@ -178,18 +178,21 @@ def start(hz: Heizung, bid: str, jetzt: datetime | None = None) -> start_logik.S
 def festhalten(hz: Heizung, bid: str, warm: WarmAb | None, plan: Any, beginn: int, jetzt: datetime) -> None:
     """Ab dem Start bis Arbeitsbeginn festhalten (Store, übersteht Neustarts): Aufheizzeit für die Regelung, Beginn des
     Vorheizens und „früher“ aus dem Plan, dazu die Werte beim Start für den Dialog (gemessen, Prognose, Band, Rate).
-    `jetzt` = Zeit der Auswertung (dieselbe Minute wie der Plan)."""
+    `jetzt` = Zeit der Auswertung (dieselbe Minute wie der Plan). Aufheizzeit und Beginn des Vorheizens so, dass der Plan
+    genau zum festgehaltenen Beginn startet (`start_logik.fest_aufheiz`, Prüfpunkt 4)."""
     alle = hz.st.lz.setdefault("warm_start", {})
     heute = jetzt.date()
     s = start(hz, bid, jetzt)
     info = hz.st.bereiche[bid]
+    vor_min = warm.vor_min if warm is not None else 0
+    aufheiz, auf_beginn = start_logik.fest_aufheiz(plan, vor_min, beginn)
     if s is not None and s.tag == heute and not s.laeuft:
-        neu = start_logik.festhalten(s, hz.st.temperatur(info.fuehler), beginn, warm.aufheiz_min if warm is not None else None)
-    else:
-        neu = {"tag": heute.isoformat(), "beginn": beginn, "aufheiz_min": warm.aufheiz_min if warm is not None else None,
+        neu = start_logik.festhalten(s, hz.st.temperatur(info.fuehler), beginn, aufheiz)
+    else:   # ohne Start für heute (kein Innenwert): ohne Rate – der Dialog nennt sie dann geschätzt
+        neu = {"tag": heute.isoformat(), "beginn": beginn, "aufheiz_min": aufheiz,
                "innen_start": hz.st.temperatur(info.fuehler), "zusatz": bool(hz._zusatz_gelernt.get(bid)),
                "geschaetzt": bool(hz._geschaetzt.get(bid))}
-    neu.update(auf_beginn=plan.vor, frueher=[list(x) for x in plan.frueher])   # aus dem Plan, der gerade gilt
+    neu.update(auf_beginn=auf_beginn, frueher=[list(x) for x in plan.frueher])   # aus dem Plan, der gerade gilt
     alle[bid] = neu
     hz._start_runde += 1
     hz.st.einstellungen.speichern()

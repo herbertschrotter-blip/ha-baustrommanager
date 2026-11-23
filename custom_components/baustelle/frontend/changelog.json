@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.8.184",
+    "datum": "2026-11-23",
+    "punkte": [
+      "Heizung: **eine Startzeit statt zwei** (Prüfpunkt 4): Container 003 zeigte heute im Heizplan den Start 04:20 (110 min Aufheizen) und im Dialog „So rechnet der Start“ 06:10. Ursache: Der Container war schon warm, der Start fiel genau auf das Ziel „warm um“ 06:10. Genau dort sprang die Start-Logik auf morgen, und der Plan von heute übernahm die Aufheizzeit von morgen (110 min) – damit wurde um 06:10 mit dieser Zeit festgehalten, der Plan zeigte 04:20, der Dialog den echten Beginn 06:10. Jetzt bleibt der Tag bis zum Arbeitsbeginn heute, der Plan von heute bekommt nie die Zeit eines anderen Tages, und beim Festhalten rückt der Plan auf den tatsächlichen Beginn nach. Plan, Regelung, Plan-Chip und Dialog lesen dieselbe Startzeit aus einer einzigen Regel.",
+      "Die Quelle der Aufheizrate stimmt: Kam beim Festhalten keine Rate mit, rechnete der Dialog mit der Schätzung aus der Größe (2,5 °C/h), schrieb aber „gelernt aus 0 Mal“. Jetzt heißt das „noch geschätzt“, gelernt steht als „gelernt aus N Mal in diesem Container“. Gelerntes und Gespeichertes bleiben unverändert."
+    ]
+  },
+  {
     "version": "0.8.183",
     "datum": "2026-11-23",
     "punkte": [

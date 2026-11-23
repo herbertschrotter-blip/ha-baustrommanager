@@ -216,10 +216,12 @@ def warm_anzeige(hz: Heizung, bid: str) -> dict[str, Any] | None:
         "gelernt": s is not None and not s.rate_geschaetzt, "band": s.band if s is not None else lernen.band(hz.st.daten.wetter.aussen),
         "geschaetzt": round(s.rate, 2) if s is not None and geschaetzt else None,   # 0.8.183: wie der Start schätzt
         "rate": s.rate if s is not None and not s.rate_geschaetzt else None, "n": s.rate_n if s is not None else 0,
+        "quelle": s.quelle if s is not None else None,   # Prüfpunkt 4: container | schaetzung (logik/start.Start.quelle)
         "n_noetig": lernen.AUF_N, "vor": warm.vor_min, "nach": warm.nach_min, "max": warm.max_min,
         "vor_eigen": e.get("warm_vor") is not None, "nach_eigen": e.get("warm_nach") is not None,
         # Aufheizdauer der Prognose; nach dem Start die festgehaltene Zeit Ziel − Beginn des Plans
-        "aufheiz_min": s.aufheiz_min if s is not None and not s.laeuft else warm.aufheiz_min,
+        "aufheiz_min": s.aufheiz_min if s is not None and not s.laeuft
+                       else (None if warm.aufheiz_min is None else max(0, warm.aufheiz_min)),
         "innen": hz.st.temperatur(info.fuehler), "soll": hz.soll_temperatur(bid),
         "fest": bool(hz.st.lz.get("warm_start", {}).get(bid)), "anzahl": s.anzahl if s is not None else 1,
         "plan": None if plan is None else {"tag": tag.isoformat(), "start": plan.vor, "ziel": plan.a - warm.vor_min, "a": plan.a,

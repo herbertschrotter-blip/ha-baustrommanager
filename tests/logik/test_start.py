@@ -40,15 +40,15 @@ def _plan_am(tag):
 
 def test_tag_naechstes_ziel_heute_nur_vor_dem_ziel_oder_wenn_gestartet():
     mi = date(2026, 10, 28)
-    assert S.tag_waehlen(mi, 2 * 60, _plan_am, 30) == mi                       # nachts vor dem Ziel 06:30: heute
-    assert S.tag_waehlen(mi, 6 * 60 + 29, _plan_am, 30) == mi
-    assert S.tag_waehlen(mi, 12 * 60, _plan_am, 30, gestartet_heute=True) == mi   # heute gestartet: bis Planende heute
-    assert S.tag_waehlen(mi, 16 * 60 + 29, _plan_am, 30, gestartet_heute=True) == mi
+    assert S.tag_waehlen(mi, 2 * 60, _plan_am) == mi                       # nachts vor dem Ziel 06:30: heute
+    assert S.tag_waehlen(mi, 6 * 60 + 29, _plan_am) == mi
+    assert S.tag_waehlen(mi, 12 * 60, _plan_am, gestartet_heute=True) == mi   # heute gestartet: bis Planende heute
+    assert S.tag_waehlen(mi, 16 * 60 + 29, _plan_am, gestartet_heute=True) == mi
     # 2. Review, Befund 1: Ziel vorbei und heute nicht gestartet (Lernstand zurückgesetzt, tagsüber eingeschaltet) → morgen
-    assert S.tag_waehlen(mi, 10 * 60, _plan_am, 30) == MORGEN
-    assert S.tag_waehlen(mi, 20 * 60 + 47, _plan_am, 30, gestartet_heute=True) == MORGEN   # abends: morgen
+    assert S.tag_waehlen(mi, 10 * 60, _plan_am) == MORGEN
+    assert S.tag_waehlen(mi, 20 * 60 + 47, _plan_am, gestartet_heute=True) == MORGEN   # abends: morgen
     fr = date(2026, 10, 30)
-    assert S.tag_waehlen(fr, 13 * 60, _plan_am, 30) == date(2026, 11, 2)       # Freitag nach 12:30: Montag
+    assert S.tag_waehlen(fr, 13 * 60, _plan_am) == date(2026, 11, 2)       # Freitag nach 12:30: Montag
 
 
 def test_tag_eigenes_fenster_ist_kein_start():
@@ -57,8 +57,8 @@ def test_tag_eigenes_fenster_ist_kein_start():
     from dataclasses import replace as ersetzen
     mi = date(2026, 10, 28)
     mit_fenster = lambda t: (p := _plan_am(t)) and ersetzen(p, eigene=((18 * 60, 20 * 60),))   # noqa: E731
-    assert S.tag_waehlen(mi, 17 * 60, mit_fenster, 30, gestartet_heute=True) == MORGEN
-    assert S.tag_waehlen(mi, 19 * 60, mit_fenster, 30) == MORGEN
+    assert S.tag_waehlen(mi, 17 * 60, mit_fenster, gestartet_heute=True) == MORGEN
+    assert S.tag_waehlen(mi, 19 * 60, mit_fenster) == MORGEN
 
 
 # ---------------------------------------------------------------- abends: Mockup „abends“
@@ -376,3 +376,107 @@ def test_schaetzung_konvektor_plausibel():
     doppel = S.rechnen(_eingabe(innen=15.0, aussen=0.0, vorhersage=(), raten={}, tau=[13, 9], kw_nenn=(1.8, 1.4),
                                 anzahl=2, stufen=True, m2=groesse.DOPPEL_M2))
     assert doppel.rate_geschaetzt and 2.0 <= doppel.rate <= 5.0, doppel.rate
+
+
+# ---------------------------------------------------------------- Prüfpunkt 4: eine Startzeit für Plan, Regelung und Dialog
+def _plan_710(aufheiz, tag=MORGEN):
+    """Plan des Tages wie plan.py (`warm_ab`): Aufheizzeit aus der Start-Logik."""
+    return tagesplan(tag, LISTE_710, [], HeizRegeln(), WetterTag(), trocknen=False,
+                     warm=WarmAb(vor_min=30, max_min=300, aufheiz_min=aufheiz))
+
+
+def _beide_wege(s, fest=None):
+    """Startzeit über den Plan (Regelung, Plan-Chip, Woche) und über den Dialog (`anzeige`) – als Wanduhr-Minute."""
+    heute = s.null_utc.astimezone(TZ).date()
+    plan = _plan_710(S.plan_aufheiz(s.tag, heute, s, fest), s.tag)
+    return plan.start, s.wand(s.beginn_m), plan
+
+
+def test_tag_bleibt_heute_zwischen_ziel_und_arbeitsbeginn():
+    """Prüfpunkt 4: zwischen Ziel (06:30) und Arbeitsbeginn (07:00) ohne Start bleibt der Tag heute (fällig) – bis
+    0.8.183 sprang er schon am Ziel auf morgen."""
+    mi = date(2026, 10, 28)
+    assert S.tag_waehlen(mi, 6 * 60 + 30, _plan_am) == mi
+    assert S.tag_waehlen(mi, 6 * 60 + 59, _plan_am) == mi
+    assert S.tag_waehlen(mi, 7 * 60, _plan_am) == MORGEN
+
+
+def test_eine_startzeit_vor_dem_start_plan_gleich_dialog():
+    """Abends gerechnet: der Plan von morgen beginnt genau zum Start des Dialogs (03:30)."""
+    s = S.rechnen(_eingabe())
+    plan_start, dialog, _ = _beide_wege(s)
+    assert plan_start == dialog == 210 and S.anzeige(s, ABEND)["beginn"] == "03:30"
+
+
+def test_eine_startzeit_container_warm_am_ziel_wie_003():
+    """Befund Container 003 (23.11.2026): warm (23,4 °C über dem Soll), Auswertung genau am Ziel. Der Tag bleibt heute,
+    der Start ist das Ziel – Plan und Dialog zeigen 06:40, nicht der Plan die Aufheizzeit von morgen (04:20 mit 110 min)
+    und der Dialog den Start „gelernt aus 0 Mal“."""
+    jetzt = datetime(2026, 10, 29, 6, 40, tzinfo=TZ)
+    tag = S.tag_waehlen(MORGEN, 400, lambda t: _plan_710(0, t))
+    assert tag == MORGEN
+    s = S.rechnen(_eingabe(jetzt=jetzt, innen=23.4, aussen=1.0, vorhersage=()))
+    plan_start, dialog, plan = _beide_wege(s)
+    assert plan_start == dialog == 400 and s.plan_aufheiz_min == 0
+    # festhalten wie plan.py: Beginn laut Plan, Aufheizzeit so, dass der Plan dort beginnt
+    beginn = S.fest_beginn(plan.start, 400)
+    aufheiz, auf_beginn = S.fest_aufheiz(plan, 30, beginn)
+    fest = {**S.festhalten(s, 23.4, beginn, aufheiz), "auf_beginn": auf_beginn}
+    spaeter = datetime(2026, 10, 29, 6, 50, tzinfo=TZ)
+    l = S.rechnen(_eingabe(jetzt=spaeter, innen=23.2, aussen=1.0, vorhersage=(), fest=fest))
+    plan_start, dialog, _ = _beide_wege(l, fest)
+    assert l.laeuft and plan_start == dialog == 400
+    a = S.anzeige(l, spaeter)
+    assert a["beginn"] == "06:40" and a["auf_beginn"] == "06:40" and a["quelle"] == S.QUELLE_CONTAINER
+    assert a["schritte"][2]["marke_t"] == "gelernt aus 14 Mal in diesem Container"
+
+
+def test_heute_nie_die_aufheizzeit_eines_anderen_tages():
+    """Der Start gilt für morgen (heute nach Arbeitsbeginn, nicht gestartet): der Plan von heute bekommt 0, nicht die
+    Zeit von morgen; andere Tage der Woche dieselbe wie der nächste Start; ohne Start None (Vorheizen wie ohne Lernen)."""
+    s = S.rechnen(_eingabe())   # Start für morgen, 190 min
+    heute = ABEND.date()
+    assert S.plan_aufheiz(heute, heute, s, None) == 0
+    assert S.plan_aufheiz(MORGEN, heute, s, None) == 190
+    assert S.plan_aufheiz(date(2026, 11, 5), heute, s, None) == 190
+    assert S.plan_aufheiz(heute, heute, None, None) is None
+    assert S.plan_aufheiz(heute, heute, s, {"tag": heute.isoformat(), "aufheiz_min": 35}) == 35
+
+
+def test_spaet_festgehalten_plan_startet_zum_beginn():
+    """Plan-Beginn 04:20 (140 min), festgehalten erst um 06:10 (Auswertung später, `fest_beginn` = jetzt): der Plan
+    rückt nach – Plan und Dialog 06:10, nicht Plan 04:20 / Dialog 06:10 wie bis 0.8.183."""
+    plan = _plan_710(140)
+    assert plan.start == 260
+    beginn = S.fest_beginn(plan.start, 370)
+    aufheiz, auf_beginn = S.fest_aufheiz(plan, 30, beginn)
+    assert beginn == 370 and (aufheiz, auf_beginn) == (30, 370) and _plan_710(aufheiz).start == 370
+    jetzt = datetime(2026, 10, 29, 6, 10, tzinfo=TZ)
+    s = S.rechnen(_eingabe(jetzt=jetzt, innen=17.0, vorhersage=()))
+    fest = {**S.festhalten(s, 17.0, beginn, aufheiz), "auf_beginn": auf_beginn}
+    l = S.rechnen(_eingabe(jetzt=jetzt + timedelta(minutes=5), innen=17.3, vorhersage=(), fest=fest))
+    plan_start, dialog, _ = _beide_wege(l, fest)
+    assert l.laeuft and plan_start == dialog == 370 and S.anzeige(l, jetzt)["auf_beginn"] == "06:10"
+    # nach dem Ziel festgehalten: negative Aufheizzeit, der Plan beginnt trotzdem zum Beginn (06:50, Ziel 06:40)
+    aufheiz, auf_beginn = S.fest_aufheiz(_plan_710(0), 30, 410)
+    assert (aufheiz, auf_beginn) == (-10, 410) and _plan_710(aufheiz).start == 410
+
+
+def test_spaet_festgehalten_mit_frueher_bleibt_frueher():
+    """„früher“ (Plan beginnt 20 min vor dem Vorheizen) bleibt beim Nachrücken erhalten: Start = festgehaltener Beginn."""
+    from dataclasses import replace as ersetzen
+    plan = ersetzen(_plan_710(140), start=240)   # 20 min früher (Regen/Noch früher)
+    aufheiz, auf_beginn = S.fest_aufheiz(plan, 30, 300)
+    assert auf_beginn == 320 and aufheiz == 400 - 320
+
+
+def test_nach_dem_start_ohne_rate_heisst_geschaetzt():
+    """Festgehalten ohne Rate (kein Start für heute): der Dialog rechnet mit der Schätzung aus der Größe und nennt sie
+    so – bis 0.8.183 stand dort „gelernt aus 0 Mal“."""
+    jetzt = datetime(2026, 10, 29, 6, 20, tzinfo=TZ)
+    fest = {"tag": "2026-10-29", "beginn": 370, "aufheiz_min": 30, "innen_start": 18.0, "zusatz": False, "geschaetzt": False}
+    s = S.rechnen(_eingabe(jetzt=jetzt, innen=19.0, fest=fest, m2=28.0))
+    assert s.laeuft and s.rate_geschaetzt and s.quelle == S.QUELLE_SCHAETZUNG
+    a = S.anzeige(s, jetzt)
+    assert a["quelle"] == "schaetzung" and a["schritte"][2]["marke"] == "geschaetzt"
+    assert a["schritte"][2]["marke_t"].startswith("noch geschätzt")

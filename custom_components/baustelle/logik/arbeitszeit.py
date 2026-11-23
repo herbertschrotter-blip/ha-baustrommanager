@@ -138,7 +138,8 @@ class WarmAb:
     Soll erreicht `vor_min` vor Arbeitsbeginn, warm halten bis `nach_min` nach Arbeitsende, nie früher als `max_min`
     vor dem Ziel „warm um“ (Arbeitsbeginn − `vor_min`) beginnen – Herbert 29.10.2026 (FE-0031/FE-0032, Mockup start.html;
     bis 0.8.156 vor Arbeitsbeginn). `aufheiz_min`: Minuten vom Beginn bis zum Ziel (die Start-Logik `logik/start.py`
-    liefert Ziel − Start); None = noch nicht gelernt – dann gelten Vorheizen, Kälte-Frühstart und Nachheizen wie bisher.
+    liefert Ziel − Start; negativ, wenn der festgehaltene Start nach dem Ziel lag, `start.fest_aufheiz`); None = noch
+    nicht gelernt – dann gelten Vorheizen, Kälte-Frühstart und Nachheizen wie bisher.
     """
 
     vor_min: int = 0

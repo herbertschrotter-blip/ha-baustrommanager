@@ -4,8 +4,12 @@ Home-Assistant-Code.
 **Eine Rechnung** für den Heizbeginn: Regelung (Plan über `arbeitszeit.WarmAb`), Jetzt-Text („aus bis morgen 03:30“),
 Plan-Chip („morgen ab 03:30 · warm 06:35“) und Dialog „Lernstand“ › „So rechnet der Start“ lesen dasselbe Ergebnis.
 
-- **Tag** (`tag_waehlen`): der nächste Tag, dessen Ziel noch kommt; ist heute schon gestartet, heute bis zum Ende von
-  „warm halten“. Abends nach der Arbeit ist es morgen – wie „aus bis morgen …“.
+- **Tag** (`tag_waehlen`): heute, solange der Arbeitsbeginn noch kommt (zwischen Ziel und Arbeitsbeginn ohne Start: fällig,
+  heizt ab jetzt); ist heute schon gestartet, heute bis zum Ende von „warm halten“. Abends nach der Arbeit ist es morgen –
+  wie „aus bis morgen …“.
+- **Eine Startzeit je Tag** (Prüfpunkt 4, 23.11.2026): Den Plan bekommt die Aufheizzeit nur aus `plan_aufheiz` – nie die
+  eines anderen Tages für heute –, und festgehalten wird sie mit `fest_aufheiz` so, dass der Plan genau zum
+  festgehaltenen Beginn startet. Plan, Regelung, Chip und Dialog zeigen damit dieselbe Uhrzeit.
 - **Ziel** „warm um“ = Arbeitsbeginn − „Soll erreicht vorher“ (`WarmAb.vor_min`), Soll der Arbeitszeit.
 - **Auskühlen Stunde für Stunde** bis zum Start: in Schritten von `SCHRITT_MIN` Minuten nähert sich die Innen- der
   Außentemperatur mit der Auskühlzeit τ (dT/dt = −(innen − außen) ÷ τ, je Schritt exakt gelöst). Außen kommt aus der
@@ -53,18 +57,26 @@ MODELL_MAX_MIN = 12 * 60
 """0.8.183: so weit rechnet das Raummodell das Aufheizen höchstens voraus. Erreicht es das Soll bis dahin nicht (die
 Heizleistung reicht bei dieser Kälte kaum), gilt diese Dauer – der Start liegt dann an der Grenze „frühestens“ und ist
 spät. 12 h liegen weit über jeder Grenze „frühestens“ (Einstellung bis 5 h) und halten die Suche schnell."""
+QUELLE_CONTAINER = "container"
+"""Aufheizrate in diesem Container gelernt (mindestens `lernen.AUF_N` Messungen bzw. Raummodell)."""
+QUELLE_SCHAETZUNG = "schaetzung"
+"""Aufheizrate geschätzt (aus der Größe, mit bekannter Leistung über das Raummodell) – auch nach dem Start, wenn beim
+Festhalten keine Rate mitkam (dann rechnet `_laeuft` mit der Schätzung aus der Größe; bis 0.8.183 hieß das fälschlich
+„gelernt aus 0 Mal“)."""
 FRUEHER_TEXT = {"frueher_nach_regen": "Kleidung trocknen nach Regen", "noch_frueher": "Noch früher",
                 "fruehstart": "Kälte-Frühstart"}   # Gründe aus Plan.frueher (arbeitszeit.tagesplan, plan.py)
 
 
-def tag_waehlen(heute: date, minute: int, plan_am: Callable[[date], Plan | None], vor_min: int,
+def tag_waehlen(heute: date, minute: int, plan_am: Callable[[date], Plan | None],
                 gestartet_heute: bool = False) -> date | None:
     """Tag des nächsten Vorheiz-Starts (in 7 Tagen; sonst None).
 
     - Heute schon gestartet (festgehalten): heute, bis der Plan von heute mit „warm halten“ endet (`nach`) – Dialog und
       Chip zeigen dann den Start von heute früh.
-    - Sonst der nächste Tag, dessen Ziel „warm um“ (Arbeitsbeginn − `vor_min`) noch kommt; heute nur, wenn es noch vor
-      dem Ziel ist. Eigene Zeitfenster (FE-0012) und „warm halten“ zählen nicht als Start.
+    - Sonst heute, solange der Arbeitsbeginn noch kommt; danach der nächste Tag mit Plan. Zwischen Ziel „warm um“ und
+      Arbeitsbeginn ohne Start (der Container war warm genug, die Automatik kam später) ist der Start von heute fällig –
+      bis 0.8.183 sprang der Tag dort schon auf morgen, und heute bekam die Aufheizzeit von morgen (Prüfpunkt 4:
+      Plan 04:20, Dialog 06:10). Eigene Zeitfenster (FE-0012) und „warm halten“ zählen nicht als Start.
     """
     for k in range(8):
         tag = heute + timedelta(days=k)
@@ -73,7 +85,7 @@ def tag_waehlen(heute: date, minute: int, plan_am: Callable[[date], Plan | None]
             continue
         if k == 0 and gestartet_heute and minute < p.nach:
             return tag
-        if k > 0 or minute < p.a - vor_min:
+        if k > 0 or minute < p.a:
             return tag
     return None
 
@@ -175,6 +187,12 @@ class Start:
     @property
     def geschaetzt(self) -> bool:
         return self.tau_geschaetzt or self.rate_geschaetzt
+
+    @property
+    def quelle(self) -> str:
+        """Woher die Aufheizrate kommt: `QUELLE_CONTAINER` (in diesem Container gelernt, `rate_n` Messungen) oder
+        `QUELLE_SCHAETZUNG` (aus Größe und Leistung) – die Anzeige nennt sie so (Prüfpunkt 4)."""
+        return QUELLE_SCHAETZUNG if self.rate_geschaetzt else QUELLE_CONTAINER
 
 
 # ---------------------------------------------------------------------------------------------------- Hilfen
@@ -438,7 +456,8 @@ def _laeuft(e: Eingabe, fest: Mapping[str, Any], aussen: Callable[[float], float
     # Beginn des Vorheizens: festgehalten aus dem Plan; ältere Stände ohne ihn: Beginn + „früher“
     auf_beginn = (_wand(e.tag, int(fest["auf_beginn"]), heute, zone) if fest.get("auf_beginn") is not None
                   else beginn + sum(m for _, m in frueher))
-    rate = float(fest.get("rate") or groesse.rate_geschaetzt(e.m2))
+    rate_fest = fest.get("rate")
+    rate = float(rate_fest or groesse.rate_geschaetzt(e.m2))
     if e.innen < e.soll and jetzt_m < gemeinsam["ziel_m"]:
         rest = _aufheiz(e.innen, e.soll, rate)
         warm = jetzt_m + rest
@@ -457,7 +476,7 @@ def _laeuft(e: Eingabe, fest: Mapping[str, Any], aussen: Callable[[float], float
         innen_start=round(float(innen_start), 2) if innen_start is not None else round(e.innen, 2),
         aussen_von=e.aussen, aussen_bis=aussen(warm) if aussen is not None else e.aussen,
         band=str(fest.get("band") or lernen.band(e.aussen)), rate=rate, rate_n=int(fest.get("rate_n") or 0),
-        rate_geschaetzt=bool(fest.get("geschaetzt")), anzahl=int(fest.get("anzahl") or 1), rate_einer=None,
+        rate_geschaetzt=bool(fest.get("geschaetzt")) or not rate_fest, anzahl=int(fest.get("anzahl") or 1), rate_einer=None,
         aufheiz_min=rest, begrenzt=bool(fest.get("begrenzt")), beginn_ohne_m=None, spaet=False, laeuft=True,
         zusatz=bool(fest.get("zusatz")),
         prognose_start=float(fest["prognose"]) if fest.get("prognose") is not None else None,
@@ -517,6 +536,36 @@ def _aussen_kurve(e: Eingabe, aussen: Callable[[float], float] | None, jetzt_m: 
     if not punkte and aussen is not None:
         punkte.append((jetzt_m, round(aussen(jetzt_m), 1), "vorhersage"))
     return tuple(_ordnen(punkte))
+
+
+# ---------------------------------------------------------------------------------------------------- Plan
+def plan_aufheiz(tag: date, heute: date, s: Start | None, fest: Mapping[str, Any] | None) -> int | None:
+    """Aufheizzeit (Ziel − Beginn des Vorheizens, `WarmAb.aufheiz_min`) für den Plan am Tag `tag` – die eine Regel, aus
+    der Plan, Regelung, Plan-Chip, Woche und Dialog ihre Startzeit haben (Prüfpunkt 4).
+
+    - Heute festgehalten (`fest` von `tag`): die festgehaltene Zeit (`fest_aufheiz`, startet genau zum Beginn).
+    - Der Start gilt für `tag`: seine `plan_aufheiz_min`.
+    - Heute, aber der Start ist für einen anderen Tag (der Arbeitsbeginn ist vorbei, ohne dass heute gestartet wurde):
+      0 – der Plan von heute bekommt nie die Aufheizzeit von morgen.
+    - Andere Tage (Woche): dieselbe Aufheizzeit wie der nächste Start.
+    None ohne Start (kein Innenwert): der Plan heizt wie ohne Lernen vor."""
+    if fest and fest.get("tag") == tag.isoformat() and fest.get("aufheiz_min") is not None:
+        return int(fest["aufheiz_min"])
+    if s is None:
+        return None
+    if s.tag == tag or tag != heute:
+        return s.plan_aufheiz_min
+    return 0
+
+
+def fest_aufheiz(plan: Plan, vor_min: int, beginn: int) -> tuple[int, int]:
+    """Beim Festhalten: (Aufheizzeit, Beginn des Vorheizens) so, dass der Plan von heute genau zum festgehaltenen
+    `beginn` startet. Kam die Auswertung später als der Plan-Beginn (`fest_beginn` nimmt dann jetzt), rückt das
+    Vorheizen um so viel nach hinten – bis 0.8.183 blieb die alte Aufheizzeit stehen, der Plan zeigte 04:20, der
+    Dialog 06:10. „früher“ (`plan.vor − plan.start`) bleibt; nicht vor `plan.vor` (die Grenze „frühestens“ hält er),
+    nicht nach dem Arbeitsbeginn. Liegt der Beginn nach dem Ziel, ist die Aufheizzeit negativ (`WarmAb.aufheiz_min`)."""
+    vor = min(plan.vor + max(0, beginn - plan.start), plan.a)
+    return plan.a - vor_min - vor, vor
 
 
 # ---------------------------------------------------------------------------------------------------- Festhalten
@@ -622,7 +671,7 @@ def anzeige(s: Start, jetzt: datetime, heute_ende: int | None = None, m2: float 
         "rate_einer": None if s.rate_einer is None else round(s.rate_einer, 2), "rate_geschaetzt": s.rate_geschaetzt,
         "aufheiz_min": s.aufheiz_min, "grenze": s.uhr(s.grenze_m), "grenze_h": round(grenze_h, 2),
         "begrenzt": s.begrenzt, "beginn_ohne": None if s.beginn_ohne_m is None else s.uhr(s.beginn_ohne_m),
-        "spaet": s.spaet, "geschaetzt": s.geschaetzt,
+        "spaet": s.spaet, "geschaetzt": s.geschaetzt, "quelle": s.quelle,
         "schaetz_grund": (f"aus der Größe ({zahl(groesse.flaeche(m2))} m²) und dem Wärmeverlust"
                           if s.geschaetzt else None),
         "satz": satz, "kurz": f"{s.uhr(s.beginn_m)} → {s.uhr(s.warm_m)}",
@@ -663,8 +712,8 @@ def _schritte(s: Start, aussen_t: str | None, hk: str, m2: float | None, spaet_m
             "rechnung": (f"Arbeitsbeginn {s.uhr(s.a_m)} − {s.vor_min} min „Soll erreicht vorher“" if s.vor_min
                          else f"Arbeitsbeginn {s.uhr(s.a_m)}"),
             "marke": "einstellung", "marke_t": "Warm ab"}
-    rate_marke = (("geschaetzt", f"noch geschätzt · {s.rate_n} von {lernen.AUF_N} gemessen") if s.rate_geschaetzt
-                  else ("gelernt", f"gelernt aus {s.rate_n} Mal"))
+    rate_marke = (("geschaetzt", f"noch geschätzt · {s.rate_n} von {lernen.AUF_N} gemessen") if s.quelle == QUELLE_SCHAETZUNG
+                  else ("gelernt", f"gelernt aus {s.rate_n} Mal in diesem Container"))
     if s.rate_geschaetzt:
         wie = f"aus {zahl(groesse.flaeche(m2))} m²-Container" + (f" und {zahl(s.modell_kw, 2)} kW" if s.modell_a is not None else "")
     elif s.anzahl >= 2 and s.rate_einer is not None:

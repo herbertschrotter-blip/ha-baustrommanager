@@ -118,18 +118,14 @@ def warm_ab(hz: Heizung, bid: str, tag: date, jetzt: datetime) -> WarmAb | None:
     Vorhersage, dann Aufheizen mit der gelernten Rate) als Ziel − Start – so beginnt der Plan genau zum gerechneten
     Start, und „aus bis …“, Plan-Chip und Dialog zeigen dieselbe Uhrzeit. Hat der Container heute schon zu heizen
     begonnen, bleibt sie für den Tag fest (Store `warm_start`) – sonst rutschte der Beginn mit dem Aufheizen wieder nach
-    hinten. Andere Tage der Woche (`plan_woche`) bekommen dieselbe Aufheizzeit wie der nächste Start.
+    hinten. Welche Zeit für welchen Tag gilt, regelt `start_logik.plan_aufheiz` (heute nie die eines anderen Tages).
     """
     if not h_start.lernend_thermo(hz, bid):
         return None
     heute = jetzt.date()
     f = h_start.fest(hz, bid)
     s = h_start.start(hz, bid, jetzt)
-    auf: int | None = None
-    if f is not None and f.get("tag") == tag.isoformat() and f.get("aufheiz_min") is not None:
-        auf = int(f["aufheiz_min"])
-    elif s is not None:
-        auf = s.plan_aufheiz_min
+    auf = start_logik.plan_aufheiz(tag, heute, s, f)   # Prüfpunkt 4: eine Regel für die Startzeit (logik/start.py)
     if tag == heute:   # Merker der Regelung von heute (Zusatz gelernt, geschätzt) – nie aus dem Start eines anderen Tages
         if f is not None and f.get("tag") == heute.isoformat():
             hz._zusatz_gelernt[bid], hz._geschaetzt[bid] = bool(f.get("zusatz")), bool(f.get("geschaetzt"))
