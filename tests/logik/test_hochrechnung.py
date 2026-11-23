@@ -318,6 +318,30 @@ def test_ohne_container_und_heizperiode():
     assert wenig.signatur.stand == "lernt" and wenig.heizperiode_kwh is None
 
 
+def test_ersparnis_gegen_signatur_mit_kontrolltag():
+    """Herbert 23.11.2026: steht die Signatur „ohne“, misst die Bauart nur noch einen Kontrolltag im Monat; „ohne“ an allen
+    anderen Tagen (auch im Dezember ohne Messlauf) kommt aus der Signatur gegen die Außentemperatur des Tages."""
+    beginn, ende, heute = date(2026, 10, 1), date(2027, 4, 30), date(2026, 12, 20)
+    start = date(2026, 10, 20)
+    n = (heute - start).days
+    temps = [-3 + (i % 22) for i in range(n)]
+    nov = {start + timedelta(days=i) for i in range(0, 30, 2)}                 # Messläufe bis zur Signatur
+    kontrolle = date(2026, 12, 6)                                               # ein Kontrolltag im Dezember
+    ohne_tage = nov | {kontrolle}
+    r = [TagRoh(start + timedelta(days=i), (ohne_modell if start + timedelta(days=i) in ohne_tage else modell)(t), t, 86400)
+         for i, t in enumerate(temps)]
+    o = ohne_container(r, ohne_tage, heute, beginn, ende, {}, KLIMA)
+    assert o.signatur.stand == "gut" and o.tage == 16
+    je = {t.datum: t for t in r}
+    dez = [d for d in tage(date(2026, 12, 1), heute) if d != kontrolle and d in je]
+    assert dez and all(d not in ohne_tage for d in dez)
+    erwartet = 0.0
+    for d in tage(beginn, ende):
+        t = je.get(d)
+        erwartet += t.kwh if d in ohne_tage else ohne_modell(t.aussen if t and d <= heute else klima_tag(d, KLIMA))
+    assert o.heizperiode_kwh == pytest.approx(erwartet, rel=1e-6)
+
+
 def test_ohne_baustelle_mit_verhaeltnis_je_typ():
     g = Ohne(Signatur("gut", 12), 12, 3000.0)
     lernt = Ohne(Signatur("lernt", 2), 2, None)

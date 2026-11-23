@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.185] – 2026-11-23
+
+- Heizung, Baseline: **ein Kontrolltag je Monat, sobald die Signatur steht** (Prüfpunkt 5): Solange eine Bauart noch
+  keine gute Signatur „ohne Automatik“ hat, plant die Integration die Messläufe wie bisher (Samstag und Sonntag). Ist
+  sie gut, bekommt die Bauart nur noch einen Kontrolltag je Kalendermonat (ein Tag, nicht zwei) – er zeigt, ob die
+  Signatur noch passt. Ein Lauf eines anderen Containers derselben Bauart im Monat zählt mit; abgesagte zählen nicht.
+  Erst kommen die Bauarten, die noch messen. Ein Container ohne Automatik, bei Bedarf oder aus bekommt keinen
+  Kontrolltag. Die Ersparnis rechnet an allen anderen Tagen gegen die Signatur (kWh gegen Außentemperatur), wie schon
+  bisher. Von Hand eingeplante Läufe bleiben immer möglich. Gemessene Läufe und Tage bleiben unverändert.
+
 ## [0.8.184] – 2026-11-23
 
 - Heizung: **eine Startzeit statt zwei** (Prüfpunkt 4): Container 003 zeigte heute im Heizplan den Start 04:20 (110 min

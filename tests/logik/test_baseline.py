@@ -6,8 +6,8 @@ from datetime import UTC, date, datetime, timedelta, timezone
 import pytest
 
 from logik.baseline import (
-    ANTEIL, HINWEIS, MAX_TAGE, STELLUNG_ANGENOMMEN, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, einplanen, freier_block, kein_lauf, kopf_anzeige,
-    messung_je_bauart, uebernimmt,
+    ANTEIL, HINWEIS, KONTROLL_TAGE, MAX_TAGE, STELLUNG_ANGENOMMEN, Kandidat, Lauf, Stand, abbrechen, abbruch_grund, container_waehlen, einplanen, freier_block, kein_lauf, kopf_anzeige,
+    kontrolle_faellig, messung_je_bauart, uebernimmt,
     laeuft_am, lauf_anzeige, monat_rest, offener, plant_am, planen, rahmen, schaetzung_eur, stand_anzeige, stand_text,
     starten, tag_t, volllastanteil, vorschau, zaehlende_tage, zeit_t,
 )
@@ -287,3 +287,58 @@ def test_messung_je_bauart_nicht_je_container():
     assert container_waehlen(K, None, [SA]).bereich == "004"                 # die Bauart mit den wenigsten Tagen zuerst
     fertig = [replace(x, fertig=True) if x.bauart == "konvektor:einzel" else x for x in K]
     assert "konvektor:einzel" not in {m.gruppe for m in [container_waehlen(fertig, "oelradiator", [SA])]}
+
+
+# ------------------------------------------------------------------ Kontrolltag nach der Signatur (Herbert 23.11.2026)
+
+def _arten():
+    return [Kandidat("001", "001", "oelradiator", 2.0, 12, fertig=True, bauart="oel:einzel"),
+            Kandidat("002", "002", "konvektor", 2.0, 4, bauart="konv:einzel")]
+
+
+def test_vor_der_signatur_wie_bisher():
+    """Solange die Bauart noch keine gute Signatur „ohne“ hat, plant `planen` ganze Blöcke wie bisher (Sa + So)."""
+    K = [Kandidat("002", "002", "konvektor", 2.0, 4, bauart="konv:einzel")]
+    vorher = [Lauf("v", "002", date(2026, 11, 7), date(2026, 11, 9), "fertig", 12.0, 12.0)]
+    l = planen(FR, wochenende, K, vorher, 60.0, 0.25, "x")
+    assert (l.bereich, l.von, l.bis) == ("002", SA, MO)                        # derselbe Monat: weiter messen
+
+
+def test_nach_der_signatur_ein_kontrolltag_je_monat_und_bauart():
+    assert KONTROLL_TAGE == 1
+    nur_fertig = _arten()[:1]
+    l = planen(FR, wochenende, nur_fertig, [], 60.0, 0.25, "k1")
+    assert (l.bereich, l.von, l.bis) == ("001", SA, SO)                        # genau ein Tag, nicht Sa + So
+    assert l.schaetzung_eur == pytest.approx(2.0 * 24 * ANTEIL * 0.25)
+    fertig = replace(l, status="fertig")
+    assert planen(SO, wochenende, nur_fertig, [fertig], 60.0, 0.25, "k2") is None   # im November erledigt
+    dez = planen(date(2026, 12, 4), wochenende, nur_fertig, [fertig], 60.0, 0.25, "k3")
+    assert (dez.von, dez.bis) == (date(2026, 12, 5), date(2026, 12, 6))       # neuer Monat: wieder einer
+    # ein anderer Container derselben Bauart zählt für den Monat mit (gruppen)
+    fremd = [Lauf("h", "003", date(2026, 11, 1), date(2026, 11, 2), "fertig", 5.0)]
+    assert planen(FR, wochenende, nur_fertig, fremd, 60.0, 0.25, "k4", {"003": "oel:einzel"}) is None
+    # abgesagt bzw. vor dem ersten Tag abgebrochen: der Kontrolltag fehlt noch
+    weg = [replace(l, status="abgesagt"), Lauf("b", "001", SA, SO, "abgebrochen", 5.0, ende=SA)]
+    assert kontrolle_faellig(nur_fertig, weg, 2026, 11) == {"oel:einzel"}
+    assert kontrolle_faellig(nur_fertig, [replace(l, status="laeuft")], 2026, 11) == set()
+
+
+def test_messende_bauart_vor_dem_kontrolltag():
+    K = _arten()
+    l = planen(FR, wochenende, K, [], 60.0, 0.25, "x")
+    assert (l.bereich, l.von, l.bis) == ("002", SA, MO)                        # erst die noch messende Bauart
+    zu = [K[0], replace(K[1], gesperrt=frozenset({SA}))]                     # die messende kann nicht: Kontrolltag
+    k = planen(FR, wochenende, zu, [], 60.0, 0.25, "y")
+    assert (k.bereich, (k.bis - k.von).days) == ("001", 1)
+    assert planen(FR, wochenende, [replace(K[0], ruht=True)], [], 60.0, 0.25, "z") is None   # ohne Automatik: keiner
+    gesperrt = replace(K[0], gesperrt=frozenset({SO}))                        # nur der erste Tag zählt
+    assert planen(FR, wochenende, [gesperrt], [], 60.0, 0.25, "g").von == SA
+
+
+def test_von_hand_auch_nach_der_signatur():
+    """0.8.179: von Hand bleibt jeder Lauf möglich, auch wenn der Kontrolltag des Monats schon gelaufen ist."""
+    a = _arten()[0]
+    erledigt = [Lauf("k", "001", date(2026, 11, 7), date(2026, 11, 8), "fertig", 5.0, 5.0)]
+    l = einplanen(a, SA, 2, FR, wochenende, erledigt, 60.0, 0.25, "h")
+    assert isinstance(l, Lauf) and (l.von, l.bis) == (SA, MO)
+    assert "ohne Lauf" in einplanen(replace(a, ruht=True), SA, 1, FR, wochenende, [], 60.0, 0.25, "h")

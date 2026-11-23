@@ -13,6 +13,12 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
   Gesperrt = diese Bauart setzt aus, kein anderer Container springt ein.
 - **Container** (`container_waehlen`): der Messcontainer eines Typs, der nicht fertig ist (Signatur „ohne“ noch nicht
   gut); Container mit nur einem Heizkörper-Typ zuerst, abwechselnd Ölradiator und Konvektor, dann die wenigsten Tage.
+- **Kontrolltag** (`kontrolle_faellig`, Herbert 23.11.2026: Baseline-Tage abbauen, sobald die Signatur steht): ist eine
+  Bauart fertig, plant `planen` für sie nur noch `KONTROLL_TAGE` Tag je Kalendermonat (nach dem ersten Tag des Laufs),
+  solange in dem Monat noch kein Lauf eines Containers dieser Bauart gelaufen, geplant oder am Laufen ist. Er hält die
+  Signatur „ohne“ aktuell (die Tage zählen wie alle Baseline-Tage); die Ersparnis an allen anderen Tagen rechnet die
+  Hochrechnung gegen die Signatur (`hochrechnung.ohne_container`). Erst die Bauarten, die noch messen. Von Hand
+  (`einplanen`) bleibt jeder Lauf möglich, auch an einer fertigen Bauart.
 - **Kosten** (`schaetzung_eur`, Herbert 17.11.2026: „ohne Automatik“ heißt Thermostat am Heizkörper voll aufgedreht):
   Nennleistung × Stunden × Volllastanteil × Strompreis. Volllastanteil = der höhere von `ANTEIL` (gemessen 001_C_POL:
   0,72 und 0,78) und dem gemessenen des Containers (`volllastanteil`: kWh ÷ Nenn-kWh seiner fertigen Läufe); eine
@@ -34,7 +40,7 @@ ganzer Container, Kostenrahmen je Monat (Vorgabe 60 €), Ankündigung am Vortag
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 
@@ -46,6 +52,10 @@ SUCHE_TAGE = 14             # so weit voraus wird ein freier Block gesucht
 ANTEIL = 0.75               # Thermostat voll: Anteil der Nennleistung über den Lauf (gemessen 001_C_POL 0,72 / 0,78)
 STELLUNG_ANGENOMMEN: Thermostatstellung = "max"   # Herbert 17.11.2026: Thermostat am Heizkörper voll aufgedreht
 BUDGET_EUR = 60.0           # Vorgabe Kostenrahmen je Monat (Herbert 11.10.2026)
+KONTROLL_TAGE = 1
+"""Länge des Kontrolllaufs einer fertigen Bauart, einer je Kalendermonat (Herbert 23.11.2026: 1 Tag je Monat je Bauart).
+Ein Tag genügt, um zu sehen, ob die Signatur „ohne“ noch passt (Thermostat verstellt, Container umgebaut), und kostet
+nur ein Viertel bis die Hälfte eines Messlaufs; mehr Tage bringt die fertige Signatur nicht mehr weiter."""
 OFFEN = ("geplant", "laeuft")
 STATUS = ("geplant", "laeuft", "fertig", "abgebrochen", "abgesagt")
 
@@ -119,6 +129,7 @@ class Kandidat:
     gesperrt: frozenset[date] = field(default_factory=frozenset)   # Tage mit Termin oder Bedarf
     bauart: str = ""                # `logik/bauart.bauart`; leer = nach Typ (baseline_tage/fertig gelten je Bauart)
     eigene_tage: int | None = None  # eigene Baseline-Tage des Containers (None = baseline_tage)
+    ruht: bool = False              # fertig, aber gerade ohne Lauf (`kein_lauf`): zählt für die Bauart, kein Kontrolltag
 
     @property
     def gruppe(self) -> str:
@@ -161,12 +172,32 @@ def uebernimmt(bereich: str, typ: str, quelle: object, je_typ: Mapping[str, Kand
     return (m.bereich,) if m is not None and quelle != EIGEN else ()
 
 
-def container_waehlen(kandidaten: Iterable[Kandidat], letzter_typ: str | None, tage: Sequence[date]) -> Kandidat | None:
-    """Nächster Container (siehe Modul-Docstring): nur Messcontainer, die nicht fertig und an den Tagen nicht gesperrt sind."""
-    frei = [k for k in messung_je_bauart(kandidaten).values() if not k.fertig and not k.gesperrt.intersection(tage)]
+def container_waehlen(kandidaten: Iterable[Kandidat], letzter_typ: str | None, tage: Sequence[date],
+                     kontrolle: Collection[str] = ()) -> Kandidat | None:
+    """Nächster Container (siehe Modul-Docstring): nur Messcontainer, die nicht fertig und an den Tagen nicht gesperrt
+    sind; dazu die fertigen der Bauarten in `kontrolle` (Kontrolltag fällig), wenn ihr erster Tag frei ist – nach den
+    noch messenden."""
+    def geht(k: Kandidat) -> bool:
+        if not k.fertig:
+            return not k.gesperrt.intersection(tage)
+        return k.gruppe in kontrolle and not k.ruht and not k.gesperrt.intersection(tage[:KONTROLL_TAGE])
+
+    frei = [k for k in messung_je_bauart(kandidaten).values() if geht(k)]
     if not frei:
         return None
-    return min(frei, key=lambda k: (k.typ == "gemischt", k.typ == letzter_typ, k.baseline_tage, k.name))
+    return min(frei, key=lambda k: (k.fertig, k.typ == "gemischt", k.typ == letzter_typ, k.baseline_tage, k.name))
+
+
+def kontrolle_faellig(kandidaten: Iterable[Kandidat], laeufe: Iterable[Lauf], jahr: int, monat: int,
+                      gruppen: Mapping[str, str] | None = None) -> set[str]:
+    """Fertige Bauarten, deren Kontrolltag im Monat noch fehlt (Modul-Docstring): im Monat kein Lauf eines Containers der
+    Bauart, der geplant ist, läuft oder Tage gelaufen ist (abgesagte und vor dem ersten Tag abgebrochene zählen nicht).
+    `gruppen`: Container → Bauart für alle Läufe (sonst nur die der Kandidaten)."""
+    ks = list(kandidaten)
+    art = {k.bereich: k.gruppe for k in ks} | dict(gruppen or {})
+    erledigt = {art.get(l.bereich) for l in laeufe
+                if (l.von.year, l.von.month) == (jahr, monat) and (l.status in OFFEN or _gelaufen(l))}
+    return {k.gruppe for k in ks if k.fertig} - erledigt
 
 
 def volllastanteil(laeufe: Iterable[Lauf], k: Kandidat) -> float | None:
@@ -191,9 +222,10 @@ def monat_rest(laeufe: Iterable[Lauf], jahr: int, monat: int, budget: float) -> 
 
 def planen(
     heute: date, frei: Callable[[date], bool], kandidaten: Sequence[Kandidat], laeufe: Sequence[Lauf], budget: float,
-    preis: float, neue_id: str,
+    preis: float, neue_id: str, gruppen: Mapping[str, str] | None = None,
 ) -> Lauf | None:
-    """Nächsten Lauf ab morgen planen; keiner, solange einer geplant ist oder läuft, oder wenn der Rahmen nicht reicht."""
+    """Nächsten Lauf ab morgen planen; keiner, solange einer geplant ist oder läuft, oder wenn der Rahmen nicht reicht.
+    Eine fertige Bauart bekommt nur ihren Kontrolltag (`kontrolle_faellig`, `KONTROLL_TAGE`)."""
     if any(l.status in OFFEN for l in laeufe):
         return None
     block = freier_block(heute + timedelta(days=1), frei)
@@ -203,9 +235,13 @@ def planen(
     tage = [von + timedelta(days=i) for i in range((bis - von).days)]
     letzter = max((l for l in laeufe if l.status != "abgesagt"), key=lambda l: l.von, default=None)
     typen = {k.bereich: k.typ for k in kandidaten}
-    k = container_waehlen(kandidaten, typen.get(letzter.bereich) if letzter else None, tage)
+    kontrolle = kontrolle_faellig(kandidaten, laeufe, von.year, von.month, gruppen)
+    k = container_waehlen(kandidaten, typen.get(letzter.bereich) if letzter else None, tage, kontrolle)
     if k is None:
         return None
+    if k.fertig:
+        tage = tage[:KONTROLL_TAGE]
+        bis = von + timedelta(days=len(tage))
     eur = schaetzung_eur(k, len(tage), preis, laeufe)
     if eur > monat_rest(laeufe, von.year, von.month, budget):
         return None
@@ -220,7 +256,7 @@ def einplanen(
     Typ“ und an „höchstens ein offener Lauf“. Es bleiben: ganze freie Tage ab morgen, höchstens `MAX_TAGE`, ein Container
     mit Heizkörpern und Lauf (`kein_lauf`), kein zweiter offener Lauf dieses Containers, kein Termin, der Kostenrahmen.
     Ergebnis: der geplante Lauf oder der Grund, warum nicht."""
-    if k is None or not k.typ or k.nenn_kw <= 0:
+    if k is None or not k.typ or k.nenn_kw <= 0 or k.ruht:
         return "Container ohne Lauf (ohne Heizkörper, ohne Automatik, bei Bedarf oder aus)"
     if von <= heute:
         return "frühestens ab morgen (es zählen nur ganze Tage)"
@@ -466,7 +502,7 @@ class Stand:
 
 
 def stand_anzeige(c: Stand, noetig: int) -> dict[str, object]:
-    """Stand je Container: Tage/nötig, Signatur „ohne“ (ohne Tage kein Stand), fertig = gut (dann kein Lauf mehr)."""
+    """Stand je Container: Tage/nötig, Signatur „ohne“ (ohne Tage kein Stand), fertig = gut (dann nur der Kontrolltag je Monat)."""
     stand = c.stand if c.tage else None
     return {"bereich": c.bereich, "name": c.name, "typ": c.typ, "tage": c.tage, "noetig": noetig, "stand": stand,
             "fertig": stand == "gut", "kein_lauf": c.kein_lauf, "uebernimmt": list(c.uebernimmt), "misst": c.misst}

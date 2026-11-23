@@ -3,7 +3,7 @@
 Jede Minute (`takt`, aus `Heizung.nach_schalten`): ausgeschaltet → offene Läufe absagen/abbrechen; ein geplanter Lauf
 beginnt an seinem ersten Tag um 00:00 und endet nach dem letzten Tag; ein laufender bricht ab bei Automatik aus,
 offener Tür/Fenster über die Tür-Pause, Taste, Bedarf oder Termin. Ab 12:00 einmal am Tag: Lauf für morgen planen und
-ankündigen (Nachricht mit „Absagen“). Startet aus (`heizung.baseline`); geschaltet wird über den Soll-Grund `BASELINE`
+ankündigen (Nachricht mit „Absagen“); eine fertige Bauart nur ihren Kontrolltag je Monat (logik/baseline). Startet aus (`heizung.baseline`); geschaltet wird über den Soll-Grund `BASELINE`
 (plan.py → logik/regelung), Frost, Hand und Tür-Pause bleiben davor. Läufe in `lz["baseline"]`.
 """
 
@@ -133,14 +133,20 @@ def kandidaten(hz: Heizung, heute: date) -> list[b.Kandidat]:
         heizer = hz.heizer_von(info.id)
         o = ohne.get(info.id) or {}
         fertig = o.get("stand") == "gut"
-        if not fertig and kein_lauf_von(hz, info.id):
+        ruht = kein_lauf_von(hz, info.id) is not None
+        if not fertig and ruht:
             continue   # ohne Heizkörper, ohne Automatik, bei Bedarf oder aus: kein Lauf; ein fertiger zählt weiter für seinen Typ
         gesperrt = frozenset(d for von, bis, _ in hz.termin_fenster(info.id)
                              for d in (von.date() + timedelta(days=i) for i in range((bis.date() - von.date()).days + 1)))
         aus.append(b.Kandidat(info.id, info.name, typ_alle(hz, info.id), sum(nenn_kw(st, g) for g in heizer),
                               je_bauart.get(info.id, 0), fertig, o.get("kwh_je_tag"), gesperrt,
-                              bauart_von(hz, info.id)[0], len(tage.get(info.id, ()))))
+                              bauart_von(hz, info.id)[0], len(tage.get(info.id, ())), ruht))
     return aus
+
+
+def gruppen(hz: Heizung) -> dict[str, str]:
+    """Bauart je Container (alle), damit der Kontrolltag im Monat auch Läufe von Containern ohne Lauf sieht."""
+    return {i.id: bauart_von(hz, i.id)[0] for i in hz.bereiche()}
 
 
 def _bedarf_oder_termin(hz: Heizung, bid: str, jetzt: datetime) -> tuple[bool, bool]:
@@ -238,7 +244,8 @@ def takt(hz: Heizung, jetzt: datetime) -> None:
         stand["geplant_am"] = heute.isoformat()
         morgen = heute + timedelta(days=1)
         lauf = b.planen(heute, lambda d: frei(hz, d), kandidaten(hz, heute), liste,
-                        float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR)), st.preis_am(morgen), uuid.uuid4().hex[:8])
+                        float(st.e["heizung"].get("baseline_eur_monat", b.BUDGET_EUR)), st.preis_am(morgen), uuid.uuid4().hex[:8],
+                        gruppen(hz))
         if lauf is not None and lauf.von == morgen:
             lauf = replace(lauf, angekuendigt=jetzt)
             liste.append(lauf)
@@ -301,7 +308,7 @@ def anzeige(hz: Heizung, jetzt: datetime) -> dict[str, Any]:
         # heute schon geplant (ab 12:00, ohne Lauf für morgen): der nächste Lauf beginnt frühestens übermorgen
         ab = heute + timedelta(days=1) if _lz(hz).get("geplant_am") == heute.isoformat() else heute
         lauf = b.planen(ab, lambda d: frei(hz, d), alle, liste, budget,
-                        st.preis_am(ab + timedelta(days=1)), "vorschau")
+                        st.preis_am(ab + timedelta(days=1)), "vorschau", gruppen(hz))
         vor = b.vorschau(lauf, namen.get(lauf.bereich, lauf.bereich), jetzt) if lauf else None
     hr = hz.hochrechnung or {}
     ohne = {c["bereich"]: c for c in (hr.get("ohne") or {}).get("container", [])}

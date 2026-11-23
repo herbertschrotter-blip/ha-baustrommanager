@@ -71,7 +71,7 @@ function standListe(p) {
         ${c.kein_lauf || (uebernimmt && !c.fertig) ? html`<span></span>` : html`<span class="bl-tage" title="${t} von ${n} Tagen ohne Automatik"><span class="bl-tbahn"><i style="width:${Math.min(100, t / n * 100)}%" class=${c.fertig ? 'ok' : ''}></i></span><span class="bl-tz">${t}/${n}</span></span>`}
         ${rechts}</div>`; })}</div>
     <div class="leise">Tage „ohne“ = ganze Tage eines Laufs, die zählen. Je Heizkörper-Typ misst ein Container, die anderen dieses Typs übernehmen von ihm.
-      Er ist fertig, sobald seine Signatur „ohne Automatik“ gut ist; dann läuft er nicht mehr. Gemischte Container (Ölradiator und Konvektor) kommen nach den reinen.</div>`;
+      Er ist fertig, sobald seine Signatur „ohne Automatik“ gut ist; dann misst er nur noch einen Kontrolltag je Monat, die Ersparnis rechnet gegen die Signatur. Gemischte Container (Ölradiator und Konvektor) kommen nach den reinen.</div>`;
 }
 function laufListe(p) {
   const A = (p.d.baseline.laeufe || []).filter(l => l.status !== 'geplant' && l.status !== 'laeuft').slice().reverse();   // neueste zuerst
