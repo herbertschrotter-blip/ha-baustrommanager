@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.197] – 2026-11-24
+
+- Neu (Mockup `mockups/container-seite.html`, abgenommen 24.11.2026): **„Kosten heute“ auf der Container-Seite**, Reiter
+  Strom – mit dem Tagespreis darunter; Antippen öffnet den Verlauf in €. Die Zahl kommt aus dem Kosten-Zähler des
+  Containers, den die Integration zum Preis des jeweiligen Tages bucht.
+- Korrigiert: Die Kachel „Kosten heute“ am Container rechnete selbst kWh × heutiger Preis; sie zeigt jetzt dieselbe Zahl
+  aus dem Kosten-Zähler der Integration.
+- Neu (Mockup `mockups/namen-konflikt.html`, abgenommen 24.11.2026): **Namenskonflikt direkt lösen.** Hält ein anderes
+  Gerät die Entity-ID, die der Benenner vergeben will, nennt die Zeile das Gerät, und darunter steht seine Karte: Modell
+  und Werksname, Integration, HA-Bereich, ob die Baustelle es verwendet, aktiv oder verwaist, wo es verwendet wird und
+  seine Entitäten. Knöpfe: **Auf Werksnamen zurücksetzen** (erst Vorschau alt → neu; Gerätename leer, Entity-IDs mit dem
+  Werksnamen – wie „Entitäts-IDs umbenennen“ in HA), **Gerät entfernen …** (nur verwaist, sonst ausgegraut mit Grund) und
+  **In HA öffnen ↗**. Automationen und Dashboards, die eine geänderte ID nennen, werden genannt; HA passt sie nicht an.
+  Danach prüft die Vorschau neu, „Übernehmen“ geht wieder. Neuer Befehl `baustelle/inventar_konflikt_loesen` (nur Admins).
+
 ## [0.8.196] – 2026-11-24
 
 - Neu gestaltet (UI-Bericht M8, Mockup `mockups/container-seite.html`, abgenommen 24.11.2026): **„Bearbeiten“ ist die

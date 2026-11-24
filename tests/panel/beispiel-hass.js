@@ -238,8 +238,18 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       s(g, 'plug', 'g1', 'Plug-Name', 'heizung-01', g, fertig ? 'gleich' : 'aendern'), s(g, 'unter_eintrag', 'g1', 'Heizkörper (Integration)', 'Radiator 1', '001-01_C_HZ_POL_Radiator01', 'aendern'),
       s(t, 'geraet', 'dev2', 'HA-Gerät', 'BLU H&T', t, 'aendern'), s(t, 'entitaet_id', 'sensor.polier_temperatur', 'Entity-ID', 'sensor.polier_temperatur', 'sensor.001_c_temp_pol_temperatur', 'aendern'),
       ...c.ausruestung.filter(a => a.device_id).map(a => s(a.name_neu, 'geraet', a.device_id, 'HA-Gerät', a.name_alt, a.name_neu, 'aendern'))];   // zugeordnet (wie neu geladen)
+    // Namenskonflikt (Mockup namen-konflikt.html): mit hass.beispielKonflikt hält ein FRITZ!-Gerät die Ziel-ID des Fühlers
+    const kf = !!hass.beispielKonflikt && !fertig, kid = 'sensor.001_c_temp_pol_temperatur';
+    if (kf) schritte.find(x => x.neu === kid).zustand = 'konflikt';
+    const belegt_von = kf ? [{ ref: 'fritz1', art: 'geraet', name: '001_C_TEMP_POL', werksname: 'FRITZ!DECT 440 Büro', modell: 'AVM FRITZ!DECT 440',
+      integration: 'AVM FRITZ!SmartHome', bereich: 'Büro', baustelle: null, verwaist: hass.beispielKonflikt === 'verwaist', trifft: [kid],
+      werks: { [kid]: 'sensor.fritz_dect_440_buro_temperatur', 'sensor.001_c_temp_pol_batterie': 'sensor.fritz_dect_440_buro_batterie' },
+      entitaeten: [{ entity_id: kid, zustand: '22.5 °C', trifft: true }, { entity_id: 'sensor.001_c_temp_pol_batterie', zustand: '70 %', trifft: false }],
+      verwendet_in: ['Automation „Büro heizen“'],
+      loesungen: { zuruecksetzen: { ok: true, warum: null }, entfernen: hass.beispielKonflikt === 'verwaist' ? { ok: true, warum: null }
+        : { ok: false, warum: 'Entfernen geht nicht: AVM FRITZ!SmartHome meldet das Gerät noch und legt es sofort wieder an. Erst dort abmelden.' } } }] : [];
     const z = k => schritte.filter(x => x.zustand === k).length;
-    return { schritte, konflikte: {}, zaehler: { aendern: z('aendern'), neu: z('neu'), gleich: z('gleich'), konflikt: 0 },
+    return { schritte, konflikte: kf ? { 'sensor.polier_temperatur': kid } : {}, belegt_von, zaehler: { aendern: z('aendern'), neu: z('neu'), gleich: z('gleich'), konflikt: z('konflikt') },
       verweise: fertig ? [] : [{ art: 'Automation', name: 'Polier morgens vorheizen', alt: 'switch.heizung_01', neu: 'switch.001_01_c_plug_pol' }],
       hinweis: 'BTHome-Namen an den Plugs zieht die Kopplungspflege nach' };
   }
@@ -440,6 +450,9 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         case 'baustelle/inventar_zuordnen_vorschau': return kopie(invZuordnenVorschau(m));
         case 'baustelle/inventar_umbenennen': return kopie(invUmbenennen(m.container_id));
         case 'baustelle/inventar_rueckgaengig': return kopie(invRueck(m));
+        case 'baustelle/inventar_konflikt_loesen': { if (!hass.beispielKonflikt) nichtGefunden('Gerät oder Entität nicht gefunden');
+          if (m.aktion === 'entfernen' && hass.beispielKonflikt !== 'verwaist') throw { code: 'nicht_erlaubt', message: 'Entfernen geht nicht' };
+          hass.beispielKonflikt = false; return m.aktion === 'zuruecksetzen' ? { aktion: m.aktion, getauscht: {}, name: 'FRITZ!DECT 440 Büro' } : { aktion: m.aktion, entfernt: [], name: '001_C_TEMP_POL' }; }
         case 'baustelle/inventar_kandidaten': return { geraete: kopie(invKandidaten()) };
         case 'baustelle/inventar_aendern': return kopie(invAendern(m));
         case 'baustelle/geraet_kandidaten': return { geraete: kopie(gaKandidaten()) };

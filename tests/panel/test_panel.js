@@ -433,6 +433,11 @@ async function allgemein() {
     if (an.id !== x.anschluss) erwarte('M8: Anschluss gilt sofort', gesetzt('anschluss') && gesetzt('anschluss').wert === an.id);
     neu(); await klick('.sheet [data-zeile="vorrang"] [data-v="hoch"]', 20);
     erwarte('M8: Vorrang gilt sofort', gesetzt('prio') && gesetzt('prio').wert === 'hoch');
+    { const kid = panel.eid(d(), x.id, 'kosten'), r = kid ? panel.reihe(d(), kid, 'Woche') : null, v = r ? r[['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].indexOf(panel.z.HEUTE_TAG)] ?? null : null;
+      const t = (litEl('.sheet [data-zeile="kosten"]') || {}).textContent || '', soll = Number.isFinite(v) ? `${Number(v).toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : '–';
+      erwarte('M8: Kosten heute aus dem Kosten-Zähler der Integration (nicht kWh × Preis)', t.includes('€/kWh') && t.includes(`${soll} · Verlauf`));
+      await klick('.sheet [data-k="kosten"]', 10); erwarte('M8: Kosten heute öffnet den Verlauf in €', (panel.s.sheet || {}).art === 'verbrauch');
+      await klick({ act: 'sheet', s: 'bereich' }); await klick('.sheet [data-tab="strom"]', 10); }
     if (fi) { neu(); aendern({ f: 'firma' }, fi.id); await ruhe(30); erwarte('M8: Firma gilt sofort (Liste der Firmen)', letzte('baustelle/liste').some(m => m.liste === 'firmen')); }
     await klick('.sheet [data-tab="aussehen"]', 10);
     neu(); eingabe({ f: 'name' }, `${x.name} Nord`); aendern({ f: 'name' }, `${x.name} Nord`); await ruhe(40);
@@ -2121,6 +2126,22 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         erwarte('UI-1: erst nach dem Bestätigen zugeordnet, dann umbenannt', aufrufe.findIndex(m => m.aktion === 'ausruestung_zuordnen') < aufrufe.findIndex(m => m.type === 'baustelle/inventar_umbenennen')
           && aufrufe.some(m => m.type === 'baustelle/inventar_umbenennen' && m.container_id === 'c1') && /Erledigt|Teilweise erledigt/.test(ui.innerHTML));
         { /* Gutachten N5: Doppelklick ordnet nur einmal zu – gesperrt wird vor dem await */
+          {   // Namenskonflikt lösen (Mockup namen-konflikt.html): Karte des belegenden Geräts, Zurücksetzen mit Vorschau, Entfernen nur verwaist
+            panel._hass.beispielKonflikt = true; panel.invNeu(); panel.invAuf({ art: 'inv-vorschau', id: 'c1' }); await ruhe(60);
+            const karte = () => litEl('.sheet .inv-belegt[data-ref="fritz1"]'), t = () => (karte() || {}).textContent || '';
+            erwarte('Konflikt: Zeile nennt das belegende Gerät', (litEl('.sheet .inv-tr.konflikt .inv-hinweis') || {}).textContent.includes('gehört dem Gerät 001_C_TEMP_POL'));
+            erwarte('Konflikt: Karte mit Integration, Bereich, Verwendung und Entitäten', !!karte() && ['AVM FRITZ!SmartHome', 'HA-Bereich „Büro“', 'Büro heizen', 'sensor.001_c_temp_pol_batterie', 'meldet das Gerät noch'].every(x => t().includes(x)));
+            neu(); await klick('.sheet .inv-belegt [data-k="kl-entfernen"]', 20);
+            erwarte('Konflikt: Entfernen bei aktivem Gerät nicht', !letzte('baustelle/inventar_konflikt_loesen').length && !litEl('.sheet .inv-bel-vs'));
+            await klick('.sheet .inv-belegt [data-k="kl-zuruecksetzen"]', 20);
+            erwarte('Konflikt: Zurücksetzen zeigt erst die Vorschau alt → neu', !!litEl('.sheet .inv-bel-vs') && t().includes('sensor.fritz_dect_440_buro_temperatur') && !letzte('baustelle/inventar_konflikt_loesen').length);
+            await klick('.sheet .inv-belegt [data-k="kl-ok"]', 60);
+            erwarte('Konflikt: Zurücksetzen über die Integration, danach frei', letzte('baustelle/inventar_konflikt_loesen').some(m => m.ref === 'fritz1' && m.aktion === 'zuruecksetzen') && !karte() && !litEl('.sheet .inv-tr.konflikt'));
+            panel._hass.beispielKonflikt = 'verwaist'; panel.invNeu(); panel.invAuf({ art: 'inv-vorschau', id: 'c1' }); await ruhe(60);
+            neu(); await klick('.sheet .inv-belegt [data-k="kl-entfernen"]', 20); await klick('.sheet .inv-belegt [data-k="kl-ok"]', 60);
+            erwarte('Konflikt: verwaistes Gerät entfernen', letzte('baustelle/inventar_konflikt_loesen').some(m => m.aktion === 'entfernen') && !karte());
+            panel._hass.beispielKonflikt = false; panel.invNeu();
+          }
           const Z = { device_id: 'd9', typ: 'PLUG', name: 'Plug Lager 09', haengt: 'radiator' }, s1 = { art: 'inv-vorschau', id: 'c1', zuordnen: Z };
           panel.s.sheet = s1; neu(); const a = panel.invZuordnenAusfuehren(s1, false), b = panel.invZuordnenAusfuehren(s1, false); await Promise.all([a, b]); await ruhe(20);
           erwarte('Gutachten N5: Doppelklick auf Zuordnen schickt nur einen Auftrag', aufrufe.filter(m => m.aktion === 'ausruestung_zuordnen').length === 1);

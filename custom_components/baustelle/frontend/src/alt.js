@@ -1905,6 +1905,14 @@ class BaustellePanel extends LitElement {
       return this.invAuf({ ...s, ergebnis: r });
     } catch (e) { this.toast(this.fehlerText(e)); }
   }
+  async invKonfliktLoesen(s, k, aktion) {   // Mockup namen-konflikt.html: belegendes Gerät zurücksetzen bzw. entfernen (Integration prüft und führt aus)
+    try {
+      const r = await this._hass.callWS({ type: 'baustelle/inventar_konflikt_loesen', ref: k.ref, aktion, trifft: k.trifft || [] });
+      this.invNeu(); this._laden();
+      this.toast(aktion === 'zuruecksetzen' ? `${k.name || 'Gerät'} heißt wieder „${r.name || k.werksname}“ – Namen frei` : `${k.name || 'Gerät'} entfernt – Namen frei`);
+      return this.invAuf({ ...s, konflikt: null });
+    } catch (e) { this.toast(this.fehlerText(e)); }
+  }
   idsTauschen(sheet, ids) {   // {alt: neu} der Integration (baustelle/inventar_umbenennen, …_rueckgaengig) in Entwurf und Formular jedes Dialogs darunter
     if (!ids || !Object.keys(ids).length) return;
     const tausch = o => { for (const k of Object.keys(o)) { const v = o[k]; if (typeof v === 'string' && Object.hasOwn(ids, v)) o[k] = ids[v]; else if (v && typeof v === 'object') tausch(v); } };

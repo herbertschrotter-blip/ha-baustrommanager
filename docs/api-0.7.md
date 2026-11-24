@@ -627,6 +627,18 @@ Energie, mit denen die Integration rechnet; eigene Entitäten der Integration un
 bleiben, wie sie sind. Eigene Labels (Bauplan Inventar §5), die nicht mehr passen, stehen als Schritt mit `neu: null`.
 Ab 0.8.112 dazu `verweise` [{art (Automation/Skript/Dashboard), name, alt, neu}]: eigene Automationen, Skripte und
 Dashboards, die eine Entity-ID nennen, die sich ändern würde – HA passt sie nicht an (Bauplan §6.2).
+Ab 0.8.197 dazu `belegt_von` (Mockup `namen-konflikt.html`, `konflikt.py`): je fremdem Gerät, das Ziel-IDs der
+Konflikte hält, eine Karte {ref (device_id bzw. entity_id bei einer Entität ohne Gerät), art (`geraet`/`entitaet`), name,
+werksname, modell, integration, bereich (HA-Bereich), baustelle (wo die Baustelle es verwendet, sonst null), verwaist
+(keine geladene Integration meldet es), trifft [Ziel-IDs], werks {alt: neu} (IDs nach dem Zurücksetzen auf den
+Werksnamen, logik/inventar.werks_ids), entitaeten [{entity_id, zustand, trifft}], verwendet_in [Text],
+loesungen {zuruecksetzen, entfernen: {ok, warum}} (logik/inventar.loesungen)}.
+
+**`baustelle/inventar_konflikt_loesen`** (nur Admins, sonst `unauthorized`; 0.8.197), `ref`, `aktion`
+(`zuruecksetzen`/`entfernen`) → `{aktion, name, getauscht {alt: neu}}` bzw. `{aktion, name, entfernt [IDs]}`.
+Zurücksetzen: Gerätename in HA leer (Werksname gilt), Entity-IDs mit dem Namen vorne bekommen den Werksnamen.
+Entfernen nur verwaist (Gerät samt Entitäten bzw. die Entität). Was die Karte nicht erlaubt → `nicht_erlaubt` mit Grund;
+unbekannt → `not_found`. Geräte, die die Baustelle verwendet, nie.
 
 **`baustelle/inventar_zuordnen_vorschau`** (alle Benutzer, 0.8.187), `container_id`, `device_id`, optional `typ`,
 `haengt` → wie `inventar_vorschau` plus `zuordnen` {device_id, typ, name} – **ändert nichts**: die Namen, als wäre das

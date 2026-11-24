@@ -1,0 +1,203 @@
+<title>Namenskonflikt lösen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!-- Vorschlag (24.11.2026): Konflikt im Benenner („Namen in HA“ / Inventar-Vorschau) direkt lösen.
+     Tokens: HA-Standard-Theme als CSS-Variablen (Designquelle laut Skill-Profil), dunkel wie die Seite, hell über System/Schalter.
+     Beispieldaten nach dem echten Fall Poliercontainer: Shelly H&T soll 001_C_TEMP_POL heißen, die IDs hält ein FRITZ!DECT-Gerät. -->
+<style>
+/* Layout: Vorführleiste oben, darunter Handy (390 px) und Desktop nebeneinander, je die Einblendung „Namen in HA“ */
+:root {
+  --primary-text-color: #212121; --secondary-text-color: #616161; --divider-color: rgba(0,0,0,.12);
+  --primary-color: #03a9f4; --error-color: #db4437; --warning-color: #ffa600; --success-color: #43a047;
+  --card-background-color: #ffffff; --primary-background-color: #f2f2f7; --buehne: #dfe3ea; --konflikt-bg: rgba(219,68,55,.07);
+  --belegt-bg: rgba(255,166,0,.08); --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --primary-text-color: #e8eaed; --secondary-text-color: #9aa0a6; --divider-color: rgba(255,255,255,.12);
+  --card-background-color: #1c1c1e; --primary-background-color: #111; --buehne: #0b0d12; --konflikt-bg: rgba(219,68,55,.12);
+  --belegt-bg: rgba(255,166,0,.10); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --primary-text-color: #e8eaed; --secondary-text-color: #9aa0a6; --divider-color: rgba(255,255,255,.12);
+  --card-background-color: #1c1c1e; --primary-background-color: #111; --buehne: #0b0d12; --konflikt-bg: rgba(219,68,55,.12);
+  --belegt-bg: rgba(255,166,0,.10); color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--buehne); color: var(--primary-text-color);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 40px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-block: 14px; border-bottom: 1px solid var(--divider-color); }
+.bar b { font-size: 15px; }
+.bar .leise { flex-basis: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--divider-color); border-radius: 999px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--primary-text-color); padding: 5px 12px; cursor: pointer; }
+.seg button.on { background: var(--primary-color); color: #fff; }
+.leise { color: var(--secondary-text-color); font-size: 12.5px; }
+.buehne { display: flex; flex-wrap: wrap; gap: 28px; padding-top: 20px; align-items: flex-start; }
+.buehne h2 { margin: 0 0 8px; font-size: 13px; font-weight: 500; color: var(--secondary-text-color); }
+.telefon { width: 390px; max-width: 100%; border-radius: 36px; border: 9px solid #000; overflow: hidden; background: var(--primary-background-color); }
+.desktop-spalte { flex: 1 1 640px; min-width: 0; }
+.desktop { border-radius: 12px; border: 1px solid var(--divider-color); overflow: hidden; background: var(--primary-background-color); }
+.sheet { padding: 14px; display: grid; gap: 12px; }
+.kopf { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.kopf h3 { margin: 0; font-size: 17px; }
+.karte { background: var(--card-background-color); border-radius: 12px; border: 1px solid var(--divider-color); overflow: hidden; }
+.gruppe-kopf { padding: 10px 14px; font-family: var(--mono); font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.tab { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 500; color: var(--secondary-text-color); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 6px 14px; }
+td { padding: 8px 14px; border-top: 1px solid var(--divider-color); vertical-align: top; }
+td.id { font-family: var(--mono); font-size: 12.5px; word-break: break-all; }
+tr.konflikt td { background: var(--konflikt-bg); }
+.z-neu { color: var(--success-color); } .z-aendern { color: var(--secondary-text-color); } .z-konflikt { color: var(--error-color); white-space: nowrap; }
+.z-frei { color: var(--success-color); white-space: nowrap; }
+.hinweis { color: var(--error-color); font-size: 12.5px; padding: 0 14px 10px; background: var(--konflikt-bg); }
+/* Handy: Tabelle als Zeilenblöcke */
+.telefon table, .telefon tbody, .telefon tr, .telefon td { display: block; }
+.telefon thead { display: none; }
+.telefon tr { border-top: 1px solid var(--divider-color); padding: 8px 14px; }
+.telefon td { border: 0; padding: 1px 0; }
+.telefon td.was { font-size: 11px; color: var(--secondary-text-color); text-transform: uppercase; letter-spacing: .05em; }
+.telefon td.alt::before { content: "alt "; color: var(--secondary-text-color); font-family: inherit; }
+.telefon td.neu::before { content: "neu "; color: var(--secondary-text-color); font-family: inherit; }
+.telefon .hinweis { padding: 0 14px 10px; }
+/* Belegt-Karte */
+.belegt { border: 1px solid var(--warning-color); background: var(--belegt-bg); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; }
+.belegt .titel { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.belegt .titel b { font-family: var(--mono); }
+.chip { font-size: 12px; border: 1px solid var(--divider-color); border-radius: 999px; padding: 1px 9px; background: var(--card-background-color); }
+.chip.warn { border-color: var(--warning-color); color: var(--warning-color); }
+.chip.gut { border-color: var(--success-color); color: var(--success-color); }
+.fakten { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; }
+.fakten dt { color: var(--secondary-text-color); } .fakten dd { margin: 0; min-width: 0; }
+.ents { display: grid; gap: 2px; }
+.ents div { display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: 12.5px; }
+.ents div span:last-child { color: var(--secondary-text-color); font-family: inherit; white-space: nowrap; }
+.ents .trifft { color: var(--error-color); }
+.knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+.knopf { font: inherit; font-size: 13.5px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); padding: 7px 14px; cursor: pointer; }
+.knopf.haupt { background: var(--primary-color); border-color: var(--primary-color); color: #fff; }
+.knopf.gefahr { color: var(--error-color); border-color: var(--error-color); }
+.knopf:disabled { opacity: .45; cursor: not-allowed; }
+.knopf:focus-visible, .seg button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
+.warum { font-size: 12.5px; color: var(--secondary-text-color); }
+.vorschau { border-top: 1px dashed var(--divider-color); padding-top: 10px; display: grid; gap: 8px; }
+.vorschau .z { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; font-family: var(--mono); font-size: 12px; align-items: baseline; }
+.vorschau .z span:nth-child(2) { color: var(--secondary-text-color); }
+.vorschau .z span { min-width: 0; word-break: break-all; }
+.gelöst { border-color: var(--success-color); background: transparent; }
+.fuss { display: flex; justify-content: flex-end; gap: 8px; }
+.anm { max-width: 70ch; }
+.anm li { margin-bottom: 4px; }
+</style>
+
+<div class="bar">
+  <b>Namen in HA · Konflikt direkt lösen</b>
+  <span class="seg" id="lage">
+    <button data-v="konflikt" class="on">Konflikt</button>
+    <button data-v="vorschau">Zurücksetzen – Vorschau</button>
+    <button data-v="geloest">gelöst</button>
+  </span>
+  <span class="seg" id="art">
+    <button data-v="aktiv" class="on">belegendes Gerät aktiv</button>
+    <button data-v="verwaist">belegendes Gerät verwaist</button>
+  </span>
+  <span class="seg" id="thema"><button data-v="dark" class="on">Dunkel</button><button data-v="light">Hell</button></span>
+  <span class="leise">Vorschlag mit Beispieldaten nach dem echten Fall im Poliercontainer. Die Knöpfe schalten die Zustände um; nichts geht an Home Assistant.</span>
+</div>
+
+<div class="buehne">
+  <div><h2>Handy · 390 px</h2><div class="telefon"><div class="sheet" data-ort="handy"></div></div></div>
+  <div class="desktop-spalte"><h2>Desktop</h2><div class="desktop"><div class="sheet" data-ort="desktop"></div></div></div>
+</div>
+
+<ul class="anm leise">
+  <li>Je belegendem Gerät <b>eine</b> Karte, auch wenn es mehrere IDs hält (hier 3 Konflikte → 1 Gerät).</li>
+  <li>„Auf Werksnamen zurücksetzen“: Gerätename in HA leeren (Werksname gilt wieder) und seine Entity-IDs danach neu bilden – wie „Entitäts-IDs umbenennen“ in HA. Vorher zeigt die Vorschau alt → neu.</li>
+  <li>„Gerät entfernen“ nur, wenn HA es erlaubt: verwaist (keine Integration meldet es mehr) bzw. die Integration löscht Geräte. Ein aktives FRITZ!-Gerät meldet die FRITZ!Box sofort wieder an – dann ausgegraut mit Grund.</li>
+  <li>„Verwendet in“ warnt vor Automationen, Skripten und Dashboards, die nach dem Umbenennen ins Leere zeigen würden. Geräte der Baustelle selbst werden nie angeboten (dort hilft der Benenner).</li>
+  <li>Nach dem Lösen prüft der Benenner die Konflikte neu; der Schritt läuft dann mit „Übernehmen“.</li>
+</ul>
+
+<script>
+const S = { lage: 'konflikt', art: 'aktiv' };
+const ROWS = [
+  ['Label', '–', 'Polier', 'neu'],
+  ['Label', '–', 'Shelly H&Temp Sensor', 'neu'],
+  ['Name', 'Batterie', '001_C_TEMP_POL_Batterie', 'aendern'],
+  ['Entity-ID', 'sensor.001_c_temp_pol_batterie_2', 'sensor.001_c_temp_pol_batterie', 'konflikt'],
+  ['Name', 'Luftfeuchtigkeit', '001_C_TEMP_POL_Feuchte', 'aendern'],
+  ['Entity-ID', 'sensor.001_c_temp_pol_luftfeuchtigkeit', 'sensor.001_c_temp_pol_feuchte', 'konflikt'],
+  ['Name', 'Temperatur', '001_C_TEMP_POL_Temperatur', 'aendern'],
+  ['Entity-ID', 'sensor.001_c_temp_pol_temperatur_2', 'sensor.001_c_temp_pol_temperatur', 'konflikt'],
+];
+const ENTS = [
+  ['sensor.001_c_temp_pol_temperatur', '22,5 °C', true, 'sensor.fritz_dect_440_temperatur'],
+  ['sensor.001_c_temp_pol_feuchte', '33 %', true, 'sensor.fritz_dect_440_luftfeuchtigkeit'],
+  ['sensor.001_c_temp_pol_batterie', '70 %', true, 'sensor.fritz_dect_440_batterie'],
+  ['binary_sensor.001_c_temp_pol_batterie', 'normal', false, 'binary_sensor.fritz_dect_440_batterie'],
+];
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function zustand(z) {
+  if (z === 'konflikt' && S.lage === 'geloest') return '<span class="z-frei">✓ frei</span>';
+  return { neu: '<span class="z-neu">+ neu</span>', aendern: '<span class="z-aendern">ändern</span>', konflikt: '<span class="z-konflikt">✕ Konflikt</span>' }[z];
+}
+function tabelle() {
+  let h = '<div class="tab"><table><thead><tr><th>Was</th><th>Alt</th><th>Neu</th><th>Zustand</th></tr></thead><tbody>';
+  for (const [was, alt, neu, z] of ROWS) {
+    const k = z === 'konflikt' && S.lage !== 'geloest';
+    const id = was === 'Entity-ID' ? ' id' : '';
+    h += `<tr class="${k ? 'konflikt' : ''}"><td class="was">${was}</td><td class="alt${id}">${esc(alt)}</td><td class="neu${id}">${esc(neu)}</td><td>${zustand(z)}</td></tr>`;
+    if (k) h += `<tr class="konflikt"><td colspan="4" class="hinweis">${esc(neu)} gehört dem Gerät <b>001_C_TEMP_POL</b> (FRITZ!DECT) – unten lösen</td></tr>`;
+  }
+  return h + '</tbody></table></div>';
+}
+function belegt() {
+  const verwaist = S.art === 'verwaist';
+  if (S.lage === 'geloest') return `<div class="belegt gelöst"><div class="titel"><span class="chip gut">✓ gelöst</span><b>FRITZ!DECT 440</b><span class="leise">${verwaist ? 'Gerät entfernt' : 'auf Werksnamen zurückgesetzt'} · 3 IDs frei</span></div>
+    <div class="leise">${verwaist ? 'Das verwaiste Gerät und seine 4 Entitäten sind aus HA entfernt.' : 'Das Gerät heißt wieder wie ab Werk, seine Entitäten jetzt <span style="font-family:var(--mono)">sensor.fritz_dect_440_…</span>. Die Automation „Büro heizen“ wurde mit umbenannt.'}</div></div>`;
+  const ents = ENTS.map(([id, st, trifft]) => `<div><span class="${trifft ? 'trifft' : ''}">${id}</span><span>${verwaist ? 'nicht verfügbar' : st}</span></div>`).join('');
+  let h = `<div class="belegt">
+    <div class="titel"><span class="chip warn">belegt 3 Namen</span><b>001_C_TEMP_POL</b><span class="leise">anderes Gerät in HA</span></div>
+    <dl class="fakten">
+      <dt>Gerät</dt><dd>FRITZ!DECT 440 · Werksname „FRITZ!DECT 440 Büro“</dd>
+      <dt>Integration</dt><dd>FRITZ!SmartHome (FRITZ!Box)</dd>
+      <dt>Wo</dt><dd>HA-Bereich „Büro“ · in keinem Container der Baustelle</dd>
+      <dt>Zustand</dt><dd>${verwaist ? '<span class="chip warn">verwaist – keine Integration meldet es mehr</span>' : 'online · zuletzt gemeldet vor 2 min'}</dd>
+      <dt>Verwendet in</dt><dd>${verwaist ? 'nirgends' : '1 Automation („Büro heizen“) · 1 Dashboard („Haus“)'}</dd>
+    </dl>
+    <div class="ents">${ents}</div>
+    <div class="knoepfe">
+      <button class="knopf haupt" data-k="zuruecksetzen">Auf Werksnamen zurücksetzen</button>
+      <button class="knopf gefahr" data-k="entfernen" ${verwaist ? '' : 'disabled'}>Gerät entfernen …</button>
+      <button class="knopf" data-k="ha">In HA öffnen ↗</button>
+    </div>
+    ${verwaist ? '' : '<div class="warum">Entfernen geht nicht: Die FRITZ!Box meldet das Gerät noch und legt es sofort wieder an. Erst in der FRITZ!Box abmelden.</div>'}`;
+  if (S.lage === 'vorschau') {
+    h += `<div class="vorschau"><b>Vorschau · Zurücksetzen</b>
+      <div class="z"><span>001_C_TEMP_POL</span><span>→</span><span>FRITZ!DECT 440 Büro</span></div>
+      ${ENTS.map(([a, , , n]) => `<div class="z"><span>${a}</span><span>→</span><span>${n}</span></div>`).join('')}
+      ${verwaist ? '' : '<div class="leise">Automation „Büro heizen“ und Dashboard „Haus“ bekommen die neuen IDs mit (wie in HA beim Umbenennen).</div>'}
+      <div class="knoepfe"><button class="knopf haupt" data-k="ok">Zurücksetzen</button><button class="knopf" data-k="abbrechen">Abbrechen</button></div></div>`;
+  }
+  return h + '</div>';
+}
+function zeichnen() {
+  document.querySelectorAll('.sheet').forEach(el => {
+    const offen = S.lage !== 'geloest';
+    el.innerHTML = `<div class="kopf"><h3>Namen in HA · Poliercontainer</h3><span class="leise">${offen ? '3 Konflikte' : 'keine Konflikte'}</span></div>
+      <div class="karte"><div class="gruppe-kopf"><span>001_C_TEMP_POL</span><span class="leise">Shelly H&amp;T · BTHome</span></div>${tabelle()}</div>
+      ${belegt()}
+      <div class="fuss"><button class="knopf">Schließen</button><button class="knopf haupt" ${offen ? 'disabled' : ''}>Übernehmen</button></div>`;
+  });
+}
+function setze(gruppe, v) { S[gruppe] = v; document.querySelectorAll(`#${gruppe} button`).forEach(b => b.classList.toggle('on', b.dataset.v === v)); zeichnen(); }
+document.getElementById('lage').addEventListener('click', e => e.target.dataset.v && setze('lage', e.target.dataset.v));
+document.getElementById('art').addEventListener('click', e => e.target.dataset.v && setze('art', e.target.dataset.v));
+document.getElementById('thema').addEventListener('click', e => { const v = e.target.dataset.v; if (!v) return; document.documentElement.dataset.theme = v; document.querySelectorAll('#thema button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); });
+document.addEventListener('click', e => {
+  const k = e.target.dataset && e.target.dataset.k;
+  if (k === 'zuruecksetzen') setze('lage', 'vorschau');
+  else if (k === 'ok' || k === 'entfernen') setze('lage', 'geloest');
+  else if (k === 'abbrechen') setze('lage', 'konflikt');
+});
+document.documentElement.dataset.theme = 'dark';
+zeichnen();
+</script>

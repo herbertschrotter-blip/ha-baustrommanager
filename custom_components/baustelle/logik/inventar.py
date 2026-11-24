@@ -10,6 +10,7 @@ mit `_2` …); Messwerte `<Gerätename>_<Endung>`. Entity-IDs: Name klein, `-` �
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping
 from typing import Any
 
@@ -677,3 +678,85 @@ def container_vorschau(*, schacht: bool, eigen: bool, art: str | None, nr: int |
     breite = 3 if eigen else 2
     return {"im_inventar": True, "inventar": f"{p}_C_{art_}", "nummer": nummer, "naechste": naechste_,
             "nummer_text": f"{nummer:0{breite}d}", "naechste_text": f"{naechste_:0{breite}d}", "belegt": grund is not None, "grund": grund, "geraete": geraet_name(p, art_, "PLUG", 1), "hinweis": None}
+
+
+# ---------- Konflikt lösen (Mockup mockups/namen-konflikt.html, abgenommen von Herbert am 24.11.2026) ----------
+# Hält eine fremde Entität die Entity-ID, die der Benenner vergeben will, zeigt die Vorschau das belegende Gerät (eine
+# Karte je Gerät, auch wenn es mehrere IDs hält) mit „Auf Werksnamen zurücksetzen“ und „Gerät entfernen …“.
+
+_UMSCHRIFT = str.maketrans({"ß": "ss", "ẞ": "SS", "æ": "ae", "Æ": "AE", "ø": "o", "Ø": "O", "œ": "oe", "Œ": "OE", "đ": "d",
+                            "Đ": "D", "ł": "l", "Ł": "L", "þ": "th", "Þ": "TH"})
+
+
+def _objekt(name: str) -> str:
+    """Objekt-Teil einer Entity-ID wie HA ihn aus einem Namen bildet (wie `slugify`: „Büro“ → `buro`, „Straße“ →
+    `strasse`)."""
+    return entity_id("x", unicodedata.normalize("NFKD", name.translate(_UMSCHRIFT)).encode("ascii", "ignore").decode())[2:]
+
+
+def verwaist(eintraege: Iterable[str], zustaende: Iterable[str]) -> bool:
+    """Meldet keine Integration das Gerät (bzw. die Entität) mehr? `eintraege`: je Integrationseintrag `fehlt`
+    (gelöscht), `geladen` oder `anders` (startet gerade, Fehler, abgeschaltet); `zustaende`: je Entität `da`, `weg` (kein
+    Zustand oder nur wiederhergestellt) oder `aus` (abgeschaltet). Ohne Eintrag (YAML, Template) nie – sonst verwaist,
+    wenn alle Einträge gelöscht sind oder ein geladener Eintrag keine seiner Entitäten mehr meldet. Ein Eintrag, der nur
+    gerade nicht läuft, zählt nicht: die Integration legt das Gerät beim nächsten Start wieder an."""
+    e, z = list(eintraege), [x for x in zustaende if x != "aus"]
+    if not e:
+        return False
+    if all(x == "fehlt" for x in e):
+        return True
+    return "geladen" in e and bool(z) and all(x == "weg" for x in z)
+
+
+def werks_ids(entity_ids: Iterable[str], name_alt: str | None, werksname: str | None, belegt: Iterable[str] = ()) -> dict[str, str]:
+    """Entity-IDs nach dem Zurücksetzen auf den Werksnamen – wie HA beim Umbenennen eines Geräts mit „Entitäts-IDs
+    umbenennen“: Beginnt die ID mit dem Namen des Geräts, tritt der Werksname an seine Stelle. Ist die neue ID schon
+    vergeben, hängt `_2`, `_3` … an. {alt: neu}, nur IDs, die sich ändern."""
+    alt, neu = _objekt(name_alt or ""), _objekt(werksname or "")
+    if not alt or not neu or alt == neu:
+        return {}
+    ids = [x for x in entity_ids if (o := x.split(".", 1)[1]) == alt or o.startswith(alt + "_")]
+    frei = set(belegt) - set(ids)   # nur die IDs, die wandern, werden frei; die übrigen eigenen bleiben belegt
+    aus: dict[str, str] = {}
+    for eid in ids:
+        domain, objekt = eid.split(".", 1)
+        basis = f"{domain}.{neu}{objekt[len(alt):]}"
+        ziel, n = basis, 2
+        while ziel in frei or ziel in aus.values():
+            ziel, n = f"{basis}_{n}", n + 1
+        aus[eid] = ziel
+    return aus
+
+
+def belegt_gruppen(konfl: Mapping[str, str], besitzer: Mapping[str, str | None]) -> dict[str, list[str]]:
+    """Je belegendem Gerät (Schlüssel aus `besitzer`: Gerät, sonst die Entität selbst) die Ziel-IDs, die es hält –
+    in der Reihenfolge der Konflikte."""
+    aus: dict[str, list[str]] = {}
+    for ziel in konfl.values():
+        aus.setdefault(besitzer.get(ziel) or ziel, []).append(ziel)
+    return aus
+
+
+def loesungen(*, geraet: bool, baustelle: str | None, verwaist: bool, integration: str | None, trifft: Iterable[str],
+              werks: Mapping[str, str]) -> dict[str, dict[str, Any]]:
+    """Welche Knöpfe die Karte anbietet und warum nicht: `zuruecksetzen` und `entfernen` je {ok, warum}.
+    `baustelle`: wo die Baustelle das Gerät verwendet (dann nichts – dort hilft der Benenner); `werks`: aus `werks_ids`."""
+    if baustelle:
+        nein = {"ok": False, "warum": f"Gehört zur Baustelle ({baustelle}) – dort im Benenner ändern"}
+        return {"zuruecksetzen": nein, "entfernen": nein}
+    t = list(trifft)
+    zr: dict[str, Any]
+    ent: dict[str, Any]
+    if not geraet:
+        zr = {"ok": False, "warum": "Entität ohne Gerät – hier gibt es keinen Werksnamen"}
+    elif t and all(x in werks for x in t):
+        zr = {"ok": True, "warum": None}
+    else:
+        zr = {"ok": False, "warum": "Zurücksetzen gibt die Namen nicht frei – die IDs hängen nicht am Gerätenamen"}
+    if verwaist:
+        ent = {"ok": True, "warum": None}
+    else:
+        wer = integration or "Die Integration"
+        ent = {"ok": False, "warum": f"Entfernen geht nicht: {wer} meldet {'das Gerät' if geraet else 'die Entität'} noch und "
+                                     "legt es sofort wieder an. Erst dort abmelden."}
+    return {"zuruecksetzen": zr, "entfernen": ent}

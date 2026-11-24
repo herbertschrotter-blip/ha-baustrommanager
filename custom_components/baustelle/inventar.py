@@ -24,6 +24,7 @@ from .db import DATA_DB
 from .db import inventar as db_inventar
 from .abgleich import nicht_in_ha
 from .kern.einrichtung import _sensor_am_geraet
+from .konflikt import async_belegt_von, async_loesen
 from .inventar_geraete import (
     _entitaeten, _schalter, async_bestand, async_verweise, async_zuordnen, kandidaten, sensor_plan, status_uebernehmen,
     zuordnen_pruefen,
@@ -335,6 +336,7 @@ async def _vorschau_senden(hass: HomeAssistant, connection: websocket_api.Active
                            v: dict[str, Any], **mehr: Any) -> None:
     ids = {s["alt"]: s["neu"] for s in v["schritte"] if s["ziel"] == "entitaet_id" and s["alt"] != s["neu"]}
     connection.send_result(msg["id"], {**v, "verweise": await async_verweise(hass, ids),
+                                       "belegt_von": await async_belegt_von(hass, v.get("konflikte") or {}),
                                        "hinweis": "BTHome-Namen an den Plugs zieht die Kopplungspflege nach", **mehr})
 
 
@@ -404,4 +406,27 @@ def zuordnen_vorschau(hass: HomeAssistant, roh: dict[str, Any], container_id: st
                                           **({} if eingetragen else {"hinweis": nicht_eingetragen(typ)})}
 
 
-BEFEHLE = (ws_inventar, ws_inventar_aendern, ws_inventar_vorschau, ws_inventar_zuordnen_vorschau, ws_inventar_kandidaten)
+@websocket_api.websocket_command({vol.Required("type"): "baustelle/inventar_konflikt_loesen", vol.Required("ref"): str,
+                                  vol.Required("aktion"): vol.In(["zuruecksetzen", "entfernen"]),
+                                  vol.Optional("trifft"): [str]})
+@websocket_api.async_response
+@verwirft_namen
+async def ws_inventar_konflikt_loesen(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """Namenskonflikt lösen (Mockup namen-konflikt.html): belegendes Gerät auf Werksnamen zurücksetzen oder ein verwaistes
+    Gerät bzw. eine verwaiste Entität entfernen – nur Admins (konflikt.py)."""
+    if not darf(bool(connection.user and connection.user.is_admin), "inventar_konflikt_loesen"):
+        connection.send_error(msg["id"], websocket_api.ERR_UNAUTHORIZED, "Nur Admins dürfen Konflikte lösen")
+        return
+    try:
+        ergebnis = await async_loesen(hass, msg["ref"], msg["aktion"], msg.get("trifft"))
+    except LookupError as err:
+        connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, str(err))
+        return
+    except ValueError as err:
+        connection.send_error(msg["id"], "nicht_erlaubt", str(err))
+        return
+    connection.send_result(msg["id"], ergebnis)
+
+
+BEFEHLE = (ws_inventar, ws_inventar_aendern, ws_inventar_vorschau, ws_inventar_zuordnen_vorschau, ws_inventar_kandidaten,
+           ws_inventar_konflikt_loesen)

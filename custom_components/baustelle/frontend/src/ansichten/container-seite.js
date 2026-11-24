@@ -6,11 +6,11 @@
 import { html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import { de } from '../hilfen.js';
+import { de, zahl } from '../hilfen.js';
 import { BEREICH_FARBEN, bcContainer } from '../symbole.js';
 import { MODI, MODUS_TEXT } from '../tabellen.js';
 import { schalterVorlage } from './allgemein.js';
-import { eiSpringen } from './container.js';
+import { eiSpringen, kostenHeute } from './container.js';
 import { namenChip, zustand } from './inventar.js';
 
 const GRIFF = html`<div class="griff"></div>`;
@@ -115,13 +115,15 @@ function tabFuehler(p, s, b, E) {
 
 /* ---------- Reiter Strom ---------- */
 function tabStrom(p, b, E) {
-  const d = p.d;
+  const d = p.d, eur = kostenHeute(p, b);
   return html`<div class="glas-panel liste cs-gr">
       ${zeile('anschluss', 'Stromanschluss', null, html`<select data-f="anschluss" @change=${p.nurAdmin(ev => p.csSetzen(b, 'anschluss', ev.target.value, 'Anschluss gespeichert'))}>${d.anschluesse.map(a => html`<option value=${a.id} ?selected=${b.anschluss === a.id}>${a.name} · ${a.phasen === 3 ? '3 × ' : ''}${a.ampere} A</option>`)}</select>`)}
       ${zeile('vorrang', 'Vorrang in der Staffelung', 'kommt vor oder nach den anderen dran, wenn nicht alle zugleich dürfen',
         seg([['niedrig', 'niedrig'], ['normal', 'normal'], ['hoch', 'hoch']], b.prio, p.nurAdmin(v => p.csSetzen(b, 'prio', v))), E.prio, E.prio && E.prio.herkunft === 'abweichend' ? marke(p, E.prio, () => p.csSetzen(b, 'prio', 'normal')) : nothing)}
       ${zeile('staffel', '⚡ Staffelung', null, html`<span class="cs-wert">${E.staffel ? E.staffel.text : '–'}</span>`, E.staffel, marke(p, E.staffel))}
       ${zeile('firma', 'Firma · für die Abrechnung', null, html`<select data-f="firma" @change=${p.nurAdmin(ev => p.csFirma(b, ev.target.value))}>${d.firmen.map(f => html`<option value=${f.id} ?selected=${b.firma === f.id}>${f.name}</option>`)}</select>`)}
+      ${zeile('kosten', 'Kosten heute', `zum Tagespreis ${de(d.e.preis, 2)} €/kWh – von der Integration`,
+        html`<button class="cs-link" data-k="kosten" @click=${() => p.einblenden('verbrauch', { id: b.id, t: 'eur' })}>${zahl(eur) ? `${de(eur, 2)} €` : '–'} · Verlauf ›</button>`)}
     </div>`;
 }
 

@@ -194,11 +194,18 @@ function kopf(p, b) {
 
 const ohneFuehler = b => html`<div class="c-ohne glas-panel"><small>LEISTUNG JETZT</small><b>${de(kwVon(b))}<small> kW</small></b><span class="leise">kein Fühler – der Heizkörperthermostat regelt</span></div>`;
 
+/* Kosten heute: Zähler „kosten“ des Containers, den die Integration zum Preis des Tages bucht – die Seite rechnet nicht
+   kWh × Preis (Kachel „Kosten heute“, Container-Seite M8 Reiter Strom). null = Statistik lädt noch */
+export function kostenHeute(p, b) {   // ohne Kosten-Zähler oder ohne Wert für heute: null („–“), nicht 0 €
+  const id = p.eid(p.d, b.id, 'kosten'), r = id ? p.reihe(p.d, id, 'Woche') : null;
+  return r ? r[TAGE.indexOf(p.z.HEUTE_TAG)] ?? null : null;
+}
+
 /* Kacheln: je Kachel ein eigenes Diagramm (FE-0009) */
 function kacheln(p, b) {
   const d = p.d, heuteNr = TAGE.indexOf(p.z.HEUTE_TAG), kwh7 = p.verbrauch(d, b.id, 'Woche'), h7 = p.heizStunden(d, b, 'Woche');
-  const kwh = kwh7 ? kwh7[heuteNr] : null, h = h7 ? h7[heuteNr] : null;
-  return [['⚡', de(kwVon(b)), 'kW jetzt', 'leistung'], ['🔋', zahl(kwh) ? de(kwh) : '–', 'kWh heute', 'verbrauch'], ['€', zahl(kwh) ? de(kwh * d.e.preis, 2) : '–', 'Kosten heute', 'verbrauch', 'eur'], ['⏱', zahl(h) ? de(h) : '–', 'h Heizzeit', 'heizzeit-c']]
+  const kwh = kwh7 ? kwh7[heuteNr] : null, h = h7 ? h7[heuteNr] : null, eur = kostenHeute(p, b);
+  return [['⚡', de(kwVon(b)), 'kW jetzt', 'leistung'], ['🔋', zahl(kwh) ? de(kwh) : '–', 'kWh heute', 'verbrauch'], ['€', zahl(eur) ? de(eur, 2) : '–', 'Kosten heute', 'verbrauch', 'eur'], ['⏱', zahl(h) ? de(h) : '–', 'h Heizzeit', 'heizzeit-c']]
     .map(([i, v, t, s, art]) => html`<button class="glas-panel c-kachel" data-s=${s} @click=${() => p.einblenden(s, art ? { id: b.id, t: art } : { id: b.id })}><span>${i}</span><b>${v}</b><small>${t}</small></button>`);
 }
 

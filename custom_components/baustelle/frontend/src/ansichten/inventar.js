@@ -136,6 +136,42 @@ export function zustand(r) {
   return r.zustand;
 }
 
+/* Konflikt lösen (Mockup namen-konflikt.html, abgenommen 24.11.2026): je belegendem Gerät eine Karte – was es ist, wo es
+   steht, wo es verwendet wird; Knöpfe und Gründe liefert die Integration (konflikt.py, logik/inventar.loesungen) */
+function konfliktHinweis(r, B) {
+  const k = B.find(x => (x.trifft || []).includes(r.neu));
+  if (!k) return html`<span class="inv-hinweis rot-t">${r.neu} ist schon vergeben – Schritt bleibt aus, bis sie umbenannt oder gelöscht ist</span>`;
+  return html`<span class="inv-hinweis rot-t">${r.neu} gehört ${k.art === 'geraet' ? 'dem Gerät' : 'der Entität'} <b class="inv-id">${k.name || k.ref}</b>${k.integration ? ` (${k.integration})` : ''} – unten lösen</span>`;
+}
+function belegtKarte(p, s, k) {
+  const L = k.loesungen || {}, zr = L.zuruecksetzen || {}, ent = L.entfernen || {}, offen = s.konflikt && s.konflikt.ref === k.ref ? s.konflikt.aktion : null;
+  const auf = aktion => p.invAuf({ ...s, konflikt: { ref: k.ref, aktion } }), zu = () => p.invAuf({ ...s, konflikt: null });
+  const ha = k.art === 'geraet' ? `/config/devices/device/${k.ref}` : `/config/entities?search=${encodeURIComponent(k.ref)}`;
+  const n = (k.trifft || []).length, werks = Object.entries(k.werks || {});
+  const fakt = (t, w) => w ? html`<dt>${t}</dt><dd>${w}</dd>` : nothing;
+  const bestaetigen = offen === 'zuruecksetzen' ? html`<div class="inv-bel-vs"><b>Vorschau · Zurücksetzen</b>
+      <div class="inv-bel-z"><span class="inv-id">${k.name}</span><span>→</span><span class="inv-id">${k.werksname}</span></div>
+      ${werks.map(([a, b]) => html`<div class="inv-bel-z"><span class="inv-id">${a}</span><span>→</span><span class="inv-id">${b}</span></div>`)}
+      ${(k.verwendet_in || []).length ? html`<div class="leise amber-t">Home Assistant passt ${k.verwendet_in.join(', ')} nicht an – danach dort die neue ID eintragen.</div>` : nothing}
+      <div class="inv-bel-k">${knopf('Zurücksetzen', p.nurAdmin(() => p.invKonfliktLoesen(s, k, 'zuruecksetzen')), 'amber nur-admin', 'kl-ok')}${knopf('Abbrechen', zu, 'leise-k', 'kl-abbrechen')}</div></div>`
+    : offen === 'entfernen' ? html`<div class="inv-bel-vs"><b class="rot-t">${k.art === 'geraet' ? `Gerät „${k.name}“ und ${(k.entitaeten || []).length} Entitäten` : `Entität ${k.ref}`} aus Home Assistant entfernen?</b>
+      <div class="inv-bel-k">${knopf('Entfernen', p.nurAdmin(() => p.invKonfliktLoesen(s, k, 'entfernen')), 'rot nur-admin', 'kl-ok')}${knopf('Abbrechen', zu, 'leise-k', 'kl-abbrechen')}</div></div>` : nothing;
+  return html`<div class="inv-belegt" data-ref=${k.ref}>
+    <div class="inv-bel-titel"><span class="chip glas-panel amber-t">belegt ${n} Namen</span><b class="inv-id">${k.name || k.ref}</b><span class="leise">${k.art === 'geraet' ? 'anderes Gerät in HA' : 'Entität ohne Gerät'}</span></div>
+    <dl class="inv-bel-fakten">${fakt('Gerät', [k.modell, k.werksname && k.werksname !== k.name ? `Werksname „${k.werksname}“` : null].filter(Boolean).join(' · '))}
+      ${fakt('Integration', k.integration)}
+      <dt>Wo</dt><dd>${k.bereich ? `HA-Bereich „${k.bereich}“` : 'ohne HA-Bereich'} · ${k.baustelle ? `verwendet von ${k.baustelle}` : 'in keinem Container der Baustelle'}</dd>
+      <dt>Zustand</dt><dd>${k.verwaist ? html`<span class="amber-t">verwaist – keine Integration meldet es mehr</span>` : 'aktiv'}</dd>
+      <dt>Verwendet in</dt><dd>${(k.verwendet_in || []).length ? k.verwendet_in.join(' · ') : 'nirgends'}</dd></dl>
+    <div class="inv-bel-ents">${(k.entitaeten || []).map(e => html`<div><span class="inv-id ${e.trifft ? 'rot-t' : ''}">${e.entity_id}</span><span class="leise">${e.zustand}</span></div>`)}</div>
+    ${offen ? bestaetigen : html`<div class="inv-bel-k">
+      ${knopf('Auf Werksnamen zurücksetzen', p.nurAdmin(() => zr.ok ? auf('zuruecksetzen') : p.toast(zr.warum)), `amber nur-admin ${zr.ok ? '' : 'aus'}`, 'kl-zuruecksetzen')}
+      ${knopf(k.art === 'geraet' ? 'Gerät entfernen …' : 'Entität entfernen …', p.nurAdmin(() => ent.ok ? auf('entfernen') : p.toast(ent.warum)), `rot nur-admin ${ent.ok ? '' : 'aus'}`, 'kl-entfernen')}
+      <a class="knopf leise-k" href=${ha} target="_top">In HA öffnen ↗</a></div>
+      ${[zr, ent].filter(x => !x.ok && x.warum).map((x, i, A) => A.findIndex(y => y.warum === x.warum) === i ? html`<div class="leise inv-bel-warum">${x.warum}</div>` : nothing)}`}
+  </div>`;
+}
+
 function vorschauSheet(p, s) {
   const I = p.invDaten(), c = I && I.container.find(x => x.id === s.id), rueck = !!s.rueck, erg = s.ergebnis, Z = s.zuordnen;
   const V = erg ? erg : rueck ? p.invRueckVorschau(s.id) : Z ? p.invZuordnenDaten(s.id, Z) : p.invVorschau(s.id);
@@ -148,7 +184,7 @@ function vorschauSheet(p, s) {
   if (V === undefined) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer">Vorschau lädt …</div></div>${knopf('Schließen', zu, 'leise-k')}`;
   if (!V) return html`${kopf}<div class="glas-panel liste inv-liste"><div class="leer">${p.invFehler(rueck ? 'invr:' + s.id : Z ? p.invZuordnenSchluessel(s.id, Z) : 'invv:' + s.id) || 'Keine Vorschau'}</div></div>${knopf('Schließen', zu, 'leise-k')}`;
   const S = V.schritte || [], offen = S.filter(r => !['gleich', 'ok', 'entfaellt'].includes(zustand(r)));
-  const kon = Object.keys(V.konflikte || {}).length, gruppen = [...new Set(S.map(r => r.gruppe || ''))];
+  const kon = Object.keys(V.konflikte || {}).length, gruppen = [...new Set(S.map(r => r.gruppe || ''))], B = erg ? [] : V.belegt_von || [];
   const zahlen = html`<div class="inv-zahlen"><span class="chip glas-panel">${rueck ? '↶' : '✎'} ${offen.length} ${rueck ? 'Schritte zurück' : offen.length === 1 ? 'Änderung' : 'Änderungen'}</span>
     ${S.length - offen.length ? html`<span class="chip glas-panel">= ${S.length - offen.length} ${erg ? 'erledigt oder gleich' : 'unverändert'}</span>` : nothing}${kon ? html`<span class="chip glas-panel rot-t">✕ ${kon} Konflikt</span>` : nothing}</div>`;
   const verweise = (V.verweise || []).length ? html`<div class="glas-panel liste inv-liste inv-warn"><div class="zeile"><div><b class="amber-t">⚠ ${V.verweise.length} ${V.verweise.length === 1 ? 'Eintrag nennt' : 'Einträge nennen'} alte Entity-IDs</b><div class="leise">Home Assistant passt eigene Automationen, Skripte und Dashboards nicht an – danach dort die neue ID eintragen. Verlauf und Statistik ziehen mit.</div></div></div>
@@ -157,7 +193,7 @@ function vorschauSheet(p, s) {
     return html`<div class="glas-panel liste inv-liste inv-gruppe"><div class="inv-g-kopf"><b class="inv-id">${g || '–'}</b></div>
       <div class="inv-tr inv-th"><span class="t-was">Was</span><span class="t-alt">Alt</span><span class="t-neu">Neu</span><span class="t-m">Zustand</span></div>
       ${R.map(r => { const st = zustand(r); return html`<div class="inv-tr ${st}"><span class="t-was">${r.was}</span><span class="t-alt">${wert(r.alt)}</span><span class="t-neu">${st === 'gleich' ? html`<span class="leise">=</span>` : wert(r.neu)}</span><span class="t-m">${MARKE[st] || st}</span>
-        ${r.fehler ? html`<span class="inv-hinweis amber-t">${r.fehler}</span>` : st === 'konflikt' ? html`<span class="inv-hinweis rot-t">${r.neu} ist schon vergeben – Schritt bleibt aus, bis sie umbenannt oder gelöscht ist</span>` : nothing}</div>`; })}</div>`; });
+        ${r.fehler ? html`<span class="inv-hinweis amber-t">${r.fehler}</span>` : st === 'konflikt' ? konfliktHinweis(r, B) : nothing}</div>`; })}</div>`; });
   let ende;
   if (erg) ende = html`${halb ? html`<div class="leise amber-t inv-p">${rueck ? 'Nochmal „Zurücknehmen“ holt den Rest nach.' : 'Fehlende Schritte holt „Nachholen“ – Plug-Namen auch die Integration selbst, sobald der Plug erreichbar ist.'}</div>
       ${knopf(rueck ? 'Rest zurücknehmen' : 'Nachholen', p.nurAdmin(() => p.invAusfuehren({ ...s, zuordnen: null })), 'amber nur-admin', 'ausfuehren')}${rechteHinweis(p)}` : nothing}${knopf('Schließen', () => s.zurueck !== undefined ? p.schliessen() : p.invAuf({ art: 'inv-container', id: s.id }), 'leise-k')}`;
@@ -172,7 +208,7 @@ function vorschauSheet(p, s) {
     ${!rueck ? knopf('Rückgängig …', p.nurAdmin(() => p.invAuf({ art: 'inv-vorschau', id: s.id, rueck: true, zurueck: s.zurueck })), 'nur-admin', 'rueck') : nothing}${rechteHinweis(p)}
     <div class="leise inv-p">nur Admins · das Schalten des Containers pausiert dafür kurz, die Automatik bleibt an${rueck ? ' · nur die jüngste Umbenennung des Containers' : ' · Verweise der Integration (Schalter, Leistung, Energie, Fühler, Tür) ziehen mit, der Bereich bleibt'}</div>
     ${knopf('Abbrechen', zu, 'leise-k', 'abbrechen')}`;
-  return html`${kopf}${zahlen}${verweise}<div class="inv-inhalt">${tabelle}</div>${!erg && V.hinweis ? html`<div class="leise inv-p">${V.hinweis}</div>` : nothing}${ende}`;
+  return html`${kopf}${zahlen}${verweise}<div class="inv-inhalt">${tabelle}${B.map(k => belegtKarte(p, s, k))}</div>${!erg && V.hinweis ? html`<div class="leise inv-p">${V.hinweis}</div>` : nothing}${ende}`;
 }
 
 export const INVENTAR_EINBLENDUNGEN = { 'inv-container': containerSheet, 'inv-neu': anlegenSheet, 'inv-zuordnen': zuordnenSheet, 'inv-vorschau': vorschauSheet };
@@ -202,6 +238,16 @@ export const INV_CSS = `
 .inv-hinweis { grid-column: 1 / -1; font-size: 12px; }
 .inv-m { white-space: nowrap; font-size: 12px; }
 .knopf.aus { opacity: .5; }
+.inv-belegt { border: 1px solid var(--amber); background: rgba(255,159,10,.08); border-radius: 14px; padding: 12px 14px; display: grid; gap: 10px; margin-top: 10px; }
+.inv-bel-titel { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; } .inv-bel-titel .chip { font-size: 12px; padding: 2px 9px; }
+.inv-bel-fakten { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; margin: 0; }
+.inv-bel-fakten dt { color: var(--ink2); } .inv-bel-fakten dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.inv-bel-ents { display: grid; gap: 2px; font-size: 12.5px; } .inv-bel-ents div { display: flex; justify-content: space-between; gap: 10px; }
+.inv-bel-ents .inv-id { min-width: 0; overflow-wrap: anywhere; } .inv-bel-ents .leise { white-space: nowrap; }
+.inv-bel-k { display: flex; flex-wrap: wrap; gap: 8px; } .inv-bel-k .knopf { flex: 0 1 auto; margin: 0; } .inv-bel-k a.knopf { text-decoration: none; }
+.inv-bel-warum { font-size: 12.5px; }
+.inv-bel-vs { border-top: 1px dashed rgba(120,120,128,.35); padding-top: 10px; display: grid; gap: 6px; }
+.inv-bel-z { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; font-size: 12px; align-items: baseline; } .inv-bel-z span { min-width: 0; overflow-wrap: anywhere; }
 .nm-chip { white-space: nowrap; } .chip.nm-chip { font-size: 12px; padding: 4px 10px; } .nm-ok { color: var(--gruen, #30d158); }
 .nm-zeile { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 2px 4px 8px; }
 @container (max-width: 520px) {

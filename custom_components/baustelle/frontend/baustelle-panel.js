@@ -2328,6 +2328,38 @@ function zustand(r5) {
   if (r5.ziel === "label" && !r5.neu) return r5.zustand === "gleich" ? "gleich" : "weg";
   return r5.zustand;
 }
+function konfliktHinweis(r5, B2) {
+  const k2 = B2.find((x2) => (x2.trifft || []).includes(r5.neu));
+  if (!k2) return b2`<span class="inv-hinweis rot-t">${r5.neu} ist schon vergeben – Schritt bleibt aus, bis sie umbenannt oder gelöscht ist</span>`;
+  return b2`<span class="inv-hinweis rot-t">${r5.neu} gehört ${k2.art === "geraet" ? "dem Gerät" : "der Entität"} <b class="inv-id">${k2.name || k2.ref}</b>${k2.integration ? ` (${k2.integration})` : ""} – unten lösen</span>`;
+}
+function belegtKarte(p4, s4, k2) {
+  const L2 = k2.loesungen || {}, zr = L2.zuruecksetzen || {}, ent = L2.entfernen || {}, offen = s4.konflikt && s4.konflikt.ref === k2.ref ? s4.konflikt.aktion : null;
+  const auf = (aktion) => p4.invAuf({ ...s4, konflikt: { ref: k2.ref, aktion } }), zu = () => p4.invAuf({ ...s4, konflikt: null });
+  const ha = k2.art === "geraet" ? `/config/devices/device/${k2.ref}` : `/config/entities?search=${encodeURIComponent(k2.ref)}`;
+  const n4 = (k2.trifft || []).length, werks = Object.entries(k2.werks || {});
+  const fakt = (t5, w2) => w2 ? b2`<dt>${t5}</dt><dd>${w2}</dd>` : A;
+  const bestaetigen = offen === "zuruecksetzen" ? b2`<div class="inv-bel-vs"><b>Vorschau · Zurücksetzen</b>
+      <div class="inv-bel-z"><span class="inv-id">${k2.name}</span><span>→</span><span class="inv-id">${k2.werksname}</span></div>
+      ${werks.map(([a3, b3]) => b2`<div class="inv-bel-z"><span class="inv-id">${a3}</span><span>→</span><span class="inv-id">${b3}</span></div>`)}
+      ${(k2.verwendet_in || []).length ? b2`<div class="leise amber-t">Home Assistant passt ${k2.verwendet_in.join(", ")} nicht an – danach dort die neue ID eintragen.</div>` : A}
+      <div class="inv-bel-k">${knopf("Zurücksetzen", p4.nurAdmin(() => p4.invKonfliktLoesen(s4, k2, "zuruecksetzen")), "amber nur-admin", "kl-ok")}${knopf("Abbrechen", zu, "leise-k", "kl-abbrechen")}</div></div>` : offen === "entfernen" ? b2`<div class="inv-bel-vs"><b class="rot-t">${k2.art === "geraet" ? `Gerät „${k2.name}“ und ${(k2.entitaeten || []).length} Entitäten` : `Entität ${k2.ref}`} aus Home Assistant entfernen?</b>
+      <div class="inv-bel-k">${knopf("Entfernen", p4.nurAdmin(() => p4.invKonfliktLoesen(s4, k2, "entfernen")), "rot nur-admin", "kl-ok")}${knopf("Abbrechen", zu, "leise-k", "kl-abbrechen")}</div></div>` : A;
+  return b2`<div class="inv-belegt" data-ref=${k2.ref}>
+    <div class="inv-bel-titel"><span class="chip glas-panel amber-t">belegt ${n4} Namen</span><b class="inv-id">${k2.name || k2.ref}</b><span class="leise">${k2.art === "geraet" ? "anderes Gerät in HA" : "Entität ohne Gerät"}</span></div>
+    <dl class="inv-bel-fakten">${fakt("Gerät", [k2.modell, k2.werksname && k2.werksname !== k2.name ? `Werksname „${k2.werksname}“` : null].filter(Boolean).join(" · "))}
+      ${fakt("Integration", k2.integration)}
+      <dt>Wo</dt><dd>${k2.bereich ? `HA-Bereich „${k2.bereich}“` : "ohne HA-Bereich"} · ${k2.baustelle ? `verwendet von ${k2.baustelle}` : "in keinem Container der Baustelle"}</dd>
+      <dt>Zustand</dt><dd>${k2.verwaist ? b2`<span class="amber-t">verwaist – keine Integration meldet es mehr</span>` : "aktiv"}</dd>
+      <dt>Verwendet in</dt><dd>${(k2.verwendet_in || []).length ? k2.verwendet_in.join(" · ") : "nirgends"}</dd></dl>
+    <div class="inv-bel-ents">${(k2.entitaeten || []).map((e6) => b2`<div><span class="inv-id ${e6.trifft ? "rot-t" : ""}">${e6.entity_id}</span><span class="leise">${e6.zustand}</span></div>`)}</div>
+    ${offen ? bestaetigen : b2`<div class="inv-bel-k">
+      ${knopf("Auf Werksnamen zurücksetzen", p4.nurAdmin(() => zr.ok ? auf("zuruecksetzen") : p4.toast(zr.warum)), `amber nur-admin ${zr.ok ? "" : "aus"}`, "kl-zuruecksetzen")}
+      ${knopf(k2.art === "geraet" ? "Gerät entfernen …" : "Entität entfernen …", p4.nurAdmin(() => ent.ok ? auf("entfernen") : p4.toast(ent.warum)), `rot nur-admin ${ent.ok ? "" : "aus"}`, "kl-entfernen")}
+      <a class="knopf leise-k" href=${ha} target="_top">In HA öffnen ↗</a></div>
+      ${[zr, ent].filter((x2) => !x2.ok && x2.warum).map((x2, i7, A2) => A2.findIndex((y3) => y3.warum === x2.warum) === i7 ? b2`<div class="leise inv-bel-warum">${x2.warum}</div>` : A)}`}
+  </div>`;
+}
 function vorschauSheet(p4, s4) {
   const I2 = p4.invDaten(), c4 = I2 && I2.container.find((x2) => x2.id === s4.id), rueck = !!s4.rueck, erg = s4.ergebnis, Z2 = s4.zuordnen;
   const V2 = erg ? erg : rueck ? p4.invRueckVorschau(s4.id) : Z2 ? p4.invZuordnenDaten(s4.id, Z2) : p4.invVorschau(s4.id);
@@ -2339,7 +2371,7 @@ function vorschauSheet(p4, s4) {
   if (V2 === void 0) return b2`${kopf6}<div class="glas-panel liste inv-liste"><div class="leer">Vorschau lädt …</div></div>${knopf("Schließen", zu, "leise-k")}`;
   if (!V2) return b2`${kopf6}<div class="glas-panel liste inv-liste"><div class="leer">${p4.invFehler(rueck ? "invr:" + s4.id : Z2 ? p4.invZuordnenSchluessel(s4.id, Z2) : "invv:" + s4.id) || "Keine Vorschau"}</div></div>${knopf("Schließen", zu, "leise-k")}`;
   const S3 = V2.schritte || [], offen = S3.filter((r5) => !["gleich", "ok", "entfaellt"].includes(zustand(r5)));
-  const kon = Object.keys(V2.konflikte || {}).length, gruppen2 = [...new Set(S3.map((r5) => r5.gruppe || ""))];
+  const kon = Object.keys(V2.konflikte || {}).length, gruppen2 = [...new Set(S3.map((r5) => r5.gruppe || ""))], B2 = erg ? [] : V2.belegt_von || [];
   const zahlen = b2`<div class="inv-zahlen"><span class="chip glas-panel">${rueck ? "↶" : "✎"} ${offen.length} ${rueck ? "Schritte zurück" : offen.length === 1 ? "Änderung" : "Änderungen"}</span>
     ${S3.length - offen.length ? b2`<span class="chip glas-panel">= ${S3.length - offen.length} ${erg ? "erledigt oder gleich" : "unverändert"}</span>` : A}${kon ? b2`<span class="chip glas-panel rot-t">✕ ${kon} Konflikt</span>` : A}</div>`;
   const verweise = (V2.verweise || []).length ? b2`<div class="glas-panel liste inv-liste inv-warn"><div class="zeile"><div><b class="amber-t">⚠ ${V2.verweise.length} ${V2.verweise.length === 1 ? "Eintrag nennt" : "Einträge nennen"} alte Entity-IDs</b><div class="leise">Home Assistant passt eigene Automationen, Skripte und Dashboards nicht an – danach dort die neue ID eintragen. Verlauf und Statistik ziehen mit.</div></div></div>
@@ -2351,7 +2383,7 @@ function vorschauSheet(p4, s4) {
       ${R2.map((r5) => {
       const st = zustand(r5);
       return b2`<div class="inv-tr ${st}"><span class="t-was">${r5.was}</span><span class="t-alt">${wert(r5.alt)}</span><span class="t-neu">${st === "gleich" ? b2`<span class="leise">=</span>` : wert(r5.neu)}</span><span class="t-m">${MARKE[st] || st}</span>
-        ${r5.fehler ? b2`<span class="inv-hinweis amber-t">${r5.fehler}</span>` : st === "konflikt" ? b2`<span class="inv-hinweis rot-t">${r5.neu} ist schon vergeben – Schritt bleibt aus, bis sie umbenannt oder gelöscht ist</span>` : A}</div>`;
+        ${r5.fehler ? b2`<span class="inv-hinweis amber-t">${r5.fehler}</span>` : st === "konflikt" ? konfliktHinweis(r5, B2) : A}</div>`;
     })}</div>`;
   });
   let ende;
@@ -2368,7 +2400,7 @@ function vorschauSheet(p4, s4) {
     ${!rueck ? knopf("Rückgängig …", p4.nurAdmin(() => p4.invAuf({ art: "inv-vorschau", id: s4.id, rueck: true, zurueck: s4.zurueck })), "nur-admin", "rueck") : A}${rechteHinweis(p4)}
     <div class="leise inv-p">nur Admins · das Schalten des Containers pausiert dafür kurz, die Automatik bleibt an${rueck ? " · nur die jüngste Umbenennung des Containers" : " · Verweise der Integration (Schalter, Leistung, Energie, Fühler, Tür) ziehen mit, der Bereich bleibt"}</div>
     ${knopf("Abbrechen", zu, "leise-k", "abbrechen")}`;
-  return b2`${kopf6}${zahlen}${verweise}<div class="inv-inhalt">${tabelle}</div>${!erg && V2.hinweis ? b2`<div class="leise inv-p">${V2.hinweis}</div>` : A}${ende}`;
+  return b2`${kopf6}${zahlen}${verweise}<div class="inv-inhalt">${tabelle}${B2.map((k2) => belegtKarte(p4, s4, k2))}</div>${!erg && V2.hinweis ? b2`<div class="leise inv-p">${V2.hinweis}</div>` : A}${ende}`;
 }
 var INVENTAR_EINBLENDUNGEN = { "inv-container": containerSheet, "inv-neu": anlegenSheet, "inv-zuordnen": zuordnenSheet, "inv-vorschau": vorschauSheet };
 var INV_BREIT = ["inv-vorschau"];
@@ -2396,6 +2428,16 @@ var INV_CSS = `
 .inv-hinweis { grid-column: 1 / -1; font-size: 12px; }
 .inv-m { white-space: nowrap; font-size: 12px; }
 .knopf.aus { opacity: .5; }
+.inv-belegt { border: 1px solid var(--amber); background: rgba(255,159,10,.08); border-radius: 14px; padding: 12px 14px; display: grid; gap: 10px; margin-top: 10px; }
+.inv-bel-titel { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; } .inv-bel-titel .chip { font-size: 12px; padding: 2px 9px; }
+.inv-bel-fakten { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; margin: 0; }
+.inv-bel-fakten dt { color: var(--ink2); } .inv-bel-fakten dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.inv-bel-ents { display: grid; gap: 2px; font-size: 12.5px; } .inv-bel-ents div { display: flex; justify-content: space-between; gap: 10px; }
+.inv-bel-ents .inv-id { min-width: 0; overflow-wrap: anywhere; } .inv-bel-ents .leise { white-space: nowrap; }
+.inv-bel-k { display: flex; flex-wrap: wrap; gap: 8px; } .inv-bel-k .knopf { flex: 0 1 auto; margin: 0; } .inv-bel-k a.knopf { text-decoration: none; }
+.inv-bel-warum { font-size: 12.5px; }
+.inv-bel-vs { border-top: 1px dashed rgba(120,120,128,.35); padding-top: 10px; display: grid; gap: 6px; }
+.inv-bel-z { display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; font-size: 12px; align-items: baseline; } .inv-bel-z span { min-width: 0; overflow-wrap: anywhere; }
 .nm-chip { white-space: nowrap; } .chip.nm-chip { font-size: 12px; padding: 4px 10px; } .nm-ok { color: var(--gruen, #30d158); }
 .nm-zeile { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 2px 4px 8px; }
 @container (max-width: 520px) {
@@ -3747,10 +3789,14 @@ function kopf2(p4, b3) {
       <div class="ckd-gruppen">${GR.map(gruppe)}</div></div>`;
 }
 var ohneFuehler = (b3) => b2`<div class="c-ohne glas-panel"><small>LEISTUNG JETZT</small><b>${de(kwVon(b3))}<small> kW</small></b><span class="leise">kein Fühler – der Heizkörperthermostat regelt</span></div>`;
+function kostenHeute(p4, b3) {
+  const id = p4.eid(p4.d, b3.id, "kosten"), r5 = id ? p4.reihe(p4.d, id, "Woche") : null;
+  return r5 ? r5[TAGE.indexOf(p4.z.HEUTE_TAG)] ?? null : null;
+}
 function kacheln(p4, b3) {
   const d3 = p4.d, heuteNr = TAGE.indexOf(p4.z.HEUTE_TAG), kwh7 = p4.verbrauch(d3, b3.id, "Woche"), h7 = p4.heizStunden(d3, b3, "Woche");
-  const kwh = kwh7 ? kwh7[heuteNr] : null, h3 = h7 ? h7[heuteNr] : null;
-  return [["⚡", de(kwVon(b3)), "kW jetzt", "leistung"], ["🔋", zahl(kwh) ? de(kwh) : "–", "kWh heute", "verbrauch"], ["€", zahl(kwh) ? de(kwh * d3.e.preis, 2) : "–", "Kosten heute", "verbrauch", "eur"], ["⏱", zahl(h3) ? de(h3) : "–", "h Heizzeit", "heizzeit-c"]].map(([i7, v2, t5, s4, art]) => b2`<button class="glas-panel c-kachel" data-s=${s4} @click=${() => p4.einblenden(s4, art ? { id: b3.id, t: art } : { id: b3.id })}><span>${i7}</span><b>${v2}</b><small>${t5}</small></button>`);
+  const kwh = kwh7 ? kwh7[heuteNr] : null, h3 = h7 ? h7[heuteNr] : null, eur3 = kostenHeute(p4, b3);
+  return [["⚡", de(kwVon(b3)), "kW jetzt", "leistung"], ["🔋", zahl(kwh) ? de(kwh) : "–", "kWh heute", "verbrauch"], ["€", zahl(eur3) ? de(eur3, 2) : "–", "Kosten heute", "verbrauch", "eur"], ["⏱", zahl(h3) ? de(h3) : "–", "h Heizzeit", "heizzeit-c"]].map(([i7, v2, t5, s4, art]) => b2`<button class="glas-panel c-kachel" data-s=${s4} @click=${() => p4.einblenden(s4, art ? { id: b3.id, t: art } : { id: b3.id })}><span>${i7}</span><b>${v2}</b><small>${t5}</small></button>`);
 }
 function bedarf(p4, b3) {
   const H2 = p4.z.HEUTE, offen = (t5) => t5.datum > H2 || t5.datum === H2 && t5.bis > p4.z.JETZT, serien = /* @__PURE__ */ new Map();
@@ -4409,7 +4455,7 @@ function tabFuehler(p4, s4, b3, E2) {
     <div class="leise cs-fuss">Wie viele Türen und Fenster das Symbol hat und wo sie sitzen, steht unter 🏠 Aussehen. Die Suche geht über alle passenden Entitäten in Home Assistant.</div>`;
 }
 function tabStrom(p4, b3, E2) {
-  const d3 = p4.d;
+  const d3 = p4.d, eur3 = kostenHeute(p4, b3);
   return b2`<div class="glas-panel liste cs-gr">
       ${zeile3("anschluss", "Stromanschluss", null, b2`<select data-f="anschluss" @change=${p4.nurAdmin((ev) => p4.csSetzen(b3, "anschluss", ev.target.value, "Anschluss gespeichert"))}>${d3.anschluesse.map((a3) => b2`<option value=${a3.id} ?selected=${b3.anschluss === a3.id}>${a3.name} · ${a3.phasen === 3 ? "3 × " : ""}${a3.ampere} A</option>`)}</select>`)}
       ${zeile3(
@@ -4422,6 +4468,12 @@ function tabStrom(p4, b3, E2) {
   )}
       ${zeile3("staffel", "⚡ Staffelung", null, b2`<span class="cs-wert">${E2.staffel ? E2.staffel.text : "–"}</span>`, E2.staffel, marke2(p4, E2.staffel))}
       ${zeile3("firma", "Firma · für die Abrechnung", null, b2`<select data-f="firma" @change=${p4.nurAdmin((ev) => p4.csFirma(b3, ev.target.value))}>${d3.firmen.map((f3) => b2`<option value=${f3.id} ?selected=${b3.firma === f3.id}>${f3.name}</option>`)}</select>`)}
+      ${zeile3(
+    "kosten",
+    "Kosten heute",
+    `zum Tagespreis ${de(d3.e.preis, 2)} €/kWh – von der Integration`,
+    b2`<button class="cs-link" data-k="kosten" @click=${() => p4.einblenden("verbrauch", { id: b3.id, t: "eur" })}>${zahl(eur3) ? `${de(eur3, 2)} €` : "–"} · Verlauf ›</button>`
+  )}
     </div>`;
 }
 function tabAussehen(p4, b3) {
@@ -7018,7 +7070,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.196";
+var SEITE_VERSION = "0.8.197";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -8528,6 +8580,17 @@ var BaustellePanel = class extends i4 {
       }
       this.toast({ ausgefuehrt: "Umbenannt", teilweise: "Teilweise umbenannt – Rest folgt", zurueck: "Zurückgenommen", zurueck_teilweise: "Teilweise zurückgenommen" }[r5.status] || r5.status);
       return this.invAuf({ ...s4, ergebnis: r5 });
+    } catch (e6) {
+      this.toast(this.fehlerText(e6));
+    }
+  }
+  async invKonfliktLoesen(s4, k2, aktion) {
+    try {
+      const r5 = await this._hass.callWS({ type: "baustelle/inventar_konflikt_loesen", ref: k2.ref, aktion, trifft: k2.trifft || [] });
+      this.invNeu();
+      this._laden();
+      this.toast(aktion === "zuruecksetzen" ? `${k2.name || "Gerät"} heißt wieder „${r5.name || k2.werksname}“ – Namen frei` : `${k2.name || "Gerät"} entfernt – Namen frei`);
+      return this.invAuf({ ...s4, konflikt: null });
     } catch (e6) {
       this.toast(this.fehlerText(e6));
     }
