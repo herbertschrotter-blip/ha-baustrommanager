@@ -259,22 +259,24 @@ function browser(R) {
   R.einblendung('container-neu', containerNeu, { breit: () => false });
 
   /* ================= Grundlagen für Hochrechnung und Baseline (M9) – im Reiter Heizung ================= */
-  const KLIMA = [['Okt', '9,8'], ['Nov', '4,6'], ['Dez', '0,9'], ['Jan', '−0,6'], ['Feb', '1,2'], ['Mär', '5,4'], ['Apr', '9,9']];
+  // Klimamittel wie die Integration (logik/hochrechnung.KLIMA_GRAZ, Vorgabe Graz 1991–2020), alle 12 Monate, Heizperiode hervorgehoben
+  const KLIMA = [['Jan', '0,3'], ['Feb', '2,0'], ['Mär', '6,3'], ['Apr', '11,1'], ['Mai', '15,6'], ['Jun', '19,4'], ['Jul', '21,1'], ['Aug', '20,6'], ['Sep', '15,8'], ['Okt', '10,6'], ['Nov', '5,4'], ['Dez', '1,0']];
+  const HP = ['Jan', 'Feb', 'Mär', 'Apr', 'Okt', 'Nov', 'Dez'];
   const grundlagenKarte = (p) => html`<div class="glas-panel liste or-grundlagen" data-or="grundlagen"><div class="gruppe">📈 Grundlagen für Hochrechnung und Baseline ${R.marke}</div>
       <button class="zeile" @click=${() => R.auf(p, { art: 'or-grundlagen' })}><div class="or-zl"><b>Heizperiode</b><div class="leise">Oktober – April · bis 30.04.2027</div></div><span class="leise">›</span></button>
-      <button class="zeile" @click=${() => R.auf(p, { art: 'or-grundlagen' })}><div class="or-zl"><b>Klimamittel</b><div class="leise">Monatsmittel außen 1991–2020, Graz · eigene Werte: keine</div></div><span class="leise">›</span></button>
-      <button class="zeile" @click=${() => R.auf(p, { art: 'or-grundlagen' })}><div class="or-zl"><b>🧪 Baseline messen</b><div class="leise">an · höchstens 60 € je Monat · nächster Lauf Di 01.12.</div></div><span class="leise">›</span></button>
-      <div class="leise or-fuss">Ergebnisse stehen in der Auswertung (Heizperiode & Wetter, Ersparnis); dort nur „einstellen ›“.</div></div>`;
+      <button class="zeile" @click=${() => R.auf(p, { art: 'or-grundlagen' })}><div class="or-zl"><b>Klimamittel</b><div class="leise">Vorgabe Graz 1991–2020 · Nov 5,4 °C · Dez 1,0 °C · Jan 0,3 °C</div></div><span class="leise">›</span></button>
+      <button class="zeile" @click=${() => R.auf(p, { art: 'or-grundlagen' })}><div class="or-zl"><b>🧪 Baseline messen</b><div class="leise">an · höchstens 60 € je Monat · nächster Lauf Di 01.12. · bisher aus Regeln › Baseline</div></div><span class="leise">›</span></button>
+      <div class="leise or-fuss">Einstellen nur hier. Die Ergebnisse (Hochrechnung, Signatur, Klima, Baseline-Läufe) bleiben in der Auswertung › Heizperiode; dort steht statt ✎ und „Klimamittel ändern ›“ nur noch „einstellen ›“, das hierher führt.</div></div>`;
   const grundlagen = () => html`<div class="griff"></div>${R.band('Vorschlag Ordnung · M9: Einstellung hier, Ergebnis in der Auswertung')}
       <div class="block-kopf"><h3>Grundlagen für Hochrechnung und Baseline</h3><span class="leise">Heizung</span></div>
       <div class="glas-panel liste or-gr"><div class="gruppe">Heizperiode</div>
-        ${zeile('von – bis', 'gilt für Hochrechnung und Baseline; heute auch unter ⚙ › Baustelle', html`<select><option>Oktober</option></select> – <select><option>April</option></select>`)}</div>
+        ${zeile('von – bis', 'derselbe Wert wie ⚙ › Baustelle › Zeitraum; gilt für Hochrechnung, Heizgradtage und Baseline', html`<select><option>Oktober</option></select> – <select><option>April</option></select>`)}</div>
       <div class="glas-panel liste or-gr"><div class="gruppe">Klimamittel · °C außen je Monat</div>
-        <div class="or-klima">${KLIMA.map(([m, v]) => html`<label><span class="leise">${m}</span><input .value=${v} size="4"></label>`)}</div>
-        ${zeile('Quelle', 'Werte der nächsten Messstelle; eigene Werte überschreiben sie', html`<button class="chip glas-panel">↺ Messstelle</button>`)}</div>
+        <div class="or-klima">${KLIMA.map(([m, v]) => html`<label class=${HP.includes(m) ? 'or-hp' : ''}><span class="leise">${m}</span><input .value=${v} size="4"></label>`)}</div>
+        ${zeile('Quelle', 'Vorgabe Graz 1991–2020; für eine andere Gegend die Werte der nächsten GeoSphere-Station eintragen. Hervorgehoben: Heizperiode', html`<button class="chip glas-panel">↺ Vorgabe Graz</button>`)}</div>
       <div class="glas-panel liste or-gr"><div class="gruppe">🧪 Baseline messen</div>
-        ${zeile('Testläufe ohne Automatik', 'ein Kontrolltag je Monat und Bauart, um „gespart“ zu belegen', sw(true, () => {}))}
-        ${zeile('Kostenrahmen', 'je Monat', html`<span class="stepper klein"><button>−</button><b>60 €</b><button>+</button></span>`)}
+        ${zeile('Testläufe ohne Automatik', 'ein Kontrolltag je Monat und Bauart, um „gespart“ zu belegen – zieht aus Heizung › Regeln hierher', sw(true, () => {}))}
+        ${zeile('Kostenrahmen', 'je Monat · gemessen 18 € · geplant 12 €', html`<span class="stepper klein"><button>−</button><b>60 €</b><button>+</button></span>`)}
         ${zeile('Nächster Lauf', 'Di 01.12. · Mannschaft · Konvektor', html`<button class="chip glas-panel">Absagen</button> <button class="chip glas-panel">Einplanen …</button>`)}</div>
       <div class="or-knoepfe"><button class="knopf" @click=${() => { for (const q of R.P()) { q.s.sheet = null; q.gehe('auswertung'); } }}>Ergebnisse in der Auswertung ›</button></div>`;
   R.einblendung('or-grundlagen', grundlagen, { breit: () => false });
@@ -446,6 +448,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
 .or-gross { font-size: 40px; color: var(--s3); }
 .or-klima { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 12px 10px; }
 .or-klima label { display: flex; flex-direction: column; font-size: 12px; gap: 2px; }
+.or-klima label.or-hp span { color: var(--amber); font-weight: 600; } .or-klima label.or-hp input { border-color: var(--amber); }
 .or-grundlagen { margin-top: 14px; }
 .or-fehlt { padding: 12px 16px; margin-top: 14px; }
 .or-fehlt-k { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
@@ -561,7 +564,8 @@ const ZEIGEN = [
 ];
 // --nur=M8: nur dieser Schritt als eigene Datei zum Abnehmen (Herbert, 23.11.2026: Schritt für Schritt)
 const NUR = (process.argv.find(a => a.startsWith('--nur=')) || '').slice(6);
-const DATEIEN = { M8: ['container-seite.html', 'Baustelle – Container-Seite (M8)', 'Schritt M8 · „Bearbeiten“ ist die eine Container-Seite'] };
+const DATEIEN = { M8: ['container-seite.html', 'Baustelle – Container-Seite (M8)', 'Schritt M8 · „Bearbeiten“ ist die eine Container-Seite'],
+  M9: ['grundlagen.html', 'Baustelle – Grundlagen (M9)', 'Schritt M9 · Heizperiode, Klimamittel, Baseline im Reiter Heizung'] };
 if (NUR && !DATEIEN[NUR]) throw new Error(`--nur=${NUR}: unbekannter Schritt`);
 if (NUR) ZEIGEN.splice(0, ZEIGEN.length, ...ZEIGEN.filter(([, t]) => t.startsWith(NUR + ' ') || t.startsWith(NUR + '/')));
 const faelle = ZEIGEN.map(([z]) => ({ name: z, werte: { zeigen: z } }));

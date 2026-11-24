@@ -1,19 +1,18 @@
 // Karte „Heizperiode“ der Auswertung (BSM-033.03, Mockup hochrechnung.html, abgenommen 10.10.2026): Reiter Hochrechnung
 // (Prognose mit Spanne, Diagramm tatsächlich / Prognose mit / ohne Automatik über die Heizperiode), Signatur (je Container
 // Streudiagramm mit Knickgerade, Heizgrenze, kWh je Grad, Grundlast, Güte) und Klima (Klimamittel, Vorhersage, Heizgradtage,
-// Normjahr), dazu die Einblendung „Klimamittel“. Im Reiter Hochrechnung Umschalter Heizperiode · Monat · Woche · Tag
+// Normjahr). Im Reiter Hochrechnung Umschalter Heizperiode · Monat · Woche · Tag
 // (BSM-033.04, Mockup hochrechnung-j4b.html: Balken je Zeitraum aus `perioden`, Antippen zeigt die Zahlen; beim Tag der
 // Verlauf 24 h aus `baustelle/tagesverlauf`). Alle Zahlen kommen von der Integration (`A.hochrechnung`, logik/hochrechnung,
-// logik/signatur); die Seite rechnet nur Pixel. Die Heizperiode stellt ✎ über die Einblendung „zeitraum-bs“ ein. Vierter
+// logik/signatur); die Seite rechnet nur Pixel. Heizperiode und Klimamittel stellt „einstellen ›“ in Heizung › Grundlagen ein (M9). Vierter
 // Reiter „Baseline“ (J4b, Mockup baseline.html B): Stand je Container und Läufe aus laufzeit.baseline (ansichten/baseline.js).
 import { html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { MONATE, de, zahl } from '../hilfen.js';
 import { baselineHinweis, baselineReiter } from './baseline.js';
+import { zuGrundlagen } from './grundlagen.js';
 
-const GRIFF = html`<div class="griff"></div>`;
 const LAEDT = html`<div class="leer">Lädt …</div>`;
-const MONATE_VOLL = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 const STAND = { gut: ['gut', 'gruen-t'], brauchbar: ['brauchbar', 'amber-t'], unsicher: ['unsicher', 'rot-t'], lernt: ['lernt noch', 'leise'] };
 const eur = x => zahl(x) ? `${de(x, 0)} €` : '–';
 const tagText = iso => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : '';
@@ -240,7 +239,7 @@ function klima(p, h) {
   const K = h.klima || [], min = Math.min(-2, ...K), max = Math.max(22, ...K), y = v => (v - min) / (max - min) * 100;
   return html`<div class="hp-monate">${K.map((t, i) => html`<div class="hp-m ${imZeitraum(i + 1, p.d.hp) ? 'hp' : ''}"><i style="height:${y(t)}%"></i><b>${de(t, 1)}</b><span>${MONATE[i]}</span></div>`)}</div>
     <div class="leise">Klimamittel ${h.klima_vorgabe ? 'Graz 1991–2020 (Vorgabe)' : '(eigene Werte)'} · hervorgehoben: Heizperiode.
-      <a class="hp-link nur-admin" @click=${p.nurAdmin(() => p.einblenden('hp-klima'))}>Klimamittel ändern ›</a></div>
+      <a class="hp-link" data-k="hp-klima-einstellen" @click=${() => zuGrundlagen(p)}>einstellen ›</a></div>
     ${(h.vorhersage || []).length ? html`<div class="hp-vh"><b>Vorhersage</b>${h.vorhersage.map(([t, v]) => html`<span class="chip glas-panel">${t.slice(8, 10)}.${t.slice(5, 7)}. ${de(v, 1)}°</span>`)}</div>` : nothing}
     <div class="hp-kz">${zahl(h.hgt_rest) ? html`<div><b>${de(h.hgt_rest, 0)}</b><span>Heizgradtage bis ${tagText(h.ende)}</span></div>` : nothing}
       ${zahl(h.normjahr_eur) ? html`<div><b>${eur(h.normjahr_eur)}</b><span>im Normjahr (witterungsbereinigt)</span></div>` : nothing}</div>`;
@@ -253,27 +252,16 @@ const REITER = [['hoch', 'Hochrechnung', 'Prognose'], ['sig', 'Signatur'], ['kli
 export function heizperiodeVorlage(p, A, start = 'hoch', merk = 'hpReiter') {
   const d = p.d, h = A && A.hochrechnung, r = p.s[merk] || start, [von, bis] = d.hp;
   return html`<div class="glas-panel block hp-karte"><div class="block-kopf"><b>Heizperiode</b>
-      <button class="chip glas-panel hp-zeit-chip nur-admin" @click=${p.nurAdmin(() => p.einblenden('zeitraum-bs'))}>${MONATE[von - 1]}–${MONATE[bis - 1]}${h && h.ende ? ` · bis ${tagText(h.ende)}` : ''} ✎</button></div>
+      <span class="hp-zeit-r"><span class="leise hp-zr-t">${MONATE[von - 1]}–${MONATE[bis - 1]}${h && h.ende ? ` · bis ${tagText(h.ende)}` : ''}</span>
+      <button class="chip glas-panel hp-zeit-chip" data-k="hp-einstellen" @click=${() => zuGrundlagen(p)}>einstellen ›</button></span></div>
     <div class="seg glas-panel hp-reiter">${REITER.map(([k, t, kurz]) => html`<button data-v=${k} class=${r === k ? 'on' : ''} @click=${() => { p.s[merk] = k; p.neuZeichnen(); }}>${p.narrow && kurz ? kurz : t}</button>`)}</div>
     ${r === 'bl' ? baselineReiter(p) : !A ? LAEDT : !h || !zahl(h.mit_kwh) ? html`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>`
       : r === 'sig' ? signatur(p, h) : r === 'klima' ? klima(p, h)
       : hochrechnung(p, h)}</div>`;
 }
 
-/* ---------- Einblendung Klimamittel (Einstellung heizung.klimamittel; leer = Vorgabe) ---------- */
-function hpKlima(p, s) {
-  const A = p.awDaten(p.s.aw.zeitraum, p.zrV('aw')), h = A && A.hochrechnung, K = (s.werte ||= [...((h && h.klima) || [])]);
-  const speichern = wert => p.setzen(['heizung', 'klimamittel'], wert, 'Gespeichert').then(() => p.schliessen());
-  return html`${GRIFF}<div class="block-kopf"><h3>Klimamittel</h3><span class="leise">Monatsmittel außen, °C</span></div>
-    <div class="glas-panel liste hp-eingabe">${K.map((t, i) => html`<label class="feld">${MONATE_VOLL[i]}<input inputmode="decimal" .value=${de(t, 1)}
-      @change=${e => { const v = parseFloat(String(e.target.value).replace(',', '.')); if (!isNaN(v)) K[i] = v; }}></label>`)}</div>
-    <div class="leise">Vorgabe: Graz 1991–2020. Für eine andere Gegend die Klimamittel der nächsten Station von GeoSphere Austria
-      eintragen. Die Hochrechnung nimmt sie für alle Tage ohne Vorhersage.</div>
-    <div class="hp-knoepfe"><button class="knopf amber" data-k="hp-speichern" @click=${() => speichern(K.map(v => Math.round(v * 10) / 10))}>Speichern</button>
-      <button class="knopf leise-k" data-k="hp-vorgabe" @click=${() => speichern(null)}>Vorgabe Graz</button>
-      <button class="knopf leise-k" @click=${() => p.schliessen()}>Abbrechen</button></div>`;
-}
-export const HEIZPERIODE_EINBLENDUNGEN = { 'hp-klima': hpKlima };
+/* Klimamittel und Heizperiode stellt seit M9 die Einblendung Heizung › Grundlagen ein (grundlagen.js) */
+export const HEIZPERIODE_EINBLENDUNGEN = {};
 
 export const HEIZPERIODE_CSS = `
 .seg.hp-aufl { margin: 2px 0 8px; } .seg.hp-aufl button, .seg.hp-reiter button { padding: 6px 2px; min-width: 0; flex: 1 1 0; font-size: 12px; }
@@ -297,6 +285,7 @@ export const HEIZPERIODE_CSS = `
 .hp-det-z .sum { border-top: 1px solid rgba(127,127,127,.2); } .hp-det-z .gesp b { color: #30d158; }
 .hp-grob { display: block; font-size: 12px; color: var(--amber); }   /* BSM-033.05: ohne/gespart nur grobe Obergrenze */
 .hp-zeit-chip { font-size: 12px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.hp-zeit-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; } .hp-zr-t { font-size: 12px; white-space: nowrap; }
 .hp-reiter { margin: 4px 0 8px; } .hp-zahl { font-size: 26px; font-weight: 600; margin: 4px 0 2px; } .hp-zahl .leise { font-size: 14px; font-weight: 400; }
 .hp-dia { width: 100%; max-width: 540px; height: auto; display: block; margin: 6px auto; }
 .hp-dia text, .hp-streu text { font-size: 9px; fill: var(--ink2); } .hp-dia .hp-yt { text-anchor: end; }
@@ -326,5 +315,4 @@ export const HEIZPERIODE_CSS = `
 .hp-m b { font-weight: 500; font-size: 9px; } .hp-m span { color: var(--ink2); }
 .hp-vh { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; } .hp-vh .chip { font-size: 12px; padding: 4px 8px; }
 .hp-kz { display: flex; gap: 16px; flex-wrap: wrap; } .hp-kz div { display: flex; flex-direction: column; } .hp-kz b { font-size: 18px; } .hp-kz span { font-size: 12px; color: var(--ink2); }
-.hp-eingabe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 10px; padding: 10px 14px; } .hp-eingabe input { width: 100%; min-width: 0; box-sizing: border-box; }
-.hp-knoepfe { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }`;
+`;

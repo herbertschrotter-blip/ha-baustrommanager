@@ -1,11 +1,12 @@
 // Baseline-Läufe anzeigen (J4b, Ticket FE-0033, Mockup baseline.html Variante B, Herbert 29.10.2026; Bauplan Hochrechnung §6):
-// Karte „🧪 Baseline messen“ in Heizung › Regeln (Schalter, Kostenrahmen − 60 € +, nächster Lauf mit „Absagen“ bzw.
+// Karte „🧪 Baseline messen“ in Heizung › Grundlagen (M9, grundlagen.js; bis 0.8.197 in Heizung › Regeln) (Schalter, Kostenrahmen − 60 € +, nächster Lauf mit „Absagen“ bzw.
 // „Lauf abbrechen“, Link zur Heizperiode), Reiter „Baseline“ der Karte Heizperiode (Stand je Container, Läufe, „einstellen ›“),
 // Hinweis unter der Legende der Hochrechnung und Chip im Container-Kopf während eines Laufs. Alle Werte liefert die
 // Integration (laufzeit.baseline, laufzeit.container.<id>.baseline; logik/baseline.py); die Seite ordnet nur an.
 import { html, nothing } from 'lit';
 import { MONATE_LANG, de, zahl } from '../hilfen.js';
 import { schalterVorlage } from './allgemein.js';
+import { zuGrundlagen } from './grundlagen.js';
 
 const TYP = { oelradiator: 'Ölradiator', konvektor: 'Konvektor', gemischt: 'gemischt', '': 'ohne Heizkörper' };
 const ST = { geplant: ['geplant', 'amber-t'], laeuft: ['läuft', 'blau-t'], fertig: ['zählt', 'gruen-t'], abgebrochen: ['abgebrochen', 'rot-t'], abgesagt: ['abgesagt', 'leise'] };
@@ -45,7 +46,7 @@ export function naechsterLauf(p) {
   return nothing;
 }
 
-/* Heizung › Regeln: Karte „🧪 Baseline messen“ (vor den festen Regeln) */
+/* Heizung › Grundlagen: Karte „🧪 Baseline messen“ */
 export function baselineRegeln(p) {
   const B = p.d.baseline;
   if (!B) return nothing;
@@ -56,7 +57,7 @@ export function baselineRegeln(p) {
         <div class="zeile unter"><span class="leise">Stand je Container und alle Läufe</span><button class="rv-link" data-k="bl-heizperiode" @click=${() => zurHeizperiode(p)}>Auswertung › Heizperiode ›</button></div>` : nothing}</div>`;
 }
 
-/* Reiter „Baseline“ der Heizperiode: Stand je Container und Läufe; Einstellen unter Heizung › Regeln */
+/* Reiter „Baseline“ der Heizperiode: Stand je Container und Läufe; Einstellen unter Heizung › Grundlagen */
 function standListe(p) {
   const C = p.d.baseline.container || [];
   return html`<div class="bl-titel">Stand je Container</div>
@@ -90,8 +91,8 @@ const thermostat = html`<div class="bl-hinweis">🌡 Der Thermostat am Heizkörp
 export function baselineReiter(p) {
   const B = p.d.baseline;
   if (!B) return html`<div class="leer">Keine Heizung auf dieser Baustelle</div>`;
-  return html`<div class="bl-zeile1"><div><b>Baseline messen</b> <span class="leise">· ${B.an ? 'an' : 'aus'}</span><div class="leise">Testläufe ohne Automatik – Schalter, Kostenrahmen und Absagen unter Heizung › Regeln.</div></div>
-      <button class="chip glas-panel" data-k="bl-einstellen" @click=${() => { p.gehe('heizung'); p.s.rvAuf = 'bl'; return p.hzAuf('regeln'); }}>einstellen ›</button></div>
+  return html`<div class="bl-zeile1"><div><b>Baseline messen</b> <span class="leise">· ${B.an ? 'an' : 'aus'}</span><div class="leise">Testläufe ohne Automatik – Schalter, Kostenrahmen und Absagen unter Heizung › Grundlagen.</div></div>
+      <button class="chip glas-panel" data-k="bl-einstellen" @click=${() => zuGrundlagen(p)}>einstellen ›</button></div>
     ${B.an ? naechsterLauf(p) : nothing}${standListe(p)}${laufListe(p)}${thermostat}`;
 }
 

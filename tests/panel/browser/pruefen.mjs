@@ -626,7 +626,7 @@ await fall('B9 Kacheln S am Handy', browser, async (page, erwarte) => {
   erwarte('Handy 390 px: kurze Zahlen bleiben 34 px', h.filter(kurz).every(z => z.px === 34), JSON.stringify(h.filter(kurz).map(z => [z.text, z.px])));
 });
 
-/* B10 Baseline-Läufe am Handy (J4b, Mockup baseline.html B, FE-0033): Karte „🧪 Baseline messen“ in Heizung › Regeln und der
+/* B10 Baseline-Läufe am Handy (J4b, Mockup baseline.html B, FE-0033): Karte „🧪 Baseline messen“ in Heizung › Grundlagen und der
    Reiter „Baseline“ der Heizperiode ragen nicht hinaus (Kostenrahmen bricht um, Stand und Läufe zweizeilig); im Container-Kopf
    während eines Laufs der kurze Chip „🧪 bis So 24:00“ */
 await fall('B10 Baseline am Handy', browser, async (page, erwarte) => {
@@ -634,7 +634,7 @@ await fall('B10 Baseline am Handy', browser, async (page, erwarte) => {
   const raus = () => panel(page, T, () => { const sc = sr.querySelector('.sheet') || sr.querySelector('.scroll'), re = sc.getBoundingClientRect().right;
     return [...sc.querySelectorAll('.bl-rv *, .bl-stand *, .bl-liste *, .bl-lauf *, .bl-leg *')].filter(x => x.getBoundingClientRect().right > re + 1 && !x.closest('svg'))
       .slice(0, 3).map(x => `${x.tagName.toLowerCase()}.${String(x.className).trim()} +${Math.round(x.getBoundingClientRect().right - re)}px`); });
-  await panel(page, T, () => { p.gehe('heizung'); p.s.rvAuf = 'bl'; return p.hzAuf('regeln'); }); await warte(800);   // AN-0020: Gruppe Baseline offen
+  await panel(page, T, () => { p.gehe('heizung'); return p.hzAuf('grundlagen'); }); await warte(800);   // M9: Baseline in Heizung › Grundlagen
   const k = await panel(page, T, () => { const c = sr.querySelector('.sheet .bl-rv'); if (!c) return null; c.scrollIntoView(); const r = c.querySelector('.bl-rahmen');
     return { rahmen: !!r && getComputedStyle(r).flexWrap === 'wrap', lauf: !!c.querySelector('.bl-lauf') }; });
   const r1 = await raus();

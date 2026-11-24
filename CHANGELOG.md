@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.198] – 2026-11-24
+
+- Neu gestaltet (UI-Bericht M9, Mockup `mockups/grundlagen.html`, abgenommen 24.11.2026): **Grundlagen für Hochrechnung
+  und Baseline** als Karte im Reiter Heizung unter den Kacheln (Heizperiode, Klimamittel, Baseline messen). Ein Tipp öffnet
+  die Einstellung: Heizperiode von–bis (derselbe Wert wie ⚙ › Baustelle › Beginn und Ende), alle 12 Klimamittel mit
+  hervorgehobener Heizperiode, „Klimamittel speichern“ und „↺ Vorgabe Graz“, darunter Baseline messen mit Schalter,
+  Kostenrahmen und nächstem Lauf.
+- Geändert: **Baseline messen** steht nicht mehr unter Heizung › Regeln (auch nicht in der Kurzfassung der Einstellungen),
+  sondern nur noch in den Grundlagen.
+- Geändert: In der Auswertung › Heizperiode wird nichts mehr eingestellt – statt ✎ am Zeitraum und „Klimamittel ändern ›“
+  steht dort „einstellen ›“, das in die Grundlagen führt; ebenso „einstellen ›“ im Reiter Baseline.
+
 ## [0.8.197] – 2026-11-24
 
 - Neu (Mockup `mockups/container-seite.html`, abgenommen 24.11.2026): **„Kosten heute“ auf der Container-Seite**, Reiter

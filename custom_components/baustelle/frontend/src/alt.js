@@ -38,6 +38,7 @@ import { ASSISTENT_BREIT, ASSISTENT_CSS, ASSISTENT_EINBLENDUNGEN } from './ansic
 import { CS_BREIT, CS_CSS } from './ansichten/container-seite.js';
 import { GERAETE_CSS, GERAETE_EINBLENDUNGEN } from './ansichten/geraete.js';
 import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN, hochrechnungSvg } from './ansichten/heizperiode.js';
+import { GRUNDLAGEN_CSS } from './ansichten/grundlagen.js';
 import { BASELINE_CSS } from './ansichten/baseline.js';
 import { uebersichtVorlage } from './ansichten/uebersicht.js';
 import { katalogEinblendung } from './ansichten/kacheln.js';
@@ -900,7 +901,7 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .rv-gic { font-size: 18px; } .rv-gt { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .rv-unter { font-weight: 400; font-size: 12px; }
 .rv-sum { font-size: 12px; color: var(--ink2); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rv-sum b { color: var(--ink); font-weight: 600; } .rv-s.aus { color: var(--ink2); font-style: italic; }
-.rv-gr .bl-regeln { display: none; }
+
 .rv-karte { border-radius: 16px; background: rgba(120,120,128,.10); padding: 2px 12px; margin-bottom: 6px; } .rv-karte > .zeile:first-child { border-top: 0; }
 .rv-fest { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 8px 0; font-size: 13px; border-top: 1px solid var(--gridc); }
 .rv-fest:first-child { border-top: 0; } .rv-fest b { font-weight: 600; text-align: right; } .rv-fest .leise { grid-column: 1 / -1; margin-top: -4px; font-size: 12px; }
@@ -1040,7 +1041,7 @@ const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
 const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(GRUNDLAGEN_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -2036,6 +2037,9 @@ class BaustellePanel extends LitElement {
     S.sheet = null; this.neuZeichnen();
     return this.einrichten(() => this.optionenSpeichern(d, { beginn: f.beginn || null, ende: f.ende || null, heizperiode_von: String(f.hp[0]), heizperiode_bis: String(f.hp[1]) }), 'Gespeichert').then(() => this._laden());
   }
+  /** Heizperiode aus Heizung › Grundlagen (M9) – dieselben Optionen wie ⚙ › Baustelle › Beginn und Ende */
+  heizperiodeSetzen(von, bis) { const d = this.d;
+    return this.einrichten(() => this.optionenSpeichern(d, { heizperiode_von: String(von), heizperiode_bis: String(bis) }), 'Gespeichert').then(() => this._laden()); }
   abschliessen() { const d = this.d; this.s.leeren(); this.neuZeichnen();
     return this.einrichten(() => this.optionenSpeichern(d, { status: 'abgeschlossen' }), 'Abgeschlossen – steht jetzt im Verlauf').then(() => this._laden()); }
   urlaubSpeichern() {

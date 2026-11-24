@@ -1392,14 +1392,16 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     const S = letzte('baustelle/setzen').map(a => `${a.pfad.join('.')}=${a.wert}`);
     erwarte('AN-0012: neue Regler setzen die Integration (' + S.join(', ') + ')', ['heizung.toleranz=0.4', 'heizung.hand_nachfrist_min=35', 'heizung.fuehler_halten_min=20', 'heizung.zieht_strom_w=55'].every(x => S.includes(x)));
     await klick({ act: 'zu' }); }
-  /* J4b (Mockup baseline.html B): Karte „🧪 Baseline messen“ in Heizung › Regeln vor den festen Regeln – Schalter mit Erklärung,
+  /* J4b (Mockup baseline.html B): Karte „🧪 Baseline messen“ – seit M9 (Mockup grundlagen.html) in Heizung › Grundlagen – Schalter mit Erklärung,
      Kostenrahmen − 60 € + mit gemessen/geplant/übrig, nächster Lauf (Vorschau, angekündigt mit „Absagen“, läuft mit „Lauf
      abbrechen“), Link zur Heizperiode; aus: nur der Schalter. Werte aus laufzeit.baseline. */
   { const W = () => struktur.find(x => x.baustelle.entry_id === panel.d.entry).laufzeit.baseline, alt = JSON.parse(JSON.stringify(W()));
     const laden = async () => { panel._rohText = null; await panel._laden(); await ruhe(20); };
-    let h = await hzOffen('regeln'); pruefe('Regeln Baseline an');
+    const hr = await hzOffen('regeln');
+    erwarte('M9: Baseline nicht mehr unter Heizung › Regeln', !hr.includes('data-gr="bl"') && !litEl('.sheet .bl-rv'));
+    await hzOffen('grundlagen'); pruefe('Grundlagen Baseline an'); let h = litEl('.sheet').innerHTML;
     const karte = () => litEl('.sheet .bl-rv'), txt = () => (karte() ? karte().textContent : '').replace(/\s+/g, ' ');
-    erwarte('J4b: Karte „Baseline messen“ zwischen „Immer“ und „Feste Regeln“', !!karte() && h.indexOf('data-gr="bl"') > h.indexOf('data-gr="immer"') && h.indexOf('data-gr="bl"') < h.indexOf('data-gr="fest"')
+    erwarte('M9: Einblendung Grundlagen mit Heizperiode, Klimamittel und Baseline (in dieser Reihenfolge)', !!karte() && h.indexOf('gl-hp-von') > 0 && h.indexOf('gl-hp-von') < h.indexOf('Klimamittel') && h.indexOf('Klimamittel') < h.indexOf('bl-rv')
       && txt().includes('nur sein Thermostat am Heizkörper regelt') && !!karte().querySelector('.sw.on'));
     erwarte('J4b: Kostenrahmen mit Balken, gemessen und übrig (Werte der Integration)', txt().includes('September: 12,52 € gemessen · 47,48 € übrig') && txt().includes('60 €')
       && karte().querySelector('.bl-balken i.g').style.width.startsWith('20.8'));
@@ -1637,14 +1639,30 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await klick('[data-k="bl-alle"]');
       Object.assign(W(), JSON.parse(JSON.stringify(alt))); await laden();
       await klick('.hp-karte [data-k="bl-einstellen"]', 20);
-      erwarte('J4b: „einstellen ›“ → Heizung › Regeln', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'regeln' && !!litEl('.sheet .bl-rv'));
+      erwarte('M9: „einstellen ›“ → Heizung › Grundlagen', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'grundlagen' && !!litEl('.sheet .bl-rv'));
       await klick({ act: 'zu' }); await klick({ act: 'tab', v: 'auswertung' }, 20); panel.s.hpReiter = 'hoch'; panel.awDetail('hochrechnung'); await ruhe(); }
-    const klima = async k => { neu(); await klick({ act: 'sheet', s: 'hp-klima' }); pruefe('Klimamittel'); await klick(`[data-k="${k}"]`, 30); return letzte('baustelle/setzen').at(-1); };
-    const k = await klima('hp-speichern');
-    erwarte('BSM-033.03: 12 Klimamittel gespeichert', k && k.entry_id === panel.d.entry && k.pfad.join('.') === 'heizung.klimamittel' && Array.isArray(k.wert) && k.wert.length === 12);
-    const v = await klima('hp-vorgabe');
-    erwarte('BSM-033.03: Vorgabe = keine eigenen Werte', v && v.wert === null);
+    /* M9 (Mockup grundlagen.html): in der Heizperiode nur „einstellen ›“ (Zeitraum und Klima) – kein ✎, kein „Klimamittel ändern ›“ */
+    erwarte('M9: Heizperiode-Karte mit „einstellen ›“ statt ✎', !!litEl('.hp-karte [data-k="hp-einstellen"]') && !litEl('.hp-karte .hp-zeit-chip').textContent.includes('✎') && !ui.innerHTML.includes('Klimamittel ändern'));
+    await klick('.hp-karte [data-k="hp-einstellen"]', 20);
+    erwarte('M9: „einstellen ›“ → Heizung › Grundlagen', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'grundlagen');
+    await ruhe(30); pruefe('Grundlagen Klimamittel');
+    erwarte('M9: 12 Klimamittel, Heizperiode hervorgehoben', litEls('.sheet .gl-klima input').length === 12 && litEls('.sheet .gl-klima label.gl-hp').length === (panel.d.hp[0] <= panel.d.hp[1] ? panel.d.hp[1] - panel.d.hp[0] + 1 : 13 - panel.d.hp[0] + panel.d.hp[1]));
+    const klima = async k => { neu(); await klick(`.sheet [data-k="${k}"]`, 30); return letzte('baustelle/setzen').at(-1); };
+    const k = await klima('gl-klima-speichern');
+    erwarte('BSM-033.03/M9: 12 Klimamittel gespeichert', k && k.entry_id === panel.d.entry && k.pfad.join('.') === 'heizung.klimamittel' && Array.isArray(k.wert) && k.wert.length === 12);
+    const v = await klima('gl-klima-vorgabe');
+    erwarte('BSM-033.03/M9: Vorgabe = keine eigenen Werte', v && v.wert === null);
+    { const opt = []; const alt = panel.optionenSpeichern; panel.optionenSpeichern = (x, a) => { opt.push(a); return Promise.resolve({}); };
+      const sel = litEl('.sheet [data-k="gl-hp-bis"]'); sel.value = '3'; sel.dispatchEvent(new Event('change')); await ruhe(30);
+      panel.optionenSpeichern = alt;
+      erwarte('M9: Heizperiode bis März speichert nur heizperiode_von/_bis', opt.length === 1 && opt[0].heizperiode_bis === '3' && opt[0].heizperiode_von === String(panel.d.hp[0]) && !('beginn' in opt[0])); }
     panel.s.hpReiter = null; await klick({ act: 'zu' }); }
+  /* M9: Karte „Grundlagen“ im Reiter Heizung unter den Kacheln, jede Zeile öffnet die Einblendung */
+  { await klick({ act: 'tab', v: 'heizung' }, 20); const gk = litEl('.gl-karte'), t = gk ? gk.textContent.replace(/\s+/g, ' ') : '';
+    erwarte('M9: Karte Grundlagen mit Heizperiode, Klimamittel, Baseline', !!gk && t.includes('Grundlagen für Hochrechnung und Baseline') && t.includes('Heizperiode') && t.includes('Klimamittel') && t.includes('Baseline messen'));
+    await klick('.gl-karte [data-k="gl-klima"]', 20);
+    erwarte('M9: Zeile öffnet die Einblendung Grundlagen', panel.s.sheet && panel.s.sheet.art === 'hz' && panel.s.sheet.k === 'grundlagen');
+    await klick({ act: 'zu' }); }
   /* FE-0011: Stromverteilung nach gemessenem Verbrauch – ein eingeschalteter Heizkörper ohne Strom zeigt „zieht gerade nichts“ */
   { await klick({ act: 'tab', v: 'uebersicht' }, 10); const g = panel.d.bereiche.flatMap(b => b.geraete).find(x => x.heizer);
     if (g) { const alt = [g.an, g.kwJetzt]; g.an = true; g.kwJetzt = 0; await klick({ act: 'sheet', s: 'strom' }, 10); pruefe('Stromverteilung gemessen');
@@ -2028,7 +2046,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       erwarte('Maßnahme 3: Tür-Nachricht in den Regeln nur Verweis', !litEl('.sheet [data-k="tuer_melden"]'));
       panel.s.rvAuf = 'alle'; await panel.neuZeichnen(); await ruhe(5);
       erwarte('Maßnahme 3: Tür-Verweis da (Gruppe Arbeitszeit)', !!litEl('.sheet [data-k="tuer-meldung"]'));
-      erwarte('Maßnahme 4: Beschriftungen Heizgrenze und „heizt“', ui.innerHTML.includes('Heizgrenze verglichen mit') && ui.innerHTML.includes('Zählt als „heizt“ ab') && !ui.innerHTML.includes('Grundlage'));
+      erwarte('Maßnahme 4: Beschriftungen Heizgrenze und „heizt“', ui.innerHTML.includes('Heizgrenze verglichen mit') && ui.innerHTML.includes('Zählt als „heizt“ ab') && !litEl('.sheet').innerHTML.includes('Grundlage'));   // M9: die Karte „Grundlagen …“ im Reiter zählt nicht
       panel.s.rvAuf = null; await klick({ act: 'zu' }, 5); await klick({ act: 'tab', v: 'einst' }, 10);
       await gruppe('geraete'); await klick('.ev-inhalt .glas-panel.liste[data-kurz="container"] .rk-zeile', 20);
       erwarte('Maßnahme 3: Je Container springt in den Reiter Heizung', panel.s.view === 'heizung' && panel.s.sheet && panel.s.sheet.k === 'container');

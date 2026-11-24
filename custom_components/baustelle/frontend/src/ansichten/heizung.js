@@ -8,7 +8,7 @@ import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { TAGE, datum, dauer, de, erkl, kurzDatum, minu, plusTage, uhr, wtag, zahl } from '../hilfen.js';
 import { ACHSE_TEXT, AUSNAHME, AUSN_LEGENDE, MODI, TAG_MIN } from '../tabellen.js';
 import { kopfVorlage, schalterVorlage, stepperVorlage } from './allgemein.js';
-import { baselineRegeln } from './baseline.js';
+import { grundlagen, grundlagenKarte } from './grundlagen.js';
 import { KEIN_URLAUBSKALENDER, beschreibbar } from './einblendungen-baustelle.js';
 
 const LAEDT = html`<div class="leer">Lädt …</div>`;
@@ -52,7 +52,7 @@ export function heizungVorlage(p) {
         ${kachel('regeln', '⚙️', 'Regeln', k.regeln, k.regeln2)}
         ${kachel('trocknen', '👕', 'Kleidung trocknen', k.trocknen, k.trocknen2)}
         ${kachel('urlaub', '🏖', 'Urlaub & Feiertage', k.urlaub, k.urlaub2)}
-      </div>`;
+      </div>${grundlagenKarte(p)}`;   // M9 (Mockup grundlagen.html): Heizperiode, Klimamittel, Baseline
 }
 
 /* ---- Blöcke (cls: „glas-panel block“ im Reiter/in den Einstellungen, „block hz-innen“ in der Einblendung) ---- */
@@ -178,7 +178,7 @@ const REGEL_GRUPPEN = [['vor', '🌅', 'Vor der Arbeit', 'warm, wenn es losgeht'
   ['nacht', '🌙', 'Nachts, frei, Urlaub', 'nur Frostschutz', ['frost', 'urlaub']],
   ['immer', '⏱', 'Immer', 'Messung und Strom', ['zieht', 'fuehler', 'staffel']]];
 const DATA_R = { fruehstart: 'frueh' };   // data-r der Zeile → Schlüssel der Regel, wo sie abweichen
-const ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map(k => [k, id]))), baseline: 'bl', soll: 'soll' };   // Soll: immer offen, erste Zeile
+const ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map(k => [k, id]))), soll: 'soll' };   // Soll: immer offen, erste Zeile
 /** „ändern ›“ auf eine Regel: ihre Gruppe öffnen, damit die Zeile da ist */
 export const regelGruppeAuf = (p, z) => { p.s.rvAuf = ZEILE_GRUPPE[DATA_R[z] || z] || 'alle'; };   // unbekannt: alles auf, damit die Zeile da ist
 /* Zusammenfassung je Regel: [Name, Wert, an (true/false; null = nur Wert)] – feste Texte mit den Einstellungswerten */
@@ -197,7 +197,7 @@ function regelSumme(p) {
     trocknen: ['Trocknen', 'nach Regen', null], hand: ['Hand übernehmen', `nach ${e.hand_nachfrist} min`, null],
     frost: ['Frostschutz', `unter ${grad(e.frost_temp)}`, !!e.frost], urlaub: ['Urlaub', { frost: 'nur Frostschutz', absenk: `absenken ${grad(e.absenk)}`, aus: 'alles aus' }[e.urlaub] || 'nur Frostschutz', null],
     zieht: ['„heizt“ ab', `${e.zieht_w} W`, null], fuehler: ['Fühler hält', min(e.fuehler_halten), null],
-    staffel: ['Staffelung', `${e.nutzbar} % · max ${e.max_gleich}`, !!e.staffel], baseline: ['Baseline', 'Testläufe', !!e.baseline],
+    staffel: ['Staffelung', `${e.nutzbar} % · max ${e.max_gleich}`, !!e.staffel],
   };
 }
 
@@ -212,12 +212,11 @@ export const sollKurz = p => { const e = p.d.e, G = p.d.sollG;
 /* UI-Bericht Maßnahme 3 (Herbert 23.11.2026, Entscheidung 1): bearbeitet wird nur im Reiter Heizung › Regeln; die
    Einstellungen zeigen je Gruppe die Zusammenfassung, antippen springt in den Reiter mit offener Gruppe */
 export function regelnKurzVorlage(p, cls) {
-  const S = regelSumme(p), bl = baselineRegeln(p) !== nothing, sprung = g => () => p.hzBearbeiten('regeln', g);
+  const S = regelSumme(p), sprung = g => () => p.hzBearbeiten('regeln', g);
   const zeile = (id, ic, titel, inhalt) => html`<button class="zeile rk-zeile" data-gr=${id} @click=${sprung(id)}><span class="rk-ic">${ic}</span><div><b>${titel}</b><div class="leise rv-sum">${inhalt}</div></div><span class="chev">›</span></button>`;
   return html`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">Kurzfassung</span></div>
       ${zeile('soll', '🌡', 'Solltemperatur', sollKurz(p).replace(/^Soll /, ''))}
       ${REGEL_GRUPPEN.map(([id, ic, titel, , teile]) => zeile(id, ic, titel, summeVorlage(S, teile)))}
-      ${bl ? zeile('bl', '🧪', 'Baseline messen', summeVorlage(S, ['baseline'])) : nothing}
       <button class="zeile" data-k="hz-bearbeiten" @click=${sprung(null)}><span class="blau">Im Reiter Heizung bearbeiten</span><span class="chev">›</span></button></div>`;
 }
 
@@ -280,10 +279,8 @@ function regelnInhalt(p) {
       ${auf ? inhalt() : nothing}</div>`; };
   const sum = keys => summeVorlage(S, keys);
   const karteG = (id, ic, titel, unter, teile) => gruppe(id, ic, titel, unter, sum(teile), () => html`<div class="rv-karte">${teile.map(k => R[k])}</div>`);
-  const bl = baselineRegeln(p);
   // UI-Bericht Maßnahme 3: die Solltemperatur ist der wichtigste Wert – erste Zeile, nicht zugeklappt
   return html`<div class="rv-gr auf rv-soll" data-gr="soll"><div class="rv-karte">${R.soll}</div></div>${REGEL_GRUPPEN.map(([id, ic, titel, unter, teile]) => karteG(id, ic, titel, unter, teile))}
-    ${bl === nothing ? nothing : gruppe('bl', '🧪', 'Baseline messen', 'Testläufe ohne Automatik', sum(['baseline']), () => bl)}
     ${gruppe('fest', '📐', 'Feste Regeln', 'bewährte Schwellen, nicht änderbar', html`<span class="leise">${FEST.length} feste Schwellen</span>`,
       () => html`<div class="rv-karte">${FEST.map(([t, w, x]) => html`<div class="rv-fest"><span>${t}</span><b>${w}</b><div class="leise">${x}</div></div>`)}</div>`)}${unsafeHTML(erkl(e.erklaer, 'Vorheizen und Nachheizen gelten jeden Arbeitstag. Die Verlängerungen zählen zusammen: vor der Arbeit Vorheizen + Kälte-Frühstart + früher nach Regen, danach Nachheizen + Kleidung trocknen (AN-0003). Die Heizgrenze verhindert Heizen an warmen Tagen. Der Frostschutz springt unter „ein“ an und hört erst über „aus“ wieder auf, damit der Heizkörper nicht dauernd ein- und ausschaltet.'))}`;
 }
@@ -347,9 +344,9 @@ function urlaub(p, cls) {
 }
 
 /** Blöcke je Schlüssel (Kacheln, Einstellungen); Titel und Symbol der Einblendung wie bisher */
-export const HZ_BLOECKE = { heute, wann, plan, az: arbeitszeit, ausn: ausnahmen, regeln, trocknen, container: jeContainer, urlaub };
+export const HZ_BLOECKE = { heute, wann, plan, az: arbeitszeit, ausn: ausnahmen, regeln, trocknen, container: jeContainer, urlaub, grundlagen };
 const HZ_TITEL = { heute: ['🕖', 'Heute'], wann: ['🔥', 'Wann heizt was'], plan: ['📅', 'Diese Woche'], az: ['👷', 'Arbeitszeit'], ausn: ['✳️', 'Ausnahmen'], regeln: ['⚙️', 'Regeln'],
-  trocknen: ['👕', 'Kleidung trocknen'], container: ['🏠', 'Container'], urlaub: ['🏖', 'Urlaub & Feiertage'] };
+  trocknen: ['👕', 'Kleidung trocknen'], container: ['🏠', 'Container'], urlaub: ['🏖', 'Urlaub & Feiertage'], grundlagen: ['📈', 'Grundlagen für Hochrechnung und Baseline'] };
 
 /** Block als Einblendung (Art „hz“): Heute mit „Wann heizt was“, Arbeitszeit mit Ausnahmen */
 export function hzEinblendung(p, s) {

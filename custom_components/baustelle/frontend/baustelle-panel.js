@@ -2797,12 +2797,8 @@ var thermostat = b2`<div class="bl-hinweis">🌡 Der Thermostat am Heizkörper s
 function baselineReiter(p4) {
   const B2 = p4.d.baseline;
   if (!B2) return b2`<div class="leer">Keine Heizung auf dieser Baustelle</div>`;
-  return b2`<div class="bl-zeile1"><div><b>Baseline messen</b> <span class="leise">· ${B2.an ? "an" : "aus"}</span><div class="leise">Testläufe ohne Automatik – Schalter, Kostenrahmen und Absagen unter Heizung › Regeln.</div></div>
-      <button class="chip glas-panel" data-k="bl-einstellen" @click=${() => {
-    p4.gehe("heizung");
-    p4.s.rvAuf = "bl";
-    return p4.hzAuf("regeln");
-  }}>einstellen ›</button></div>
+  return b2`<div class="bl-zeile1"><div><b>Baseline messen</b> <span class="leise">· ${B2.an ? "an" : "aus"}</span><div class="leise">Testläufe ohne Automatik – Schalter, Kostenrahmen und Absagen unter Heizung › Grundlagen.</div></div>
+      <button class="chip glas-panel" data-k="bl-einstellen" @click=${() => zuGrundlagen(p4)}>einstellen ›</button></div>
     ${B2.an ? naechsterLauf(p4) : A}${standListe(p4)}${laufListe(p4)}${thermostat}`;
 }
 function baselineHinweis(p4) {
@@ -2864,6 +2860,72 @@ var BASELINE_CSS = `
   .bl-l-d { grid-area: d; } .bl-l-s { grid-area: s; text-align: left; } .bl-l-c { grid-area: c; text-align: right; }
   .bl-l-z { grid-area: z; text-align: left; } .bl-l-k { grid-area: k; } .bl-l-e { grid-area: e; } .bl-l-g { grid-area: g; }
 }`;
+
+// src/ansichten/grundlagen.js
+var imZeitraum = (m3, [von, bis]) => von <= bis ? m3 >= von && m3 <= bis : m3 >= von || m3 <= bis;
+var zuGrundlagen = (p4) => {
+  p4.gehe("heizung");
+  return p4.hzAuf("grundlagen");
+};
+var hochrechnung = (p4) => {
+  const A2 = p4.s.aw ? p4.awDaten(p4.s.aw.zeitraum, p4.zrV("aw")) : p4.awDaten("Monat", 0);
+  return A2 ? A2.hochrechnung || null : void 0;
+};
+var eigeneKlima = (p4) => {
+  const h3 = (p4.d.r && p4.d.r.einstellungen || {}).heizung || {};
+  return Array.isArray(h3.klimamittel) && h3.klimamittel.length === 12;
+};
+function grundlagenKarte(p4) {
+  const d3 = p4.d, [von, bis] = d3.hp, B2 = d3.baseline, auf = () => p4.hzAuf("grundlagen"), l4 = B2 && B2.offen;
+  const zeile4 = (k2, titel2, text2) => b2`<button class="zeile gl-zeile" data-k=${`gl-${k2}`} @click=${auf}><div><b>${titel2}</b><div class="leise">${text2}</div></div><span class="chev">›</span></button>`;
+  const bl = !B2 ? null : !d3.e.baseline ? "aus" : `an · höchstens ${de(d3.e.baseline_eur, 0)} € je Monat${l4 ? ` · ${l4.status === "laeuft" ? "läuft jetzt" : `nächster Lauf ${l4.von_t}`}` : ""}`;
+  return b2`<div class="glas-panel liste gl-karte" data-k="grundlagen"><div class="gruppe">📈 Grundlagen für Hochrechnung und Baseline</div>
+      ${zeile4("heizperiode", "Heizperiode", `${MONATE_LANG[von - 1]} – ${MONATE_LANG[bis - 1]}`)}
+      ${zeile4("klima", "Klimamittel", eigeneKlima(p4) ? "eigene Werte" : "Vorgabe Graz 1991–2020")}
+      ${bl === null ? A : zeile4("baseline", "🧪 Baseline messen", bl)}
+      <div class="leise gl-fuss">Die Ergebnisse stehen in der Auswertung › Heizperiode.</div></div>`;
+}
+function klima(p4, s4) {
+  const h3 = hochrechnung(p4);
+  if (h3 === void 0) return b2`<div class="leise">Lädt …</div>`;
+  const K = s4.klima ||= [...h3 && h3.klima || []];
+  if (K.length !== 12) return b2`<div class="leise">Klimamittel kommen mit der ersten Hochrechnung.</div>`;
+  const speichern = (wert2) => p4.setzen(["heizung", "klimamittel"], wert2, "Gespeichert").then(() => {
+    s4.klima = null;
+    p4.neuZeichnen();
+  });
+  return b2`<div class="gl-klima">${K.map((t5, i7) => b2`<label class=${imZeitraum(i7 + 1, p4.d.hp) ? "gl-hp" : ""}><span>${MONATE[i7]}</span>
+      <input inputmode="decimal" data-m=${i7} .value=${de(t5, 1)} @change=${(e6) => {
+    const v2 = parseFloat(String(e6.target.value).replace(",", ".").replace("−", "-"));
+    if (!isNaN(v2)) K[i7] = v2;
+  }}></label>`)}</div>
+    <div class="leise">${h3 && h3.klima_vorgabe ? "Vorgabe Graz 1991–2020" : "Eigene Werte"}. Für eine andere Gegend die Monatsmittel der nächsten Station von GeoSphere Austria
+      eintragen. Die Hochrechnung nimmt sie für alle Tage ohne Vorhersage. Hervorgehoben: Heizperiode.</div>
+    <div class="gl-knoepfe nur-admin"><button class="knopf amber" data-k="gl-klima-speichern" @click=${p4.nurAdmin(() => speichern(K.map((v2) => Math.round(v2 * 10) / 10)))}>Klimamittel speichern</button>
+      <button class="knopf leise-k" data-k="gl-klima-vorgabe" @click=${p4.nurAdmin(() => speichern(null))}>↺ Vorgabe Graz</button></div>`;
+}
+function grundlagen(p4, cls) {
+  const d3 = p4.d, [von, bis] = d3.hp, s4 = p4.s.sheet || {};
+  const wahl2 = (k2, wert2, fn) => b2`<select data-k=${k2} @change=${(e6) => p4.nurAdmin(fn)(+e6.target.value)}>${MONATE_LANG.map((m3, i7) => b2`<option value=${i7 + 1} ?selected=${i7 + 1 === wert2}>${m3}</option>`)}</select>`;
+  const bl = baselineRegeln(p4);
+  return b2`<div class=${cls}>
+      <div class="gruppe-t">Heizperiode</div>
+      <div class="zeile"><div><b>von – bis</b><div class="leise">derselbe Wert wie ⚙ › Baustelle › Beginn und Ende; gilt für Hochrechnung, Heizgradtage und Baseline</div></div>
+        <span class="gl-hp-wahl">${wahl2("gl-hp-von", von, (v2) => p4.heizperiodeSetzen(v2, bis))} – ${wahl2("gl-hp-bis", bis, (v2) => p4.heizperiodeSetzen(von, v2))}</span></div>
+      <div class="gruppe-t">Klimamittel · °C außen je Monat</div>
+      ${klima(p4, s4)}
+      ${bl === A ? A : b2`<div class="gl-bl">${bl}</div>`}</div>`;
+}
+var GRUNDLAGEN_CSS = `
+.gl-karte .gl-zeile { text-align: left; } .gl-fuss { padding: 6px 14px 10px; font-size: 12px; }
+.gl-hp-wahl { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.gl-klima { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; padding: 6px 0 8px; }
+.gl-klima label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--ink2); }
+.gl-klima input { width: 100%; box-sizing: border-box; padding: 6px; border-radius: 8px; border: 1px solid rgba(127,127,127,.3); background: transparent; color: inherit; font: inherit; }
+.gl-klima label.gl-hp span { color: var(--amber); font-weight: 600; } .gl-klima label.gl-hp input { border-color: var(--amber); }
+.gl-knoepfe { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+.gl-bl { margin-top: 12px; } .gl-bl .bl-regeln { margin-top: 0; }
+`;
 
 // src/ansichten/einblendungen-baustelle.js
 var GRIFF3 = b2`<div class="griff"></div>`;
@@ -3045,7 +3107,7 @@ function heizungVorlage(p4) {
         ${kachel("regeln", "⚙️", "Regeln", k2.regeln, k2.regeln2)}
         ${kachel("trocknen", "👕", "Kleidung trocknen", k2.trocknen, k2.trocknen2)}
         ${kachel("urlaub", "🏖", "Urlaub & Feiertage", k2.urlaub, k2.urlaub2)}
-      </div>`;
+      </div>${grundlagenKarte(p4)}`;
 }
 function heute(p4, cls) {
   const d3 = p4.d, pl = p4.planTag(p4.z.HEUTE_TAG), R2 = d3.heute || [], sel = R2.find((r5) => r5.k === p4.s.hrAuf);
@@ -3176,7 +3238,7 @@ var REGEL_GRUPPEN = [
   ["immer", "⏱", "Immer", "Messung und Strom", ["zieht", "fuehler", "staffel"]]
 ];
 var DATA_R = { fruehstart: "frueh" };
-var ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map((k2) => [k2, id]))), baseline: "bl", soll: "soll" };
+var ZEILE_GRUPPE = { ...Object.fromEntries(REGEL_GRUPPEN.flatMap(([id, , , , teile]) => teile.map((k2) => [k2, id]))), soll: "soll" };
 var regelGruppeAuf = (p4, z2) => {
   p4.s.rvAuf = ZEILE_GRUPPE[DATA_R[z2] || z2] || "alle";
 };
@@ -3204,8 +3266,7 @@ function regelSumme(p4) {
     urlaub: ["Urlaub", { frost: "nur Frostschutz", absenk: `absenken ${grad(e6.absenk)}`, aus: "alles aus" }[e6.urlaub] || "nur Frostschutz", null],
     zieht: ["„heizt“ ab", `${e6.zieht_w} W`, null],
     fuehler: ["Fühler hält", min(e6.fuehler_halten), null],
-    staffel: ["Staffelung", `${e6.nutzbar} % · max ${e6.max_gleich}`, !!e6.staffel],
-    baseline: ["Baseline", "Testläufe", !!e6.baseline]
+    staffel: ["Staffelung", `${e6.nutzbar} % · max ${e6.max_gleich}`, !!e6.staffel]
   };
 }
 var summeVorlage = (S3, keys) => {
@@ -3217,12 +3278,11 @@ var sollKurz = (p4) => {
   return e6.soll_art !== "gleitend" ? `Soll ${de(e6.soll)} °C` : G ? `Soll gleitend, heute ${de(G.soll, 1)} °C` : `Soll gleitend, noch ${de(e6.soll)} °C`;
 };
 function regelnKurzVorlage(p4, cls) {
-  const S3 = regelSumme(p4), bl = baselineRegeln(p4) !== A, sprung = (g2) => () => p4.hzBearbeiten("regeln", g2);
+  const S3 = regelSumme(p4), sprung = (g2) => () => p4.hzBearbeiten("regeln", g2);
   const zeile4 = (id, ic, titel2, inhalt) => b2`<button class="zeile rk-zeile" data-gr=${id} @click=${sprung(id)}><span class="rk-ic">${ic}</span><div><b>${titel2}</b><div class="leise rv-sum">${inhalt}</div></div><span class="chev">›</span></button>`;
   return b2`<div class=${cls}><div class="block-kopf"><b>So wird geheizt</b><span class="leise">Kurzfassung</span></div>
       ${zeile4("soll", "🌡", "Solltemperatur", sollKurz(p4).replace(/^Soll /, ""))}
       ${REGEL_GRUPPEN.map(([id, ic, titel2, , teile]) => zeile4(id, ic, titel2, summeVorlage(S3, teile)))}
-      ${bl ? zeile4("bl", "🧪", "Baseline messen", summeVorlage(S3, ["baseline"])) : A}
       <button class="zeile" data-k="hz-bearbeiten" @click=${sprung(null)}><span class="blau">Im Reiter Heizung bearbeiten</span><span class="chev">›</span></button></div>`;
 }
 function blockKurzVorlage(p4, k2, cls) {
@@ -3288,9 +3348,7 @@ function regelnInhalt(p4) {
   };
   const sum = (keys) => summeVorlage(S3, keys);
   const karteG = (id, ic, titel2, unter, teile) => gruppe(id, ic, titel2, unter, sum(teile), () => b2`<div class="rv-karte">${teile.map((k2) => R2[k2])}</div>`);
-  const bl = baselineRegeln(p4);
   return b2`<div class="rv-gr auf rv-soll" data-gr="soll"><div class="rv-karte">${R2.soll}</div></div>${REGEL_GRUPPEN.map(([id, ic, titel2, unter, teile]) => karteG(id, ic, titel2, unter, teile))}
-    ${bl === A ? A : gruppe("bl", "🧪", "Baseline messen", "Testläufe ohne Automatik", sum(["baseline"]), () => bl)}
     ${gruppe(
     "fest",
     "📐",
@@ -3361,7 +3419,7 @@ function urlaub2(p4, cls) {
         ${!p4.entitaeten(beschreibbar).length ? b2`<div class="leise kal-hinweis" data-k="kein-urlaubskalender">${KEIN_URLAUBSKALENDER}</div>` : A}
         <button class="zeile nur-admin" @click=${p4.nurAdmin(() => p4.einblenden(urlaubsKal ? "urlaub" : "wetterquelle"))}><span class="blau">${urlaubsKal ? "+ Urlaub eintragen" : "Kalender für Urlaub wählen"}</span></button></div>`;
 }
-var HZ_BLOECKE = { heute, wann, plan, az: arbeitszeit, ausn: ausnahmen, regeln, trocknen, container: jeContainer, urlaub: urlaub2 };
+var HZ_BLOECKE = { heute, wann, plan, az: arbeitszeit, ausn: ausnahmen, regeln, trocknen, container: jeContainer, urlaub: urlaub2, grundlagen };
 var HZ_TITEL = {
   heute: ["🕖", "Heute"],
   wann: ["🔥", "Wann heizt was"],
@@ -3371,7 +3429,8 @@ var HZ_TITEL = {
   regeln: ["⚙️", "Regeln"],
   trocknen: ["👕", "Kleidung trocknen"],
   container: ["🏠", "Container"],
-  urlaub: ["🏖", "Urlaub & Feiertage"]
+  urlaub: ["🏖", "Urlaub & Feiertage"],
+  grundlagen: ["📈", "Grundlagen für Hochrechnung und Baseline"]
 };
 function hzEinblendung(p4, s4) {
   const k2 = HZ_TITEL[s4.k] ? s4.k : "heute", [sym, titel2] = HZ_TITEL[k2], cls = "block hz-innen";
@@ -4978,13 +5037,11 @@ var ASSISTENT_CSS = `
 `;
 
 // src/ansichten/heizperiode.js
-var GRIFF10 = b2`<div class="griff"></div>`;
 var LAEDT6 = b2`<div class="leer">Lädt …</div>`;
-var MONATE_VOLL = ["Jänner", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 var STAND = { gut: ["gut", "gruen-t"], brauchbar: ["brauchbar", "amber-t"], unsicher: ["unsicher", "rot-t"], lernt: ["lernt noch", "leise"] };
 var eur2 = (x2) => zahl(x2) ? `${de(x2, 0)} €` : "–";
 var tagText = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "";
-var imZeitraum = (m3, [von, bis]) => von <= bis ? m3 >= von && m3 <= bis : m3 >= von || m3 <= bis;
+var imZeitraum2 = (m3, [von, bis]) => von <= bis ? m3 >= von && m3 <= bis : m3 >= von || m3 <= bis;
 var stand = (c4) => {
   const [t5, k2] = STAND[c4.stand] || [c4.stand, ""];
   return b2`<span class="hp-st ${k2}">${t5}${c4.stand === "lernt" ? ` · ${c4.tage}/10 Tage` : ""}</span>`;
@@ -5157,7 +5214,7 @@ function zeitraeume(p4, h3, art) {
     ${ueberRand(Z2) ? b2`<div class="leise">↑ ohne Automatik reicht über den Rand – die Zahl zeigt das Antippen.</div>` : A}
     ${detail(h3, Z2[wahl2], art, p4)}`;
 }
-function hochrechnung(p4, h3) {
+function hochrechnung2(p4, h3) {
   const a3 = p4.s.hpAufl || "hp";
   const seg2 = b2`<div class="seg glas-panel hp-aufl">${AUFL.map(([k2, t5]) => b2`<button data-v=${k2} class=${a3 === k2 ? "on" : ""} @click=${() => {
     p4.s.hpAufl = k2;
@@ -5205,11 +5262,11 @@ function signatur(p4, h3) {
       Gleich gebaute Container (Einzel oder Doppel, gleicher Heizkörper) lernen eine gemeinsame Signatur, ein Doppelcontainer zählt doppelt. Unter der Heizgrenze steigt der
       Verbrauch je Grad kälter; die Güte ist die mittlere Abweichung (bis 20 % gut, bis 30 % brauchbar).</div>`;
 }
-function klima(p4, h3) {
+function klima2(p4, h3) {
   const K = h3.klima || [], min2 = Math.min(-2, ...K), max = Math.max(22, ...K), y3 = (v2) => (v2 - min2) / (max - min2) * 100;
-  return b2`<div class="hp-monate">${K.map((t5, i7) => b2`<div class="hp-m ${imZeitraum(i7 + 1, p4.d.hp) ? "hp" : ""}"><i style="height:${y3(t5)}%"></i><b>${de(t5, 1)}</b><span>${MONATE[i7]}</span></div>`)}</div>
+  return b2`<div class="hp-monate">${K.map((t5, i7) => b2`<div class="hp-m ${imZeitraum2(i7 + 1, p4.d.hp) ? "hp" : ""}"><i style="height:${y3(t5)}%"></i><b>${de(t5, 1)}</b><span>${MONATE[i7]}</span></div>`)}</div>
     <div class="leise">Klimamittel ${h3.klima_vorgabe ? "Graz 1991–2020 (Vorgabe)" : "(eigene Werte)"} · hervorgehoben: Heizperiode.
-      <a class="hp-link nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("hp-klima"))}>Klimamittel ändern ›</a></div>
+      <a class="hp-link" data-k="hp-klima-einstellen" @click=${() => zuGrundlagen(p4)}>einstellen ›</a></div>
     ${(h3.vorhersage || []).length ? b2`<div class="hp-vh"><b>Vorhersage</b>${h3.vorhersage.map(([t5, v2]) => b2`<span class="chip glas-panel">${t5.slice(8, 10)}.${t5.slice(5, 7)}. ${de(v2, 1)}°</span>`)}</div>` : A}
     <div class="hp-kz">${zahl(h3.hgt_rest) ? b2`<div><b>${de(h3.hgt_rest, 0)}</b><span>Heizgradtage bis ${tagText(h3.ende)}</span></div>` : A}
       ${zahl(h3.normjahr_eur) ? b2`<div><b>${eur2(h3.normjahr_eur)}</b><span>im Normjahr (witterungsbereinigt)</span></div>` : A}</div>`;
@@ -5218,29 +5275,15 @@ var REITER = [["hoch", "Hochrechnung", "Prognose"], ["sig", "Signatur"], ["klima
 function heizperiodeVorlage(p4, A2, start = "hoch", merk = "hpReiter") {
   const d3 = p4.d, h3 = A2 && A2.hochrechnung, r5 = p4.s[merk] || start, [von, bis] = d3.hp;
   return b2`<div class="glas-panel block hp-karte"><div class="block-kopf"><b>Heizperiode</b>
-      <button class="chip glas-panel hp-zeit-chip nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("zeitraum-bs"))}>${MONATE[von - 1]}–${MONATE[bis - 1]}${h3 && h3.ende ? ` · bis ${tagText(h3.ende)}` : ""} ✎</button></div>
+      <span class="hp-zeit-r"><span class="leise hp-zr-t">${MONATE[von - 1]}–${MONATE[bis - 1]}${h3 && h3.ende ? ` · bis ${tagText(h3.ende)}` : ""}</span>
+      <button class="chip glas-panel hp-zeit-chip" data-k="hp-einstellen" @click=${() => zuGrundlagen(p4)}>einstellen ›</button></span></div>
     <div class="seg glas-panel hp-reiter">${REITER.map(([k2, t5, kurz]) => b2`<button data-v=${k2} class=${r5 === k2 ? "on" : ""} @click=${() => {
     p4.s[merk] = k2;
     p4.neuZeichnen();
   }}>${p4.narrow && kurz ? kurz : t5}</button>`)}</div>
-    ${r5 === "bl" ? baselineReiter(p4) : !A2 ? LAEDT6 : !h3 || !zahl(h3.mit_kwh) ? b2`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>` : r5 === "sig" ? signatur(p4, h3) : r5 === "klima" ? klima(p4, h3) : hochrechnung(p4, h3)}</div>`;
+    ${r5 === "bl" ? baselineReiter(p4) : !A2 ? LAEDT6 : !h3 || !zahl(h3.mit_kwh) ? b2`<div class="leer">Noch zu wenige Tage für eine Hochrechnung</div>` : r5 === "sig" ? signatur(p4, h3) : r5 === "klima" ? klima2(p4, h3) : hochrechnung2(p4, h3)}</div>`;
 }
-function hpKlima(p4, s4) {
-  const A2 = p4.awDaten(p4.s.aw.zeitraum, p4.zrV("aw")), h3 = A2 && A2.hochrechnung, K = s4.werte ||= [...h3 && h3.klima || []];
-  const speichern = (wert2) => p4.setzen(["heizung", "klimamittel"], wert2, "Gespeichert").then(() => p4.schliessen());
-  return b2`${GRIFF10}<div class="block-kopf"><h3>Klimamittel</h3><span class="leise">Monatsmittel außen, °C</span></div>
-    <div class="glas-panel liste hp-eingabe">${K.map((t5, i7) => b2`<label class="feld">${MONATE_VOLL[i7]}<input inputmode="decimal" .value=${de(t5, 1)}
-      @change=${(e6) => {
-    const v2 = parseFloat(String(e6.target.value).replace(",", "."));
-    if (!isNaN(v2)) K[i7] = v2;
-  }}></label>`)}</div>
-    <div class="leise">Vorgabe: Graz 1991–2020. Für eine andere Gegend die Klimamittel der nächsten Station von GeoSphere Austria
-      eintragen. Die Hochrechnung nimmt sie für alle Tage ohne Vorhersage.</div>
-    <div class="hp-knoepfe"><button class="knopf amber" data-k="hp-speichern" @click=${() => speichern(K.map((v2) => Math.round(v2 * 10) / 10))}>Speichern</button>
-      <button class="knopf leise-k" data-k="hp-vorgabe" @click=${() => speichern(null)}>Vorgabe Graz</button>
-      <button class="knopf leise-k" @click=${() => p4.schliessen()}>Abbrechen</button></div>`;
-}
-var HEIZPERIODE_EINBLENDUNGEN = { "hp-klima": hpKlima };
+var HEIZPERIODE_EINBLENDUNGEN = {};
 var HEIZPERIODE_CSS = `
 .seg.hp-aufl { margin: 2px 0 8px; } .seg.hp-aufl button, .seg.hp-reiter button { padding: 6px 2px; min-width: 0; flex: 1 1 0; font-size: 12px; }
 .hp-kopf { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .hp-zr { flex: 1; text-align: center; font-size: 13px; font-weight: 600; }
@@ -5263,6 +5306,7 @@ var HEIZPERIODE_CSS = `
 .hp-det-z .sum { border-top: 1px solid rgba(127,127,127,.2); } .hp-det-z .gesp b { color: #30d158; }
 .hp-grob { display: block; font-size: 12px; color: var(--amber); }   /* BSM-033.05: ohne/gespart nur grobe Obergrenze */
 .hp-zeit-chip { font-size: 12px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
+.hp-zeit-r { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; } .hp-zr-t { font-size: 12px; white-space: nowrap; }
 .hp-reiter { margin: 4px 0 8px; } .hp-zahl { font-size: 26px; font-weight: 600; margin: 4px 0 2px; } .hp-zahl .leise { font-size: 14px; font-weight: 400; }
 .hp-dia { width: 100%; max-width: 540px; height: auto; display: block; margin: 6px auto; }
 .hp-dia text, .hp-streu text { font-size: 9px; fill: var(--ink2); } .hp-dia .hp-yt { text-anchor: end; }
@@ -5292,8 +5336,7 @@ var HEIZPERIODE_CSS = `
 .hp-m b { font-weight: 500; font-size: 9px; } .hp-m span { color: var(--ink2); }
 .hp-vh { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; } .hp-vh .chip { font-size: 12px; padding: 4px 8px; }
 .hp-kz { display: flex; gap: 16px; flex-wrap: wrap; } .hp-kz div { display: flex; flex-direction: column; } .hp-kz b { font-size: 18px; } .hp-kz span { font-size: 12px; color: var(--ink2); }
-.hp-eingabe { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px 10px; padding: 10px 14px; } .hp-eingabe input { width: 100%; min-width: 0; box-sizing: border-box; }
-.hp-knoepfe { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }`;
+`;
 
 // src/ansichten/kacheln.js
 var roh = (v2) => o5(String(v2 ?? ""));
@@ -5537,7 +5580,7 @@ function uebersichtVorlage(p4) {
 }
 
 // src/ansichten/einblendungen-uebersicht.js
-var GRIFF11 = b2`<div class="griff"></div>`;
+var GRIFF10 = b2`<div class="griff"></div>`;
 var LAEDT7 = b2`<div class="leer">Lädt …</div>`;
 var knopf10 = (t5, fn, art = "") => b2`<button class="knopf ${art}" @click=${fn}>${t5}</button>`;
 var ZEITRAEUME2 = ["Tag", "Woche", "Monat", "Jahr"];
@@ -5560,7 +5603,7 @@ function verbrauchVorlage(p4, st, ziel2, kennzahlen) {
       <div class="chart-wrap">${laedt ? LAEDT7 : svg(V2.chart)}</div>
       ${V2.jeReihe.length ? b2`<div class="vb-je">${V2.jeReihe.map((r5) => b2`<div><i style="background:${r5.farbe}"></i><span class="n">${r5.name}</span><b>${de(r5.su, r5.su < 100 ? 1 : 0)} kWh</b><span>${de(r5.su * preis2, 2)} €</span><span class="leise">Spitze ${r5.spitzeBei}</span></div>`)}</div>` : A}`;
 }
-var verbrauch = (p4, s4) => b2`${GRIFF11}${verbrauchVorlage(p4, s4, "sheet", true)}${knopf10("Schließen", () => p4.schliessen())}`;
+var verbrauch = (p4, s4) => b2`${GRIFF10}${verbrauchVorlage(p4, s4, "sheet", true)}${knopf10("Schließen", () => p4.schliessen())}`;
 function wetter(p4, s4) {
   const d3 = p4.d, a3 = s4.wa || "std", e6 = d3.e, ws = p4.zustand(d3.wetterEid), w2 = d3.wetter || {};
   const folge = (t5, iso) => b2`${zahl(t5) && t5 < e6.frueh_temp ? b2`<span class="w-folge blau">Frühstart</span>` : A}${((d3.plan[iso] || {}).gruende || []).includes("trocknen") ? b2`<span class="w-folge amber">Kleidung trocknen</span>` : A}${zahl(t5) && t5 > e6.grenze ? b2`<span class="w-folge">über Heizgrenze</span>` : A}`;
@@ -5596,7 +5639,7 @@ function wetter(p4, s4) {
     g2.includes("frueher_nach_regen") ? `Kleidung trocknen morgen früh aktiv${d3.trocknen && zahl(d3.trocknen.heute_mm) ? ` (${de(d3.trocknen.heute_mm, 1)} mm Regen in der Arbeitszeit heute, ${d3.trocknen.frueher_morgen_min} min früher)` : ""}` : "",
     g2.includes("fruehstart") ? `Kälte-Frühstart morgen ${e6.frueh_min} min früher${zahl(wm.kalt) ? ` (${de(wm.kalt, 0).replace("-", "−")} °C)` : ""}` : ""
   ].filter(Boolean);
-  return b2`${GRIFF11}<h3>Wetter · ${p4.name(d3.wetterEid) || d3.titel}</h3><div class="w-jetzt">${svg(wetterIcon(wz, 72))}<div><b>${zahl(wtemp) ? de(wtemp) + " °C" : "–"}</b><div class="leise">${[ws ? WETTER_TEXT[p4.nachtWetter(ws.state)] || ws.state : wt, zahl(w2.regen_heute) && w2.regen_heute > 0 ? `${de(w2.regen_heute, w2.regen_heute % 1 ? 1 : 0)} mm Regen heute` : "", zahl(gef) ? `gefühlt ${de(gef, 0)} °C` : ""].filter(Boolean).join(" · ")}</div></div></div>
+  return b2`${GRIFF10}<h3>Wetter · ${p4.name(d3.wetterEid) || d3.titel}</h3><div class="w-jetzt">${svg(wetterIcon(wz, 72))}<div><b>${zahl(wtemp) ? de(wtemp) + " °C" : "–"}</b><div class="leise">${[ws ? WETTER_TEXT[p4.nachtWetter(ws.state)] || ws.state : wt, zahl(w2.regen_heute) && w2.regen_heute > 0 ? `${de(w2.regen_heute, w2.regen_heute % 1 ? 1 : 0)} mm Regen heute` : "", zahl(gef) ? `gefühlt ${de(gef, 0)} °C` : ""].filter(Boolean).join(" · ")}</div></div></div>
         <div class="seg">${[["std", "Stündlich"], ["tag", "Tagesverlauf"], ["3", "3 Tage"]].map(([k2, t5]) => b2`<button data-v=${k2} class=${a3 === k2 ? "on" : ""} @click=${() => p4.wetterAnsicht(k2)}>${t5}</button>`)}</div>
         <div class="w-inhalt">${inhalt}</div>
         <div class="leise">Für die Heizung: ${fuer.length ? fuer.join(", ") + "." : "morgen nichts Besonderes."}</div>${knopf10("Schließen", () => p4.schliessen())}`;
@@ -5609,7 +5652,7 @@ function warnungen(p4) {
           <button class="chip glas-panel" data-id=${w2.id} @click=${() => p4.warnungStumm(w2.id)}>${w2.stumm ? "🔔 wieder melden" : "🔕 bis morgen stumm"}</button></div></div>`;
   const gruppe = (titel2, liste2) => liste2.length ? b2`<div class="gruppe-t">${titel2} · ${liste2.length}</div>${liste2.map(karte)}` : A;
   const offen = W.filter((w2) => !w2.stumm);
-  return b2`${GRIFF11}<div class="block-kopf"><h3>Warnungen</h3><span class="leise">${offen.length} offen</span></div>
+  return b2`${GRIFF10}<div class="block-kopf"><h3>Warnungen</h3><span class="leise">${offen.length} offen</span></div>
         ${offen.length ? A : b2`<div class="leer">Alles in Ordnung ✓</div>`}
         ${gruppe("Störungen", offen.filter((w2) => w2.stufe === "stoerung"))}${gruppe("Hinweise", offen.filter((w2) => w2.stufe === "hinweis"))}${gruppe("Stumm bis morgen", W.filter((w2) => w2.stumm))}
         <button class="zeile" @click=${() => p4.warnungenProtokoll()}><span class="blau">Alle Einträge im Protokoll</span><span class="chev">›</span></button>
@@ -5617,7 +5660,7 @@ function warnungen(p4) {
 }
 function baustellen(p4) {
   const d3 = p4.d;
-  return b2`${GRIFF11}<h3>Baustelle wählen</h3>${p4.alle.map((b3) => b2`<div class="zeile bs-zeile"><button class="bs-wahl" data-id=${b3.entry} @click=${() => p4.baustelleOeffnen(b3.entry)}><span>${b3.titel}${d3 && b3.entry === d3.entry ? " ✓" : ""}</span><span class="badge ${b3.aktiv ? "gruen" : ""}">${b3.aktiv ? "aktiv" : "abgeschlossen"}</span></button>
+  return b2`${GRIFF10}<h3>Baustelle wählen</h3>${p4.alle.map((b3) => b2`<div class="zeile bs-zeile"><button class="bs-wahl" data-id=${b3.entry} @click=${() => p4.baustelleOeffnen(b3.entry)}><span>${b3.titel}${d3 && b3.entry === d3.entry ? " ✓" : ""}</span><span class="badge ${b3.aktiv ? "gruen" : ""}">${b3.aktiv ? "aktiv" : "abgeschlossen"}</span></button>
         <button class="bs-ic nur-admin" data-id=${b3.entry} title="Bearbeiten" aria-label="${b3.titel} bearbeiten" @click=${p4.nurAdmin(() => p4.bsBearbeiten(b3.entry))}>✎</button><button class="x nur-admin" data-id=${b3.entry} title="Löschen" aria-label="${b3.titel} löschen" @click=${p4.nurAdmin(() => p4.einblenden("bs-loeschen", { id: b3.entry }))}>✕</button></div>`)}
       <button class="zeile nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("baustelle-neu"))}><span class="blau">+ Neue Baustelle</span></button>`;
 }
@@ -5654,7 +5697,7 @@ function stromRang(p4, L2, zustand3 = stromZustand) {
 }
 function strom2(p4) {
   const d3 = p4.d, L2 = p4.last(), e6 = d3.e;
-  return b2`${GRIFF11}<div class="block-kopf"><h3>Stromverteilung</h3><span class="leise">${L2.laufen} von ${L2.hk.length} Heizkörpern an · höchstens ${L2.max}</span></div>
+  return b2`${GRIFF10}<div class="block-kopf"><h3>Stromverteilung</h3><span class="leise">${L2.laufen} von ${L2.hk.length} Heizkörpern an · höchstens ${L2.max}</span></div>
         <div class="strom-leg"><span><i class="s-heiz"></i>Heizung ${de(L2.heiz)} kW</span><span><i class="s-pumpe"></i>Pumpen ${de(L2.pumpe)} kW</span><span><i class="s-sonst"></i>Sonstiges ${de(L2.sonst)} kW</span><span><i class="s-res"></i>Reserve (Kran, Werkzeug)</span></div>
         ${L2.A.map((a3) => {
     const w2 = (v2) => `${a3.grenze > 0 ? Math.max(0, v2 / a3.grenze * 100) : 0}%`;
@@ -5672,7 +5715,7 @@ function strom2(p4) {
 }
 function mBild(p4, s4) {
   const m3 = (p4.meldungen() || []).find((x2) => x2.id === s4.id), u3 = m3 && p4.mlBild(m3, s4.i);
-  return b2`${GRIFF11}<h3>${m3 && m3.ticket || "Meldung"} · Bild ${s4.i + 1}</h3>${u3 ? b2`<img class="mb-gross" src=${u3} alt="Bild">` : LAEDT7}${knopf10("Schließen", () => p4.schliessen())}`;
+  return b2`${GRIFF10}<h3>${m3 && m3.ticket || "Meldung"} · Bild ${s4.i + 1}</h3>${u3 ? b2`<img class="mb-gross" src=${u3} alt="Bild">` : LAEDT7}${knopf10("Schließen", () => p4.schliessen())}`;
 }
 var UEBERSICHT_EINBLENDUNGEN = { verbrauch, wetter, warnungen, baustellen, strom: strom2, "m-bild": mBild };
 
@@ -6829,7 +6872,7 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .rv-gic { font-size: 18px; } .rv-gt { display: flex; flex-direction: column; gap: 2px; min-width: 0; } .rv-unter { font-weight: 400; font-size: 12px; }
 .rv-sum { font-size: 12px; color: var(--ink2); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .rv-sum b { color: var(--ink); font-weight: 600; } .rv-s.aus { color: var(--ink2); font-style: italic; }
-.rv-gr .bl-regeln { display: none; }
+
 .rv-karte { border-radius: 16px; background: rgba(120,120,128,.10); padding: 2px 12px; margin-bottom: 6px; } .rv-karte > .zeile:first-child { border-top: 0; }
 .rv-fest { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; padding: 8px 0; font-size: 13px; border-top: 1px solid var(--gridc); }
 .rv-fest:first-child { border-top: 0; } .rv-fest b { font-weight: 600; text-align: right; } .rv-fest .leise { grid-column: 1 / -1; margin-top: -4px; font-size: 12px; }
@@ -7070,10 +7113,10 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.197";
+var SEITE_VERSION = "0.8.198";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
-  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
+  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
@@ -8835,6 +8878,11 @@ var BaustellePanel = class extends i4 {
     S3.sheet = null;
     this.neuZeichnen();
     return this.einrichten(() => this.optionenSpeichern(d3, { beginn: f3.beginn || null, ende: f3.ende || null, heizperiode_von: String(f3.hp[0]), heizperiode_bis: String(f3.hp[1]) }), "Gespeichert").then(() => this._laden());
+  }
+  /** Heizperiode aus Heizung › Grundlagen (M9) – dieselben Optionen wie ⚙ › Baustelle › Beginn und Ende */
+  heizperiodeSetzen(von, bis) {
+    const d3 = this.d;
+    return this.einrichten(() => this.optionenSpeichern(d3, { heizperiode_von: String(von), heizperiode_bis: String(bis) }), "Gespeichert").then(() => this._laden());
   }
   abschliessen() {
     const d3 = this.d;
