@@ -130,7 +130,7 @@ const MARKE = { gleich: html`<span class="inv-m leise">= unverändert</span>`, n
   konflikt: html`<span class="inv-m rot-t">✕ Konflikt</span>`, ok: html`<span class="inv-m gruen-t">✓ erledigt</span>`, fehler: html`<span class="inv-m amber-t">◐ offen</span>`,
   entfaellt: html`<span class="inv-m leise">– entfällt</span>`, weg: html`<span class="inv-m rot-t">− entfernen</span>` };
 const wert = w => w === null || w === undefined || w === '' ? html`<span class="leise">–</span>` : html`<span class="inv-w ${/^[a-z_]+\.[a-z0-9_]+$/.test(w) ? 'inv-id' : ''}">${w}</span>`;
-function zustand(r) {
+export function zustand(r) {
   if (r.ergebnis && r.ergebnis !== 'gleich') return r.ergebnis;
   if (r.ziel === 'label' && !r.neu) return r.zustand === 'gleich' ? 'gleich' : 'weg';
   return r.zustand;

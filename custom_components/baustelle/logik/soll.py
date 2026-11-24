@@ -66,3 +66,17 @@ def versatz(eigen: float | None, baustelle: float) -> float:
 def kurve(r: GleitRegeln, rueck: Sequence[tuple[float, int]]) -> list[list[float]]:
     """Für die Seite: je Grad Außenmittel `[t, Startwert, Soll]`."""
     return [[t, round(startwert(t, r), 2), gleitend(t, r, rueck)] for t in range(KURVE_VON, KURVE_BIS + 1)]
+
+
+SOLL_GRENZEN = (5.0, 30.0)   # wie `setzen` (panel.SETZEN_BEREICH „soll“)
+
+
+def versch_begrenzt(basis: float, versch: float) -> float:
+    """„Nur heute“ (− / + am Rad, UI-Bericht M8): die Verschiebung so begrenzen, dass das Soll 5–30 °C bleibt."""
+    lo, hi = SOLL_GRENZEN
+    return round(min(hi - basis, max(lo - basis, versch)), 2)
+
+
+def gefuehl_aus_versch(soll_art: str | None) -> bool:
+    """− / + am Rad zählt nur beim gleitenden Soll als Gefühl („zu kalt“ / „zu warm“); das feste Soll lernt nicht mit."""
+    return soll_art == "gleitend"

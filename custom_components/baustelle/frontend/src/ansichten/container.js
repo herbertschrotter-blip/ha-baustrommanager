@@ -19,7 +19,7 @@ const OHNE_SOLL = { plan: 'Zeitplan – der Heizkörperthermostat regelt', hand:
 function rad(p, b) {
   const mitSoll = p.sollAktiv(b) && !b.baseline;   // J4b: im Baseline-Lauf wirkt das Soll nicht (gedämpft, Hinweis)
   return html`<div class=${b.baseline ? 'c-rad bl-ged' : 'c-rad'}>${unsafeHTML(p.cRadSvg(b))}
-      ${b.baseline ? html`<div class="leise c-ohne-t">Thermostat am Heizkörper regelt</div>` : mitSoll ? html`<div class="c-rad-pm"><button class="c-pm" data-d="-0.5" aria-label="Soll niedriger" @click=${() => p.sollSchritt(b, -0.5)}>${unsafeHTML(IC_MINUS)}</button><button class="c-pm" data-d="0.5" aria-label="Soll höher" @click=${() => p.sollSchritt(b, 0.5)}>${unsafeHTML(IC_PLUS)}</button></div>`
+      ${b.baseline ? html`<div class="leise c-ohne-t">Thermostat am Heizkörper regelt</div>` : mitSoll ? html`<div class="c-rad-pm"><button class="c-pm" data-d="-0.5" aria-label="Soll nur heute niedriger" title="nur heute, bis morgen früh" @click=${() => p.sollSchritt(b, -0.5)}>${unsafeHTML(IC_MINUS)}</button><span class="c-pm-t">nur heute</span><button class="c-pm" data-d="0.5" aria-label="Soll nur heute höher" title="nur heute, bis morgen früh" @click=${() => p.sollSchritt(b, 0.5)}>${unsafeHTML(IC_PLUS)}</button></div>`
         : html`<div class="leise c-ohne-t">${OHNE_SOLL[b.modus] || ''}</div>`}</div>`;
 }
 
@@ -163,10 +163,12 @@ function sollChips(p, b) {
     info: `Soll gleitend ${gs} °C${zahl(S.eigen) && S.eigen ? ` ${vz(S.eigen)}${de(Math.abs(S.eigen), 1)} eigenes Soll = ${de(p.sollVon(b), 1)} °C` : ''} – dein Gefühl hilft beim Lernen` });
   if (gl && zahl(S.eigen) && S.eigen) L.push({ k: 'seig', ic: '👤', ton: 'amber', lang: `${vz(S.eigen)}${de(Math.abs(S.eigen), 1)} eigen`, kurz: `${vz(S.eigen)}${de(Math.abs(S.eigen), 1)}`,
     info: `Soll gleitend ${gs} °C ${vz(S.eigen)}${de(Math.abs(S.eigen), 1)} eigenes Soll = ${de(p.sollVon(b), 1)} °C – dein Gefühl hilft beim Lernen` });
-  if (gl && S.versch) L.push({ k: 'sver', ic: '±', ton: 'amber', lang: `${vz(S.versch)}${de(Math.abs(S.versch), 1)} bis morgen`, kurz: `${vz(S.versch)}${de(Math.abs(S.versch), 1)}`,
-    info: `gleitend ${gs} °C ${vz(S.versch)}${de(Math.abs(S.versch), 1)} · bis morgen früh – + / − lernt mit wie „zu kalt“ / „zu warm“ · ↺ gleitend setzt zurück` });
-  if (!gl) L.push({ k: 'sfest', ic: 'ⓘ', ton: '', lang: 'Soll fest', kurz: 'fest', info: 'hilft beim gleitenden Soll (Heizung › Regeln)' });
-  const zurueck = gl && S.versch ? html`<button class="ck-chip ck-zurueck" title="zurück auf gleitendes Soll" @click=${() => p.sollZurueck(b)}><span class="ck-ic">↺</span><span class="ck-l">gleitend</span><span class="ck-k">gleitend</span></button>` : nothing;
+  if (S.versch) L.push({ k: 'sver', ic: '±', ton: 'amber', lang: `${vz(S.versch)}${de(Math.abs(S.versch), 1)} nur heute`, kurz: `${vz(S.versch)}${de(Math.abs(S.versch), 1)}`,
+    info: gl ? `gleitend ${gs} °C ${vz(S.versch)}${de(Math.abs(S.versch), 1)} · nur heute, bis morgen früh – + / − lernt mit wie „zu kalt“ / „zu warm“ · ↺ gleitend setzt zurück`
+      : `nur heute ${vz(S.versch)}${de(Math.abs(S.versch), 1)} °C, bis morgen früh – dauerhaft änderst du das Soll unter „Bearbeiten“ · ↺ setzt zurück` });   // UI-Bericht M8
+  if (!gl) L.push({ k: 'sfest', ic: 'ⓘ', ton: '', lang: 'Soll fest', kurz: 'fest', info: '− / + gilt nur heute; dauerhaft unter „Bearbeiten“ (gleitendes Soll: Heizung › Regeln)' });
+  const zt = gl ? 'gleitend' : 'dauerhaft';
+  const zurueck = S.versch ? html`<button class="ck-chip ck-zurueck" title="zurück auf ${gl ? 'gleitendes Soll' : 'das dauerhafte Soll'}" @click=${() => p.sollZurueck(b)}><span class="ck-ic">↺</span><span class="ck-l">${zt}</span><span class="ck-k">${zt}</span></button>` : nothing;
   return html`<div class="ck-soll">${L.map(c => chip(p, c))}${zurueck}</div>${info(p, L)}`;
 }
 const gefuehl = (p, b) => html`<div class="ck-gefuehl">${[[-1, '🥶', 'zu kalt'], [0, '👍', 'passt'], [1, '🥵', 'zu warm']].map(([v, i, t]) =>

@@ -177,6 +177,37 @@ async def test_soll_gleitend(hass: HomeAssistant, baustelle, freezer, shellys, h
     assert (await ws.receive_json())["success"]                               # Untergrenze frei einstellbar
 
 
+async def test_soll_nur_heute_beim_festen_soll(hass: HomeAssistant, baustelle, freezer, shellys, hass_ws_client) -> None:
+    """UI-Bericht M8 (Herbert 24.11.2026): − / + am Rad gilt auch beim festen Soll nur bis morgen früh, ohne Gefühl zu merken;
+    das dauerhafte Soll bleibt; die Struktur nennt die Herkunft jeder Einstellung (logik/herkunft)."""
+    from custom_components.baustelle.daten import struktur
+    from custom_components.baustelle.funktionen.heizung import Heizung
+    ws = await hass_ws_client(hass)
+    st, hz, e = baustelle.runtime_data, Heizung.von(baustelle.runtime_data), baustelle.entry_id
+    freezer.move_to("2026-10-01 10:00:00+02:00")
+    st.einstellungen.bereich(C1)["soll"] = 21.0
+    await ws.send_json({"id": 1, "type": "baustelle/aktion", "entry_id": e, "aktion": "soll_versch", "bereich": C1, "d": 0.5})
+    assert (await ws.receive_json())["success"]
+    assert hz.soll_temperatur(C1) == 21.5 and st.einstellungen.bereich(C1)["soll"] == 21.0
+    assert st.lz.get("gefuehl") in (None, [])                                 # festes Soll lernt nicht mit
+    lz = struktur(hass, baustelle)["laufzeit"]
+    assert lz["container"][C1]["soll"]["versch"] == 0.5 and lz["container"][C1]["soll"]["wert"] == 21.5
+    einst = lz["container"][C1]["einst"]
+    assert einst["soll"]["herkunft"] == "abweichend" and einst["soll"]["text"] == "21,0 °C" and einst["soll"]["baustelle"] == "20,0 °C"
+    assert lz["container"][C2]["einst"]["soll"]["herkunft"] == "baustelle"
+    freezer.move_to("2026-10-02 03:01:00+02:00")                              # morgen früh: wieder das dauerhafte Soll
+    assert hz.soll_temperatur(C1) == 21.0
+    for i in range(30):                                                       # nie über 30 °C (wie `setzen`)
+        await ws.send_json({"id": 10 + i, "type": "baustelle/aktion", "entry_id": e, "aktion": "soll_versch", "bereich": C1, "d": 0.5})
+        await ws.receive_json()
+    assert hz.soll_temperatur(C1) == 30.0 and hz.versch(C1) == 9.0
+    await ws.send_json({"id": 50, "type": "baustelle/aktion", "entry_id": e, "aktion": "soll_versch", "bereich": C1, "d": -0.5})
+    await ws.receive_json()
+    await ws.send_json({"id": 51, "type": "baustelle/aktion", "entry_id": e, "aktion": "soll_versch_weg", "bereich": C1})
+    await ws.receive_json()
+    assert hz.soll_temperatur(C1) == 21.0 and st.e["protokoll"][0][3].endswith("Soll heute wieder wie dauerhaft")
+
+
 async def test_alles_zuruecksetzen(hass: HomeAssistant, baustelle, freezer, shellys, hass_ws_client) -> None:
     """Herbert 01.10.2026: alle Zähler und alles Gelernte auf null; Einstellungen bleiben, die Integration lädt neu."""
     ws = await hass_ws_client(hass)

@@ -257,6 +257,15 @@ Entfallen (samt Plattformen, wo leer): Zeitplan- und Regel-Entitäten (`time`, `
   jetzt (an-Teil mit Mindestlaufzeit, Pause bis zum Beginn der nächsten Runde); `null` bei dauernd/erreicht und wenn die
   Runde unterbrochen ist (der Heizkörper steht anders, als die Regelung will: Staffelung, Mindestpause). Der Zustandstext
   sagt dann „Pause bis 17:42“ bzw. „Pause · wartet“ (bis 0.8.153 „Takt-Pause · lernend 46 % je 10 min“).
+- Herkunft der Einstellungen für die Container-Seite (UI-Bericht M8, Mockup `container-seite.html`, Herbert 24.11.2026;
+  `logik/herkunft.py`): `laufzeit.container.<id>.einst` = `{<k>: {wert, text, herkunft: "baustelle"|"abweichend", baustelle,
+  zurueck, ziel, ruht, hinweis}}` mit `k` = `soll`, `warm_vor`, `warm_nach`, `prio` (eigene Werte; `abweichend` = eigener
+  Wert, `baustelle` = Text des Werts der Baustelle, die Seite setzt für ↺ `null` bzw. `zurueck`) und `vorheizen`, `frost`,
+  `tuer`, `trocknen`, `staffel` (Regeln der Baustelle, immer `baustelle`). `ziel` (nur bei `baustelle`) sagt wie bei
+  `eingestellt`, wohin „ändern ›“ springt; `ruht` = gilt hier gerade nicht (Vorheizen bei lernender Regelung); `hinweis`
+  beim gleitenden Soll. Pumpenschächte `null`.
+- Soll „nur heute“: `baustelle/aktion` `soll_versch` (`d`) verschiebt das Soll bis morgen früh – seit 0.8.196 auch beim
+  festen Soll (dort ohne Gefühl); `soll_versch_weg` nimmt es zurück; `laufzeit.container.<id>.soll.versch`/`versch_bis`.
 - Eingestellt im Kopf der Container-Ansicht (Mockup `eingestellt.html`, Variante C, Herbert 28.10.2026; `logik/eingestellt.py`):
   `laufzeit.container.<id>.eingestellt` = `[{k, ic, text, kurz, satz, von: "container"|"baustelle", wirkt, grund, ziel}]` –
   nur, was an ist und den Container betrifft, in der Reihenfolge der Anzeige (erst Container: `lernen`, `warm`,

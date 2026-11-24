@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.8.196] – 2026-11-24
+
+- Neu gestaltet (UI-Bericht M8, Mockup `mockups/container-seite.html`, abgenommen 24.11.2026): **„Bearbeiten“ ist die
+  Container-Seite.** Oben Name, Inventar-Nummer und Namen-Chip, darunter die Geräte (Antippen = ✎, „+ Gerät hinzufügen“),
+  dann die Reiter **Heizung · Fühler & Kontakte · Strom · Aussehen · Namen in HA**. Jede Einstellung zeigt ihre Herkunft:
+  grau „von der Baustelle“ (mit „ändern ›“ zur Regel) oder amber „abweichend · Baustelle X ↺“ (↺ = zurück auf den Wert der
+  Baustelle). Herkunft und Texte liefert die Integration (`laufzeit.container.<id>.einst`, `logik/herkunft.py`).
+- Geändert (Herbert, 24.11.2026): **Änderungen auf der Container-Seite gelten sofort**, unten steht nur noch „Fertig“. Der
+  Name wird gespeichert, wenn man das Feld verlässt. „Gerät bearbeiten“ und „Aussehen“ behalten ihr „Speichern“.
+- Neu: **Fühler & Kontakte an einer Stelle** – Temperaturfühler, jede Tür, jedes Fenster und das Licht im Symbol, mit
+  **Suche** über alle passenden Entitäten (M16); von dort auch „Neues Gerät mit dem Assistenten ›“.
+- Neu: **Soll in zwei Zeilen** – „dauerhaft“ (eigenes Soll des Containers) und „nur heute“ (bis morgen früh).
+- Geändert (Herbert, 24.11.2026): **− / + am Rad gilt immer nur heute**, bis morgen früh – auch beim festen Soll (bisher
+  änderte es dort das Soll dauerhaft). Unter dem Rad steht „nur heute“; ↺ nimmt es zurück. Dauerhaft ändert man das Soll
+  auf der Container-Seite oder unter Heizung › Je Container. Beim festen Soll wird dabei kein Gefühl gemerkt.
+- Neu: **Gerät entfernen** in „Gerät bearbeiten“ (mit Rückfrage); die Werte bleiben im Verlauf, das Inventar zieht mit.
+
 ## [0.8.195] – 2026-11-23
 
 - Fix (Gutachten zu 0.8.194): **„Nachholen“ nach dem Assistenten holt nur dessen Schritte nach.** Blieb das Umbenennen

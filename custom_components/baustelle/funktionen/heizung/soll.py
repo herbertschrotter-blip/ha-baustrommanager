@@ -17,14 +17,15 @@ if TYPE_CHECKING:
 
 def soll_temperatur(hz: Heizung, bid: str) -> float:
     """Soll eines Containers: fest (eigenes oder das der Baustelle) oder gleitend (Herbert 01.10.2026) – dann gilt ein
-    eigenes Soll als Verschiebung gegenüber dem der Baustelle, dazu + / − am Rad bis morgen früh."""
+    eigenes Soll als Verschiebung gegenüber dem der Baustelle. Dazu kommt + / − am Rad, „nur heute“ bis morgen früh
+    (gleitend seit 01.10.2026, fest seit UI-Bericht M8, Herbert 24.11.2026)."""
     b, h = hz.st.einstellungen.bereich(bid), hz.st.e["heizung"]
     if h.get("soll_art") != "gleitend":
-        return float(b["soll"] if b.get("soll") is not None else h["soll"])
-    g = hz.gleit_info()
-    wert = g["soll"] if g is not None else float(h["soll"])
-    wert += soll_logik.versatz(b.get("soll"), float(h["soll"]))
-    return round(wert + hz.versch(bid), 2)
+        wert = float(b["soll"] if b.get("soll") is not None else h["soll"])
+    else:
+        g = hz.gleit_info()
+        wert = (g["soll"] if g is not None else float(h["soll"])) + soll_logik.versatz(b.get("soll"), float(h["soll"]))
+    return round(wert + soll_logik.versch_begrenzt(wert, hz.versch(bid)), 2)   # „nur heute“: Soll bleibt 5–30 °C
 
 
 def gleit_info(hz: Heizung) -> dict[str, Any] | None:
@@ -60,15 +61,22 @@ def gefuehl_merken(hz: Heizung, bid: str, wert: int, jetzt: datetime) -> None:
 
 
 def soll_verschieben(hz: Heizung, bid: str, d: float, jetzt: datetime) -> None:
-    """+ / − am Rad: Soll bis morgen früh verschieben und als Gefühl merken (+ = zu kalt, − = zu warm)."""
-    neu = round(hz.versch(bid) + d, 2)
+    """+ / − am Rad („nur heute“): Soll bis morgen früh verschieben; beim gleitenden Soll auch als Gefühl merken
+    (+ = zu kalt, − = zu warm), beim festen nicht – dort lernt das Soll nicht mit."""
+    basis = round(hz.soll_temperatur(bid) - hz.versch(bid), 2)
+    neu = soll_logik.versch_begrenzt(basis, hz.versch(bid) + d)
     bis = datetime.combine(jetzt.date() + timedelta(days=1), VERSCH_BIS, tzinfo=jetzt.tzinfo)
     versch = hz.st.lz.setdefault("soll_versch", {})
     if neu:
         versch[bid] = [neu, bis.isoformat(timespec="seconds")]
     else:
         versch.pop(bid, None)
-    hz.gefuehl_merken(bid, -1 if d > 0 else 1, jetzt)
+    if soll_logik.gefuehl_aus_versch(hz.st.e["heizung"].get("soll_art")):
+        hz.gefuehl_merken(bid, -1 if d > 0 else 1, jetzt)
+    else:
+        name = hz.st.bereiche[bid].name
+        hz.st.protokoll("einstellung", bid, f"{name}: Soll nur heute {'+' if neu > 0 else '−'}{warn_logik._zahl(abs(neu))} °C" if neu
+                        else f"{name}: Soll heute wieder wie dauerhaft")
 
 
 def _aussen_merken(hz: Heizung, jetzt: datetime, aussen: float | None) -> None:

@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.195",
+   "version": "0.8.196",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00",
@@ -747,6 +747,98 @@
        "ziel": "strom"
       }
      ],
+     "einst": {
+      "soll": {
+       "wert": 20.0,
+       "text": "20,0 °C",
+       "herkunft": "baustelle",
+       "baustelle": "20,0 °C",
+       "zurueck": null,
+       "ziel": "regeln:soll",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_vor": {
+       "wert": 0,
+       "text": "bei Beginn",
+       "herkunft": "baustelle",
+       "baustelle": "bei Beginn",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_nach": {
+       "wert": 0,
+       "text": "bis Ende",
+       "herkunft": "baustelle",
+       "baustelle": "bis Ende",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "prio": {
+       "wert": "hoch",
+       "text": "hoch",
+       "herkunft": "abweichend",
+       "baustelle": "normal",
+       "zurueck": "normal",
+       "ziel": null,
+       "ruht": null,
+       "hinweis": null
+      },
+      "vorheizen": {
+       "wert": 45,
+       "text": "45 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "frost": {
+       "wert": true,
+       "text": "unter 5 °C, aus über 7 °C",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:frost",
+       "ruht": null,
+       "hinweis": null
+      },
+      "tuer": {
+       "wert": 3,
+       "text": "nach 3 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:tuer",
+       "ruht": null,
+       "hinweis": null
+      },
+      "trocknen": {
+       "wert": null,
+       "text": "ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:trocknen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "staffel": {
+       "wert": true,
+       "text": "an · 67 % je Anschluss nutzbar",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "strom",
+       "ruht": null,
+       "hinweis": null
+      }
+     },
      "stufen": {
       "an": false,
       "haupt": [
@@ -879,6 +971,98 @@
        "ziel": "strom"
       }
      ],
+     "einst": {
+      "soll": {
+       "wert": 20.0,
+       "text": "20,0 °C",
+       "herkunft": "baustelle",
+       "baustelle": "20,0 °C",
+       "zurueck": null,
+       "ziel": "regeln:soll",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_vor": {
+       "wert": 0,
+       "text": "bei Beginn",
+       "herkunft": "baustelle",
+       "baustelle": "bei Beginn",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_nach": {
+       "wert": 0,
+       "text": "bis Ende",
+       "herkunft": "baustelle",
+       "baustelle": "bis Ende",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "prio": {
+       "wert": "normal",
+       "text": "normal",
+       "herkunft": "baustelle",
+       "baustelle": "normal",
+       "zurueck": "normal",
+       "ziel": null,
+       "ruht": null,
+       "hinweis": null
+      },
+      "vorheizen": {
+       "wert": 45,
+       "text": "45 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "frost": {
+       "wert": true,
+       "text": "unter 5 °C, aus über 7 °C",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:frost",
+       "ruht": null,
+       "hinweis": null
+      },
+      "tuer": {
+       "wert": 3,
+       "text": "nach 3 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:tuer",
+       "ruht": null,
+       "hinweis": null
+      },
+      "trocknen": {
+       "wert": null,
+       "text": "ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:trocknen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "staffel": {
+       "wert": true,
+       "text": "an · 67 % je Anschluss nutzbar",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "strom",
+       "ruht": null,
+       "hinweis": null
+      }
+     },
      "stufen": {
       "an": false,
       "haupt": [
@@ -1107,6 +1291,98 @@
        "ziel": "strom"
       }
      ],
+     "einst": {
+      "soll": {
+       "wert": 20.0,
+       "text": "20,0 °C",
+       "herkunft": "baustelle",
+       "baustelle": "20,0 °C",
+       "zurueck": null,
+       "ziel": "regeln:soll",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_vor": {
+       "wert": 0,
+       "text": "bei Beginn",
+       "herkunft": "baustelle",
+       "baustelle": "bei Beginn",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_nach": {
+       "wert": 0,
+       "text": "bis Ende",
+       "herkunft": "baustelle",
+       "baustelle": "bis Ende",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "prio": {
+       "wert": "normal",
+       "text": "normal",
+       "herkunft": "baustelle",
+       "baustelle": "normal",
+       "zurueck": "normal",
+       "ziel": null,
+       "ruht": null,
+       "hinweis": null
+      },
+      "vorheizen": {
+       "wert": 45,
+       "text": "45 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "frost": {
+       "wert": true,
+       "text": "unter 5 °C, aus über 7 °C",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:frost",
+       "ruht": null,
+       "hinweis": null
+      },
+      "tuer": {
+       "wert": 3,
+       "text": "nach 3 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:tuer",
+       "ruht": null,
+       "hinweis": null
+      },
+      "trocknen": {
+       "wert": null,
+       "text": "ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:trocknen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "staffel": {
+       "wert": true,
+       "text": "an · 67 % je Anschluss nutzbar",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "strom",
+       "ruht": null,
+       "hinweis": null
+      }
+     },
      "stufen": null,
      "bedarf": {
       "summe": 0.699,
@@ -1191,6 +1467,7 @@
      "takt": null,
      "baseline": null,
      "eingestellt": null,
+     "einst": null,
      "stufen": null,
      "bedarf": null,
      "soll": null,
@@ -2637,7 +2914,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.195",
+   "version": "0.8.196",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00",
@@ -2955,6 +3232,98 @@
        "ziel": "strom"
       }
      ],
+     "einst": {
+      "soll": {
+       "wert": 20.0,
+       "text": "20,0 °C",
+       "herkunft": "baustelle",
+       "baustelle": "20,0 °C",
+       "zurueck": null,
+       "ziel": "regeln:soll",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_vor": {
+       "wert": 0,
+       "text": "bei Beginn",
+       "herkunft": "baustelle",
+       "baustelle": "bei Beginn",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "warm_nach": {
+       "wert": 0,
+       "text": "bis Ende",
+       "herkunft": "baustelle",
+       "baustelle": "bis Ende",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "prio": {
+       "wert": "normal",
+       "text": "normal",
+       "herkunft": "baustelle",
+       "baustelle": "normal",
+       "zurueck": "normal",
+       "ziel": null,
+       "ruht": null,
+       "hinweis": null
+      },
+      "vorheizen": {
+       "wert": 45,
+       "text": "45 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:vorheizen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "frost": {
+       "wert": true,
+       "text": "unter 5 °C, aus über 7 °C",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:frost",
+       "ruht": null,
+       "hinweis": null
+      },
+      "tuer": {
+       "wert": 3,
+       "text": "nach 3 min",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:tuer",
+       "ruht": null,
+       "hinweis": null
+      },
+      "trocknen": {
+       "wert": null,
+       "text": "ab 2 mm 60 min länger, 15 min früher; ab 5 mm 100 min länger, 30 min früher",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "regeln:trocknen",
+       "ruht": null,
+       "hinweis": null
+      },
+      "staffel": {
+       "wert": true,
+       "text": "an · 67 % je Anschluss nutzbar",
+       "herkunft": "baustelle",
+       "baustelle": "",
+       "zurueck": null,
+       "ziel": "strom",
+       "ruht": null,
+       "hinweis": null
+      }
+     },
      "stufen": null,
      "bedarf": {
       "summe": 0.0,

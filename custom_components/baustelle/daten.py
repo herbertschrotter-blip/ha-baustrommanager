@@ -226,6 +226,7 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
             "takt": heizung.takt_anzeige(bid) if info.art == ART_CONTAINER else None,   # Takt der lernenden Regelung (takt.html)
             "baseline": heizung.baseline_container(bid) if info.art == ART_CONTAINER and heizung.aktiv() else None,   # J4b: laufender Baseline-Lauf
             "eingestellt": heizung.eingestellt_anzeige(bid) if info.art == ART_CONTAINER and heizung.aktiv() else None,   # eingestellt.html C
+            "einst": heizung.einst_anzeige(bid) if info.art == ART_CONTAINER else None,   # M8: Herkunft je Einstellung
             "stufen": heizung.stufen_anzeige(bid) if info.art == ART_CONTAINER else None,   # Zusatz-Heizkörper (AN-0006)
             "bedarf": heizung.bedarf_anzeige(bid) if info.art == ART_CONTAINER else None,   # Bedarf in °C (Staffelung)
             "soll": heizung.soll_anzeige(bid) if info.art == ART_CONTAINER else None,   # Soll jetzt (fest/gleitend)

@@ -35,6 +35,7 @@ import { EINRICHTUNG_EINBLENDUNGEN } from './ansichten/einblendungen-einrichtung
 import { npPlugEinblendung } from './ansichten/notprogramm.js';
 import { INVENTAR_EINBLENDUNGEN, INV_BREIT, INV_CSS } from './ansichten/inventar.js';
 import { ASSISTENT_BREIT, ASSISTENT_CSS, ASSISTENT_EINBLENDUNGEN } from './ansichten/assistent.js';
+import { CS_BREIT, CS_CSS } from './ansichten/container-seite.js';
 import { GERAETE_CSS, GERAETE_EINBLENDUNGEN } from './ansichten/geraete.js';
 import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN, hochrechnungSvg } from './ansichten/heizperiode.js';
 import { BASELINE_CSS } from './ansichten/baseline.js';
@@ -696,7 +697,8 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 }
 .c-rad { position: relative; width: 210px; margin: 0 auto; }   /* WU-0018: mittig über „zu kalt / passt / zu warm“ */ .c-rad svg { width: 210px; height: 210px; display: block; }
 .c-rad-k { font-size: 11px; letter-spacing: 2px; fill: var(--ink2); } .c-rad-t { font-size: 38px; font-weight: 700; fill: var(--ink); } .c-rad-s { font-size: 13px; font-weight: 600; }
-.c-rad-pm { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: center; gap: 36px; }
+.c-rad-pm { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: center; align-items: center; gap: 4px; }
+.c-pm-t { font-size: 10px; line-height: 1.1; width: 28px; text-align: center; color: var(--secondary-text-color); }   /* UI-Bericht M8: − / + gilt nur heute */
 .c-pm, .c-power { display: inline-flex; align-items: center; justify-content: center; padding: 0; line-height: 1; border-radius: 50%; border: 1px solid var(--panel-rand); background: rgba(255,255,255,.08); color: var(--ink); cursor: pointer; backdrop-filter: blur(8px); }
 .c-pm { width: 44px; height: 44px; } .c-pm:active, .c-power:active { transform: scale(.94); } .c-pm .ic, .c-power .ic { width: 55%; height: 55%; display: block; }
 .wurzel.hell .c-pm, .wurzel.hell .c-power { background: rgba(255,255,255,.6); }
@@ -1038,7 +1040,7 @@ const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
 const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -1790,22 +1792,7 @@ class BaustellePanel extends LitElement {
     const frei = s.frei ? (s.freiName || '').trim() : '';
     return this._holen(this.assistentSchluessel('gav', s), () => this._hass.callWS({ type: 'baustelle/geraet_vorschau', entry_id: this.d.entry, bereich_id: s.bid, ...this.assistentGeraet(s), typ: s.typ, ...(frei ? { name: frei } : {}) }), 15000);
   }
-  /* Gutachten 0.8.192: nach Hinzufügen und Rückgängig den Entwurf von „Bearbeiten“ darunter verwerfen – er wird beim nächsten
-     Zeichnen aus den frischen Daten neu gebildet (sonst setzte „Speichern“ Fühler, Tür und Primär auf den alten Stand zurück) */
-  /* Gutachten 0.8.194: was Herbert in „Bearbeiten“ schon geändert, aber noch nicht gespeichert hat, bleibt – der neue Entwurf
-     übernimmt diese Felder (Geräte je id), alles andere kommt frisch */
-  entwurfNeu(sheet) {
-    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) {
-      if (x.art !== 'bereich' || !x.edit) continue;
-      const a = x.editAnfang || {}, gl = (u, v) => JSON.stringify(u) === JSON.stringify(v);
-      const eigen = Object.fromEntries(Object.entries(x.edit).filter(([k, v]) => k !== 'geraete' && !gl(v, a[k])));
-      const altG = Object.fromEntries((a.geraete || []).map(g => [g.id, g]));
-      const geraete = (x.edit.geraete || []).filter(g => g.neu || !gl(g, altG[g.id]));   // geändert, entfernt (weg) oder neu
-      x.editBehalten = { ...(x.editBehalten || {}), ...eigen, ...(geraete.length ? { geraete } : {}) };
-      delete x.edit; delete x.editAnfang;
-    }
-  }
-  async assistentNachher(s) { this.entwurfNeu(s.zurueck); this.invNeu(); this.neuZeichnen(); await this._laden(); this.entwurfNeu(s.zurueck); }
+  async assistentNachher() { this.invNeu(); this.neuZeichnen(); await this._laden(); }   // Container-Seite darunter zeigt die frischen Daten (M8: kein Entwurf mehr)
   assistentNenn(s, dd) { const v = s.nenn ? Math.round((s.nenn + dd) * 10) / 10 : dd > 0 ? 2 : null; s.nenn = v && v >= 0.1 ? Math.min(10, v) : null; return this.neuZeichnen(); }
   async assistentAnlegen(s, namenLassen = false) {
     if (s.laeuft) return undefined;
@@ -1921,7 +1908,7 @@ class BaustellePanel extends LitElement {
   idsTauschen(sheet, ids) {   // {alt: neu} der Integration (baustelle/inventar_umbenennen, …_rueckgaengig) in Entwurf und Formular jedes Dialogs darunter
     if (!ids || !Object.keys(ids).length) return;
     const tausch = o => { for (const k of Object.keys(o)) { const v = o[k]; if (typeof v === 'string' && Object.hasOwn(ids, v)) o[k] = ids[v]; else if (v && typeof v === 'object') tausch(v); } };
-    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) { for (const k of ['edit', 'editAnfang', 'editBehalten', 'form']) if (x[k]) tausch(x[k]); }
+    for (let x = sheet, n = 0; x && typeof x === 'object' && n < 10; x = x.zurueck, n++) { for (const k of ['form']) if (x[k]) tausch(x[k]); }
   }
   npProbe(id, m) { return this.ws({ type: 'baustelle/notprogramm_probe', entry_id: this.d.entry, geraet: id, minuten: m }, m ? `Ausfall-Probe ${m} min gestartet` : 'Ausfall-Probe beendet'); }
   /* Dialoge für Container und Geräte (src/ansichten/einblendungen-einrichtung.js, BSM-022 3e); Rümpfe wie bisher in klick() */
@@ -1951,40 +1938,6 @@ class BaustellePanel extends LitElement {
     const id = S.sheet.form.id, rest = d.anschluesse.find(x => x.id !== id); S.sheet = null; neu();
     return this.liste('anschluesse', 'loeschen', { id }, `Gelöscht – Container hängen jetzt an ${rest ? rest.name : 'keinem Anschluss'}`);
   }
-  bereichSpeichern() {
-    const S = this.s, d = this.d, b = this.b, neu = () => this.neuZeichnen();
-    const e = S.sheet.edit, x = b; S.sheet = null; neu();
-    return this.einrichten(async () => {
-      const eb = { ...((d.r.einstellungen.bereiche || {})[x.id] || {}) }, pfad = k => ['bereiche', x.id, k];
-      // Geräte zuerst, alle in einem Aufruf über die Integration (kern/geraete, BSM-034.02): geprüft, Inventar zieht mit
-      const schritte = e.geraete.flatMap(g => g.weg && !g.neu ? [{ aktion: 'entfernen', geraet: g.id }]
-        : g.neu && !g.weg && g.schalter ? [{ aktion: 'anlegen', ...this.geraetDaten(x.id, g) }]
-        : !g.neu && !g.weg && (g.n !== g.alt.n || g.typ !== g.alt.typ) ? [{ aktion: 'aendern', geraet: g.id, ...this.geraetDaten(x.id, g) }] : []);
-      if (schritte.length) await this.geraeteSpeichern(schritte);
-      if (e.name.trim() && (e.name.trim() !== x.name || (e.fuehler || '') !== (x.fuehler || ''))) {
-        const r = await this.dialog('config/config_entries/subentries/flow', { handler: [d.entry, 'bereich'], subentry_id: x.id }, this.bereichDaten(e.name.trim(), x.art || 'container', e.fuehler));
-        if (this.flowFehler(r)) return r;
-        if ((e.fuehler || '') !== (x.fuehler || '')) await this.fuehlerAbwarten(x.id, e.fuehler || null); }   // neuer Fühler: erst wenn die Integration ihn kennt, weiter (Modus Thermostat, Gutachten 0.8.190)
-      const call = (k, w) => this._hass.callWS({ type: 'baustelle/setzen', entry_id: d.entry, pfad: pfad(k), wert: w });
-      if (x.groesse) { const m2 = e.groesseArt === 'einzel' ? null : e.groesseArt === 'doppel' ? x.groesse.typen.doppel.m2 : (zahl(e.m2) && Number(e.m2) >= 4 ? Number(e.m2) : undefined);   // AN-0014
-        if (m2 !== undefined && (m2 ?? x.groesse.typen.einzel.m2) !== x.groesse.m2) await call('groesse_m2', m2); }   // nur bei anderer Fläche (ohne Angabe = Einzel)
-      if ((e.tuer || null) !== (eb.tuer || null)) await call('tuer', e.tuer || null);
-      if (e.warmVor !== (x.warmVor ?? null)) await call('warm_vor', e.warmVor);   // BSM-034.01: alles erst bei „Speichern“
-      if (e.warmNach !== (x.warmNach ?? null)) await call('warm_nach', e.warmNach);
-      if (e.stufen !== !!x.stufenAn) await call('stufen', e.stufen);
-      if (x.lern && e.lernen !== !!x.lern.an) await call('lernen', e.lernen);
-      if (e.trocknen !== !!x.trocknen) await call('trocknen', e.trocknen);
-      if ((e.primaer || null) !== (x.primaer || null)) await call('primaer', e.primaer || null);   // AN-0015
-      if (e.anschluss && e.anschluss !== x.anschluss) await call('anschluss', e.anschluss);
-      if (!x.pumpe && e.modus && e.modus !== x.modus) {   // UI-Bericht Maßnahme 4: Modus statt Schalter „Nur bei Bedarf“; zuletzt, der Rest ist dann schon gespeichert
-        try { await call('modus', e.modus); } catch (err) { throw new Error(`Gespeichert bis auf den Modus – ${this.fehlerText(err)}. Bitte den Modus nochmal wählen.`); } }
-      if (e.firma !== x.firma) {
-        if (x.firma !== 'eigen') await this._hass.callWS({ type: 'baustelle/liste', entry_id: d.entry, liste: 'firmen', aktion: 'speichern', eintrag: { id: x.firma, name: this.firma(x.firma).name, container: d.bereiche.filter(y => y.firma === x.firma && y.id !== x.id).map(y => y.id) } });
-        if (e.firma !== 'eigen') await this._hass.callWS({ type: 'baustelle/liste', entry_id: d.entry, liste: 'firmen', aktion: 'speichern', eintrag: { id: e.firma, name: this.firma(e.firma).name, container: [...d.bereiche.filter(y => y.firma === e.firma).map(y => y.id), x.id] } });
-      }
-      return true;
-    }, e.geraete.some(g => g.weg && !g.neu) ? `Gespeichert · ${e.geraete.filter(g => g.weg && !g.neu).length} entfernt – Werte bleiben im Verlauf` : 'Gespeichert').then(() => this._laden());
-  }
   bereichWeg() {
     const S = this.s, d = this.d, b = this.b, neu = () => this.neuZeichnen();
     const x = b; S.sheet = null; this.gehe('uebersicht');
@@ -2009,32 +1962,48 @@ class BaustellePanel extends LitElement {
       return true;
     }, `${f.n.trim()} gespeichert`).then(() => this._laden());
   }
-  /* Dialoge ändern nur ihren Entwurf; gespeichert wird bei „Speichern“, Abbrechen nimmt alles zurück (BSM-034.01) */
-  warmEigen(e, k, dd) { const d = this.d, key = k === 'vor' ? 'warmVor' : 'warmNach', alt = e[key] ?? (k === 'vor' ? d.e.warm_vor : d.e.warm_nach);   // AN-0004
-    e[key] = Math.max(0, Math.min(240, alt + dd)); return this.neuZeichnen(); }
-  warmZurueck(e) { e.warmVor = null; e.warmNach = null; return this.neuZeichnen(); }
+  /* Gerät bearbeiten und Aussehen ändern nur ihren Entwurf; gespeichert wird bei „Speichern“ (BSM-034.01) */
   geraetNennKw(f, g, dd) { f.nennKw = Math.max(0, Math.min(10, Math.round(((f.nennKw ?? g.kw) + dd) * 10) / 10)); return this.neuZeichnen(); }   // Szenarien: Nennleistung ohne Messung
   unterDialog(sheet) { const s = this.s.sheet; this.s.sheet = { ...sheet, zurueck: s && s.art === 'bereich' ? s : null }; return this.neuZeichnen(); }   // aus „Bearbeiten“: danach dorthin zurück, Entwurf bleibt
   aussehenAuf(x) { return this.unterDialog({ art: 'aussehen', id: x.id }); }   // BSM-032
-  bereichEntwurf(x, s) {   // Entwurf für „Container bearbeiten“: einmal aus den Daten, danach bleibt er beim Neuzeichnen stehen
-    const d = this.d;
-    if (s.edit) return s.edit;
-    const e = { modus: x.modus ?? null, name: x.name, anschluss: x.anschluss || (d.anschluesse[0] && d.anschluesse[0].id) || '', tuer: (x.tuer && x.tuer.eid) || '', firma: x.firma || 'eigen', fuehler: x.fuehler || '',
-      groesseArt: (x.groesse && x.groesse.art) || 'einzel', m2: x.groesse ? x.groesse.m2 : null,
-      warmVor: x.warmVor ?? null, warmNach: x.warmNach ?? null, stufen: !!x.stufenAn, primaer: x.primaer || '',   // AN-0015
-      lernen: !!(x.lern && x.lern.an), trocknen: !!x.trocknen,   // AN-0018: Lernen und Trocknen stehen in „Bearbeiten“, gespeichert mit „Speichern“
-      // nur eigene Sensoren – die automatisch gefundenen sucht die Integration weiter selbst (BSM-034.01)
-      geraete: x.geraete.map(g => ({ id: g.id, n: g.n, typ: g.typ, schalter: g.schalter, leistung: g.leistungEigen || undefined, energie: g.energieEigen || undefined, alt: { n: g.n, typ: g.typ } })) };
-    s.editAnfang = JSON.parse(JSON.stringify(e));
-    const b = s.editBehalten;   // eigene, noch nicht gespeicherte Änderungen von vorher (entwurfNeu)
-    if (b) {
-      const { geraete, ...rest } = b, je = Object.fromEntries((geraete || []).filter(g => !g.neu).map(g => [g.id, g]));
-      Object.assign(e, rest);
-      e.geraete = e.geraete.map(g => je[g.id] ? { ...g, ...je[g.id], schalter: g.schalter } : g).concat((geraete || []).filter(g => g.neu));
-      delete s.editBehalten;
-    }
-    return (s.edit = e);
-  }
+  /* Container-Seite (UI-Bericht M8, Mockup container-seite.html, Herbert 24.11.2026): jede Änderung gilt sofort, kein Entwurf */
+  csTab(t) { const s = this.s.sheet; if (s) { s.tab = t; s.wahl = null; s.q = ''; } return this.neuZeichnen(); }
+  csSetzen(x, k, w, ok) { return this.setzen(['bereiche', x.id, k], w, ok); }
+  csName(x, roh) { const n = String(roh || '').trim();
+    if (!n || n === x.name) return this.neuZeichnen();
+    return this.einrichten(() => this.dialog('config/config_entries/subentries/flow', { handler: [this.d.entry, 'bereich'], subentry_id: x.id }, this.bereichDaten(n, x.art || 'container', x.fuehler)), `Name: ${n}`).then(() => this._laden()); }
+  csFuehler(x, eid) { const neu = eid || null; this.s.sheet.wahl = null;
+    if (neu === (x.fuehler || null)) return this.neuZeichnen();
+    return this.einrichten(async () => {
+      const r = await this.dialog('config/config_entries/subentries/flow', { handler: [this.d.entry, 'bereich'], subentry_id: x.id }, this.bereichDaten(x.name, x.art || 'container', neu));
+      if (this.flowFehler(r)) return r;   // nicht gespeichert: Modus bleibt, wie er war
+      await this.fuehlerAbwarten(x.id, neu);   // neuer Fühler: erst wenn die Integration ihn kennt (Modus Thermostat, Gutachten 0.8.190)
+      if (!neu && x.modus === 'thermo') await this._hass.callWS(nachricht.setzen(this.d.entry, ['bereiche', x.id, 'modus'], 'plan'));   // ohne Fühler kein Thermostat
+      return true;
+    }, neu ? `Fühler: ${this.name(neu)}` : 'Kein Fühler mehr – Modus Zeitplan').then(() => this._laden()); }
+  /* Kontakt wählen (M16): Tür 1 = Türkontakt des Containers, weitere Türen, Fenster und Licht im Symbol (BSM-032) */
+  csKontakt(x, platz, eid) { const neu = eid || null, [art, i] = platz.split(':'), n = Number(i || 0); this.s.sheet.wahl = null;
+    const c = this.symAus(x), ok = neu ? `${this.name(neu)} zugeordnet` : 'Zuordnung entfernt';
+    if (art === 'tuer' && n === 0) {
+      const eigen = c.tueren[0] && c.tueren[0].sensor;
+      return this.setzen(['bereiche', x.id, 'tuer'], neu, eigen ? null : ok).then(r => { if (!eigen || r === null) return r; c.tueren[0].sensor = null; return this.setzen(['bereiche', x.id, 'symbol'], c, ok); }); }
+    if (art === 'licht') c.licht = neu; else if (c[art === 'tuer' ? 'tueren' : 'fenster'][n]) c[art === 'tuer' ? 'tueren' : 'fenster'][n].sensor = neu;
+    return this.setzen(['bereiche', x.id, 'symbol'], c, ok); }
+  csGroesse(x, art, m2) { const G = x.groesse; if (!G) return null;   // AN-0014: Einzel = ohne Angabe
+    const w = art === 'einzel' ? null : art === 'doppel' ? G.typen.doppel.m2 : zahl(m2) && Number(m2) >= 4 ? Number(m2) : undefined;
+    if (w === undefined || (w ?? G.typen.einzel.m2) === G.m2) return this.neuZeichnen();
+    return this.csSetzen(x, 'groesse_m2', w); }
+  csFirma(x, neu) { const d = this.d; if (neu === x.firma) return null;
+    return this.einrichten(async () => {
+      if (x.firma !== 'eigen') await this._hass.callWS(nachricht.liste(d.entry, 'firmen', 'speichern', { id: x.firma, name: this.firma(x.firma).name, container: d.bereiche.filter(y => y.firma === x.firma && y.id !== x.id).map(y => y.id) }));
+      if (neu !== 'eigen') await this._hass.callWS(nachricht.liste(d.entry, 'firmen', 'speichern', { id: neu, name: this.firma(neu).name, container: [...d.bereiche.filter(y => y.firma === neu).map(y => y.id), x.id] }));
+      return true; }, `Firma: ${this.firma(neu).name}`).then(() => this._laden()); }
+  csWarm(x, k, dd) { const E = x.einst && x.einst[k], alt = E ? Number(E.wert) : 0;   // AN-0004: eigener Wert, ↺ = wie die Baustelle
+    return this.csSetzen(x, k, Math.max(0, Math.min(240, alt + dd))); }
+  csSoll(x, dd) { const [min, max] = GRENZEN.soll, E = x.einst && x.einst.soll, alt = E ? Number(E.wert) : (x.soll ?? this.d.e.soll);
+    return this.csSetzen(x, 'soll', Math.min(max, Math.max(min, Math.round((alt + dd) * 2) / 2))); }
+  geraetEntfernen(b, g) { this.s.sheet = this.s.sheet && this.s.sheet.zurueck || null; this.neuZeichnen();
+    return this.einrichten(() => this.geraeteSpeichern([{ aktion: 'entfernen', geraet: g.id }]), `${g.n} entfernt – Werte bleiben im Verlauf`).then(() => this._laden()); }
   symAendern(x, fn) { const c = JSON.parse(JSON.stringify(this.symKonfig(x))); fn(c); return this.symSenden(x, c); }
   symStandard() { const s = this.s.sheet; s.sym = null; s.std = true; return this.neuZeichnen(); }
   symSpeichern(b) { const s = this.s.sheet, neu = s.std ? null : s.sym;
@@ -2170,12 +2139,12 @@ class BaustellePanel extends LitElement {
   nurAdmin(fn) { return (...x) => this.nurLesen() ? this.toast(NUR_ANSEHEN) : fn(...x); }   // wie NUR_LESEN_SPERRE für Lit-Knöpfe (.nur-admin)
   modusSetzen(x, m) { if (x.modus === m) return undefined; return this.setzen(['bereiche', x.id, 'modus'], m, `${x.name}: ${(MODI.find(q => q[0] === m) || [m, m])[1]}`); }
   boostUmschalten(x) { return this.aktion('boost', { bereich: x.id, an: !x.boost }, !x.boost ? `${x.name}: schnell aufheizen` : `${x.name}: normal weiter`); }
-  sollSchritt(x, dd) {
-    if (this.d.e.soll_art === 'gleitend') return this.aktion('soll_versch', { bereich: x.id, d: dd }, `Soll heute ${dd > 0 ? 'wärmer' : 'kühler'} – ab morgen früh wieder gleitend · als „${dd > 0 ? 'zu kalt' : 'zu warm'}“ gemerkt`);   // gleitend: bis morgen früh verschieben und als Gefühl merken (Herbert 01.10.2026)
-    return this.setzen(['bereiche', x.id, 'soll'], Math.max(5, Math.min(30, (x.soll ?? this.d.e.soll) + dd)));
+  sollSchritt(x, dd) {   // − / + am Rad: immer „nur heute“ bis morgen früh (UI-Bericht M8, Herbert 24.11.2026); dauerhaft nur auf der Container-Seite
+    const gl = this.d.e.soll_art === 'gleitend';
+    return this.aktion('soll_versch', { bereich: x.id, d: dd }, `Soll heute ${dd > 0 ? 'wärmer' : 'kühler'} – ab morgen früh wieder ${gl ? 'gleitend' : 'wie dauerhaft'}${gl ? ` · als „${dd > 0 ? 'zu kalt' : 'zu warm'}“ gemerkt` : ''}`);
   }
   gefuehl(x, v) { return this.aktion('gefuehl', { bereich: x.id, wert: v }, v === 0 ? 'Gemerkt: passt' : `Gemerkt: ${v < 0 ? 'zu kalt' : 'zu warm'} – das Soll lernt mit`); }
-  sollZurueck(x) { return this.aktion('soll_versch_weg', { bereich: x.id }, 'Zurück auf gleitendes Soll'); }
+  sollZurueck(x) { return this.aktion('soll_versch_weg', { bereich: x.id }, this.d.e.soll_art === 'gleitend' ? 'Zurück auf gleitendes Soll' : 'Soll heute wieder wie dauerhaft'); }
   geraetAktiv(b, i) { const g = b.geraete[i]; this.invNeu();   // BSM-034.02: derselbe Status wie ✎ und Inventar
     return this.ws({ type: 'baustelle/geraet', entry_id: this.d.entry, geraet: g.id, aktion: 'status', status: g.aktiv ? 'inaktiv' : 'aktiv' }, g.aktiv ? `${g.n} inaktiv – die Automatik lässt es aus` : `${g.n} wieder aktiv`); }
   geraetAutomatik(b, i) { const g = b.geraete[i]; return this.aktion('automatik', { geraet: g.id }, `${g.n}: Automatik übernimmt`); }
@@ -2340,7 +2309,7 @@ class BaustellePanel extends LitElement {
         ? html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''} nav-ic" aria-label="Einstellungen" title="Einstellungen" @click=${() => this.navEinst(aktivTab === 'einst')}>${unsafeHTML(ICON_COG)}<span class="nav-t">Einstellungen</span></button>`
         : html`<button data-v=${k} class="${k === aktivTab ? 'on' : ''}" @click=${() => this.gehe(k)}>${t}</button>`)}</nav>
       <div class="schleier ${S.sheet ? 'an' : ''}" @click=${() => this.schliessen()}></div>
-      <div class="sheet glas-panel ${S.sheet ? 'an' : ''}${S.sheet && (INV_BREIT.includes(S.sheet.art) || ASSISTENT_BREIT.includes(S.sheet.art)) ? ' breit' : ''}">${melden && this.roh && S.sheet && S.sheet.art !== 'melden' ? meldenKnopf('im-sheet', () => this.meldenAuf()) : nothing}${sheet}</div>
+      <div class="sheet glas-panel ${S.sheet ? 'an' : ''}${S.sheet && (INV_BREIT.includes(S.sheet.art) || ASSISTENT_BREIT.includes(S.sheet.art) || CS_BREIT.includes(S.sheet.art)) ? ' breit' : ''}">${melden && this.roh && S.sheet && S.sheet.art !== 'melden' ? meldenKnopf('im-sheet', () => this.meldenAuf()) : nothing}${sheet}</div>
       <div class="tip"></div><div class="toast glas-panel"></div>
       ${melden && this.roh && !S.sheet ? meldenKnopf('glas-panel', () => this.meldenAuf()) : nothing}`;
   }
@@ -2876,9 +2845,10 @@ class BaustellePanel extends LitElement {
   }
 
   /* BSM-032: Container-Symbol – Aussehen bearbeiten; die Integration prüft und liefert den Zustand aus den Sensoren */
+  symAus(b, std = false) { const q = (!std && b.symbol) || SYMBOL_STANDARD, el = y => ({ wand: y.wand, pos: y.pos, sensor: y.sensor || null });   // gespeicherte Form ohne Zustand
+    return { doppel: !!q.doppel, farbe: q.farbe || null, rahmen: q.rahmen || null, tueren: q.tueren.map(el), fenster: q.fenster.map(el), licht: q.licht || null }; }
   symKonfig(b) { const s = this.s.sheet, x = s && s.sym; if (x) return x;
-    const q = (!s.std && b.symbol) || SYMBOL_STANDARD, el = y => ({ wand: y.wand, pos: y.pos, sensor: y.sensor || null });
-    s.sym = { doppel: !!q.doppel, farbe: q.farbe || null, rahmen: q.rahmen || null, tueren: q.tueren.map(el), fenster: q.fenster.map(el), licht: q.licht || null };
+    s.sym = this.symAus(b, s.std);
     if (s.anfang === undefined) s.anfang = JSON.stringify(s.sym);
     return s.sym; }
   symSenden(b, c) { this.s.sheet.sym = c; this.s.sheet.std = false; return this.neuZeichnen(); }   // erst „Speichern“ schickt es (BSM-034.01)

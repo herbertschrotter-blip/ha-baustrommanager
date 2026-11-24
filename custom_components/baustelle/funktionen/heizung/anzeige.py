@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from homeassistant.const import STATE_ON
 
 from ...const import HEIZROLLEN, ROLLE_HEIZKOERPER
-from ...logik import eingestellt as eingestellt_logik, lernen
+from ...logik import eingestellt as eingestellt_logik, herkunft as herkunft_logik, lernen
 from ...logik import sensoren as sensor_logik, warnungen as warn_logik
 from ...logik.arbeitszeit import AusnahmeArt, StatusArt, frei_gilt, status as plan_status, uhrzeit
 from ...logik.regelung import SollGrund
@@ -170,6 +170,15 @@ def eingestellt(hz: Heizung, bid: str) -> list[dict[str, Any]]:
         kontakte=tuple(s.name for s in st.sensoren(bid) if s.art in sensor_logik.KONTAKTE),
     )
     return eingestellt_logik.eingestellt(lage)
+
+
+def einst(hz: Heizung, bid: str) -> dict[str, dict[str, Any]]:
+    """Herkunft der Einstellungen für die Container-Seite (UI-Bericht M8, logik/herkunft)."""
+    st, info = hz.st, hz.st.bereiche.get(bid)
+    lage = eingestellt_logik.Lage(heizung=st.e["heizung"], staffel=st.e["staffel"], bereich=st.einstellungen.bereich(bid),
+                                  automatik=st.automatik, modus=hz.modus(bid), fuehler=bool(info is not None and info.fuehler))
+    return herkunft_logik.einstellungen(st.e["heizung"], st.e["staffel"], st.einstellungen.bereich(bid),
+                                        eingestellt_logik.lernend(lage))
 
 
 def _zieht_strom(hz: Heizung, g: GeraetInfo) -> bool:

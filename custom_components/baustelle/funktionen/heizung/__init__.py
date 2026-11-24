@@ -166,7 +166,7 @@ class Heizung(Funktion):
                 "eigen": round(float(b["soll"]) - float(h["soll"]), 2) if b.get("soll") is not None else None}
 
     def versch(self, bid: str) -> float:
-        """+ / − am Rad (Soll gleitend): gilt bis morgen früh."""
+        """+ / − am Rad („nur heute“, fest und gleitend): gilt bis morgen früh."""
         v = (self.st.lz.get("soll_versch") or {}).get(bid)
         bis = zeit(v[1]) if v else None
         return float(v[0]) if v and bis is not None and bis > dt_util.now() else 0.0
@@ -179,7 +179,8 @@ class Heizung(Funktion):
 
     def soll_versch_weg(self, bid: str) -> None:
         if (self.st.lz.get("soll_versch") or {}).pop(bid, None) is not None:
-            self.st.protokoll("einstellung", bid, f"{self.st.bereiche[bid].name}: zurück auf gleitendes Soll")
+            wie = "zurück auf gleitendes Soll" if self.st.e["heizung"].get("soll_art") == "gleitend" else "Soll heute wieder wie dauerhaft"
+            self.st.protokoll("einstellung", bid, f"{self.st.bereiche[bid].name}: {wie}")
 
     def _aussen_merken(self, jetzt: datetime, aussen: float | None) -> None:
         h_soll._aussen_merken(self, jetzt, aussen)
@@ -364,6 +365,10 @@ class Heizung(Funktion):
     def eingestellt_anzeige(self, bid: str) -> list[dict[str, Any]]:
         """Eingeschaltete Einstellungen des Containers (api: laufzeit.container.<id>.eingestellt, logik/eingestellt)."""
         return h_anzeige.eingestellt(self, bid)
+
+    def einst_anzeige(self, bid: str) -> dict[str, dict[str, Any]]:
+        """Herkunft der Einstellungen (api: laufzeit.container.<id>.einst, logik/herkunft, UI-Bericht M8)."""
+        return h_anzeige.einst(self, bid)
 
     # ------------------------------------------------------------------ Staffelung und Schalten
     def schaltbar(self, g: GeraetInfo) -> bool:

@@ -559,10 +559,16 @@ const ZEIGEN = [
   ['aw', 'M13 Auswertung · Vorperiode'], ['aw-vorjahr', 'M13 Auswertung · Vorjahr'], ['aw-ohne', 'M13/M14 · ohne Automatik'], ['aw-filter', 'M13 · gefiltert (aus dem Container)'],
   ['container', 'M13 Container · Sprung in die Auswertung'], ['bsdetail', 'M11 Baustellen-Detail (laufend)'],
 ];
+// --nur=M8: nur dieser Schritt als eigene Datei zum Abnehmen (Herbert, 23.11.2026: Schritt für Schritt)
+const NUR = (process.argv.find(a => a.startsWith('--nur=')) || '').slice(6);
+const DATEIEN = { M8: ['container-seite.html', 'Baustelle – Container-Seite (M8)', 'Schritt M8 · „Bearbeiten“ ist die eine Container-Seite'] };
+if (NUR && !DATEIEN[NUR]) throw new Error(`--nur=${NUR}: unbekannter Schritt`);
+if (NUR) ZEIGEN.splice(0, ZEIGEN.length, ...ZEIGEN.filter(([, t]) => t.startsWith(NUR + ' ') || t.startsWith(NUR + '/')));
 const faelle = ZEIGEN.map(([z]) => ({ name: z, werte: { zeigen: z } }));
 faelle.push({ name: 'aw-ersparnis', werte: { zeigen: 'aw' }, scroll: '[data-or="ersparnis"]' }, { name: 'aw-heizperiode', werte: { zeigen: 'aw' }, scroll: '[data-or="heizperiode"]' },
   { name: 'aw-abrechnung', werte: { zeigen: 'aw' }, scroll: '[data-or="abrechnung"]' }, { name: 'aw-geraete', werte: { zeigen: 'aw' }, scroll: '[data-or="geraete"]' },
   { name: 'heizung-karte', werte: { zeigen: 'heizung' }, scroll: '[data-or="grundlagen"]' }, { name: 'cs-heizung-unten', werte: { zeigen: 'cs-heizung' }, scroll: '[data-k="stufen"]' },
   { name: 'cs-fuehler-suche-offen', werte: { zeigen: 'cs-fuehler-suche' }, scroll: '[data-k="tuer2"]' }, { name: 'cs-namen-vorschau-offen', werte: { zeigen: 'cs-namen-vorschau' }, scroll: '.or-nz.abw' });
-rahmen.bauen({ datei: 'ordnung.html', titel: 'Baustelle – Ordnung der Oberfläche (Stufe 2/3)', leiste: 'Ordnung der Oberfläche · Stufe 2/3 · Maßnahmen 7–16', browser, faelle,
+const [datei, titel, leiste] = NUR ? DATEIEN[NUR] : ['ordnung.html', 'Baustelle – Ordnung der Oberfläche (Stufe 2/3)', 'Ordnung der Oberfläche · Stufe 2/3 · Maßnahmen 7–16'];
+rahmen.bauen({ datei, titel, leiste, browser, faelle: NUR ? faelle.filter(f => ZEIGEN.some(([z]) => z === f.werte.zeigen)) : faelle,
   auswahl: [{ id: 'zeigen', t: 'zeigen', optionen: ZEIGEN }] });

@@ -120,37 +120,33 @@ const erwarte = (text, bedingung) => { if (!bedingung) fehler.push('erwartet: ' 
 const letzte = typ => aufrufe.filter(a => a.type === typ);
 const neu = () => { aufrufe.length = 0; api.length = 0; };
 
-/* Gutachten 0.8.192 Befund 1: Assistent aus „Bearbeiten“ – nach Hinzufügen und Rückgängig wird der Entwurf aus frischen Daten
-   neu gebildet; Tipp auf den Hintergrund und „Speichern“ setzen Fühler, Tür und Primär nicht auf den alten Stand zurück */
+/* Gutachten 0.8.192 Befund 1, seit M8: Assistent aus der Container-Seite – nach Hinzufügen und Rückgängig zeigt die Seite die
+   frischen Daten (kein Entwurf mehr, Änderungen gelten sofort); nichts wird nachträglich auf einen alten Stand gesetzt */
 async function entwurfFrischPruefen() {
   const b = panel.d.bereiche.find(x => x.namen && x.namen.container_id && !x.pumpe), C2 = panel.d.bereiche.find(x => !x.pumpe && !(x.namen && x.namen.container_id) && !x.fuehler && !x.tuer);
   if (!b || !C2) return erwarte('Befund 1: Beispiel mit Container im Inventar und Container ohne Fühler', false);
+  const sel = () => litEl('.sheet [data-zeile="primaer"] select');
   // Primär: Radiator am Container mit Inventar, Rolle Primär
-  neu(); panel.bereichEinst(b.id); await ruhe(10); const altPrimaer = panel.s.sheet.edit && panel.s.sheet.edit.primaer;
+  neu(); panel.bereichEinst(b.id); await ruhe(10);
   await klick('.sheet [data-k="assistent"]', 20);
   Object.assign(panel.s.sheet, { dev: 'd6', schalter: 'switch.shelly_pro_2pm_kanal_2', schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
   Object.assign(panel.s.sheet, { typ: 'radiator', rolle: 'primaer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
   await klick('.sheet [data-k="anlegen"]', 60);
-  erwarte('Befund 1: Hinzufügen aus „Bearbeiten“', panel.s.sheet && panel.s.sheet.schritt === 5 && panel.d.bereiche.find(x => x.id === b.id).primaer === 'g-d6');
-  await klick({ act: 'zu' }, 10);   // Tipp auf den Hintergrund → zurück in „Bearbeiten“
-  const e1 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
-  erwarte('Befund 1: Entwurf aus frischen Daten (Primär)', e1 && e1.primaer === 'g-d6' && altPrimaer !== 'g-d6');
-  neu(); await panel.bereichSpeichern(); await ruhe(40);
-  erwarte('Befund 1: „Speichern“ setzt Primär nicht zurück', !letzte('baustelle/setzen').some(m => m.pfad && m.pfad[2] === 'primaer'));
-  // Rückgängig aus „Bearbeiten“: danach kommt der Entwurf wieder aus frischen Daten (Primär wie vorher)
-  panel.bereichEinst(b.id); await ruhe(10); panel.s.sheet.edit.name = 'Eigener Entwurf';   // ungespeichert (Gutachten 0.8.194)
+  erwarte('Befund 1: Hinzufügen aus der Container-Seite', panel.s.sheet && panel.s.sheet.schritt === 5 && panel.d.bereiche.find(x => x.id === b.id).primaer === 'g-d6');
+  await klick({ act: 'zu' }, 10);   // Tipp auf den Hintergrund → zurück auf die Container-Seite
+  erwarte('Befund 1: Container-Seite zeigt frische Daten (Primär)', panel.s.sheet && panel.s.sheet.art === 'bereich' && (!panel.d.bereiche.find(x => x.id === b.id).stufenAn || (sel() && sel().value === 'g-d6'))
+    && /Radiator/.test(ui.innerHTML) && !letzte('baustelle/setzen').some(m => m.pfad && m.pfad[2] === 'primaer' && m.wert !== 'g-d6'));
+  // Rückgängig aus der Container-Seite
   await klick('.sheet [data-k="assistent"]', 20);
   Object.assign(panel.s.sheet, { dev: 'd5', schalter: 'switch.steckdose_werkstatt', schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
   Object.assign(panel.s.sheet, { typ: 'konvektor', rolle: 'primaer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
-  await klick('.sheet [data-k="anlegen"]', 60); const vorRueck = panel.s.sheet.zurueck && panel.s.sheet.zurueck.edit;
+  await klick('.sheet [data-k="anlegen"]', 60);
   await klick('.sheet [data-k="rueck"]', 60);
   erwarte('Befund 2: „wieder entfernt“ nach Rückgängig, kein zweites Rückgängig', /wieder entfernt/.test(ui.innerHTML) && !litEl('.sheet [data-k="rueck"]'));
   await klick({ act: 'zu' }, 10);
-  const e3 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
-  erwarte('Befund 1: nach Rückgängig Entwurf aus frischen Daten', e3 && e3 !== vorRueck && e3.primaer === 'g-d6');
-  erwarte('Gutachten 0.8.194: ungespeicherte Änderung in „Bearbeiten“ bleibt', e3 && e3.name === 'Eigener Entwurf');
+  erwarte('Befund 1: nach Rückgängig zeigt die Container-Seite den Stand davor (Primär)', panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.d.bereiche.find(x => x.id === b.id).primaer === 'g-d6');
   await klick({ act: 'zu' }, 5);
-  // Fühler: Fühler an einen Container ohne Fühler, danach Rückgängig
+  // Fühler: Fühler und Tür an einen Container ohne Fühler – die Seite zeigt beide sofort im Reiter Fühler & Kontakte
   neu(); panel.bereichEinst(C2.id); await ruhe(10);
   await klick('.sheet [data-k="assistent"]', 20);
   Object.assign(panel.s.sheet, { dev: 'd8', schalter: null, schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
@@ -160,11 +156,10 @@ async function entwurfFrischPruefen() {
   Object.assign(panel.s.sheet, { dev: 'd4', schalter: null, schritt: 3 }); panel.neuZeichnen(); await ruhe(30);
   Object.assign(panel.s.sheet, { typ: 'tuer', schritt: 4 }); panel.neuZeichnen(); await ruhe(30);
   await klick('.sheet [data-k="anlegen"]', 60); await klick({ act: 'zu' }, 10);
-  const e2 = panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit;
-  erwarte('Befund 1: Entwurf aus frischen Daten (Fühler, Tür)', e2 && e2.fuehler === 'sensor.shelly_h_t_gen3_temperatur' && e2.tuer === 'binary_sensor.tuer_neu');
-  neu(); await panel.bereichSpeichern(); await ruhe(40);
-  erwarte('Befund 1: „Speichern“ leert Fühler und Tür nicht', !aufrufe.some(m => m.type === 'config/config_entries/subentries/flow') && !api.some(([, pfad]) => /subentries\/flow/.test(pfad))
-    && !letzte('baustelle/setzen').some(m => m.pfad && m.pfad[2] === 'tuer'));
+  await klick('.sheet [data-tab="fuehler"]', 10);
+  erwarte('Befund 1: Container-Seite zeigt Fühler und Tür aus frischen Daten', panel.s.sheet && panel.s.sheet.art === 'bereich'
+    && /sensor\.shelly_h_t_gen3_temperatur/.test(litEl('.sheet [data-zeile="fuehler"]').textContent) && /binary_sensor\.tuer_neu/.test(litEl('.sheet [data-zeile="tuer0"]').textContent));
+  erwarte('M8: kein „Speichern“ mehr auf der Container-Seite – nur „Fertig“', !/>Speichern</.test(litEl('.sheet').innerHTML) && /Fertig/.test(litEl('.sheet .cs-knoepfe').textContent));
   await klick({ act: 'zu' }, 5);
   for (const rueck of ['r-d4', 'r-d8']) await panel._hass.callWS({ type: 'baustelle/geraet_hinzufuegen_rueckgaengig', rueck });   // Beispiel wieder wie vorher
   await panel._laden();
@@ -414,42 +409,78 @@ async function allgemein() {
     erwarte('M12: „+ Container“ über baustelle/container_neu', letzte('baustelle/container_neu').some(m => m.name === 'Lager Ost' && m.art === 'MAN' && m.eigen === true)
       && !api.some(a => a[1] === 'config/config_entries/subentries/flow'));
   }
-  const x = C().find(b => b.tuer) || C()[0], an = d().anschluesse.find(a => a.id !== x.anschluss) || d().anschluesse[0], fi = d().firmen.find(f => f.id !== x.firma);
-  await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
-  eingabe({ f: 'name' }, `${x.name} Nord`); eingabe({ f: 'tuer' }, x.tuer ? '' : 'binary_sensor.tuer_neu'); eingabe({ f: 'anschluss' }, an.id); if (fi) eingabe({ f: 'firma' }, fi.id); eingabe({ f: 'modus' }, x.modus === 'bedarf' ? 'plan' : 'bedarf');   // UI-Bericht Maßnahme 4: Modus statt Schalter „Nur bei Bedarf“
-  const hk = x.geraete.findIndex(g => g.heizer && g.rolle === 'heizung');
-  if (hk >= 0) eingabe({ f: 'typ', i: String(hk) }, x.geraete[hk].gtyp === 'konvektor' ? 'Ölradiator' : 'Konvektor');
-  if (x.geraete.length > 1) await klick(`.sheet .ge-zeile[data-i=\"${String(x.geraete.length - 1)}\"] .x`);
-  await klick({ act: 'b-speichern' }, 60);
-  const schritte = letzte('baustelle/geraet').flatMap(m => m.schritte || []);
-  if (hk >= 0 && !x.geraete[hk].leistungEigen) erwarte('BSM-034.01: Speichern schreibt automatisch gefundene Sensoren nicht fest',
-    !schritte.some(s => s.schalter === x.geraete[hk].schalter && (s.leistung || s.energie)));
-  erwarte('Bearbeiten: Name über Subentry-Dialog, Geräte ändern/hinzufügen über baustelle/geraet (BSM-034.02)', api.some(a => a[2] && a[2].subentry_id === x.id)
-    && (hk < 0 || schritte.some(s => s.aktion === 'aendern' && s.geraet === x.geraete[hk].id)));
-  erwarte('Bearbeiten: Tür und Modus über baustelle/setzen', ['tuer', 'modus'].every(k => letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, k]))));
-  if (an.id !== x.anschluss) erwarte('Bearbeiten: Anschluss', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, 'anschluss'])));
-  if (x.groesse) {   // AN-0014: Größe – Doppel speichert die Fläche der Integration, m² frei den eingetragenen Wert
+  const x = C().find(b => b.tuer && !b.pumpe) || C().find(b => !b.pumpe), an = d().anschluesse.find(a => a.id !== x.anschluss) || d().anschluesse[0], fi = d().firmen.find(f => f.id !== x.firma);
+  const gesetzt = k => letzte('baustelle/setzen').filter(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, k])).pop();
+  const aendern = (ds, v) => ereignis.feld(ds, v, 'change');
+  {   // UI-Bericht M8: Container-Seite – jede Änderung gilt sofort (Herbert 24.11.2026), Reiter, Herkunft der Integration
     await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
-    erwarte('AN-0014: Größe im Dialog mit Text der Integration', ui.innerHTML.includes('für Vergleiche (kWh je m²)') && ui.innerHTML.includes('container innen 5,90 × '));
-    await klick(`.sheet .seg [data-v=\"${x.groesse.art === 'doppel' ? 'einzel' : 'doppel'}\"]`);
-    await klick({ act: 'b-speichern' }, 60);
-    const g = letzte('baustelle/setzen').find(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', x.id, 'groesse_m2']));
-    erwarte('AN-0014: Größe über baustelle/setzen', g && g.wert === (x.groesse.art === 'doppel' ? null : x.groesse.typen.doppel.m2));
-    await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' }); await klick(`.sheet .seg [data-v=\"${'frei'}\"]`);
-    erwarte('AN-0014: m² frei mit Eingabe', ui.innerHTML.includes('data-f="bm2"'));
-    eingabe({ f: 'bm2' }, '19.5'); await klick({ act: 'b-speichern' }, 60);
-    erwarte('AN-0014: m² frei gespeichert', letzte('baustelle/setzen').some(a => a.pfad[2] === 'groesse_m2' && a.wert === 19.5));
+    erwarte('M8: Container-Seite mit Geräten, Legende und fünf Reitern', !!litEl('.sheet .cs-geraete') && !!litEl('.sheet .cs-legende') && litEls('.sheet .cs-tabs [data-tab]').length === 5
+      && /Änderungen gelten sofort/.test(ui.innerHTML) && !!litEl('.sheet .cs-geraete [data-k="assistent"]'));
+    erwarte('M8: Reiter Heizung mit Soll dauerhaft und nur heute', !!litEl('.sheet [data-zeile="soll"] .stepper') && !!litEl('.sheet [data-zeile="soll-heute"]')
+      && !!litEl('.sheet [data-zeile="soll-heute"] .stepper') === panel.sollAktiv(x));
+    const E = x.einst || {};
+    if (x.einst) erwarte('M8: Herkunft je Zeile von der Integration (laufzeit.container.einst)', !!E.soll && !!E.frost && /von der Baustelle/.test(litEl('.sheet [data-zeile="frost"]').textContent)
+      && litEl('.sheet [data-zeile="frost"] .cs-wert').textContent === E.frost.text);
+    neu(); await klick(`.sheet [data-zeile="modus"] [data-v="${x.modus === 'bedarf' ? 'plan' : 'bedarf'}"]`, 20);
+    erwarte('M8: Modus gilt sofort', !!gesetzt('modus'));
+    neu(); await klick('.sheet [data-zeile="soll"] [data-d="0.5"]', 20);
+    const so = gesetzt('soll'), basis = E.soll ? Number(E.soll.wert) : (x.soll ?? d().e.soll);
+    erwarte('M8: Soll dauerhaft sofort über baustelle/setzen', so && so.wert === Math.round((basis + 0.5) * 2) / 2);
+    if (panel.sollAktiv(x)) { neu(); await klick('.sheet [data-zeile="soll-heute"] [data-d="0.5"]', 20);
+    erwarte('M8: Soll nur heute über soll_versch, nicht dauerhaft', letzte('baustelle/aktion').some(m => m.aktion === 'soll_versch' && m.bereich === x.id && m.d === 0.5) && !gesetzt('soll')); }
+    await klick('.sheet [data-tab="strom"]', 10);
+    neu(); aendern({ f: 'anschluss' }, an.id);
+    if (an.id !== x.anschluss) erwarte('M8: Anschluss gilt sofort', gesetzt('anschluss') && gesetzt('anschluss').wert === an.id);
+    neu(); await klick('.sheet [data-zeile="vorrang"] [data-v="hoch"]', 20);
+    erwarte('M8: Vorrang gilt sofort', gesetzt('prio') && gesetzt('prio').wert === 'hoch');
+    if (fi) { neu(); aendern({ f: 'firma' }, fi.id); await ruhe(30); erwarte('M8: Firma gilt sofort (Liste der Firmen)', letzte('baustelle/liste').some(m => m.liste === 'firmen')); }
+    await klick('.sheet [data-tab="aussehen"]', 10);
+    neu(); eingabe({ f: 'name' }, `${x.name} Nord`); aendern({ f: 'name' }, `${x.name} Nord`); await ruhe(40);
+    erwarte('M8: Name gilt beim Verlassen des Felds (Subentry-Dialog)', api.some(a => a[2] && a[2].subentry_id === x.id));
+    await klick('.sheet [data-tab="fuehler"]', 10);
+    neu(); await klick('.sheet [data-zeile="tuer0"] .chip', 10);
+    erwarte('M16: Kontakt wählen mit Suche', !!litEl('.sheet .cs-picker input[type="search"]') && litEls('.sheet .cs-picker [data-eid]').length > 0);
+    const erster = litEls('.sheet .cs-picker [data-eid]')[0].dataset.eid;
+    eingabe('.sheet .cs-picker input', erster.slice(-6)); await ruhe(10);
+    erwarte('M16: Suche filtert nach Entity-ID', litEls('.sheet .cs-picker [data-eid]').every(e => e.dataset.eid.includes(erster.slice(-6)) || /./.test(e.textContent)) && !!litEl(`.sheet .cs-picker [data-eid="${erster}"]`));
+    await klick(`.sheet .cs-picker [data-eid="${erster}"]`, 20);
+    const tu = gesetzt('tuer'), sy = gesetzt('symbol');
+    erwarte('M16: Tür 1 = Türkontakt des Containers, gilt sofort', (tu && tu.wert === erster) || (sy && sy.wert.tueren[0].sensor === null && tu && tu.wert === erster));
+    const xb = () => panel.d.bereiche.find(b => b.id === x.id), hk = xb().geraete.findIndex(g => g.heizer && g.rolle === 'heizung');
+    if (hk >= 0) {   // Typ eines Heizkörpers ändern: auf der Container-Seite über ✎ (früher in der Liste von „Bearbeiten“)
+      const gh = xb().geraete[hk]; neu(); await klick(`.sheet .cs-geraete [data-i="${hk}"]`, 10);
+      eingabe({ f: 'typ' }, gh.gtyp === 'konvektor' ? 'Ölradiator' : 'Konvektor'); await klick({ act: 'gf-speichern' }, 60);
+      erwarte('M8: Typ über ✎ › Speichern (baustelle/geraet), zurück auf die Container-Seite', letzte('baustelle/geraet').some(m => (m.schritte || []).some(z => z.aktion === 'aendern' && z.geraet === gh.id))
+        && panel.s.sheet && panel.s.sheet.art === 'bereich'); }
+    const letztes = xb().geraete.length - 1;
+    if (letztes > 0) {   // M8: Gerät entfernen über ✎ › „Gerät entfernen …“ › bestätigen (wie früher ✕ + Speichern)
+      const gw = xb().geraete[letztes]; neu(); await klick(`.sheet .cs-geraete [data-i="${letztes}"]`, 10); await klick('.sheet .knopf.rot', 5); await klick('.sheet .knopf.rot', 40);
+      erwarte('M8: Gerät entfernen über baustelle/geraet, zurück auf die Container-Seite', letzte('baustelle/geraet').some(m => (m.schritte || []).some(z => z.aktion === 'entfernen' && z.geraet === gw.id))
+        && panel.s.sheet && panel.s.sheet.art === 'bereich'); }
+    await klick({ act: 'zu' }, 10);
   }
-  {   // BSM-034.01: ✎ aus „Bearbeiten“ führt zurück, der Entwurf bleibt; Abbrechen sendet nichts; ✎ an Pumpen
-    const y = C().find(b => b.geraete.length);
-    await klick({ act: 'container', id: y.id }, 20); await klick({ act: 'sheet', s: 'bereich' });
-    eingabe({ f: 'name' }, `${y.name} Süd`); neu();
-    await klick('.sheet .ge-zeile[data-i="0"] .bs-ic', 10);
-    erwarte('BSM-034.01: ✎ aus Bearbeiten', panel.s.sheet.art === 'geraet-edit' && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'bereich');
+  if (x.groesse) {   // AN-0014: Größe – Doppel speichert die Fläche der Integration, m² frei den eingetragenen Wert (sofort, M8)
+    await klick({ act: 'container', id: x.id }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
+    erwarte('AN-0014: Größe auf der Container-Seite mit Werten der Integration', !!litEl('.sheet [data-zeile="groesse"]') && ui.innerHTML.includes('für kWh je m²'));
+    await klick(`.sheet [data-zeile="groesse"] .seg [data-v=\"${x.groesse.art === 'doppel' ? 'einzel' : 'doppel'}\"]`, 30);
+    const g = gesetzt('groesse_m2');
+    erwarte('AN-0014: Größe über baustelle/setzen', g && g.wert === (x.groesse.art === 'doppel' ? null : x.groesse.typen.doppel.m2));
+    neu(); await klick('.sheet [data-zeile="groesse"] .seg [data-v="frei"]', 10);
+    erwarte('AN-0014: m² frei mit Eingabe', ui.innerHTML.includes('data-f="bm2"') && !gesetzt('groesse_m2'));
+    eingabe({ f: 'bm2' }, '19.5'); aendern({ f: 'bm2' }, '19.5'); await ruhe(30);
+    erwarte('AN-0014: m² frei gespeichert', letzte('baustelle/setzen').some(a => a.pfad[2] === 'groesse_m2' && a.wert === 19.5));
     await klick({ act: 'zu' }, 5);
-    erwarte('BSM-034.01: zurück zu „Bearbeiten“ mit Entwurf', panel.s.sheet.art === 'bereich' && panel.s.sheet.edit.name === `${y.name} Süd`);
+  }
+  {   // ✎ aus der Container-Seite führt zurück; Gerät entfernen erst nach Rückfrage; ✎ an Pumpen
+    const y = C().find(b => b.geraete.length && !b.pumpe);
+    await klick({ act: 'container', id: y.id }, 20); await klick({ act: 'sheet', s: 'bereich' }); neu();
+    await klick('.sheet .cs-geraete [data-i="0"]', 10);
+    erwarte('M8: ✎ aus der Container-Seite', panel.s.sheet.art === 'geraet-edit' && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'bereich');
+    await klick('.sheet .knopf.rot', 10);
+    erwarte('M8: Gerät entfernen fragt nach, sendet noch nichts', panel.s.sheet.art === 'geraet-edit' && panel.s.sheet.wegFrage && !letzte('baustelle/geraet').length);
     await klick({ act: 'zu' }, 5);
-    erwarte('BSM-034.01: Abbrechen sendet nichts', !panel.s.sheet && !aufrufe.some(m => m.type === 'baustelle/setzen') && !api.length);
+    erwarte('M8: zurück auf die Container-Seite, nichts gesendet', panel.s.sheet.art === 'bereich' && !aufrufe.some(m => m.type === 'baustelle/setzen') && !api.length);
+    await klick({ act: 'zu' }, 5);
     const sch = d().bereiche.find(b => b.pumpe && b.geraete.length);
     if (sch) { await klick({ act: 'container', id: sch.id }, 20); await klick({ act: 'g-bearbeiten', i: '0' }, 10);
       const typ = litEl('.sheet select[data-f="typ"]'), ber = litEl('.sheet select[data-f="bereich"]');
@@ -459,8 +490,8 @@ async function allgemein() {
   }
   {   // BSM-032: Container-Symbol – Aussehen bearbeiten
     const y = C().find(b => !b.pumpe), sy = () => letzte('baustelle/setzen').filter(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', y.id, 'symbol'])).pop();
-    await klick({ act: 'container', id: y.id }, 20); await klick({ act: 'sheet', s: 'bereich' });
-    erwarte('BSM-032: Aussehen im Bearbeiten-Dialog', ui.innerHTML.includes('sym-zeile'));
+    await klick({ act: 'container', id: y.id }, 20); await klick({ act: 'sheet', s: 'bereich' }); await klick('.sheet [data-tab="aussehen"]', 10);
+    erwarte('BSM-032: Aussehen auf der Container-Seite (Reiter Aussehen)', ui.innerHTML.includes('sym-zeile'));
     await klick('.sheet .sym-zeile', 10);
     erwarte('BSM-032: Dialog Aussehen mit Vorschau', ui.innerHTML.includes('class="sym-vorschau"') && ui.innerHTML.includes('Doppelcontainer') && ui.innerHTML.includes('data-f="licht"'));
     neu(); const dop = !!(y.symbol && y.symbol.doppel); await klick('.sheet .liste .zeile .sw', 10);
@@ -470,7 +501,7 @@ async function allgemein() {
     await klick('.sheet [data-z=\"lage\"][data-art=\"tueren\"][data-i=\"0\"] [data-v=\"0.85\"]', 10);
     { const l = litEl('.sheet select[data-f="licht"]'); if (!l.querySelector('option[value="switch.licht"]')) l.insertAdjacentHTML('beforeend', '<option value="switch.licht">x</option>'); l.value = 'switch.licht'; l.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } await ruhe(10);
     erwarte('BSM-034.01: bis „Speichern“ nichts gesendet', !sy());
-    await klick({ act: 'zu' }, 5); erwarte('BSM-034.01: Abbrechen führt zurück zu „Bearbeiten“', panel.s.sheet && panel.s.sheet.art === 'bereich' && !sy());
+    await klick({ act: 'zu' }, 5); erwarte('BSM-034.01: Abbrechen führt zurück auf die Container-Seite', panel.s.sheet && panel.s.sheet.art === 'bereich' && !sy());
     await klick('.sheet .sym-zeile', 10); erwarte('BSM-034.01: Abbrechen hat den Entwurf verworfen', panel.s.sheet.sym === undefined || panel.s.sheet.sym.doppel === dop);
     await klick('.sheet .liste .zeile .sw', 10); await klick('.sheet [aria-label=\"Rahmen #c62828\"]', 10); await klick('.sheet button.zeile[data-art=\"fenster\"]', 10);
     await klick('.sheet [data-z=\"lage\"][data-art=\"tueren\"][data-i=\"0\"] [data-v=\"0.85\"]', 10);
@@ -481,7 +512,7 @@ async function allgemein() {
     erwarte('BSM-032: Fenster dazu', sy() && sy().wert.fenster.length >= 2);
     erwarte('BSM-032: Lage der Tür', sy() && sy().wert.tueren[0].pos === 0.85);
     erwarte('BSM-032: Licht-Quelle', sy() && sy().wert.licht === 'switch.licht');
-    erwarte('BSM-034.01: nach „Speichern“ zurück zu „Bearbeiten“', panel.s.sheet && panel.s.sheet.art === 'bereich');
+    erwarte('BSM-034.01: nach „Speichern“ zurück auf die Container-Seite', panel.s.sheet && panel.s.sheet.art === 'bereich');
     await klick({ act: 'zu' }, 5);
     if (REFERENZ) { await klick({ act: 'tab', v: 'uebersicht' }, 20);
       erwarte('BSM-032: Doppelcontainer, offene Tür und gekipptes Fenster im Symbol', ui.innerHTML.includes('viewBox="0 0 200 131"') && ui.innerHTML.includes('l-7 ') && ui.innerHTML.includes('class="bc-licht"')); }
@@ -621,13 +652,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     // AN-0018: Lernen und Trocknen stehen nicht mehr unten in der Ansicht, sondern in „Bearbeiten“
     await panel.neuZeichnen(); erwarte('AN-0018: unten kein Lernen/Trocknen mehr', !litEl('.c-einst') && !/Kleidung trocknen nach Regen/.test(ui.innerHTML));
     await panel.einblenden('bereich'); await ruhe(10);
-    erwarte('Lernen: Schalter in Bearbeiten bei Container mit Fühler', !!litEl('.sheet [data-zeile="lernen"] .sw') && !!litEl('.sheet [data-zeile="trocknen"] .sw'));
+    erwarte('Lernen: Schalter auf der Container-Seite bei Container mit Fühler', !!litEl('.sheet [data-zeile="lernen"] .sw') && !!litEl('.sheet [data-zeile="trocknen"] .sw'));
     neu(); await klick('.sheet [data-zeile="lernen"] .sw', 20); await klick('.sheet [data-zeile="trocknen"] .sw', 20);
-    erwarte('AN-0018: Lernen/Trocknen in Bearbeiten erst mit „Speichern“', !letzte('baustelle/setzen').length);
-    await klick({ act: 'b-speichern' }, 60);
-    erwarte('Lernen: Speichern setzt bereiche.polier.lernen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
-    erwarte('Trocknen: Speichern setzt bereiche.polier.trocknen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","trocknen"]'));
-    await panel.einblenden('bereich'); await ruhe(10); await klick('.sheet [data-zeile="trocknen"] .sw', 20); await klick({ act: 'b-speichern' }, 60);   // zurück (spätere Prüfungen)
+    erwarte('Lernen: gilt sofort, setzt bereiche.polier.lernen (M8)', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","lernen"]' && x.wert === true));
+    erwarte('Trocknen: gilt sofort, setzt bereiche.polier.trocknen (M8)', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","trocknen"]'));
+    await klick('.sheet [data-zeile="trocknen"] .sw', 20);   // zurück (spätere Prüfungen)
     panel.s.sheet = null; await panel.neuZeichnen();
     pol = pol0(); pol.modus = 'thermo'; pol.lern = Object.assign({ ...lern0 }, { an: true, zyklen: 3, anteil: 38, erwartet: .8, aus_bei: 19.2, kint: { wert: .57, start: .6, fort: .06 },
       nachlauf: { 'oel|lang|kalt': { grad: 1.2, min: 12, n: 3 } }, treffer: [.3, -.1, .2] });
@@ -838,20 +867,25 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   erwarte('CSV Verbrauch', csvV && csvV[0].startsWith('Zeit;Baustelle;Firma') && csvV.length > 20 && !csvV.join().includes('NaN'));
   // Einrichtungs-Dialoge von HA
   await assistentPruefen();
-  await klick({ act: 'container', id: 'mannschaft' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
-  eingabe({ f: 'name' }, 'Mannschaft 1'); eingabe({ f: 'tuer' }, 'binary_sensor.tuer_mannschaft'); eingabe({ f: 'firma' }, 'huber'); eingabe({ f: 'anschluss' }, 'sued');
-  await klick(`.sheet .ge-zeile[data-i=\"${'2'}\"] .x`);
-  eingabe({ f: 'typ', i: '1' }, 'Ölradiator'); erwarte('UI-Bericht Maßnahme 4: kein Schalter „Nur bei Bedarf“, Modus im Dialog', !litEl('.sheet [data-zeile="bedarf"]') && !!litEl('.sheet [data-zeile="modus"] select'));
-  eingabe({ f: 'modus' }, 'bedarf');
-  await klick({ act: 'b-speichern' }, 60);
-  const sp = letzte('baustelle/setzen');
-  erwarte('Bearbeiten: Name über Subentry-Dialog (reconfigure)', api.some(a => a[2] && a[2].subentry_id === 'mannschaft' && JSON.stringify(a[2].handler) === '["dobl","bereich"]'));
-  erwarte('Bearbeiten: Tür, Anschluss, Modus', ['tuer', 'anschluss', 'modus'].every(k => sp.some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', 'mannschaft', k]))));
-  erwarte('Bearbeiten: Firma „ab jetzt“', letzte('baustelle/liste').some(a => a.liste === 'firmen' && a.eintrag.id === 'huber' && a.eintrag.container.includes('mannschaft')));
-  { const sr = letzte('baustelle/geraet').flatMap(m => m.schritte || []);
-    erwarte('Bearbeiten: Gerät entfernen über baustelle/geraet', sr.some(s => s.aktion === 'entfernen' && s.geraet === 'mannschaft_t') && !letzte('config_entries/subentries/delete').length);
-    erwarte('Bearbeiten: Gerät ändern über baustelle/geraet', sr.some(s => s.aktion === 'aendern' && s.geraet === 'mannschaft_k' && s.typ === 'oelradiator'));
-    erwarte('Bearbeiten: alle Geräte in einem Aufruf', letzte('baustelle/geraet').length === 1); }
+  {   // M8: Container-Seite – Name, Tür, Firma, Anschluss, Modus und Gerät entfernen, jedes sofort
+    const sp = () => letzte('baustelle/setzen'), feld = (ds, v) => ereignis.feld(ds, v, 'change');
+    await klick({ act: 'container', id: 'mannschaft' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' });
+    erwarte('UI-Bericht Maßnahme 4: kein Schalter „Nur bei Bedarf“, Modus auf der Container-Seite', !litEl('.sheet [data-zeile="bedarf"]') && !!litEl('.sheet [data-zeile="modus"] .seg'));
+    await klick('.sheet [data-zeile="modus"] [data-v="bedarf"]', 20);
+    await klick('.sheet [data-tab="aussehen"]', 10); feld({ f: 'name' }, 'Mannschaft 1'); await ruhe(40);
+    await klick('.sheet [data-tab="strom"]', 10); feld({ f: 'firma' }, 'huber'); await ruhe(30); feld({ f: 'anschluss' }, 'sued'); await ruhe(20);
+    await klick('.sheet [data-tab="fuehler"]', 10); await klick('.sheet [data-zeile="tuer0"] .chip', 10);
+    if (!litEl('.sheet .cs-picker [data-eid="binary_sensor.tuer_mannschaft"]')) panel._hass.states['binary_sensor.tuer_mannschaft'] ||= { entity_id: 'binary_sensor.tuer_mannschaft', state: 'off', attributes: { device_class: 'door', friendly_name: 'Tür Mannschaft' } };
+    eingabe('.sheet .cs-picker input', 'binary_sensor.tuer_mannschaft'); await ruhe(10); await klick('.sheet .cs-picker [data-eid="binary_sensor.tuer_mannschaft"]', 30);
+    erwarte('Container-Seite: Name über Subentry-Dialog (reconfigure)', api.some(a => a[2] && a[2].subentry_id === 'mannschaft' && JSON.stringify(a[2].handler) === '["dobl","bereich"]'));
+    erwarte('Container-Seite: Tür, Anschluss, Modus', ['tuer', 'anschluss', 'modus'].every(k => sp().some(a => JSON.stringify(a.pfad) === JSON.stringify(['bereiche', 'mannschaft', k]))));
+    erwarte('Container-Seite: Firma „ab jetzt“', letzte('baustelle/liste').some(a => a.liste === 'firmen' && a.eintrag.id === 'huber' && a.eintrag.container.includes('mannschaft')));
+    const m = panel.d.bereiche.find(b => b.id === 'mannschaft'), it = m.geraete.findIndex(g => g.id === 'mannschaft_t');
+    await klick({ act: 'container', id: 'mannschaft' }, 20); await klick({ act: 'sheet', s: 'bereich' }); neu();
+    if (it >= 0) { await klick(`.sheet .cs-geraete [data-i="${it}"]`, 10); await klick('.sheet .knopf.rot', 5); await klick('.sheet .knopf.rot', 40); }
+    const sr = letzte('baustelle/geraet').flatMap(x => x.schritte || []);
+    erwarte('Gerät entfernen (✎ › Gerät entfernen) über baustelle/geraet', sr.some(x => x.aktion === 'entfernen' && x.geraet === 'mannschaft_t') && !letzte('config_entries/subentries/delete').length);
+  }
   await klick({ act: 'container', id: 'lager' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' }); await klick({ act: 'b-weg' }, 40);
   erwarte('Container entfernen: Geräte über baustelle/geraet (Inventar), Container über den Subentry',
     letzte('baustelle/geraet').some(m => m.schritte.some(s => s.aktion === 'entfernen' && s.geraet === 'lager_r')) && letzte('config_entries/subentries/delete').some(a => a.subentry_id === 'lager'));
@@ -1030,7 +1064,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     pol().modus = 'thermo'; await panel.neuZeichnen(); pruefe('Container D Thermostat');
     erwarte('WU-0004: Thermostat-Rad mit Soll ±', ui.innerHTML.includes('class="c-rad"') && ui.innerHTML.includes('class="c-pm"') && /Soll \d/.test(ui.innerHTML));
     neu(); await klick({ act: 'c-soll', d: '0.5' }, 20);
-    erwarte('WU-0004: Soll + über baustelle/setzen', letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","soll"]' && Number.isFinite(x.wert)));
+    erwarte('M8: Soll + am Rad gilt nur heute (soll_versch), nicht dauerhaft', letzte('baustelle/aktion').some(x => x.aktion === 'soll_versch' && x.bereich === 'polier' && x.d === 0.5)
+      && !letzte('baustelle/setzen').some(x => JSON.stringify(x.pfad) === '["bereiche","polier","soll"]') && /nur heute/.test(litEl('.c-rad-pm').textContent));
     pol().modus = 'plan'; await panel.neuZeichnen(); erwarte('WU-0004: im Zeitplan nur Ist, kein Soll ±', ui.innerHTML.includes('class="c-rad"') && !litEl('.c-rad-pm .c-pm') && /Zeitplan – der Heizkörperthermostat regelt/.test(ui.innerHTML));
     // AN-0018 (Mockup container-unten.html B): Kacheln je Geräteart; ⏻ an der Zeile, Status nur als Etikett, Zeile antippen = Gerätedialog
     erwarte('AN-0018: Geräte-Kacheln Heizen (⏻ je Heizkörper), Fühler, Türen & Fenster; kein Schalter „aktiv“, kein ✎', !!litEl('.gk-k-heiz .gk-hk .c-power') && !!litEl('.gk-k-fu')
@@ -1332,8 +1367,8 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     neu(); eingabe({ f: 'n' }, 'Radiator Nord'); await klick({ act: 'gf-speichern' }, 30);
     { const s = letzte('baustelle/geraet').flatMap(m => m.schritte || []).find(x => x.aktion === 'aendern');
       erwarte('WU-0004/BSM-034.02: Gerät bearbeiten über baustelle/geraet', s && s.name === 'Radiator Nord' && s.geraet && !api.some(a => /subentries\/flow/.test(a[1]))); }
-    await klick({ act: 'sheet', s: 'bereich' }); erwarte('WU-0004: ✎ je Gerät in Bearbeiten', ui.innerHTML.includes('class="bs-ic nur-admin"'));
-    await klick({ act: 'g-bearbeiten', i: '0' }); await klick({ act: 'zu' }); erwarte('WU-0004: zurück zu Bearbeiten', panel.s.sheet && panel.s.sheet.art === 'bereich');
+    await klick({ act: 'sheet', s: 'bereich' }); erwarte('WU-0004/M8: jedes Gerät auf der Container-Seite öffnet ✎', litEls('.sheet .cs-geraete [data-i]').length === panel.b.geraete.length && /✎/.test(litEl('.sheet .cs-geraete').textContent));
+    await klick('.sheet .cs-geraete [data-i="0"]'); await klick({ act: 'zu' }); erwarte('WU-0004: zurück auf die Container-Seite', panel.s.sheet && panel.s.sheet.art === 'bereich');
     await klick({ act: 'zu' }); }
   await klick({ act: 'tab', v: 'heizung' }, 30);
   erwarte('Heizung als Kacheln: Heute-Karte und 8 Kacheln', ui.innerHTML.includes('hz-held') && (ui.innerHTML.match(/class="glas-panel hz-kachel"/g) || []).length === 8);
@@ -1483,7 +1518,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       await klick('.ckd-soll .ck-info > button', 10); erwarte('FE-0014: ✕ schließt die Erklärung', !litEl('.ck-info'));
       b.sollJ = { wert: 22.21, versch: 0.5, versch_bis: '2026-09-30T03:00:00+02:00', eigen: null };
       await klick({ act: 'container', id: b.id }, 20); pruefe('Container Soll gleitend');
-      erwarte('Container: Gefühl, Verschiebung, gültiges Soll im Rad', ['class="ck-gefuehl"', 'class="ck-chip ck-zurueck"', '+0,5 bis morgen', 'Soll 22,2'].every(t => ui.innerHTML.includes(t))
+      erwarte('Container: Gefühl, Verschiebung, gültiges Soll im Rad', ['class="ck-gefuehl"', 'class="ck-chip ck-zurueck"', '+0,5 nur heute', 'Soll 22,2'].every(t => ui.innerHTML.includes(t))
         && litEls('.ck-gefuehl button').map(x => x.getAttribute('aria-label')).join() === 'zu kalt,passt,zu warm');
       await klick('.ckd-soll .ck-chip[data-k="sver"]', 10); erwarte('Container: Verschiebung per Antippen „bis morgen früh“', /class="ck-info"[^]*?bis morgen früh/.test(ui.innerHTML));
       neu(); await klick({ act: 'c-soll', d: '0.5' }); await klick('.ck-gefuehl button[data-v="-1"]', 10); await klick('.ckd-soll .ck-zurueck', 10);
@@ -1838,19 +1873,15 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
       erwarte('AN-0006: Schalter im Container', ui.innerHTML.includes('Zusatz-Heizkörper nur bei Bedarf') && ui.innerHTML.includes('data-zeile="stufen"'));
       neu(); await klick('.sheet [data-zeile="stufen"] .sw', 10);
       const stufen = () => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `bereiche.${b0.id}.stufen` && m.wert === true);
-      erwarte('BSM-034.01: Schalter im Dialog wartet auf „Speichern“', !stufen());
-      await klick({ act: 'b-speichern' }, 60);
-      erwarte('AN-0006: Schalter speichert bereiche.<id>.stufen', stufen());
-      // AN-0015 (Mockup primaer.html A): Primärheizkörper im Container wählen, erst bei „Speichern“
+      erwarte('AN-0006: Schalter speichert bereiche.<id>.stufen sofort (M8)', stufen());
+      // AN-0015 (Mockup primaer.html A): Primärheizkörper im Container wählen, gilt sofort (M8)
       const g2 = b0.geraete.filter(g => g.heizer)[1], i2 = b0.geraete.indexOf(g2);
       await klick({ act: 'container', id: b0.id }, 10); await klick({ act: 'sheet', s: 'bereich' }, 10);
       erwarte('AN-0015: Auswahl „★ Primärheizkörper“ mit „automatisch“ und jedem Heizkörper',
         ui.innerHTML.includes('data-zeile="primaer"') && ui.innerHTML.includes('automatisch · ') && b0.geraete.filter(g => g.heizer).every(g => ui.innerHTML.includes(`value="${g.id}"`)));
       neu(); { const sel = panel.shadowRoot.querySelector('.sheet [data-zeile="primaer"] select'); sel.value = g2.id; sel.dispatchEvent(new Event('change')); await ruhe(10); }
       const prim = () => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `bereiche.${b0.id}.primaer` && m.wert === g2.id);
-      erwarte('AN-0015: Wahl wartet auf „Speichern“', !prim());
-      await klick({ act: 'b-speichern' }, 60);
-      erwarte('AN-0015: speichert bereiche.<id>.primaer', prim());
+      erwarte('AN-0015: speichert bereiche.<id>.primaer sofort', prim());
       await klick({ act: 'container', id: b0.id }, 10);
       c.stufen = { an: true, haupt: [g2.id], zusatz: b0.geraete.filter(g => g.heizer && g !== g2).map(g => g.id), zusatz_an: false, grund: null, text: '' };
       panel.d.r.laufzeit.container[b0.id] = JSON.parse(JSON.stringify(c)); panel._neuBauen(); await panel.neuZeichnen(); await ruhe();
@@ -1944,12 +1975,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick({ act: 'sheet', s: 'lernen' }, 10);
     erwarte('AN-0004: Lernstand mit Aufheizen', ui.innerHTML.includes('3,2 °C/h') && ui.innerHTML.includes('Heute ab <b>05:30</b> – 70 min'));
     await klick({ act: 'zu' }, 5); await klick({ act: 'sheet', s: 'bereich' }, 10);
-    erwarte('AN-0004: Bearbeiten mit eigenem „Warm ab“', ui.innerHTML.includes('🧠 Warm ab') && ui.innerHTML.includes('data-w="vor"'));
-    neu(); await klick('.sheet .stepper[data-w=\"vor\"] [data-d=\"5\"]', 10);
-    const warmVor = () => aufrufe.some(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `bereiche.${b0.id}.warm_vor`);
-    erwarte('BSM-034.01: „Warm ab“ im Entwurf', !warmVor() && ui.innerHTML.includes('eigener Wert'));
-    await klick({ act: 'b-speichern' }, 60);
-    erwarte('AN-0004: eigener Wert je Container', warmVor());
+    erwarte('AN-0004: Container-Seite mit eigenem „Warm ab“', ui.innerHTML.includes('🧠 Warm ab') && ui.innerHTML.includes('data-w="warm_vor"'));
+    neu(); await klick('.sheet .stepper[data-w=\"warm_vor\"] [data-d=\"5\"]', 10);
+    const warmVor = () => aufrufe.find(m => m.type === 'baustelle/setzen' && m.pfad.join('.') === `bereiche.${b0.id}.warm_vor`);
+    const ew = (b0.einst && b0.einst.warm_vor) ? Number(b0.einst.warm_vor.wert) : 0;
+    erwarte('AN-0004/M8: eigener Wert je Container, gilt sofort', warmVor() && warmVor().wert === ew + 5);
     c.lernen.offen = { art: 'vermutet', seit: '2026-09-29T10:00:00+02:00' }; nachPanel();   // WU-0009
     await klick({ act: 'container', id: b0.id }, 10);
     erwarte('WU-0009: Chip „lernt gerade nicht“ (amber) im Container', /class="ck-chip amber[^"]*" data-k="lern"[^]*?lernt gerade nicht/.test(ui.innerHTML));
@@ -2126,58 +2156,48 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
           await klick('.sheet [data-k="abbrechen"]', 10);
           erwarte('UI-1: Abbrechen schließt dorthin zurück, wo der Chip stand', !panel.s.sheet);
           panel.einblenden('bereich'); await ruhe(20);
-          erwarte('UI-1: Chip im Dialog „Bearbeiten“', !!litEl('.sheet [data-zeile="namen"] .nm-chip'));
-          await klick('.sheet [data-zeile="namen"] .nm-chip', 20);
-          erwarte('UI-1: aus „Bearbeiten“ geöffnet, merkt sich den Dialog', panel.s.sheet.art === 'inv-vorschau' && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'bereich');
+          erwarte('UI-1: Chip im Kopf der Container-Seite', !!litEl('.sheet .cs-kopf .nm-chip'));
+          await klick('.sheet .cs-kopf .nm-chip', 20);
+          erwarte('UI-1: aus der Container-Seite geöffnet, merkt sich die Seite', panel.s.sheet.art === 'inv-vorschau' && panel.s.sheet.zurueck && panel.s.sheet.zurueck.art === 'bereich');
           panel.schliessen(); await ruhe(10);
-          erwarte('UI-1: zurück in „Bearbeiten“', panel.s.sheet && panel.s.sheet.art === 'bereich'); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
+          erwarte('UI-1: zurück auf die Container-Seite', panel.s.sheet && panel.s.sheet.art === 'bereich'); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
           const g = mitC.geraete[0];
           if (g) { panel.geraetOeffnen(mitC.id, g.id); await ruhe(20); erwarte('UI-1: Chip im Dialog „Gerät bearbeiten“', !!litEl('.sheet .g-liste .nm-chip')); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5); }
-          { /* Gutachten 0.8.190 (Befund 1): Chip in „Bearbeiten“ → Übernehmen → Schließen → Speichern schreibt keine alten IDs zurück */
+          { /* Gutachten 0.8.190 (Befund 1), seit M8: Chip auf der Container-Seite → Übernehmen → Schließen – das Formular darunter
+               bekommt die neuen IDs, die Seite zeigt frische Daten und schreibt nichts zurück (kein Entwurf mehr) */
             const ws = hass.callWS, altF = mitC.fuehler, altS = g && g.schalter, neuF = 'sensor.test_neu_fuehler', neuS = 'switch.test_neu_schalter';
             const getauscht = { ...(altF ? { [altF]: neuF } : {}), ...(altS ? { [altS]: neuS } : {}) };
             const tauschen = r => { let t = JSON.stringify(r); for (const [a, n] of Object.entries(getauscht)) t = t.split(JSON.stringify(a)).join(JSON.stringify(n)); return JSON.parse(t); };
             hass.callWS = async m => m.type === 'baustelle/inventar_umbenennen' ? { id: 9, status: 'ausgefuehrt', schritte: [], geaendert: [], getauscht }
               : m.type === 'baustelle/struktur' ? tauschen(await ws.call(hass, m)) : ws.call(hass, m);
             panel.einblenden('bereich'); await ruhe(20);
-            const e = panel.s.sheet.edit;
-            await klick('.sheet [data-zeile="namen"] .nm-chip', 20);
+            await klick('.sheet .cs-kopf .nm-chip', 20);
             if (g) { panel.s.sheet.zurueck = { art: 'geraet-edit', i: 0, form: { n: g.n, schalter: g.schalter, typ: g.typ, bereich: mitC.id, leistung: '', energie: '', status: g.status, nennKw: null, zusatz: !!g.zusatz }, zurueck: panel.s.sheet.zurueck }; }
             const geSheet = g ? panel.s.sheet.zurueck : null;
-            await panel.invAusfuehren(panel.s.sheet); await ruhe(30);
+            neu(); await panel.invAusfuehren(panel.s.sheet); await ruhe(30);
             erwarte('Gutachten 0.8.190: Gerät bearbeiten (Formular) bekommt den neuen Schalter', !g || geSheet.form.schalter === neuS);
             panel.schliessen(); await ruhe(10); if (g) { panel.schliessen(); await ruhe(10); }
-            erwarte('Gutachten 0.8.190: zurück in „Bearbeiten“ mit den neuen Entity-IDs im Entwurf', panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.edit === e
-              && (!altF || e.fuehler === neuF) && (!altS || e.geraete[0].schalter === neuS));
-            neu(); await klick({ act: 'b-speichern' }, 60);
-            const alteRaus = [...aufrufe, ...api.map(a => a[2])].some(m => m && Object.values(getauscht).length && Object.keys(getauscht).some(k => JSON.stringify(m).includes(JSON.stringify(k))));
-            erwarte('Gutachten 0.8.190: Speichern schreibt keine alten Entity-IDs zurück und ändert nichts', !alteRaus && !letzte('baustelle/geraet').length
-              && !api.some(a => a[1].includes('subentries/flow')) && !letzte('baustelle/setzen').length);
+            await klick('.sheet [data-tab="fuehler"]', 10);
+            erwarte('Gutachten 0.8.190/M8: zurück auf der Container-Seite mit den neuen Entity-IDs', panel.s.sheet && panel.s.sheet.art === 'bereich'
+              && (!altF || litEl('.sheet [data-zeile="fuehler"]').textContent.includes(neuF)));
+            erwarte('Gutachten 0.8.190/M8: nichts mit alten Entity-IDs zurückgeschrieben', !letzte('baustelle/geraet').length && !api.some(a => a[1].includes('subentries/flow')) && !letzte('baustelle/setzen').length);
             hass.callWS = ws; panel.cache = {}; await panel._laden(); await ruhe(20); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
           }
         }
-        { /* Gutachten 0.8.190 (Befund 2): Pumpenschacht – Speichern in „Bearbeiten“ setzt keinen Modus (Automatik bliebe sonst still an) */
+        { /* Gutachten 0.8.190 (Befund 2), seit M8: Pumpenschacht – die Container-Seite zeigt keinen Modus (die Automatik bliebe sonst still an) */
           const P = panel.d.bereiche.find(b => b.pumpe);
           if (P) { await klick({ act: 'container', id: P.id }, 20); panel.einblenden('bereich'); await ruhe(20);
-            erwarte('Gutachten 0.8.190: Entwurf des Pumpenschachts ohne Modus', panel.s.sheet.edit.modus === null);
-            neu(); await klick({ act: 'b-speichern' }, 60);
-            erwarte('Gutachten 0.8.190: Pumpenschacht speichern sendet keinen Modus', !letzte('baustelle/setzen').some(a => a.pfad[2] === 'modus')); } }
-        { /* Gutachten 0.8.190 (Befund 3): Fühler und Thermostat im selben Dialog – Modus erst, wenn die Integration den Fühler kennt, zuletzt */
+            erwarte('Gutachten 0.8.190/M8: Pumpenschacht ohne Modus und ohne Reiter Heizung', !litEl('.sheet [data-zeile="modus"]') && !litEl('.sheet [data-tab="heizung"]'));
+            panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5); } }
+        { /* Gutachten 0.8.190 (Befund 3), seit M8: Fühler wählen – erst wenn die Integration ihn kennt, ist Thermostat wählbar */
           const K = panel.d.bereiche.find(b => !b.pumpe && !b.fuehler), F = (panel.d.bereiche.find(b => b.fuehler) || {}).fuehler;
           if (K && F) {
             const roh = () => struktur.flatMap(x => x.bereiche).find(b => b.id === K.id);
             await klick({ act: 'container', id: K.id }, 20); panel.einblenden('bereich'); await ruhe(20);
-            let e = panel.s.sheet.edit; e.fuehler = F; e.modus = 'thermo'; e.trocknen = !K.trocknen;
-            neu(); await panel.bereichSpeichern(); await ruhe(30);
-            const sp = letzte('baustelle/setzen');
-            erwarte('Gutachten 0.8.190: Fühler über den Dialog, danach Trocknen und zuletzt Modus Thermostat', api.some(a => a[2] && a[2].fuehler === F)
-              && sp.some(a => a.pfad[2] === 'trocknen') && sp.length && sp[sp.length - 1].pfad[2] === 'modus' && sp[sp.length - 1].wert === 'thermo'
-              && aufrufe.some(m => m.type === 'baustelle/struktur') && panel.letzterToast === 'Gespeichert');
-            const ws = hass.callWS; hass.callWS = m => m.type === 'baustelle/setzen' && m.pfad[2] === 'modus' ? Promise.reject({ message: 'Thermostat braucht einen Temperaturfühler' }) : ws.call(hass, m);
-            panel.einblenden('bereich'); await ruhe(20); e = panel.s.sheet.edit; e.modus = e.modus === 'bedarf' ? 'plan' : 'bedarf'; e.trocknen = !e.trocknen;
-            neu(); await panel.bereichSpeichern(); await ruhe(30); hass.callWS = ws;
-            erwarte('Gutachten 0.8.190: Modus abgelehnt – die übrigen Felder sind gespeichert, die Meldung sagt es', letzte('baustelle/setzen').some(a => a.pfad[2] === 'trocknen')
-              && /Gespeichert bis auf den Modus – Thermostat braucht einen Temperaturfühler/.test(panel.letzterToast || ''));
+            erwarte('M8: ohne Fühler ist Thermostat nicht wählbar', !!litEl('.sheet [data-zeile="modus"] [data-v="thermo"][disabled]'));
+            await klick('.sheet [data-tab="fuehler"]', 10); await klick('.sheet [data-zeile="fuehler"] .chip', 10); eingabe('.sheet .cs-picker input', F); await ruhe(10);
+            neu(); await klick(`.sheet .cs-picker [data-eid="${F}"]`, 60);
+            erwarte('Gutachten 0.8.190/M8: Fühler über den Subentry-Dialog, gilt sofort', api.some(a => a[2] && a[2].fuehler === F) && aufrufe.some(m => m.type === 'baustelle/struktur'));
             panel.letzterToast = ''; roh().fuehler = null; panel.cache = {}; await panel._laden(); await ruhe(20); panel.s.sheet = null; panel.neuZeichnen(); await ruhe(5);
           } }
         { /* Gutachten 0.8.190 (Befund 4): Kachel „Geräte · erreichbar & Signal“ öffnet den Reiter Geräte */

@@ -458,7 +458,7 @@ await fall('3d Container', browser, async (page, erwarte) => {
   await modusAuf(); await einer('.ck-modi button:not(.on):not([disabled])', 'baustelle/setzen', 'Modus wechseln');
   await modusAuf(); const ab0 = await aufrufZahl(page); await klick(page, `${D} >>> .ck-modi button.on`);
   erwarte('gewählter Modus sendet nichts', !(await schreibAnzahl(page, ab0)).length);
-  await einer('.c-rad-pm .c-pm[data-d="0.5"]', 'baustelle/setzen', 'Soll +');
+  await einer('.c-rad-pm .c-pm[data-d="0.5"]', 'baustelle/aktion:soll_versch', 'Soll + (nur heute, UI-Bericht M8)');
   await einer('.ck-d .ck-chip.ck-boost', 'baustelle/aktion:boost', 'Schnell aufheizen');
   { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .ck-d .ckd-g[data-g="Jetzt"] .ck-chip`);
     const z = await panel(page, D, () => { const i = sr.querySelector('.ck-d .ck-info span'); return i ? i.textContent : ''; });
@@ -473,11 +473,9 @@ await fall('3d Container', browser, async (page, erwarte) => {
       return { n: k.length, reihe: k.length > 1 && Math.abs(k[0].top - k[1].top) < 2, heiz: Math.round(sr.querySelector('.gk-k-heiz').getBoundingClientRect().width), fu: Math.round(sr.querySelector('.gk-k-fu').getBoundingClientRect().width) }; });
     erwarte('AN-0018 Desktop: Kacheln je Geräteart nebeneinander, Heizen doppelt so breit', l.n >= 3 && l.reihe && l.heiz > 1.7 * l.fu, JSON.stringify(l)); }
   await klick(page, `${D} >>> .w-zeile > button.chip:last-of-type`); await warte(200);
-  await klick(page, `${D} >>> .sheet [data-zeile="trocknen"] .sw`); await warte(100);   // AN-0018: in Bearbeiten, gespeichert mit „Speichern“
-  { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .sheet .knopf.amber`); await warte(300);
+  { const ab = await aufrufZahl(page); await klick(page, `${D} >>> .sheet [data-zeile="trocknen"] .sw`); await warte(300);   // M8: Container-Seite, gilt sofort
     const pf = await page.evaluate(ab => window.baustelleBeispiel.TEST.aufrufe.slice(ab).filter(m => m.type === 'baustelle/setzen').map(m => m.pfad.join('.')), ab);
-    erwarte('Kleidung trocknen (AN-0018: Bearbeiten › Speichern) setzt bereiche.<id>.trocknen', pf.some(x => /^bereiche\.[^.]+\.trocknen$/.test(x)), pf.join(', '));
-    erwarte('Bearbeiten › Speichern schreibt nur Geändertes (kein groesse_m2 ohne Änderung)', pf.length === 1, pf.join(', ')); }
+    erwarte('Kleidung trocknen (M8: Container-Seite, sofort) setzt nur bereiche.<id>.trocknen', pf.length === 1 && /^bereiche\.[^.]+\.trocknen$/.test(pf[0]), pf.join(', ')); }
   await panel(page, D, () => { p.s.sheet = null; return p.neuZeichnen(); });
   await klick(page, `${D} >>> .c-live .seg [data-v="woche"]`);
   erwarte('Diagramm Woche', await panel(page, D, () => p.s.cvd === 'woche' && !!sr.querySelector('.c-live .chart-wrap svg')));
