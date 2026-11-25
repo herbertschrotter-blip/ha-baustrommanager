@@ -362,7 +362,7 @@ function browser(R) {
         <button class="chip glas-panel">⇩ Abrechnung je Firma (CSV)</button><button class="chip glas-panel">⇩ Verbrauch je Tag</button><button class="chip glas-panel">⇩ Je Gerät</button><button class="chip glas-panel">⇩ seit Beginn je Monat</button>
         <button class="chip glas-panel" @click=${zeigeSprung('Bericht-Beispiel (⚙ › Bericht)')}>📨 Bericht-Beispiel</button></div>
       ${sprung('Bericht-Beispiel (⚙ › Bericht)')}
-      <button class="zeile or-bsd" @click=${() => R.auf(p, { art: 'or-bsdetail' })}><div class="or-zl"><b>Baustellen-Detail · läuft seit 01.09.2026</b><div class="leise">Verbrauch je Monat und Container, CSV seit Beginn – auch ohne Abschließen</div></div><span class="leise">›</span></button>
+      <button class="zeile or-bsd" @click=${() => zuDetail(p)}><div class="or-zl"><b>Baustellen-Detail · läuft seit 01.09.2026</b><div class="leise">Verbrauch je Monat und Container, CSV seit Beginn – auch ohne Abschließen</div></div><span class="leise">›</span></button>
     </section>
 
     <section class="glas-panel or-ab">${abschnittKopf('geraete', '🔌 Geräte & Pumpen')}
@@ -370,7 +370,7 @@ function browser(R) {
         ${[['Radiator 1 · Polier', '1,9', 96, 182], ['Heizung 03 · Polier', '2,0', 48, 96], ['Konvektor · Mannschaft', '2,0', 101, 202], ['Ölradiator · Magazin', '1,5', 104, 156], ['Pumpe · Schacht 1', '0,8', 12, 9.6]].map(([n, k, h, w]) => html`<div class="or-tz vier"><span>${n}</span><span>${k}</span><span>${h}</span><b>${String(w).replace('.', ',')}</b></div>`)}</div>
       <div class="or-zeile2"><span class="leise">Ölradiator gegen Konvektor: kWh je Gradstunde und m² 0,031 / 0,027 · gleicher Zeitraum wie oben</span></div>
     </section>`; };
-  R.abschnitt({ ansicht: 'auswertung', statt: p => auswertung(p) });
+  R.abschnitt({ ansicht: 'auswertung', wann: () => !G.echteAw, statt: p => auswertung(p) });
 
   /* ================= Baustellen-Detail für die laufende Baustelle (M11) ================= */
   const MON = ['Sep', 'Okt', 'Nov'], BSD = [['Poliercontainer', [180, 352, 412], 944], ['Mannschaft', [170, 330, 388], 888], ['Magazin', [120, 260, 301], 681], ['Sanitär', [110, 222, 255], 587], ['Besprechung', [30, 71, 96], 197]];   // Summen von der Integration
@@ -381,7 +381,38 @@ function browser(R) {
       <div class="leise or-fuss">kWh je Monat; Summen und € liefert die Integration. November läuft noch (bis heute).</div>
       <div class="or-knoepfe"><button class="knopf amber">⇩ CSV seit Beginn</button><button class="knopf">Baustelle abschließen …</button></div>`, { breit: () => true });
 
+
+  /* ================= M11: Baustellen-Detail auch für die laufende Baustelle (auf der echten Seite) ================= */
+  // Heute: Verlauf-Karte der laufenden Baustelle springt in die Übersicht, das Detail gibt es nur abgeschlossen. Vorschlag:
+  // jede Karte im Verlauf öffnet das Detail; laufend mit „Stand heute“, Abrechnung nach Firma seit Beginn, CSV seit Beginn,
+  // „Übersicht dieser Baustelle ›“ und „Baustelle abschließen …“. Die Auswertung › Abrechnung nach Firma springt hin.
+  const laufendeBs = p => p.alle.find(b => b.aktiv && p.d && b.entry === p.d.entry) || p.alle.find(b => b.aktiv);
+  const imDetail = p => { const x = p.s.view === 'bsdetail' && p.alle.find(y => y.entry === p.s.bs); return x && x.aktiv ? x : null; };
+  const zuDetail = p => { const x = laufendeBs(p); if (!x) return; p.s.sheet = null; p.s.bs = x.entry; return p.gehe('bsdetail'); };
+  const oeffnenAlt = R.proto.baustelleOeffnen;
+  R.proto.baustelleOeffnen = function (id) { const x = this.alle.find(y => y.entry === id);
+    if (x && x.aktiv && this.s.view === 'verlauf') { this.s.bs = id; return this.gehe('bsdetail'); } return oeffnenAlt.call(this, id); };
+  R.vorlage({ merkmal: 'vl-mehr', fn: y => { y.values = y.values.map(v => v === 'Übersicht ›' ? 'Details ›' : v); return y; } });
+  R.vorlage({ merkmal: 'glas-kopf', wann: p => !!imDetail(p), fn: y => { y.values = y.values.map(v => v === 'LAUFEND' ? html`LÄUFT · STAND HEUTE${R.marke}` : v); return y; } });
+  R.vorlage({ merkmal: 'Abrechnung nach Firma', wann: p => G.echteAw && p.s.view === 'auswertung', fn: (y, p) => html`${y}<button class="glas-panel zeile or-bsd-link" data-or="bsd" @click=${() => zuDetail(p)}>
+      <div class="or-zl"><b>🏗 Ganze Baustelle seit Beginn</b>${R.marke}<div class="leise">Verbrauch je Monat und Container, Abrechnung nach Firma, CSV – auch während sie läuft</div></div><span class="leise">›</span></button>` });
+  const firmaSeitBeginn = (p, x) => { const k = p.kennz(x); if (!k.monate) return null; const je = new Map();   // Mockup: rechnet die Integration
+    for (const r of k.monate.reihen) { const b = x.bereiche.find(y => y.id === r.bereich) || {}, f = ((p.d && p.d.firmen) || []).find(y => y.id === b.firma);
+      const n = f ? f.name : 'Eigene Firma', a = je.get(n) || { kwh: 0, eur: 0, c: 0 }; a.kwh += r.kwh; a.eur += r.eur; a.c += 1; je.set(n, a); }
+    return [...je].sort((a, b) => b[1].kwh - a[1].kwh); };
+  R.abschnitt({ ansicht: 'bsdetail', wann: p => !!imDetail(p), vor: () => R.band('Vorschlag M11 · Detail auch während die Baustelle läuft'), nach: p => { const x = imDetail(p), F = firmaSeitBeginn(p, x), de0 = v => Math.round(v).toLocaleString('de-AT');
+    return html`<div class="glas-panel block" data-or="bsd-firma"><div class="block-kopf"><b>Abrechnung nach Firma</b>${R.marke}<span class="leise">seit Beginn · bis heute</span></div>
+        ${!F ? html`<div class="leer">Lädt …</div>` : html`<div class="or-tab"><div class="or-tz kopf vier"><span>Firma</span><span>Container</span><span>kWh</span><span>€</span></div>
+          ${F.map(([n, a]) => html`<div class="or-tz vier"><span>${n}</span><span>${a.c}</span><span>${de0(a.kwh)}</span><b>${de0(a.eur)}</b></div>`)}</div>`}
+        <div class="or-csv"><button class="chip glas-panel">⇩ Abrechnung seit Beginn (CSV)</button><button class="chip glas-panel">⇩ Verbrauch je Monat und Container</button></div>
+        <div class="leise or-fuss">Jeder Tag mit dem Preis, der an dem Tag galt. Der laufende Monat zählt bis heute; Zahlen und € liefert die Integration.</div></div>
+      <div class="or-bsd-knoepfe" data-or="bsd-unten"><button class="knopf amber" @click=${() => oeffnenAlt.call(p, x.entry)}>Übersicht dieser Baustelle ›</button>
+        <button class="knopf leise-k" @click=${() => R.auf(p, { art: 'abschliessen' })}>Baustelle abschließen …</button></div>
+      <div class="leise or-fuss">Nach dem Abschließen bleibt die Seite gleich, nur ohne diese zwei Knöpfe; dann steht dort „Wieder aktiv setzen“.</div>`; } });
+
   R.stil(`
+.or-bsd-link { width: 100%; text-align: left; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.or-bsd-knoepfe { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
 .or-erb { font-size: 11px; padding: 1px 7px; border-radius: 8px; background: rgba(127,127,127,.2); color: var(--ink2); white-space: nowrap; }
 .or-abw { font-size: 11px; padding: 1px 4px 1px 7px; border-radius: 8px; background: color-mix(in srgb, var(--amber) 20%, transparent); color: var(--amber); white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
 .or-zur { border: 0; background: none; color: var(--amber); font-size: 13px; padding: 0 3px; cursor: pointer; }
@@ -526,7 +557,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
 }`);
 
   /* ---------- Vorführ-Leiste ---------- */
-  const startwerte = () => { Object.assign(G, { tab: 'heizung', picker: false, namenVorschau: false, namenFertig: false, sprung: null, fehlt: true,
+  const startwerte = () => { Object.assign(G, { echteAw: false, tab: 'heizung', picker: false, namenVorschau: false, namenFertig: false, sprung: null, fehlt: true,
     as: { schritt: 1, geraet: 'plug9', bid: 'polier', typ: 'konvektor', frei: false, freiName: 'Konvektor Polier', vorgabe: false },
     cn: { art: 'container', eigen: true, firma: 'STRA', nummer: 6, kuerzel: 'MAN', name: 'Mannschaft 2' },
     aw: { zr: 'monat', vergl: 'vorperiode', filter: null, alle: false } });
@@ -545,7 +576,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
       else if (z === 'heizung') q.gehe('heizung');
       else if (z === 'grundlagen') { q.gehe('heizung'); q.s.sheet = { art: 'or-grundlagen' }; }
       else if (z.startsWith('aw')) { q.gehe('auswertung'); if (z === 'aw-vorjahr') G.aw.vergl = 'vorjahr'; if (z === 'aw-ohne') G.aw.vergl = 'ohne'; if (z === 'aw-filter') G.aw.filter = 'Poliercontainer'; if (z === 'aw-heute') G.aw.vergl = ''; }
-      else if (z === 'bsdetail') { q.gehe('auswertung'); q.s.sheet = { art: 'or-bsdetail' }; }
+      else if (z.startsWith('bsd-')) { G.echteAw = true; if (z === 'bsd-laufend') zuDetail(q); if (z === 'bsd-verlauf') { q.s.vlReiter = 'bs'; q.s.vlArt = 'karten'; q.gehe('verlauf'); } if (z === 'bsd-auswertung') { q.gehe('auswertung'); q.awDetail('abrechnung'); } }
       else if (z === 'container') q.containerOeffnen(BID);
       await q.neuZeichnen();
     }
@@ -560,11 +591,13 @@ const ZEIGEN = [
   ['cn-eigen', 'M12 + Container · eigen'], ['cn-fremd', 'M12 + Container · fremd'], ['cn-belegt', 'M12 + Container · Nummer belegt'],
   ['heizung', 'M9 Reiter Heizung · Grundlagen-Karte'], ['grundlagen', 'M9 Grundlagen bearbeiten'],
   ['aw', 'M13 Auswertung · Vorperiode'], ['aw-vorjahr', 'M13 Auswertung · Vorjahr'], ['aw-ohne', 'M13/M14 · ohne Automatik'], ['aw-filter', 'M13 · gefiltert (aus dem Container)'],
-  ['container', 'M13 Container · Sprung in die Auswertung'], ['bsdetail', 'M11 Baustellen-Detail (laufend)'],
+  ['container', 'M13 Container · Sprung in die Auswertung'], 
+  ['bsd-laufend', 'M11 Baustellen-Detail · laufend'], ['bsd-verlauf', 'M11 Verlauf · Karte öffnet das Detail'], ['bsd-auswertung', 'M11 Auswertung · Sprung ins Detail'],
 ];
 // --nur=M8: nur dieser Schritt als eigene Datei zum Abnehmen (Herbert, 23.11.2026: Schritt für Schritt)
 const NUR = (process.argv.find(a => a.startsWith('--nur=')) || '').slice(6);
 const DATEIEN = { M8: ['container-seite.html', 'Baustelle – Container-Seite (M8)', 'Schritt M8 · „Bearbeiten“ ist die eine Container-Seite'],
+  M11: ['baustellen-detail.html', 'Baustelle – Baustellen-Detail (M11)', 'Schritt M11 · Baustellen-Detail auch während die Baustelle läuft'],
   M9: ['grundlagen.html', 'Baustelle – Grundlagen (M9)', 'Schritt M9 · Heizperiode, Klimamittel, Baseline im Reiter Heizung'] };
 if (NUR && !DATEIEN[NUR]) throw new Error(`--nur=${NUR}: unbekannter Schritt`);
 if (NUR) ZEIGEN.splice(0, ZEIGEN.length, ...ZEIGEN.filter(([, t]) => t.startsWith(NUR + ' ') || t.startsWith(NUR + '/')));
@@ -572,7 +605,8 @@ const faelle = ZEIGEN.map(([z]) => ({ name: z, werte: { zeigen: z } }));
 faelle.push({ name: 'aw-ersparnis', werte: { zeigen: 'aw' }, scroll: '[data-or="ersparnis"]' }, { name: 'aw-heizperiode', werte: { zeigen: 'aw' }, scroll: '[data-or="heizperiode"]' },
   { name: 'aw-abrechnung', werte: { zeigen: 'aw' }, scroll: '[data-or="abrechnung"]' }, { name: 'aw-geraete', werte: { zeigen: 'aw' }, scroll: '[data-or="geraete"]' },
   { name: 'heizung-karte', werte: { zeigen: 'heizung' }, scroll: '[data-or="grundlagen"]' }, { name: 'cs-heizung-unten', werte: { zeigen: 'cs-heizung' }, scroll: '[data-k="stufen"]' },
-  { name: 'cs-fuehler-suche-offen', werte: { zeigen: 'cs-fuehler-suche' }, scroll: '[data-k="tuer2"]' }, { name: 'cs-namen-vorschau-offen', werte: { zeigen: 'cs-namen-vorschau' }, scroll: '.or-nz.abw' });
+  { name: 'cs-fuehler-suche-offen', werte: { zeigen: 'cs-fuehler-suche' }, scroll: '[data-k="tuer2"]' }, { name: 'bsd-laufend-unten', werte: { zeigen: 'bsd-laufend' }, scroll: '[data-or="bsd-firma"]' }, { name: 'bsd-auswertung-abrechnung', werte: { zeigen: 'bsd-auswertung' }, scroll: '[data-or="bsd"]' },
+  { name: 'cs-namen-vorschau-offen', werte: { zeigen: 'cs-namen-vorschau' }, scroll: '.or-nz.abw' });
 const [datei, titel, leiste] = NUR ? DATEIEN[NUR] : ['ordnung.html', 'Baustelle – Ordnung der Oberfläche (Stufe 2/3)', 'Ordnung der Oberfläche · Stufe 2/3 · Maßnahmen 7–16'];
 rahmen.bauen({ datei, titel, leiste, browser, faelle: NUR ? faelle.filter(f => ZEIGEN.some(([z]) => z === f.werte.zeigen)) : faelle,
   auswahl: [{ id: 'zeigen', t: 'zeigen', optionen: ZEIGEN }] });
