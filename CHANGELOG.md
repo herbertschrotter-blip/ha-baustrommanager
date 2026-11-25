@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.8.199] – 2026-11-25
+
+- Korrigiert: Die Integration nutzt das Geräteregister von Home Assistant so, wie es ab 2026.10 vorgesehen ist (ein Gerät
+  gehört zu genau einem Eintrag, die Geräteliste wird durchlaufen statt als Nachschlagetabelle benutzt). Damit sind die
+  Warnungen im Protokoll weg, und Konfliktprüfung und Gerätesuche laufen auch nach HA 2027.9/2027.10 weiter.
+
 ## [0.8.198] – 2026-11-24
 
 - Neu gestaltet (UI-Bericht M9, Mockup `mockups/grundlagen.html`, abgenommen 24.11.2026): **Grundlagen für Hochrechnung

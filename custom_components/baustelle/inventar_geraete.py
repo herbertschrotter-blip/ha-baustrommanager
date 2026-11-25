@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigSubentry
 from homeassistant.core import HomeAssistant
@@ -84,7 +84,7 @@ def kandidaten(hass: HomeAssistant, roh: dict[str, Any]) -> list[dict[str, Any]]
     laufend = {e["ausruestung_id"] for e in roh.get("ausruestung_einsaetze") or [] if not e.get("bis")}
     je_kennung = {a.get("kennung"): a for a in roh.get("ausruestung") or [] if a.get("kennung")}
     belegt, aus = _belegt(hass), []
-    for geraet in cast("dict[str, dr.DeviceEntry]", dr.async_get(hass).devices).values():
+    for geraet in dr.async_get(hass).devices:   # Iterieren liefert die Geräte (Zugriff als Mapping endet mit HA 2027.9)
         if not isinstance(geraet, dr.DeviceEntry) or geraet.disabled or any(d == DOMAIN for d, _ in geraet.identifiers):
             continue
         ents = _entitaeten(hass, geraet.id)
@@ -110,7 +110,7 @@ def assistent_kandidaten(hass: HomeAssistant, roh: dict[str, Any]) -> list[dict[
     laufend = {e["ausruestung_id"] for e in roh.get("ausruestung_einsaetze") or [] if not e.get("bis")}
     je_kennung = {a.get("kennung"): a for a in roh.get("ausruestung") or [] if a.get("kennung")}
     belegt, aus = _belegt(hass), []
-    for geraet in cast("dict[str, dr.DeviceEntry]", dr.async_get(hass).devices).values():
+    for geraet in dr.async_get(hass).devices:   # Iterieren liefert die Geräte (Zugriff als Mapping endet mit HA 2027.9)
         if not isinstance(geraet, dr.DeviceEntry) or geraet.disabled or any(d == DOMAIN for d, _ in geraet.identifiers):
             continue
         ents = _entitaeten(hass, geraet.id)

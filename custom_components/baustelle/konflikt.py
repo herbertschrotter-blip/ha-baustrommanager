@@ -74,14 +74,14 @@ async def async_karte(hass: HomeAssistant, ref: str, trifft: list[str] | None = 
     geraet = geraete.async_get(ref) if "." not in ref else None
     if isinstance(geraet, dr.DeviceEntry):
         ents = [e.entity_id for e in er.async_entries_for_device(reg, geraet.id, include_disabled_entities=True)]
-        domains = [ce.domain for i in geraet.config_entries if (ce := hass.config_entries.async_get_entry(i)) is not None]
+        domains = [ce.domain] if (ce := hass.config_entries.async_get_entry(geraet.config_entry_id)) is not None else []   # ein Gerät gehört zu genau einem Eintrag (HA 2026.10)
         name_alt = geraet.name_by_user or geraet.name
         werks = werks_ids(ents, name_alt, geraet.name, _alle_ids(hass)) if geraet.name_by_user else {}
         bereich = ar.async_get(hass).async_get_area(geraet.area_id) if geraet.area_id else None
         baustelle = next((verwendet[e] for e in ents if e in verwendet), None)
         if baustelle is None and any(d == DOMAIN for d, _ in geraet.identifiers):
             baustelle = "Gerät der Integration"
-        ist_verwaist = verwaist(_eintraege(hass, geraet.config_entries), _zustaende(hass, reg, ents))
+        ist_verwaist = verwaist(_eintraege(hass, [geraet.config_entry_id]), _zustaende(hass, reg, ents))
         karte: dict[str, Any] = {"ref": geraet.id, "art": "geraet", "name": name_alt, "werksname": geraet.name,
                                  "modell": " ".join(x for x in (geraet.manufacturer, geraet.model) if x) or None,
                                  "integration": await _integration(hass, domains[0] if domains else None),
