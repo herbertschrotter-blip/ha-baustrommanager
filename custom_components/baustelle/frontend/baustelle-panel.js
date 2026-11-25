@@ -1961,13 +1961,13 @@ function archiv(p4) {
   return b2`<div class="glas-panel kennz vier">${[[BS.length, `Baustellen · ${BS.filter((b3) => b3.aktiv).length} aktiv`], [laedt ? "–" : de(sum("kwh"), 0), "kWh gesamt"], [laedt ? "–" : `${de(sum("eur"), 0)} €`, "Kosten gesamt"], [laedt ? "–" : `${de(sum("gespart"), 0)} €`, "gespart"]].map(([w2, t5]) => b2`<div><b>${w2}</b><span>${t5}</span></div>`)}</div>
       ${BS.length ? b2`<div class="vl-archiv">${BS.map((b3) => {
     const k2 = K.get(b3.entry), i7 = p4.alle.indexOf(b3), farbe = `var(--s${i7 % 6 + 1})`;
-    return b2`<button class="glas-panel vl-karte ${b3.aktiv ? "aktiv" : ""}" data-bs=${b3.entry} @click=${() => p4.baustelleOeffnen(b3.entry)}>
+    return b2`<button class="glas-panel vl-karte ${b3.aktiv ? "aktiv" : ""}" data-bs=${b3.entry} @click=${() => p4.bsDetail(b3.entry)}>
           <div class="bs-kopf"><b>${b3.titel}</b><span class="badge ${b3.aktiv ? "gruen" : ""}">${b3.aktiv ? "aktiv" : "abgeschlossen"}</span></div>
           <div class="leise">${k2.zeit} · ${k2.container} Container · ${k2.laedt ? "–" : k2.heiztage} Heiztage</div>
           ${o5(p4.vlFunke(MONK.map((m3) => k2.jeMonat[m3] || 0), farbe))}<div class="vl-monate"><span>${MONATE[+MONK[0].slice(5) - 1]}</span><span>${MONATE[+MONK[11].slice(5) - 1]}</span></div>
           <div class="vl-zahlen"><div><b>${k2.laedt ? "–" : zahl0(k2.kwh)}</b><small>kWh</small></div><div><b>${k2.laedt ? "–" : `${zahl0(k2.eur)} €`}</b><small>Kosten</small></div>
             <div><b>${k2.laedt ? "–" : zahl0(k2.vergleich.tag, 1)}</b><small>kWh/Heiztag</small></div><div><b class="gruen-t">${zahl(k2.gespart) ? `${de(k2.gespart, 0)} €` : "–"}</b><small>${k2.gespartText}</small></div></div>
-          <span class="leise vl-mehr">${b3.aktiv ? "Übersicht ›" : "ansehen ›"}</span></button>`;
+          <span class="leise vl-mehr">${b3.aktiv ? "Details ›" : "ansehen ›"}</span></button>`;
   })}</div>` : b2`<div class="glas-panel block"><div class="leer">Noch keine Baustelle</div></div>`}`;
 }
 function vergleich(p4) {
@@ -1993,7 +1993,7 @@ function vergleich(p4) {
         <div class="vl-tab-kopf">${spalten.map(([k2, t5]) => b2`<button class=${sp === k2 ? "on" : ""} data-sp=${k2} @click=${() => sortiere(k2)}>${t5}${sp === k2 ? ab ? " ▼" : " ▲" : ""}</button>`)}</div>
         ${zeilen.map(({ b: b3, i: i7 }) => {
     const k2 = K.get(b3.entry);
-    return b2`<button class="vl-tab-zeile" data-bs=${b3.entry} @click=${() => p4.baustelleOeffnen(b3.entry)}><span class="vl-tab-name"><span><i class="farbpunkt" style="background:var(--s${i7 % 6 + 1})"></i>${b3.titel}</span><small>${k2.zeit}</small></span>
+    return b2`<button class="vl-tab-zeile" data-bs=${b3.entry} @click=${() => p4.bsDetail(b3.entry)}><span class="vl-tab-name"><span><i class="farbpunkt" style="background:var(--s${i7 % 6 + 1})"></i>${b3.titel}</span><small>${k2.zeit}</small></span>
           <b class=${bester !== null && k2.vergleich.tag === bester ? "gruen-t" : ""}>${f3(k2.vergleich.tag, 1)}</b><span>${f3(k2.vergleich.monat)}</span><span>${f3(k2.kwh)}</span><span>${f3(k2.eur)}</span><span>${k2.laedt ? "–" : k2.heiztage}</span><span>${k2.container}</span></button>`;
   })}</div>
       <div class="glas-panel block"><div class="block-kopf"><b>Letzte 12 Monate</b><span class="leise">kWh je Monat, gestapelt nach Baustelle</span></div>
@@ -2040,6 +2040,13 @@ function verlaufVorlage(p4) {
         ${prot ? A : b2`<div class="seg glas-panel klein">${[["karten", "▦ Karten"], ["tabelle", "☰ Vergleich"]].map(([k2, t5]) => b2`<button class=${art === k2 ? "on" : ""} data-va=${k2} @click=${() => setze("vlArt", k2)}>${t5}</button>`)}</div>`}</div>
       ${prot ? chronik(p4) : art === "tabelle" ? vergleich(p4) : archiv(p4)}`;
 }
+function firmaSeitBeginn(v2) {
+  const A2 = v2 && v2.abrechnung;
+  if (!A2) return LAEDT;
+  if (!A2.firmen.length) return b2`<div class="leer">Noch kein Verbrauch</div>`;
+  return b2`<div class="bsd-tab"><div class="bsd-tz kopf"><span>Firma</span><span>Cont.</span><span>kWh</span><span>€</span></div>
+    ${A2.firmen.map((f3) => b2`<div class="bsd-tz ${f3.eigen ? "eigen" : ""}"><span>${f3.firma}</span><span>${f3.container.length}</span><span>${de(f3.kwh, 0)}</span><b>${de(f3.eur, 0)}</b></div>`)}</div>`;
+}
 function bsdetailVorlage(p4) {
   const x2 = p4.alle.find((y3) => y3.entry === p4.s.bs), zurueck = b2`<button class="glas-panel chip" @click=${() => p4.gehe("verlauf")}>‹ Verlauf</button>`;
   if (!x2) return b2`<div class="zurueck-zeile">${zurueck}</div><div class="glas-panel block"><div class="leer">Baustelle nicht gefunden</div></div>`;
@@ -2049,20 +2056,36 @@ function bsdetailVorlage(p4) {
   }) };
   const eintraege = p4.bsProtokoll(x2);
   const ART2 = { einstellung: "⚙", warnung: "⚠", ok: "✓", schalten: "⏻", wetter: "☁", nachricht: "✉" };
+  const v2 = p4.verlaufDaten(x2);
   return b2`<div class="zurueck-zeile">${zurueck}<button class="glas-panel chip bs-csv" @click=${() => p4.csv()}>⇩ CSV</button></div>
-      ${kopfVorlage(x2.titel, x2.aktiv ? "LAUFEND" : "ABGESCHLOSSEN · NUR ANSEHEN")}
+      ${kopfVorlage(x2.titel, x2.aktiv ? "LÄUFT · STAND HEUTE" : "ABGESCHLOSSEN · NUR ANSEHEN")}
       <div class="leise vgl">${k2.zeit}</div>
       <div class="glas-panel kennz vier"><div><b>${de(k2.kwh, 0)}</b><span>kWh</span></div><div><b>${de(k2.eur, 0)} €</b><span>Kosten</span></div><div><b>${k2.laedt ? "–" : k2.heiztage}</b><span>Heiztage</span></div><div><b>${zahl(k2.gespart) ? `${de(k2.gespart, 0)} €` : "–"}</b><span>gespart</span></div></div>
       <div class="glas-panel block"><div class="block-kopf"><b>Verbrauch je Monat</b><span class="leise">gestapelt nach Container</span></div>
         ${!m3 ? LAEDT : !m3.reihen.length ? b2`<div class="leer">Keine Container</div>` : b2`<div class="chart-wrap">${o5(flaeche("bs-" + x2.entry, m3.reihen, m3.labels, "kWh", 1))}</div>
         <div class="vb-je">${m3.reihen.map((q) => b2`<div><i style="background:${q.farbe}"></i><span class="n">${q.name}</span><b>${de(q.kwh, 0)} kWh</b><span>${de(q.eur, 0)} €</span><span class="leise">${de(q.anteil, 0)} %</span></div>`)}</div>`}</div>
+      <div class="glas-panel block bsd-firma"><div class="block-kopf"><b>Abrechnung nach Firma</b><span class="leise">seit Beginn · bis ${x2.aktiv ? "heute" : "Ende"}</span></div>
+        ${firmaSeitBeginn(v2)}
+        <div class="bsd-csv"><button class="glas-panel chip" data-art="firma" @click=${() => p4.csv("firma")}>⇩ Abrechnung seit Beginn (CSV)</button><button class="glas-panel chip" data-art="monate" @click=${() => p4.csv()}>⇩ Verbrauch je Monat und Container</button></div>
+        <div class="leise bsd-fuss">Jeder Tag mit dem Preis, der an dem Tag galt${x2.aktiv ? ". Der laufende Monat zählt bis heute" : ""}.</div></div>
       <div class="glas-panel block"><div class="block-kopf"><b>Protokoll</b><span class="leise">Auszug</span></div>
         ${eintraege === null ? LAEDT : eintraege.length ? eintraege.map((e6) => {
     const l4 = p4.lokal(e6[0], x2.z.zone);
     return b2`<div class="zeile ereignis"><span class="zeit">${kurzDatum(l4)}</span><span class="p-ic">${ART2[e6[1]] || "•"}</span><div><span>${e6[2] ? `${(x2.bereiche.find((b3) => b3.id === e6[2]) || { name: e6[2] }).name}: ` : ""}${e6[3]}</span></div></div>`;
   }) : b2`<div class="leer">Keine Einträge</div>`}</div>
-      ${x2.aktiv ? A : b2`<button class="knopf leise-k bs-aktiv" @click=${() => p4.baustelleAktiv(x2.entry)}>Wieder aktiv setzen</button>`}`;
+      ${x2.aktiv ? b2`<div class="bsd-knoepfe"><button class="knopf amber bs-uebersicht" @click=${() => p4.baustelleOeffnen(x2.entry)}>Übersicht dieser Baustelle ›</button>
+          <button class="knopf leise-k nur-admin bs-abschliessen" @click=${() => p4.bsAbschliessenAuf(x2.entry)}>Baustelle abschließen …</button></div>` : b2`<button class="knopf leise-k bs-aktiv" @click=${() => p4.baustelleAktiv(x2.entry)}>Wieder aktiv setzen</button>`}`;
 }
+var VERLAUF_DETAIL_CSS = `
+.bsd-tz { display: grid; grid-template-columns: minmax(0, 1fr) 44px 56px 64px; gap: 8px; padding: 6px 0; border-top: 1px solid var(--gridc); font-size: 13.5px; }
+.bsd-tz > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bsd-tz > :not(:first-child) { text-align: right; }
+.bsd-tz.kopf { border-top: 0; font-size: 11px; color: var(--ink2); text-transform: uppercase; letter-spacing: .4px; }
+.bsd-tz.eigen > :first-child { color: var(--ink2); }
+.bsd-csv { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; } .bsd-csv .chip { font-size: 12.5px; }
+.bsd-fuss { font-size: 12px; margin-top: 6px; }
+.bsd-knoepfe { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 6px; }
+.aw-bsd { width: 100%; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+`;
 
 // src/ansichten/zeitraum.js
 function kalender(p4, ziel2, z2, v2, max, k2) {
@@ -5732,7 +5755,9 @@ function abrechnung(p4, z2) {
   return b2`<div class="glas-panel block"><div class="block-kopf"><b>Abrechnung nach Firma</b><span class="leise">${wann2} · ${de(preis2, 2)} € je kWh</span></div>
       ${!zeilen ? LAEDT8 : !zeilen.length ? b2`<div class="leer">Noch kein Verbrauch in diesem Zeitraum</div>` : zeilen.map((f3) => b2`<div class="ab-firma ${f3.eigen ? "eigen" : ""}"><div class="ab-kopf"><b>${f3.firma}</b><span><b>${de(f3.eur, 2)} €</b> <span class="leise">${de(f3.kwh, 0)} kWh · ${de(f3.anteil, 0)} %</span></span></div>
         ${(f3.container || []).map((x2) => b2`<div class="ab-c"><span>${x2.name}${lauf.length > 1 ? b2` <span class="leise">· ${x2.titel}</span>` : A}</span><span class="leise">${de(x2.kwh, 0)} kWh · ${de(x2.eur, 2)} €</span></div>`)}</div>`)}
-      <button class="knopf" data-art="firma" @click=${() => p4.csv("firma")}>⇩ Abrechnung als CSV</button></div>`;
+      <button class="knopf" data-art="firma" @click=${() => p4.csv("firma")}>⇩ Abrechnung als CSV</button></div>
+    <button class="glas-panel zeile aw-bsd" data-k="bs-detail" @click=${() => p4.bsDetail(p4.d.entry)}><div><b>🏗 Ganze Baustelle seit Beginn</b>
+      <div class="leise">Verbrauch je Monat und Container, Abrechnung nach Firma, CSV – auch während sie läuft</div></div><span class="chev">›</span></button>`;
 }
 function leistungHeute(p4) {
   const d3 = p4.d, Q = d3.bereiche.map((b3) => ({ name: b3.name, farbe: farbeVon(b3), v: p4.verbrauch(d3, b3.id, "Tag") }));
@@ -6474,7 +6499,7 @@ var GLAS_CSS = `:host { display: block; height: 100%; }
 .chart .gr { stroke: var(--gridc); stroke-width: 1; } .chart .ax-e { font-weight: 600; font-size: 9px; } .chart .ax { fill: var(--axisc); font-size: 10px; }
 .chart .kreuz { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 2 3; } .chart .punkt { stroke: var(--sheet); stroke-width: 2; }
 .chart .bar { transition: opacity .15s; } .chart .bar.matt { opacity: .35; }
-.legende { display: flex; gap: 14px; font-size: 12px; color: var(--ink2); margin-top: 4px; }
+.legende { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink2); margin-top: 4px; }
 .legende i, .tip i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
 .leer { font-size: 13px; color: var(--ink2); padding: 24px 0; text-align: center; } .link { color: var(--blau) !important; }
 .tip { position: absolute; z-index: 30; pointer-events: none; opacity: 0; transition: opacity .12s; background: var(--sheet); color: var(--ink); border: 1px solid var(--panel-rand);
@@ -7113,10 +7138,10 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.199";
+var SEITE_VERSION = "0.8.200";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
 var BaustellePanel = class extends i4 {
-  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
+  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(VERLAUF_DETAIL_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
@@ -8075,10 +8100,10 @@ var BaustellePanel = class extends i4 {
   csv(art) {
     let text2, name3;
     if (this.s.view === "bsdetail") {
-      const x2 = this.alle.find((y3) => y3.entry === this.s.bs), v2 = x2 && this.verlaufDaten(x2);
-      if (!v2 || !v2.csv) return this.toast("Werte laden noch …");
-      text2 = v2.csv;
-      name3 = `baustelle-verbrauch-${x2.titel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
+      const x2 = this.alle.find((y3) => y3.entry === this.s.bs), v2 = x2 && this.verlaufDaten(x2), firma2 = art === "firma";
+      text2 = v2 && (firma2 ? v2.abrechnung && v2.abrechnung.csv : v2.csv);
+      if (!text2) return this.toast("Werte laden noch …");
+      name3 = `baustelle-${firma2 ? "abrechnung" : "verbrauch"}-${x2.titel.toLowerCase().replace(/[^a-z0-9]+/g, "-")}${firma2 ? "-seit-beginn" : ""}.csv`;
     } else {
       const z2 = (this.s.aw || { zeitraum: "Monat" }).zeitraum, lauf = this.s.awScope === "alle" ? this.laufende() : [this.d], a3 = this.abDaten(z2, void 0, this.d, (this.s.aw || {}).v || 0);
       if (!a3 || !a3.csv) return this.toast("Werte laden noch …");
@@ -9312,6 +9337,28 @@ var BaustellePanel = class extends i4 {
     this.s.bs = x2.entry;
     return this.gehe("bsdetail");
   }
+  /* Detailseite einer Baustelle, laufend oder abgeschlossen (M11): Verlauf-Karte, Auswertung › „Ganze Baustelle seit Beginn“ */
+  bsDetail(id) {
+    const x2 = this.alle.find((y3) => y3.entry === id);
+    if (!x2) return void 0;
+    this.s.sheet = null;
+    this.s.bs = x2.entry;
+    return this.gehe("bsdetail");
+  }
+  /* „Baustelle abschließen …“ auf der Detailseite: die Einblendung gilt der gewählten Baustelle, darum diese zuerst wählen */
+  bsAbschliessenAuf(id) {
+    const x2 = this.alle.find((y3) => y3.entry === id);
+    if (!x2 || !x2.aktiv) return void 0;
+    if (x2.entry !== this.bid) {
+      this.bid = x2.entry;
+      this._merken();
+      this._neuBauen();
+      this._vorhersageAbo();
+      this._stimmung(true);
+      this.s.aw = null;
+    }
+    return this.einblenden("abschliessen");
+  }
   baustelleAktiv(id) {
     const x2 = this.alle.find((y3) => y3.entry === id);
     if (!x2) return;
@@ -9382,7 +9429,7 @@ var BaustellePanel = class extends i4 {
   }
   /* Melde-Dialog öffnen (Knopf unten rechts, „Über“) */
   meldenAuf() {
-    const namen = { uebersicht: "Übersicht", container: "Container", heizung: "Heizung", auswertung: "Auswertung", verlauf: "Verlauf", einst: "Einstellungen", ueber: "Über", dev: "Entwicklung", bsdetail: "Baustelle (abgeschlossen)" };
+    const namen = { uebersicht: "Übersicht", container: "Container", heizung: "Heizung", auswertung: "Auswertung", verlauf: "Verlauf", einst: "Einstellungen", ueber: "Über", dev: "Entwicklung", bsdetail: "Baustelle (Detail)" };
     const kontext = [namen[this.s.view] || this.s.view, this.s.view === "container" && this.b ? this.b.name : "", this.s.sheet ? `Dialog „${this.s.sheet.art}“` : ""].filter(Boolean).join(" · ");
     const breite = this.root && this.root.getBoundingClientRect ? this.root.getBoundingClientRect().width : 1e3, geraet = breite < 700 ? "Handy" : "Desktop";
     this.s.sheet = { art: "melden", vorher: this.s.sheet, form: { art: "wunsch", text: "", kontext, geraet, stand: true } };

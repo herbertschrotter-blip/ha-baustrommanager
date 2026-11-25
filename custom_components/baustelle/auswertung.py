@@ -253,6 +253,16 @@ def preis_fn(quellen: list[Quelle], preis_sim: float | None = None) -> Callable[
     return lambda entry, tag: preise_logik.preis_am(preise[entry], tag)
 
 
+def _summe_je_zeit(roh: Mapping[str, Sequence[Mapping[str, Any]]], teile: Sequence[str]) -> list[tuple[datetime, float]]:
+    """kWh je Statistik-Zeitpunkt, über die Zähler eines Containers addiert (Form von `logik/auswertung.abrechnung`)."""
+    je: dict[datetime, float] = {}
+    for sid in teile:
+        for p in roh.get(sid, []):
+            t = a.zeitpunkt(p["start"])
+            je[t] = je.get(t, 0.0) + (float(p["change"]) if a.ist_zahl(p.get("change")) else 0.0)
+    return sorted(je.items())
+
+
 def abrechnung_daten(
     quellen: list[Quelle], werte: Mapping[str, Mapping[str, Sequence[tuple[Any, float | None]]]], preis: float,
     pfn: Callable[[str, date], float] | None = None,
@@ -296,12 +306,7 @@ async def async_abrechnung(
         werte[eid], werte_zeitraum[eid] = {}, {}
         for b in q.bereiche:
             teile = q.energie_ids(b["id"])
-            je: dict[datetime, float] = {}
-            for sid in teile:
-                for p in roh.get(sid, []):
-                    t = a.zeitpunkt(p["start"])
-                    je[t] = je.get(t, 0.0) + (float(p["change"]) if a.ist_zahl(p.get("change")) else 0.0)
-            werte[eid][b["id"]] = sorted(je.items())
+            werte[eid][b["id"]] = _summe_je_zeit(roh, teile)
             v = a.verbrauch(je_periode, teile, zr.n)
             werte_zeitraum[eid][b["id"]] = [(zr.beginn(i, zone), v[i]) for i in range(zr.n)]
     daten = abrechnung_daten(quellen, werte, preis, pfn)
@@ -425,7 +430,17 @@ async def async_verlauf(hass: HomeAssistant, q: Quelle) -> dict[str, Any]:
     roh_m = await async_statistik(hass, [b["energie"] for b in bereiche], a.mitternacht(m_von, zone),
                                   a.mitternacht(m_bis, zone), "month", {"change"})
     je_monat = a.monate_je_container(monate, bereiche, roh_m, zone)
+    # Abrechnung nach Firma seit Beginn bis heute bzw. Ende (M11): Firma und Preis je Tag wie `baustelle/abrechnung`
+    f_von = beginn or m_von
+    ids = {b["id"]: q.energie_ids(b["id"]) for b in q.bereiche}
+    roh_f = await async_statistik(hass, [i for t in ids.values() for i in t], a.mitternacht(f_von, zone),
+                                  a.mitternacht(m_bis, zone), "day", {"change"})
+    firmen = abrechnung_daten([q], {eid: {bid: _summe_je_zeit(roh_f, t) for bid, t in ids.items()}}, q.preis, preis_fn([q]))
+    kwh_f, eur_f = sum(z["kwh"] for z in firmen), sum(z["eur"] for z in firmen)
     return {
+        "abrechnung": {"von": f_von.isoformat(), "bis": (m_bis - timedelta(days=1)).isoformat(), "kwh": kwh_f, "eur": eur_f,
+                       "firmen": firmen,
+                       "csv": csv_abrechnung([q], firmen, "seit Beginn", eur_f / kwh_f if kwh_f else q.preis)},
         **kennzahlen, "je_monat": vw["je_monat"], "je_tag": vw["je_tag"],   # je_tag: Chronik der Seite (WU-0006)
         "monate_je_container": {"labels": je_monat["labels"],
                                 "reihen": [{"bereich": b["id"], **r, **x} for b, r, x in

@@ -400,6 +400,15 @@ await fall('3b Verlauf', browser, async (page, erwarte) => {
   erwarte('CSV der Baustelle wird erzeugt', csv.length === 1 && /\.csv$/.test(csv[0][0]) && csv[0][1] > 50, JSON.stringify(csv));
   await klick(page, `${D} >>> .zurueck-zeile button`);
   erwarte('zurück in den Verlauf', await panel(page, D, () => p.s.view) === 'verlauf');
+  // M11: Karte der laufenden Baustelle öffnet das Detail; am Handy (390 px) läuft nichts seitlich hinaus (Legende bricht um)
+  await klick(page, `${D} >>> .vl-karte.aktiv`);
+  const lauf = await panel(page, D, () => ({ view: p.s.view, kopf: (sr.querySelector('.ui .seite') || sr).textContent.includes('LÄUFT · STAND HEUTE'), firma: sr.querySelectorAll('.bsd-tz:not(.kopf)').length }));
+  erwarte('M11: laufende Baustelle öffnet das Detail mit Abrechnung seit Beginn', lauf.view === 'bsdetail' && lauf.kopf && lauf.firma > 0, JSON.stringify(lauf));
+  await page.setViewport({ width: 390, height: 844 });
+  await panel(page, T, () => p.bsDetail(p.d.entry)); await warte(800);
+  const breit = await panel(page, T, () => { const s = sr.querySelector('.seite'); return { view: p.s.view, sw: s.scrollWidth, w: s.clientWidth }; });
+  erwarte('M11: Detail am Handy 390 px ohne seitlichen Überlauf', breit.view === 'bsdetail' && breit.sw <= breit.w + 1, JSON.stringify(breit));
+  await page.setViewport({ width: 1400, height: 1000 });
 });
 
 /* Stufe 3c: Pumpen und Schacht – Diagramme, Stepper (ein Auftrag), Schacht öffnen, Zeitraum, Automatik und Pumpe schalten

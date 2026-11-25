@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.200] – 2026-11-25
+
+- Neu gestaltet (UI-Bericht M11, Mockup `mockups/baustellen-detail.html`, abgenommen 25.11.2026): Das **Baustellen-Detail**
+  gibt es jetzt auch für die laufende Baustelle („LÄUFT · STAND HEUTE“). Im Verlauf öffnet jede Karte und jede Zeile des
+  Vergleichs das Detail („Details ›“); von dort führt „Übersicht dieser Baustelle ›“ weiter, daneben steht
+  „Baustelle abschließen …“. Abgeschlossen bleibt „Wieder aktiv setzen“.
+- Neu: Im Detail steht die **Abrechnung nach Firma seit Beginn** bis heute bzw. bis zum Ende (jeder Tag mit Firma und Preis
+  des Tages, rechnet die Integration) mit CSV „Abrechnung seit Beginn“ und „Verbrauch je Monat und Container“.
+- Neu: Die Auswertung › Abrechnung nach Firma springt mit „🏗 Ganze Baustelle seit Beginn ›“ ins Detail.
+
 ## [0.8.199] – 2026-11-25
 
 - Korrigiert: Die Integration nutzt das Geräteregister von Home Assistant so, wie es ab 2026.10 vorgesehen ist (ein Gerät

@@ -176,6 +176,13 @@ async def test_abrechnung_befehl(hass: HomeAssistant, baustelle, ws, statistik) 
     assert jahr["kwh"] == pytest.approx(sum(sum(v) for v in jahr["reihen"].values()))
     assert (await ws("baustelle/abrechnung", entry_id="falsch"))["error"]["code"] == "not_found"
     assert (await ws("baustelle/abrechnung", zeitraum="Quartal"))["error"]["code"] == "invalid_format"
+    # M11: Detailseite einer laufenden Baustelle – Abrechnung nach Firma seit Beginn (01.09.) bis heute, wie „Monat“
+    v = (await ws("baustelle/auswertung", teil="verlauf"))["result"]["abrechnung"]
+    assert v["von"] == "2026-09-01" and v["bis"] >= "2026-09-29"
+    assert [(f["firma"], f["kwh"], f["eur"]) for f in v["firmen"]] == pytest.approx([(f["firma"], f["kwh"], f["eur"]) for f in r["firmen"]])
+    assert v["kwh"] == pytest.approx(r["kwh"]) and v["eur"] == pytest.approx(sum(f["eur"] for f in r["firmen"]))
+    zeilen = v["csv"].split("\r\n")
+    assert zeilen[0] == firma[0] and zeilen[-1].startswith("seit Beginn;Elektro Huber GmbH;B1;Container 2;")
 
 
 async def test_auswertung_befehl(hass: HomeAssistant, baustelle, ws, statistik) -> None:

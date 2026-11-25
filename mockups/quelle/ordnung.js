@@ -386,15 +386,17 @@ function browser(R) {
   // Heute: Verlauf-Karte der laufenden Baustelle springt in die Übersicht, das Detail gibt es nur abgeschlossen. Vorschlag:
   // jede Karte im Verlauf öffnet das Detail; laufend mit „Stand heute“, Abrechnung nach Firma seit Beginn, CSV seit Beginn,
   // „Übersicht dieser Baustelle ›“ und „Baustelle abschließen …“. Die Auswertung › Abrechnung nach Firma springt hin.
+  // Gebaut in 0.8.200: die Seite hat dann p.bsDetail – der Vorschlag tritt zurück, damit nichts doppelt erscheint.
+  const gebaut = !!R.proto.bsDetail;
   const laufendeBs = p => p.alle.find(b => b.aktiv && p.d && b.entry === p.d.entry) || p.alle.find(b => b.aktiv);
-  const imDetail = p => { const x = p.s.view === 'bsdetail' && p.alle.find(y => y.entry === p.s.bs); return x && x.aktiv ? x : null; };
+  const imDetail = p => { const x = !gebaut && p.s.view === 'bsdetail' && p.alle.find(y => y.entry === p.s.bs); return x && x.aktiv ? x : null; };
   const zuDetail = p => { const x = laufendeBs(p); if (!x) return; p.s.sheet = null; p.s.bs = x.entry; return p.gehe('bsdetail'); };
   const oeffnenAlt = R.proto.baustelleOeffnen;
   R.proto.baustelleOeffnen = function (id) { const x = this.alle.find(y => y.entry === id);
-    if (x && x.aktiv && this.s.view === 'verlauf') { this.s.bs = id; return this.gehe('bsdetail'); } return oeffnenAlt.call(this, id); };
+    if (!gebaut && x && x.aktiv && this.s.view === 'verlauf') { this.s.bs = id; return this.gehe('bsdetail'); } return oeffnenAlt.call(this, id); };
   R.vorlage({ merkmal: 'vl-mehr', fn: y => { y.values = y.values.map(v => v === 'Übersicht ›' ? 'Details ›' : v); return y; } });
   R.vorlage({ merkmal: 'glas-kopf', wann: p => !!imDetail(p), fn: y => { y.values = y.values.map(v => v === 'LAUFEND' ? html`LÄUFT · STAND HEUTE${R.marke}` : v); return y; } });
-  R.vorlage({ merkmal: 'Abrechnung nach Firma', wann: p => G.echteAw && p.s.view === 'auswertung', fn: (y, p) => html`${y}<button class="glas-panel zeile or-bsd-link" data-or="bsd" @click=${() => zuDetail(p)}>
+  R.vorlage({ merkmal: 'Abrechnung nach Firma', wann: p => !gebaut && G.echteAw && p.s.view === 'auswertung', fn: (y, p) => html`${y}<button class="glas-panel zeile or-bsd-link" data-or="bsd" @click=${() => zuDetail(p)}>
       <div class="or-zl"><b>🏗 Ganze Baustelle seit Beginn</b>${R.marke}<div class="leise">Verbrauch je Monat und Container, Abrechnung nach Firma, CSV – auch während sie läuft</div></div><span class="leise">›</span></button>` });
   const firmaSeitBeginn = (p, x) => { const k = p.kennz(x); if (!k.monate) return null; const je = new Map();   // Mockup: rechnet die Integration
     for (const r of k.monate.reihen) { const b = x.bereiche.find(y => y.id === r.bereich) || {}, f = ((p.d && p.d.firmen) || []).find(y => y.id === b.firma);

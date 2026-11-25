@@ -734,6 +734,16 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   for (const bs of ['lieboch', 'wundschuh']) { await bsOeffnen(bs); pruefe(`bsdetail ${bs}`); hov(`bsdetail ${bs}`);
     erwarte(`bsdetail ${bs} zeigt Kennzahlen`, /ABGESCHLOSSEN/.test(ui.innerHTML) && /Verbrauch je Monat/.test(ui.innerHTML)); }
   const csvBs = panel.csv(); erwarte('CSV der abgeschlossenen Baustelle', csvBs && csvBs.length > 3 && csvBs[0].startsWith('Monat;'));
+  const csvFirmaBs = panel.csv('firma'); erwarte('M11: Abrechnung seit Beginn als CSV (abgeschlossen)', csvFirmaBs && csvFirmaBs[0].startsWith('Zeitraum;Firma;'));
+  /* M11: Detail auch für die laufende Baustelle – Karte im Verlauf → Detail, von dort Übersicht und Abschließen */
+  await bsOeffnen('dobl'); pruefe('bsdetail dobl laufend'); hov('bsdetail dobl laufend');
+  erwarte('M11: Karte der laufenden Baustelle öffnet das Detail', panel.s.view === 'bsdetail' && panel.s.bs === 'dobl' && /LÄUFT · STAND HEUTE/.test(ui.innerHTML));
+  erwarte('M11: Abrechnung nach Firma seit Beginn mit Firmen der Integration', /Abrechnung nach Firma/.test(ui.innerHTML) && !!litEl('.bsd-tz:not(.kopf)') && !litEl('.bs-aktiv'));
+  const csvLauf = panel.csv('firma'); erwarte('M11: CSV Abrechnung seit Beginn (laufend)', csvLauf && csvLauf[0].startsWith('Zeitraum;Firma;'));
+  await klick('.bs-abschliessen', 20); erwarte('M11: „Baustelle abschließen …“ öffnet die Einblendung', panel.s.sheet && panel.s.sheet.art === 'abschliessen' && panel.d.entry === 'dobl');
+  panel.schliessen(); await klick('.bs-uebersicht', 30); erwarte('M11: „Übersicht dieser Baustelle ›“', panel.s.view === 'uebersicht' && panel.d.entry === 'dobl');
+  await klick({ act: 'tab', v: 'auswertung' }, 30); panel.awDetail('abrechnung'); await ruhe();
+  await klick('[data-k="bs-detail"]', 30); erwarte('M11: Auswertung › „Ganze Baustelle seit Beginn ›“ springt ins Detail', panel.s.view === 'bsdetail' && panel.s.bs === 'dobl');
 
   /* Einblendungen */
   await klick({ act: 'bs-wahl', id: 'dobl' }, 30);

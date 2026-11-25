@@ -31,7 +31,9 @@ function abrechnung(p, z) {
   return html`<div class="glas-panel block"><div class="block-kopf"><b>Abrechnung nach Firma</b><span class="leise">${wann} · ${de(preis, 2)} € je kWh</span></div>
       ${!zeilen ? LAEDT : !zeilen.length ? html`<div class="leer">Noch kein Verbrauch in diesem Zeitraum</div>` : zeilen.map(f => html`<div class="ab-firma ${f.eigen ? 'eigen' : ''}"><div class="ab-kopf"><b>${f.firma}</b><span><b>${de(f.eur, 2)} €</b> <span class="leise">${de(f.kwh, 0)} kWh · ${de(f.anteil, 0)} %</span></span></div>
         ${(f.container || []).map(x => html`<div class="ab-c"><span>${x.name}${lauf.length > 1 ? html` <span class="leise">· ${x.titel}</span>` : nothing}</span><span class="leise">${de(x.kwh, 0)} kWh · ${de(x.eur, 2)} €</span></div>`)}</div>`)}
-      <button class="knopf" data-art="firma" @click=${() => p.csv('firma')}>⇩ Abrechnung als CSV</button></div>`;
+      <button class="knopf" data-art="firma" @click=${() => p.csv('firma')}>⇩ Abrechnung als CSV</button></div>
+    <button class="glas-panel zeile aw-bsd" data-k="bs-detail" @click=${() => p.bsDetail(p.d.entry)}><div><b>🏗 Ganze Baustelle seit Beginn</b>
+      <div class="leise">Verbrauch je Monat und Container, Abrechnung nach Firma, CSV – auch während sie läuft</div></div><span class="chev">›</span></button>`;
 }
 
 function leistungHeute(p) {

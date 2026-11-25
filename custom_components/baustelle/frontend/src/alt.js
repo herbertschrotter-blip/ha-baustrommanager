@@ -23,7 +23,7 @@ import { ueberVorlage } from './ueber.js';
 import { MB_MAX, MB_PX, MB_SUMME, meldenVorlage } from './melden.js';
 import { ladenVorlage, leerVorlage } from './ansichten/allgemein.js';
 import { devVorlage } from './ansichten/dev.js';
-import { bsdetailVorlage, verlaufVorlage } from './ansichten/verlauf.js';
+import { VERLAUF_DETAIL_CSS, bsdetailVorlage, verlaufVorlage } from './ansichten/verlauf.js';
 import { pumpenVorlage, schachtVorlage } from './ansichten/pumpen.js';
 import { containerVorlage } from './ansichten/container.js';
 import { CONTAINER_EINBLENDUNGEN } from './ansichten/einblendungen-container.js';
@@ -503,7 +503,7 @@ const GLAS_CSS = `:host { display: block; height: 100%; }
 .chart .gr { stroke: var(--gridc); stroke-width: 1; } .chart .ax-e { font-weight: 600; font-size: 9px; } .chart .ax { fill: var(--axisc); font-size: 10px; }
 .chart .kreuz { stroke: var(--ink2); stroke-width: 1; stroke-dasharray: 2 3; } .chart .punkt { stroke: var(--sheet); stroke-width: 2; }
 .chart .bar { transition: opacity .15s; } .chart .bar.matt { opacity: .35; }
-.legende { display: flex; gap: 14px; font-size: 12px; color: var(--ink2); margin-top: 4px; }
+.legende { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink2); margin-top: 4px; }
 .legende i, .tip i { display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
 .leer { font-size: 13px; color: var(--ink2); padding: 24px 0; text-align: center; } .link { color: var(--blau) !important; }
 .tip { position: absolute; z-index: 30; pointer-events: none; opacity: 0; transition: opacity .12s; background: var(--sheet); color: var(--ink); border: 1px solid var(--panel-rand);
@@ -1041,7 +1041,7 @@ const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
 const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(GRUNDLAGEN_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(GRUNDLAGEN_CSS), unsafeCSS(VERLAUF_DETAIL_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -1644,9 +1644,10 @@ class BaustellePanel extends LitElement {
     // Export (Semikolon, deutsches Komma – öffnet direkt in Excel); die CSV baut die Integration (api §8). art 'firma': Abrechnung je Firma und Container
     let text, name;
     if (this.s.view === 'bsdetail') {
-      const x = this.alle.find(y => y.entry === this.s.bs), v = x && this.verlaufDaten(x);
-      if (!v || !v.csv) return this.toast('Werte laden noch …');
-      text = v.csv; name = `baustelle-verbrauch-${x.titel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`;
+      const x = this.alle.find(y => y.entry === this.s.bs), v = x && this.verlaufDaten(x), firma = art === 'firma';   // M11: Abrechnung seit Beginn
+      text = v && (firma ? v.abrechnung && v.abrechnung.csv : v.csv);
+      if (!text) return this.toast('Werte laden noch …');
+      name = `baustelle-${firma ? 'abrechnung' : 'verbrauch'}-${x.titel.toLowerCase().replace(/[^a-z0-9]+/g, '-')}${firma ? '-seit-beginn' : ''}.csv`;
     } else {
       const z = (this.s.aw || { zeitraum: 'Monat' }).zeitraum, lauf = this.s.awScope === 'alle' ? this.laufende() : [this.d], a = this.abDaten(z, undefined, this.d, (this.s.aw || {}).v || 0);
       if (!a || !a.csv) return this.toast('Werte laden noch …');
@@ -2225,6 +2226,14 @@ class BaustellePanel extends LitElement {
     if (x.aktiv) { this.bid = x.entry; this._merken(); this._neuBauen(); this._vorhersageAbo(); this._stimmung(true); this.s.aw = null; return this.gehe('uebersicht'); }
     this.s.bs = x.entry; return this.gehe('bsdetail');
   }
+  /* Detailseite einer Baustelle, laufend oder abgeschlossen (M11): Verlauf-Karte, Auswertung › „Ganze Baustelle seit Beginn“ */
+  bsDetail(id) { const x = this.alle.find(y => y.entry === id); if (!x) return undefined; this.s.sheet = null; this.s.bs = x.entry; return this.gehe('bsdetail'); }
+  /* „Baustelle abschließen …“ auf der Detailseite: die Einblendung gilt der gewählten Baustelle, darum diese zuerst wählen */
+  bsAbschliessenAuf(id) {
+    const x = this.alle.find(y => y.entry === id); if (!x || !x.aktiv) return undefined;
+    if (x.entry !== this.bid) { this.bid = x.entry; this._merken(); this._neuBauen(); this._vorhersageAbo(); this._stimmung(true); this.s.aw = null; }
+    return this.einblenden('abschliessen');
+  }
   baustelleAktiv(id) {
     const x = this.alle.find(y => y.entry === id); if (!x) return;
     return this.einrichten(() => this.optionenSpeichern(x, { status: 'aktiv', ende: null }), 'Baustelle wieder aktiv – Automatik bleibt aus, bis du sie einschaltest').then(() => this._laden());
@@ -2256,7 +2265,7 @@ class BaustellePanel extends LitElement {
   meldenZu() { this.s.sheet = (this.s.sheet && this.s.sheet.vorher) || null; return this.neuZeichnen(); }
   /* Melde-Dialog öffnen (Knopf unten rechts, „Über“) */
   meldenAuf() {
-    const namen = { uebersicht: 'Übersicht', container: 'Container', heizung: 'Heizung', auswertung: 'Auswertung', verlauf: 'Verlauf', einst: 'Einstellungen', ueber: 'Über', dev: 'Entwicklung', bsdetail: 'Baustelle (abgeschlossen)' };
+    const namen = { uebersicht: 'Übersicht', container: 'Container', heizung: 'Heizung', auswertung: 'Auswertung', verlauf: 'Verlauf', einst: 'Einstellungen', ueber: 'Über', dev: 'Entwicklung', bsdetail: 'Baustelle (Detail)' };
     const kontext = [namen[this.s.view] || this.s.view, this.s.view === 'container' && this.b ? this.b.name : '', this.s.sheet ? `Dialog „${this.s.sheet.art}“` : ''].filter(Boolean).join(' · ');
     const breite = this.root && this.root.getBoundingClientRect ? this.root.getBoundingClientRect().width : 1000, geraet = breite < 700 ? 'Handy' : 'Desktop';
     this.s.sheet = { art: 'melden', vorher: this.s.sheet, form: { art: 'wunsch', text: '', kontext, geraet, stand: true } };

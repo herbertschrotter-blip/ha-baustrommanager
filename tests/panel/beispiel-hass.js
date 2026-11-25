@@ -174,6 +174,9 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       return { kwh, eur: k ? k.erwartet.eur : zl.kosten ?? 0, gespart: k ? k.erwartet.gespart : null, gespart_text: (b.baustelle.optionen || {}).beginn ? `gespart seit ${b.baustelle.optionen.beginn.slice(8, 10)}.${b.baustelle.optionen.beginn.slice(5, 7)}.` : 'gespart', container: b.bereiche.length, heiztage, monate: k ? k.erwartet.monate : 1,
         vergleich: k ? k.erwartet.vergleich : { tag: heiztage ? kwh / heiztage : 0, monat: 0, ges: kwh }, je_monat: v ? v.erwartet.je_monat : { '2026-09': 100 },
         monate_je_container: { labels: mo ? mo.erwartet.labels : ['Sep'], reihen },
+        // M11: Abrechnung nach Firma seit Beginn (wie auswertung.async_verlauf › abrechnung; Beispiel aus der Abrechnung des Jahres)
+        abrechnung: (a => ({ von: (b.baustelle.optionen || {}).beginn || '2026-09-01', bis: (b.baustelle.optionen || {}).ende || b.baustelle.heute || '2026-09-29',
+          kwh: a.kwh, eur: a.firmen.reduce((x, f) => x + f.eur, 0), firmen: a.firmen, csv: a.csv.firma }))(fakeAbrechnung({ ...m, zeitraum: 'Jahr', versatz: 0, scope: 'diese' })),
         csv: csvText(mo ? mo.erwartet.csv : ['Monat;Baustelle;Container;kWh;Kosten €', ...reihen.map(r => ['Sep', b.baustelle.titel, r.name, zz(r.v[0], 2), zz(r.v[0] * preis, 2)].join(';'))]) };
     }
     const abr = fakeAbrechnung({ ...m, versatz: 0 }), kwh = abr.kwh, pumpen = b.geraete.some(g => g.rolle === 'pumpe');
