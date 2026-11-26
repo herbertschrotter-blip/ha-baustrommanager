@@ -48,7 +48,7 @@ function browser(R) {
   const G = window.ORDNUNG = { tab: 'heizung', picker: false, namenVorschau: false, namenFertig: false,
     as: { schritt: 1, geraet: 'plug9', bid: 'polier', typ: 'konvektor', frei: false, freiName: 'Konvektor Polier' },
     cn: { art: 'container', eigen: true, firma: 'STRA', nummer: 6, kuerzel: 'MAN', name: 'Mannschaft 2' },
-    aw: { zr: 'monat', vergl: 'vorperiode', filter: null, alle: false }, sprung: null };
+    aw: { zr: 'monat', vergl: 'vorperiode', filter: null, alle: false, anord: false, reihe: null, aus: [] }, sprung: null };
   const neu = () => R.neuAlle();
   const sprung = (t) => html`${G.sprung === t ? html`<span class="or-sprung">Mockup: springt zu ${t}</span>` : nothing}`;
   const zeigeSprung = t => () => { G.sprung = G.sprung === t ? null : t; neu(); };
@@ -280,7 +280,9 @@ function browser(R) {
         ${zeile('Nächster Lauf', 'Di 01.12. · Mannschaft · Konvektor', html`<button class="chip glas-panel">Absagen</button> <button class="chip glas-panel">Einplanen …</button>`)}</div>
       <div class="or-knoepfe"><button class="knopf" @click=${() => { for (const q of R.P()) { q.s.sheet = null; q.gehe('auswertung'); } }}>Ergebnisse in der Auswertung ›</button></div>`;
   R.einblendung('or-grundlagen', grundlagen, { breit: () => false });
-  R.abschnitt({ ansicht: 'heizung', nach: p => grundlagenKarte(p) });
+  const m9gebaut = !!(R.proto.hzAuf && window.baustelleBeispiel);   // gebaut in 0.8.198 (Heizung › Grundlagen)
+  const zuGrundlagen = q => { q.s.sheet = null; q.gehe('heizung'); return m9gebaut ? q.hzAuf('grundlagen') : R.auf(q, { art: 'or-grundlagen' }); };
+  R.abschnitt({ ansicht: 'heizung', wann: () => !m9gebaut, nach: p => grundlagenKarte(p) });
 
   /* ================= Karte „Was fehlt noch“ (M15) – Übersicht ================= */
   const FEHLT = [
@@ -295,7 +297,7 @@ function browser(R) {
   R.abschnitt({ ansicht: 'uebersicht', wann: () => G.fehlt !== false, nach: () => fehltKarte() });
 
   /* ================= Container-Ansicht: Kennzahlen springen gefiltert in die Auswertung (M13) ================= */
-  const auswertungFilter = () => { G.aw = { ...G.aw, filter: 'Poliercontainer' }; for (const q of R.P()) { q.s.sheet = null; q.gehe('auswertung'); } };
+  const auswertungFilter = () => { G.aw = { ...G.aw, filter: 'Poliercontainer' }; for (const q of R.P()) { q.s.sheet = null; hpAn(q); q.gehe('auswertung'); } };
   R.abschnitt({ ansicht: 'container', wann: p => p.b && p.b.id === BID, nach: () => html`<button class="glas-panel zeile or-aw-link" @click=${auswertungFilter}><span>📊 Mehr zu diesem Container in der Auswertung</span>${R.marke}<span class="leise">gefiltert ›</span></button>` });
 
   /* ================= Auswertung (M13/M14): eine Zeitraumleiste, feste Abschnitte ================= */
@@ -304,6 +306,11 @@ function browser(R) {
   const VG = [['', 'kein Vergleich'], ['vorperiode', 'Vorperiode'], ['vorjahr', 'Vorjahr'], ['ohne', 'ohne Automatik']];
   const VG_T = { vorperiode: 'Oktober 2026', vorjahr: 'November 2025 (Baustelle Dobl)', ohne: 'gerechnet ohne Automatik (24/7 auf Soll)' };
   const ABSCHN = [['verbrauch', 'Verbrauch & Kosten'], ['ersparnis', 'Ersparnis'], ['heizperiode', 'Heizperiode & Wetter'], ['abrechnung', 'Abrechnung & Export'], ['geraete', 'Geräte & Pumpen']];
+  // Wohin die heutigen Bausteine (kacheln-daten.js AW_BAUSTEINE) wandern – keiner fällt weg
+  const HERKUNFT = { verbrauch: 'Kosten groß · Kennzahlen · Verbrauchsdiagramm · Wer verbraucht was · Was fällt auf · Leistung heute', ersparnis: 'Ohne Automatik · Gespart',
+    heizperiode: 'Heizperiode (Hochrechnung) · Signatur · Temperaturen', abrechnung: 'Abrechnung nach Firma · alle CSV', geraete: 'Je Gerät · Ölradiator oder Konvektor · Pumpen' };
+  const STUNDEN = [0, 0, 0, 0, 0, 2.1, 6.8, 7.4, 5.2, 3.9, 3.1, 2.6, 2.2, 2.4, 2.9, 3.3, 1.2, 0.4, 0, 0, 0, 0, 0, 0];
+  const ERK = [['📈', 'Poliercontainer braucht 18 % mehr als letzte Woche', 'Tür 3-mal länger als 10 min offen'], ['🌙', 'Magazin heizte Sa/So 6 h', 'Ausnahme „Inventur“ – gewollt'], ['❄', 'Kältester Tag: Mi 18.11. −4,2 °C', '90 kWh, Höchstwert im Monat']];
   // Beispielwerte (baustelle/auswertung, je Zeitraum und Vergleich von der Integration)
   const TAGE = [62, 71, 58, 80, 77, 40, 22, 66, 74, 69, 85, 90, 44, 25, 70, 78, 81, 76, 88, 41, 20, 72, 79];
   const VTAGE = [55, 60, 61, 64, 70, 35, 20, 58, 61, 66, 70, 74, 39, 24, 60, 66, 71, 70, 72, 36, 19, 63, 70];
@@ -314,63 +321,148 @@ function browser(R) {
   const delta = (t, gut) => html`<span class="or-delta ${gut ? 'gut' : 'schlecht'}">${t}</span>`;
   const abschnittKopf = (k, t, eigen) => html`<span class="or-anker" data-or=${k}></span><div class="or-ak"><h3>${t}</h3>${eigen ? html`<span class="or-eigen" title="folgt nicht der Zeitraumleiste">⏱ ${eigen}</span>` : html`<span class="leise">${ZR_T[G.aw.zr]}${G.aw.filter ? ` · ${G.aw.filter}` : ''}</span>`}</div>`;
   const vgl = () => G.aw.vergl;
-  const auswertung = (p) => { const a = G.aw, filt = a.filter, f = filt ? .3 : 1, kwh = Math.round(2317 * f), eur = (648.7 * f).toFixed(2).replace('.', ',');
+  // Die echte Karte „Heizperiode“ (heizperiode.js) aus der bisherigen Auswertung holen – die Seite zeichnet sie wie heute
+  const findeVorlage = (t, m) => { if (!t || typeof t !== 'object') return null; if (Array.isArray(t)) { for (const x of t) { const r = findeVorlage(x, m); if (r) return r; } return null; }
+    if (Array.isArray(t.strings) && t.strings.join('').includes(m)) return t; return Array.isArray(t.values) ? findeVorlage(t.values, m) : null; };
+  const hpAn = q => { const x = q.awAuswahl().find(y => y.k === 'hochrechnung'); if (x && !x.an) { x.an = true; return true; } return false; };
+  const ordnung = () => G.aw.reihe || ABSCHN.map(x => x[0]);
+  const schiebe = (k, d) => { const L = [...ordnung()], i = L.indexOf(k); L.splice(i, 1); L.splice(i + d, 0, k); G.aw.reihe = L; neu(); };
+
+  /* ---------- Verbrauch & Wetter (Vorschlag zu M13, Herbert 25.11.2026): kWh, Außentemperatur und Wetter in einem Diagramm,
+     je Stunde/Tag/Woche/Monat, Baustelle gesamt, gestapelt nach Container oder ein Container. Zweite Ansicht „nach Temperatur“:
+     Ø Verbrauch je Temperaturband und Wetter. Alle Werte (auch die Bänder) liefert die Integration (baustelle/auswertung
+     abschnitte.verbrauch.wetter = { aufloesung, WD_punkte: [{ t, kwh, je_container, aussen, wetter, wind, regen }], baender }) */
+  const WD_CONT = [['Poliercontainer', .28], ['Mannschaft', .27], ['Magazin', .20], ['Sanitär', .17], ['Besprechung', .08]];
+  const WD_WI = { sonne: '☀', wolken: '⛅', trueb: '☁', regen: '🌧', schnee: '❄' };
+  const WD_WT = { sonne: 'sonnig', wolken: 'heiter', trueb: 'trüb', regen: 'Regen', schnee: 'Schnee' };
+  const WD_NOV_T = [6.1, 4.8, 7.2, 2.0, 1.1, 5.5, 8.0, 3.3, 1.9, 2.4, 0.2, -1.5, 4.0, 6.6, 2.2, 0.9, -0.4, -4.2, -2.1, 3.0, 5.1, 1.2, 0.4];
+  const WD_NOV_W = ['wolken', 'regen', 'sonne', 'trueb', 'trueb', 'sonne', 'sonne', 'regen', 'trueb', 'wolken', 'trueb', 'schnee', 'wolken', 'sonne', 'regen', 'trueb', 'schnee', 'sonne', 'trueb', 'wolken', 'sonne', 'trueb', 'regen'];
+  const WD_WTAG = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+  const WD_tagPkt = i => ({ x: `${i + 1}.`, lang: `${WD_WTAG[(i + 0) % 7]} ${i + 1}.11.`, kwh: TAGE[i], vgl: VTAGE[i], t: WD_NOV_T[i], w: WD_NOV_W[i] });
+  const WD_AUFL = { tag: ['stunde'], woche: ['stunde', 'tag'], monat: ['tag', 'woche'], jahr: ['woche', 'monat'], hp: ['woche', 'monat'], gesamt: ['tag', 'woche', 'monat'] };
+  const WD_AUFL_T = { stunde: 'je Stunde', tag: 'je Tag', woche: 'je Woche', monat: 'je Monat' };
+  const WD_punkte = (zr, au) => {
+    if (au === 'stunde') { const n = zr === 'woche' ? 168 : 24;
+      return [...Array(n)].map((_, i) => { const h = i % 24, d = Math.floor(i / 24), tt = -1.5 + 4.5 * Math.sin((h - 8) / 24 * Math.PI * 2 * .5 + .2) + (zr === 'woche' ? WD_NOV_T[16 + d] - 1 : 0);
+        const k = (zr === 'woche' && (d === 5 || d === 6) ? .3 : 1) * STUNDEN[h] * (1 + Math.max(0, 2 - tt) * .08);
+        return { x: h % 6 === 0 ? (zr === 'woche' && h === 0 ? WD_WTAG[(d + 1) % 7] : zr === 'woche' ? '' : `${h} h`) : '', lang: `${zr === 'woche' ? WD_WTAG[(d + 1) % 7] + ' ' : ''}${h}–${h + 1} h`, kwh: +k.toFixed(1), vgl: +(k * .92).toFixed(1), t: +tt.toFixed(1), w: h < 7 || h > 17 ? 'trueb' : h < 11 ? 'wolken' : 'sonne' }; }); }
+    if (au === 'tag') return (zr === 'woche' ? [16, 17, 18, 19, 20, 21, 22] : zr === 'gesamt' ? [...Array(23).keys()] : [...Array(23).keys()]).map(WD_tagPkt);
+    if (au === 'woche') { if (zr === 'monat') return [[0, 7, 'KW 45'], [7, 14, 'KW 46'], [14, 21, 'KW 47'], [21, 23, 'KW 48']].map(([a, b, x]) => { const P = [...Array(b - a)].map((_, j) => WD_tagPkt(a + j));
+        return { x, lang: x, kwh: P.reduce((s, q) => s + q.kwh, 0), vgl: P.reduce((s, q) => s + q.vgl, 0), t: +(P.reduce((s, q) => s + q.t, 0) / P.length).toFixed(1), w: P.find(q => q.w === 'schnee') ? 'schnee' : P.filter(q => q.w === 'regen').length > 1 ? 'regen' : 'wolken' }; });
+      const T = [17.2, 15.8, 14.1, 13.0, 11.6, 10.2, 9.4, 8.1, 6.9, 5.2, 4.4, 2.1, 1.8], K = [18, 26, 60, 95, 150, 210, 260, 300, 360, 410, 455, 520, 470], W = ['sonne', 'sonne', 'wolken', 'regen', 'sonne', 'wolken', 'regen', 'trueb', 'wolken', 'trueb', 'regen', 'schnee', 'trueb'];
+      return T.map((t, i) => ({ x: i % 2 ? '' : `KW ${36 + i}`, lang: `KW ${36 + i}`, kwh: K[i], vgl: Math.round(K[i] * .9), t, w: W[i] })); }
+    return [['Sep', 14.8, 120, 'sonne'], ['Okt', 9.6, 1240, 'wolken'], ['Nov', 3.1, 2317, 'trueb']].map(([x, t, kwh, w]) => ({ x, lang: x === 'Nov' ? 'Nov (bis 23.)' : x, kwh, vgl: Math.round(kwh * .9), t, w }));
+  };
+  const WD_zahlDe = (v, n = 0) => v.toLocaleString('de-AT', { maximumFractionDigits: n, minimumFractionDigits: n });
+  const WD_svgZeit = (P, o) => { const { W, H, stapel, anteil, vergl } = o, L = 34, R = 34, O = 26, U = 22, iw = W - L - R, ih = H - O - U, n = P.length, bw = iw / n;
+    const kmax = Math.max(...P.map(q => Math.max(q.kwh, vergl ? q.vgl : 0))) * anteil * 1.08 || 1, tmin = Math.min(0, ...P.map(q => q.t)) - 1, tmax = Math.max(...P.map(q => q.t)) + 1;
+    const y = v => O + ih - v / kmax * ih, yt = t => O + ih - (t - tmin) / (tmax - tmin) * ih;
+    let s = `<svg class="or-wd" viewBox="0 0 ${W} ${H}" role="img" aria-label="Verbrauch und Wetter">`;
+    for (let g = 0; g <= 3; g++) { const v = kmax / 1.08 * g / 3; s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" class="gl"/><text x="${L - 4}" y="${y(v) + 3}" class="ax l">${WD_zahlDe(v, v < 10 ? 1 : 0)}</text>`; }
+    for (let g = Math.ceil(tmin / 5) * 5; g <= tmax; g += 5) s += `<text x="${W - R + 4}" y="${yt(g) + 3}" class="ax t">${g}°</text>`;
+    if (tmin < 0) s += `<line x1="${L}" x2="${W - R}" y1="${yt(0)}" y2="${yt(0)}" class="null"/>`;
+    P.forEach((q, i) => { const x = L + i * bw, w = Math.max(1, bw * (n > 60 ? .9 : .7)), x0 = x + (bw - w) / 2;
+      if (vergl) s += `<rect x="${x0 - w * .12}" width="${w * 1.24}" y="${y(q.vgl * anteil)}" height="${O + ih - y(q.vgl * anteil)}" class="vg"/>`;
+      let b = O + ih; for (const [c, a, f] of stapel) { const h = q.kwh * a / kmax * ih; s += `<rect x="${x0}" width="${w}" y="${b - h}" height="${h}" style="fill:${f}" data-i="${i}"/>`; b -= h; }
+      if ((n <= 31 && (W > 400 || n <= 12 || i % 2 === 0)) || i % 6 === 0) s += `<text x="${x + bw / 2}" y="${O - 9}" class="wi">${WD_WI[q.w]}</text>`;
+      if (q.x && (W > 400 || n <= 12 || i % 5 === 0)) s += `<text x="${x + bw / 2}" y="${H - 6}" class="ax m">${q.x}</text>`;
+      s += `<rect x="${x}" width="${bw}" y="${O}" height="${ih}" class="hit" data-i="${i}"/>`; });
+    s += `<polyline class="tl" points="${P.map((q, i) => `${L + (i + .5) * bw},${yt(q.t)}`).join(' ')}"/>`;
+    if (n <= 31) P.forEach((q, i) => { s += `<circle cx="${L + (i + .5) * bw}" cy="${yt(q.t)}" r="2.4" class="tp"/>`; });
+    if (o.wahl !== null && P[o.wahl]) { const i = o.wahl; s += `<rect x="${L + i * bw}" width="${bw}" y="${O}" height="${ih}" class="sel"/>`; }
+    s += `<text x="${L - 4}" y="${O - 14}" class="ax l">kWh</text><text x="${W - R + 4}" y="${O - 14}" class="ax t">°C</text></svg>`;
+    return s; };
+  const WD_BAND = [['< −2 °C', t => t < -2], ['−2 bis 2 °C', t => t >= -2 && t < 2], ['2 bis 6 °C', t => t >= 2 && t < 6], ['über 6 °C', t => t >= 6]];
+  const WD_WK = [['sonnig', ['sonne', 'wolken'], 'var(--amber)'], ['trüb', ['trueb'], 'var(--ink2)'], ['Regen/Schnee', ['regen', 'schnee'], 'var(--s1)']];
+  const WD_svgBand = (P, o) => { const { W, H, anteil } = o, L = 34, O = 14, U = 34, ih = H - O - U, iw = W - L - 8, gw = iw / WD_BAND.length;
+    const zellen = WD_BAND.map(([bt, f]) => WD_WK.map(([wt, ws]) => { const Q = P.filter(q => f(q.t) && ws.includes(q.w)); return Q.length ? { v: Q.reduce((s, q) => s + q.kwh, 0) / Q.length * anteil, n: Q.length } : null; }));
+    const max = Math.max(...zellen.flat().filter(Boolean).map(z => z.v), 1) * 1.1, y = v => O + ih - v / max * ih;
+    let s = `<svg class="or-wd" viewBox="0 0 ${W} ${H}" role="img" aria-label="Verbrauch nach Temperatur und Wetter">`;
+    for (let g = 0; g <= 3; g++) { const v = max / 1.1 * g / 3; s += `<line x1="${L}" x2="${W - 8}" y1="${y(v)}" y2="${y(v)}" class="gl"/><text x="${L - 4}" y="${y(v) + 3}" class="ax l">${WD_zahlDe(v, v < 10 ? 1 : 0)}</text>`; }
+    WD_BAND.forEach(([bt], b) => { const x = L + b * gw, bw = gw * .8 / WD_WK.length;
+      zellen[b].forEach((z, k) => { const xx = x + gw * .1 + k * bw; if (z) s += `<rect x="${xx + 1}" width="${bw - 2}" y="${y(z.v)}" height="${O + ih - y(z.v)}" style="fill:${WD_WK[k][2]}"/><text x="${xx + bw / 2}" y="${y(z.v) - 4}" class="ax m">${WD_zahlDe(z.v, z.v < 10 ? 1 : 0)}</text><text x="${xx + bw / 2}" y="${O + ih + 12}" class="ax m klein">${z.n}×</text>`;
+        else s += `<text x="${xx + bw / 2}" y="${O + ih - 4}" class="ax m klein">–</text>`; });
+      s += `<text x="${x + gw / 2}" y="${H - 6}" class="ax m b">${bt}</text>`; });
+    return s + `</svg>`; };
+  const wetterDia = (p) => { const a = G.aw, wd = a.wd ||= { art: 'zeit', au: null, fuer: 'gestapelt', wahl: null };
+    const auL = WD_AUFL[a.zr], au = auL.includes(wd.au) ? wd.au : auL[0], P = WD_punkte(a.zr, au), schmal = !!p.narrow, W = schmal ? 340 : 820, H = schmal ? 210 : 250;
+    const filt = a.filter || (wd.fuer !== 'gestapelt' && wd.fuer !== 'gesamt' ? wd.fuer : null), ci = filt ? WD_CONT.findIndex(c => c[0] === filt) : -1;
+    const anteil = ci >= 0 ? WD_CONT[ci][1] : 1, stapel = ci >= 0 ? [[filt, 1, `var(--s${ci + 1})`]] : wd.fuer === 'gesamt' ? [['Baustelle', 1, 'var(--s1)']] : WD_CONT.map(([c, x], i) => [c, x, `var(--s${i + 1})`]);
+    const q = wd.wahl !== null ? P[wd.wahl] : null, einheit = au === 'stunde' ? 'kWh je Stunde' : `kWh ${WD_AUFL_T[au]}`;
+    const klick = e => { const t = e.target.closest('[data-i]'); if (!t) return; const i = +t.dataset.i; wd.wahl = wd.wahl === i ? null : i; neu(); };
+    return html`<div class="or-wd-box" data-or="wetterdia"><div class="or-wd-k"><b>Verbrauch & Wetter</b>${R.marke}
+        ${seg([['zeit', 'über die Zeit'], ['band', 'nach Temperatur']], wd.art, v => { wd.art = v; wd.wahl = null; neu(); })}
+        ${auL.length > 1 ? seg(auL.map(x => [x, WD_AUFL_T[x]]), au, v => { wd.au = v; wd.wahl = null; neu(); }) : html`<span class="leise">${WD_AUFL_T[au]}</span>`}
+        ${a.filter ? nothing : html`<select @change=${e => { wd.fuer = e.target.value; neu(); }}><option value="gestapelt" ?selected=${wd.fuer === 'gestapelt'}>Baustelle · nach Container</option><option value="gesamt" ?selected=${wd.fuer === 'gesamt'}>Baustelle gesamt</option>${WD_CONT.map(([c]) => html`<option value=${c} ?selected=${wd.fuer === c}>${c}</option>`)}</select>`}</div>
+      <div class="or-wd-svg" @click=${klick}>${R.svg(wd.art === 'band' ? WD_svgBand(P, { W, H, anteil }) : WD_svgZeit(P, { W, H, stapel, anteil, vergl: !!vgl() && au !== 'stunde', wahl: wd.wahl }))}</div>
+      ${wd.art === 'band' ? html`<div class="or-wd-leg">${WD_WK.map(([t, , f]) => html`<span><i style="background:${f}"></i>${t}</span>`)}<span class="leise">Ø ${einheit} je Band · Anzahl ${au === 'stunde' ? 'Stunden' : au === 'tag' ? 'Tage' : au === 'woche' ? 'Wochen' : 'Monate'} darunter</span></div>
+          <div class="leise or-wd-satz">Bei unter −2 °C braucht ${filt || 'die Baustelle'} rund doppelt so viel wie bei über 6 °C; trübe Tage kosten bei gleicher Temperatur mehr als sonnige (Sonne wärmt die Container).</div>`
+        : html`<div class="or-wd-leg">${stapel.length > 1 ? stapel.map(([c, , f]) => html`<span><i style="background:${f}"></i>${c}</span>`) : html`<span><i style="background:${stapel[0][2]}"></i>${stapel[0][0]} · ${einheit}</span>`}
+          <span><i class="linie"></i>außen °C</span><span class="leise">☀ ⛅ ☁ 🌧 ❄ Wetter${vgl() && au !== 'stunde' ? ' · grau: Vergleich' : ''}</span></div>
+          ${q ? html`<div class="or-wd-pkt"><b>${q.lang}</b><span>${WD_zahlDe(q.kwh * anteil, 1)} kWh</span><span>${WD_WI[q.w]} ${WD_WT[q.w]}</span><span>außen ${WD_zahlDe(q.t, 1)} °C</span>${au !== 'monat' ? html`<span class="leise">Wind 12 km/h · Regen ${q.w === 'regen' ? '4,2' : '0'} mm</span>` : nothing}</div>`
+            : html`<div class="leise or-wd-satz">Balken antippen für die Zahlen ${{ stunde: 'dieser Stunde', tag: 'dieses Tages', woche: 'dieser Woche', monat: 'dieses Monats' }[au]}.</div>`}`}</div>`; };
+  const auswertung = (p, orig) => { const hp = findeVorlage(orig, 'hp-karte'); const a = G.aw, filt = a.filter, f = filt ? .3 : 1, kwh = Math.round(2317 * f), eur = (648.7 * f).toFixed(2).replace('.', ',');
     const vText = { vorperiode: ['▲ 11 % zu Oktober', '▲ 9 % zu Oktober'], vorjahr: ['▼ 6 % zu Nov. 2025', '▲ 3 % zu Nov. 2025'], ohne: ['▼ 47 % zu ohne Automatik', '▼ 47 %'] }[vgl()];
-    return html`${R.band('Vorschlag Ordnung · M13/M14: eine Zeitraumleiste, feste Abschnitte – Anordnung in der Integration gespeichert')}
+    const oben = html`${R.band('Vorschlag Ordnung · M13/M14: eine Zeitraumleiste, feste Abschnitte – Anordnung in der Integration gespeichert')}
     <div class="glas-panel or-aw-kopf"><div><span class="leise">ÖWG DOBL ZWARING</span><h2>Auswertung</h2></div>
       <div class="or-aw-k-r"><div class="seg klein"><button class=${a.alle ? '' : 'on'} @click=${() => { a.alle = false; neu(); }}>Diese Baustelle</button><button class=${a.alle ? 'on' : ''} @click=${() => { a.alle = true; neu(); }}>Alle laufenden (2)</button></div>
-        <button class="chip glas-panel" @click=${zeigeSprung('Anordnung (Abschnitte ein/aus, Reihenfolge) – gespeichert in der Integration, gleich auf Handy und PC')}>✎ Anordnung</button>
+        <button class="chip glas-panel ${a.anord ? 'on' : ''}" @click=${() => { a.anord = !a.anord; neu(); }}>✎ Anordnung</button>
         <button class="chip glas-panel" @click=${zeigeSprung('Preis simulieren')}>💶 Preis: tatsächlich</button></div>
-      ${sprung('Anordnung (Abschnitte ein/aus, Reihenfolge) – gespeichert in der Integration, gleich auf Handy und PC')}</div>
+      ${a.anord ? html`<div class="or-anord" data-or="anordnung"><div class="gruppe">Abschnitte · gespeichert in der Integration, gleich auf Handy und PC</div>
+        ${ordnung().map((k, i, L) => { const t = ABSCHN.find(x => x[0] === k)[1]; return html`<div class="or-az ${a.aus.includes(k) ? 'aus' : ''}">${sw(!a.aus.includes(k), () => { a.aus = a.aus.includes(k) ? a.aus.filter(x => x !== k) : [...a.aus, k]; neu(); })}
+          <div class="or-zl"><b>${t}</b><div class="leise">${HERKUNFT[k]}</div></div>
+          <button class="chip glas-panel" ?disabled=${i === 0} @click=${() => schiebe(k, -1)}>↑</button><button class="chip glas-panel" ?disabled=${i === L.length - 1} @click=${() => schiebe(k, 1)}>↓</button></div>`; })}
+        <div class="leise or-fuss">Statt Kachel-Raster mit Vorlagen 1–5 und Größen S/M/L: feste Abschnitte, nur ein/aus und Reihenfolge. Die Kacheln auf der Übersicht bleiben wie sie sind.</div>
+        <div class="or-knoepfe"><button class="knopf" @click=${() => { a.reihe = ABSCHN.map(x => x[0]); a.aus = []; neu(); }}>↺ Standard</button><button class="knopf amber" @click=${() => { a.anord = false; neu(); }}>Fertig</button></div></div>` : nothing}</div>
     <div class="glas-panel or-zrl" data-or="zeitraum">
       <div class="seg klein or-zr-seg">${ZR.map(([v, t]) => html`<button class=${a.zr === v ? 'on' : ''} @click=${() => { a.zr = v; neu(); }}>${t}</button>`)}</div>
       <div class="or-zr-nav"><button aria-label="zurück">‹</button><b>${ZR_T[a.zr]}</b><button aria-label="vor">›</button></div>
       <label class="or-vg">vergleichen mit <select @change=${e => { a.vergl = e.target.value; neu(); }}>${VG.map(([v, t]) => html`<option value=${v} ?selected=${a.vergl === v}>${t}</option>`)}</select></label>
       ${filt ? html`<button class="chip glas-panel or-filter" @click=${() => { a.filter = null; neu(); }}>Container: ${filt} ✕</button>` : nothing}
       ${a.vergl ? html`<span class="leise or-vg-t">Vergleich: ${VG_T[a.vergl]} – graue Balken</span>` : nothing}</div>
-    <div class="or-sprungleiste">${ABSCHN.map(([k, t]) => html`<button class="chip glas-panel" @click=${() => { const el = p.renderRoot.querySelector(`[data-or="${k}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>${t}</button>`)}</div>
+    <div class="or-sprungleiste">${ordnung().filter(k => !a.aus.includes(k)).map(k => [k, ABSCHN.find(x => x[0] === k)[1]]).map(([k, t]) => html`<button class="chip glas-panel" @click=${() => { const el = p.renderRoot.querySelector(`[data-or="${k}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>${t}</button>`)}</div>`;
+    const S = { _: html`
 
-    <section class="glas-panel or-ab">${abschnittKopf('verbrauch', '⚡ Verbrauch & Kosten')}
+    `, verbrauch: html`<section class="glas-panel or-ab">${abschnittKopf('verbrauch', '⚡ Verbrauch & Kosten')}
       <div class="or-kz"><div><span class="leise">Kosten</span><b class="or-gross-z">${eur} €</b>${vText ? delta(vText[1], vgl() === 'ohne') : nothing}<div class="leise">zum Tagespreis der Integration</div></div>
         <div><span class="leise">Verbrauch</span><b class="or-gross-z">${kwh.toLocaleString('de-AT')} kWh</b>${vText ? delta(vText[0], vgl() !== 'vorperiode') : nothing}</div>
         <div><span class="leise">Heizzeit</span><b class="or-gross-z">${filt ? 84 : 312} h</b></div></div>
-      ${balken(TAGE, vgl() === 'ohne' ? OHNE : vgl() ? VTAGE : null)}
-      <div class="leise or-achse"><span>1.</span><span>8.</span><span>15.</span><span>23.</span></div>
+      ${wetterDia(p)}
+      <div class="or-erk"><div class="gruppe">Was fällt auf ${R.marke}</div>${ERK.map(([ic, t, u]) => html`<div class="or-fz"><span class="or-fic">${ic}</span><div class="or-zl"><b>${t}</b><div class="leise">${u}</div></div></div>`)}</div>
       ${filt ? nothing : html`<div class="or-rang">${RANG.map(([n, k, e, i]) => html`<button class="zeile" @click=${() => { a.filter = n; neu(); }}><span>${i} ${n}</span><span class="or-rb"><i style="width:${k / 412 * 100}%;background:var(--s${i})"></i></span><b>${k} kWh</b><span class="leise">${e} €</span></button>`)}</div>`}
     </section>
 
-    <section class="glas-panel or-ab">${abschnittKopf('ersparnis', '🌱 Ersparnis')}
+    `, ersparnis: html`<section class="glas-panel or-ab">${abschnittKopf('ersparnis', '🌱 Ersparnis')}
       <div class="or-kz"><div><span class="leise">gespart durch die Automatik</span><b class="or-gross-z or-gut">${filt ? '156,10' : '520,30'} €</b><div class="leise">${filt ? 562 : 1873} kWh weniger als ohne Automatik</div></div>
         <div class="or-def"><b>Eine Rechnung für „gespart“</b> (überall gleich): ohne Automatik = jeder Heizkörper 24/7 auf Soll, nach Energiesignatur und Außentemperatur; belegt durch Baseline-Läufe (Spanne ± 14 %). Die bisherige „grobe Obergrenze“ fällt weg.</div></div>
       ${balken(TAGE.map(v => Math.round(v * .9 + 18)), null, 'var(--s3)')}
-      <div class="or-zeile2"><span class="leise">Baseline-Läufe: 3 von 3 · zuletzt 03.11. Mannschaft · Abweichung zur Prognose −6 %</span><button class="or-link" @click=${() => { for (const q of R.P()) { q.gehe('heizung'); R.auf(q, { art: 'or-grundlagen' }); } }}>Baseline einstellen ›</button></div>
+      <div class="or-zeile2"><span class="leise">Baseline-Läufe: 3 von 3 · zuletzt 03.11. Mannschaft · Abweichung zur Prognose −6 %</span><button class="or-link" @click=${() => { for (const q of R.P()) zuGrundlagen(q); }}>Baseline einstellen ›</button></div>
     </section>
 
-    <section class="glas-panel or-ab">${abschnittKopf('heizperiode', '🌡 Heizperiode & Wetter', 'ganze Heizperiode Okt–Apr')}
-      <div class="or-kz"><div><span class="leise">Hochrechnung Heizperiode</span><b class="or-gross-z">≈ 6 992 €</b><div class="leise">milder Winter 6 100 € · kalter 8 050 €</div></div>
-        <div><span class="leise">kWh je Grad (Energiesignatur)</span><b class="or-gross-z">3,4</b><div class="leise">ein Name statt Wetter-Einfluss / Signatur</div></div>
-        <div><span class="leise">Außen Ø ${ZR_T[a.zr]}</span><b class="or-gross-z">3,8 °C</b><div class="leise">Klimamittel 4,6 °C</div></div></div>
-      ${balken([520, 980, 1410, 1610, 1380, 900, 470], [480, 900, 1300, 1500, 1300, 860, 450], 'var(--s4)')}
-      <div class="leise or-achse"><span>Okt</span><span>Dez</span><span>Feb</span><span>Apr</span></div>
-      <div class="or-zeile2"><span class="leise">Heizperiode Oktober – April · Klimamittel 1991–2020</span><button class="or-link" @click=${() => { for (const q of R.P()) { q.gehe('heizung'); R.auf(q, { art: 'or-grundlagen' }); } }}>einstellen ›</button></div>
+    `, heizperiode: html`<section class="glas-panel or-ab">${abschnittKopf('heizperiode', '🌡 Heizperiode & Wetter', 'ganze Heizperiode Okt–Apr')}
+      ${hp ? html`<div class="or-hp-echt">${hp}</div><div class="leise or-fuss">Die Karte der Seite wie heute (Prognose mit und ohne Automatik, tatsächlicher Stand, Spanne; Reiter Signatur · Klima · Baseline), hier über die ganze Breite.</div>` : html`<div class="leer">Lädt …</div>`}
+      <div class="gruppe or-gr2">Temperaturen · ${a.zr === 'tag' ? 'heute' : ZR_T[a.zr]}</div>
+      <div class="or-temp">${[['Poliercontainer', '20,8', '21', 'var(--s1)'], ['Mannschaft', '21,2', '21', 'var(--s2)'], ['Magazin', '14,9', '15', 'var(--s3)'], ['Besprechung', '–', '19', 'var(--s5)'], ['außen', '3,8', '', 'var(--ink2)']].map(([n, t, s, f]) => html`<div class="or-tk"><i style="background:${f}"></i><span>${n}</span><b>${t} °C</b><span class="leise">${s ? `Soll ${s}` : 'Ø'}</span></div>`)}</div>
+      <div class="or-zeile2"><span class="leise">Heizperiode Oktober – April · Klimamittel 1991–2020</span><button class="or-link" @click=${() => { for (const q of R.P()) zuGrundlagen(q); }}>einstellen ›</button></div>
     </section>
 
-    <section class="glas-panel or-ab">${abschnittKopf('abrechnung', '🧾 Abrechnung & Export')}
+    `, abrechnung: html`<section class="glas-panel or-ab">${abschnittKopf('abrechnung', '🧾 Abrechnung & Export')}
       <div class="or-tab"><div class="or-tz kopf"><span>Firma</span><span>kWh</span><span>€</span></div>
         ${[['Eigene Firma', 1529, '428,10'], ['Strabag AG', 612, '171,40'], ['Elektro Huber GmbH', 176, '49,20']].map(([n, k, e]) => html`<div class="or-tz"><span>${n}</span><span>${k}</span><b>${e}</b></div>`)}</div>
       <div class="or-csv"><span class="leise">Alle Exporte an einer Stelle:</span>
         <button class="chip glas-panel">⇩ Abrechnung je Firma (CSV)</button><button class="chip glas-panel">⇩ Verbrauch je Tag</button><button class="chip glas-panel">⇩ Je Gerät</button><button class="chip glas-panel">⇩ seit Beginn je Monat</button>
         <button class="chip glas-panel" @click=${zeigeSprung('Bericht-Beispiel (⚙ › Bericht)')}>📨 Bericht-Beispiel</button></div>
       ${sprung('Bericht-Beispiel (⚙ › Bericht)')}
-      <button class="zeile or-bsd" @click=${() => zuDetail(p)}><div class="or-zl"><b>Baustellen-Detail · läuft seit 01.09.2026</b><div class="leise">Verbrauch je Monat und Container, CSV seit Beginn – auch ohne Abschließen</div></div><span class="leise">›</span></button>
+      <button class="zeile or-bsd" @click=${() => zuDetail(p)}><div class="or-zl"><b>🏗 Ganze Baustelle seit Beginn</b><div class="leise">Baustellen-Detail (M11, gebaut) · läuft seit 01.09.2026 · Abrechnung nach Firma und CSV seit Beginn</div></div><span class="leise">›</span></button>
     </section>
 
-    <section class="glas-panel or-ab">${abschnittKopf('geraete', '🔌 Geräte & Pumpen')}
+    `, geraete: html`<section class="glas-panel or-ab">${abschnittKopf('geraete', '🔌 Geräte & Pumpen')}
       <div class="or-tab"><div class="or-tz kopf vier"><span>Gerät</span><span>Ø kW</span><span>h</span><span>kWh</span></div>
         ${[['Radiator 1 · Polier', '1,9', 96, 182], ['Heizung 03 · Polier', '2,0', 48, 96], ['Konvektor · Mannschaft', '2,0', 101, 202], ['Ölradiator · Magazin', '1,5', 104, 156], ['Pumpe · Schacht 1', '0,8', 12, 9.6]].map(([n, k, h, w]) => html`<div class="or-tz vier"><span>${n}</span><span>${k}</span><span>${h}</span><b>${String(w).replace('.', ',')}</b></div>`)}</div>
       <div class="or-zeile2"><span class="leise">Ölradiator gegen Konvektor: kWh je Gradstunde und m² 0,031 / 0,027 · gleicher Zeitraum wie oben</span></div>
-    </section>`; };
-  R.abschnitt({ ansicht: 'auswertung', wann: () => !G.echteAw, statt: p => auswertung(p) });
+    </section>` };
+    return html`${oben}${ordnung().filter(k => !a.aus.includes(k)).map(k => S[k])}`; };
+  R.abschnitt({ ansicht: 'auswertung', wann: () => !G.echteAw, statt: (p, orig) => auswertung(p, orig) });
 
   /* ================= Baustellen-Detail für die laufende Baustelle (M11) ================= */
   const MON = ['Sep', 'Okt', 'Nov'], BSD = [['Poliercontainer', [180, 352, 412], 944], ['Mannschaft', [170, 330, 388], 888], ['Magazin', [120, 260, 301], 681], ['Sanitär', [110, 222, 255], 587], ['Besprechung', [30, 71, 96], 197]];   // Summen von der Integration
@@ -510,6 +602,25 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
 .or-kz > div { display: flex; flex-direction: column; gap: 2px; }
 .or-gross-z { font-size: 26px; font-weight: 700; }
 .or-gut { color: var(--s3); }
+.or-erk { margin-top: 12px; } .or-erk .or-fz { padding: 6px 0; }
+.or-wd-box { margin-top: 6px; scroll-margin-top: 220px; } .or-wd .vg { fill: var(--ink2); opacity: .3; }
+.or-wd-k { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 6px; } .or-wd-k select { max-width: 100%; }
+.or-wd-svg { width: 100%; } .or-wd { width: 100%; height: auto; display: block; }
+.or-wd .gl { stroke: var(--gridc); } .or-wd .null { stroke: var(--ink2); stroke-dasharray: 3 3; } .or-wd .vg { fill: var(--ink2); opacity: .35; }
+.or-wd .ax { font-size: 10px; fill: var(--ink2); } .or-wd .ax.l { text-anchor: end; } .or-wd .ax.m { text-anchor: middle; } .or-wd .ax.klein { font-size: 9px; fill: var(--ink2); } .or-wd .ax.b { font-weight: 600; fill: var(--ink); }
+.or-wd .wi { font-size: 11px; text-anchor: middle; } .or-wd .tl { fill: none; stroke: var(--rot); stroke-width: 2; } .or-wd .tp { fill: var(--rot); }
+.or-wd .hit { fill: transparent; cursor: pointer; } .or-wd .sel { fill: var(--ink); opacity: .08; pointer-events: none; }
+.or-wd-leg { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; margin-top: 4px; } .or-wd-leg i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.or-wd-leg i.linie { height: 0; border-top: 2px solid var(--rot); border-radius: 0; width: 14px; vertical-align: middle; }
+.or-wd-pkt { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--ink) 6%, transparent); font-size: 13px; }
+.or-wd-satz { margin-top: 6px; font-size: 12.5px; }
+.or-gr2 { margin-top: 14px; }
+.or-hp-echt > .hp-karte { margin: 4px 0 0; } .or-hp-echt .hp-dia { max-width: none; width: 100%; margin: 6px 0; }
+@container (min-width: 700px) { .or-hp-echt .hp-dia text { font-size: 4.2px; } .or-hp-echt .hp-dia path { stroke-width: 1.1; } .or-hp-echt .hp-dia .hp-ist { stroke-width: 1.4; } }   /* Mockup: Bau zeichnet breiter (hochrechnungSvg w), Schrift bleibt so groß wie heute */
+.or-temp { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 14px; margin: 6px 0 4px; }
+.or-tk { display: flex; align-items: baseline; gap: 6px; font-size: 13px; min-width: 0; } .or-tk i { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; } .or-tk span:nth-of-type(1) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.or-anord { flex-basis: 100%; margin-top: 12px; border-top: 1px solid var(--gridc); padding-top: 10px; }
+.or-az { display: flex; align-items: center; gap: 10px; padding: 7px 0; } .or-az .or-zl { flex: 1; min-width: 0; } .or-az.aus .or-zl { opacity: .5; }
 .or-def { max-width: 46ch; font-size: 12.5px; color: var(--ink2); line-height: 1.45; }
 .or-def b { color: var(--ink); }
 .or-delta { font-size: 12px; }
@@ -562,7 +673,7 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
   const startwerte = () => { Object.assign(G, { echteAw: false, tab: 'heizung', picker: false, namenVorschau: false, namenFertig: false, sprung: null, fehlt: true,
     as: { schritt: 1, geraet: 'plug9', bid: 'polier', typ: 'konvektor', frei: false, freiName: 'Konvektor Polier', vorgabe: false },
     cn: { art: 'container', eigen: true, firma: 'STRA', nummer: 6, kuerzel: 'MAN', name: 'Mannschaft 2' },
-    aw: { zr: 'monat', vergl: 'vorperiode', filter: null, alle: false } });
+    aw: { zr: 'monat', vergl: 'vorperiode', filter: null, alle: false, anord: false, reihe: null, aus: [] } });
     Object.assign(E.soll, { wert: 21, herkunft: 'abweichend' }); E.heute.wert = 0; Object.assign(E.warm_vor, { wert: 'bei Beginn', herkunft: 'baustelle' }); Object.assign(E.vorrang, { wert: 'hoch', herkunft: 'abweichend' }); };
   R.vorfuehren(async w => {
     startwerte();
@@ -576,8 +687,8 @@ code { font-family: ui-monospace, monospace; font-size: 12px; }
       else if (z.startsWith('as-')) { q.containerOeffnen(BID); const n = +z.slice(3, 4); G.as.schritt = n; if (z === 'as-4-frei') G.as.frei = true; q.s.sheet = { art: 'or-assist' }; }
       else if (z.startsWith('cn-')) { q.gehe('uebersicht'); if (z === 'cn-fremd') { G.cn.eigen = false; G.cn.nummer = 2; } if (z === 'cn-belegt') G.cn.nummer = 3; q.s.sheet = CN_SHEET(); }
       else if (z === 'heizung') q.gehe('heizung');
-      else if (z === 'grundlagen') { q.gehe('heizung'); q.s.sheet = { art: 'or-grundlagen' }; }
-      else if (z.startsWith('aw')) { q.gehe('auswertung'); if (z === 'aw-vorjahr') G.aw.vergl = 'vorjahr'; if (z === 'aw-ohne') G.aw.vergl = 'ohne'; if (z === 'aw-filter') G.aw.filter = 'Poliercontainer'; if (z === 'aw-heute') G.aw.vergl = ''; }
+      else if (z === 'grundlagen') zuGrundlagen(q);
+      else if (z.startsWith('aw')) { hpAn(q); q.gehe('auswertung'); if (z === 'aw-vorjahr') G.aw.vergl = 'vorjahr'; if (z === 'aw-ohne') G.aw.vergl = 'ohne'; if (z === 'aw-filter') G.aw.filter = 'Poliercontainer'; if (z === 'aw-heute') G.aw.vergl = ''; if (z === 'aw-tag') { G.aw.zr = 'tag'; G.aw.vergl = ''; } if (z === 'aw-wetter-band') G.aw.wd = { art: 'band', au: 'tag', fuer: 'gestapelt', wahl: null }; if (z === 'aw-wetter-hp') { G.aw.zr = 'hp'; G.aw.vergl = ''; G.aw.wd = { art: 'zeit', au: 'woche', fuer: 'gestapelt', wahl: null }; } if (z === 'aw-wetter-container') G.aw.wd = { art: 'zeit', au: 'tag', fuer: 'Poliercontainer', wahl: 17 }; if (z === 'aw-anordnung') { G.aw.anord = true; G.aw.aus = ['geraete']; } }
       else if (z.startsWith('bsd-')) { G.echteAw = true; if (z === 'bsd-laufend') zuDetail(q); if (z === 'bsd-verlauf') { q.s.vlReiter = 'bs'; q.s.vlArt = 'karten'; q.gehe('verlauf'); } if (z === 'bsd-auswertung') { q.gehe('auswertung'); q.awDetail('abrechnung'); } }
       else if (z === 'container') q.containerOeffnen(BID);
       await q.neuZeichnen();
@@ -592,18 +703,20 @@ const ZEIGEN = [
   ['as-1', 'M12 Assistent 1 · Gerät'], ['as-2', 'M12 Assistent 2 · Container'], ['as-3', 'M12 Assistent 3 · Was hängt dran'], ['as-4', 'M12 Assistent 4 · Namen'], ['as-4-frei', 'M12 Assistent 4 · freier Name'], ['as-5', 'M12 Assistent 5 · Fertig'],
   ['cn-eigen', 'M12 + Container · eigen'], ['cn-fremd', 'M12 + Container · fremd'], ['cn-belegt', 'M12 + Container · Nummer belegt'],
   ['heizung', 'M9 Reiter Heizung · Grundlagen-Karte'], ['grundlagen', 'M9 Grundlagen bearbeiten'],
-  ['aw', 'M13 Auswertung · Vorperiode'], ['aw-vorjahr', 'M13 Auswertung · Vorjahr'], ['aw-ohne', 'M13/M14 · ohne Automatik'], ['aw-filter', 'M13 · gefiltert (aus dem Container)'],
-  ['container', 'M13 Container · Sprung in die Auswertung'], 
+  ['aw', 'M13 Auswertung · Vorperiode'], ['aw-tag', 'M13 Auswertung · Tag (Leistung je Stunde)'], ['aw-vorjahr', 'M13 Auswertung · Vorjahr'], ['aw-ohne', 'M13/M14 · ohne Automatik'], ['aw-filter', 'M13 · gefiltert (aus dem Container)'],
+  ['container', 'M13 Container · Sprung in die Auswertung'], ['aw-anordnung', 'M13/M14 · Anordnung der Abschnitte'], ['aw-wetter-band', 'M13 Verbrauch & Wetter · nach Temperatur'], ['aw-wetter-hp', 'M13 Verbrauch & Wetter · Heizperiode je Woche'], ['aw-wetter-container', 'M13 Verbrauch & Wetter · ein Container, Punkt gewählt'],
   ['bsd-laufend', 'M11 Baustellen-Detail · laufend'], ['bsd-verlauf', 'M11 Verlauf · Karte öffnet das Detail'], ['bsd-auswertung', 'M11 Auswertung · Sprung ins Detail'],
 ];
 // --nur=M8: nur dieser Schritt als eigene Datei zum Abnehmen (Herbert, 23.11.2026: Schritt für Schritt)
 const NUR = (process.argv.find(a => a.startsWith('--nur=')) || '').slice(6);
 const DATEIEN = { M8: ['container-seite.html', 'Baustelle – Container-Seite (M8)', 'Schritt M8 · „Bearbeiten“ ist die eine Container-Seite'],
   M11: ['baustellen-detail.html', 'Baustelle – Baustellen-Detail (M11)', 'Schritt M11 · Baustellen-Detail auch während die Baustelle läuft'],
+  M13: ['auswertung-neu.html', 'Baustelle – Auswertung (M13/M14)', 'Schritt M13/M14 · Auswertung mit einer Zeitraumleiste und festen Abschnitten'],
   M9: ['grundlagen.html', 'Baustelle – Grundlagen (M9)', 'Schritt M9 · Heizperiode, Klimamittel, Baseline im Reiter Heizung'] };
 if (NUR && !DATEIEN[NUR]) throw new Error(`--nur=${NUR}: unbekannter Schritt`);
 if (NUR) ZEIGEN.splice(0, ZEIGEN.length, ...ZEIGEN.filter(([, t]) => t.startsWith(NUR + ' ') || t.startsWith(NUR + '/')));
 const faelle = ZEIGEN.map(([z]) => ({ name: z, werte: { zeigen: z } }));
+faelle.push(...['aw-wetter-band', 'aw-wetter-hp', 'aw-wetter-container'].map(z => ({ name: z + '-dia', werte: { zeigen: z }, scroll: '[data-or="wetterdia"]' })), { name: 'aw-dia', werte: { zeigen: 'aw' }, scroll: '[data-or="wetterdia"]' }, { name: 'aw-tag-dia', werte: { zeigen: 'aw-tag' }, scroll: '[data-or="wetterdia"]' });
 faelle.push({ name: 'aw-ersparnis', werte: { zeigen: 'aw' }, scroll: '[data-or="ersparnis"]' }, { name: 'aw-heizperiode', werte: { zeigen: 'aw' }, scroll: '[data-or="heizperiode"]' },
   { name: 'aw-abrechnung', werte: { zeigen: 'aw' }, scroll: '[data-or="abrechnung"]' }, { name: 'aw-geraete', werte: { zeigen: 'aw' }, scroll: '[data-or="geraete"]' },
   { name: 'heizung-karte', werte: { zeigen: 'heizung' }, scroll: '[data-or="grundlagen"]' }, { name: 'cs-heizung-unten', werte: { zeigen: 'cs-heizung' }, scroll: '[data-k="stufen"]' },
