@@ -129,7 +129,30 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
   const vektorFall = (art, name) => WELT ? (VEKTOR[art] || []).find(f => f.name === `${WELT} ${name}`) : undefined;
   const zz = (v, d) => Number(v).toFixed(d).replace('.', ',');
   const csvText = zeilen => '\ufeff' + zeilen.join('\r\n');
-  function perioden(z, heute) { const [j, m] = heute.split('-').map(Number); return { Tag: 24, Woche: 7, Monat: new Date(Date.UTC(j, m, 0)).getUTCDate(), Jahr: 12 }[z]; }
+  function perioden(z, heute) { const [j, m] = heute.split('-').map(Number); return { Tag: 24, Woche: 7, Monat: new Date(Date.UTC(j, m, 0)).getUTCDate(), Jahr: 12, Heizperiode: 7, Gesamt: 1 }[z]; }
+  /* M13 „Verbrauch & Wetter“ wie auswertung.async_verbrauch_wetter (logik/verbrauch_wetter): je Zeitschritt kWh je Container,
+     außen, Wetter, Wind, Regen; Bänder nach Temperatur; Vergleich nach der Stelle. Beispielwerte, stimmig zueinander. */
+  function fakeVerbrauchWetter(m) {
+    const b = welt().find(x => x.baustelle.entry_id === m.entry_id), heute = b.baustelle.heute || '2026-09-29';
+    const ERLAUBT = { Tag: ['stunde'], Woche: ['stunde', 'tag'], Monat: ['tag', 'woche'], Jahr: ['woche', 'monat'], Heizperiode: ['woche', 'monat'], Gesamt: ['tag', 'woche', 'monat'] }[m.zeitraum] || ['tag'];
+    const au = ERLAUBT.includes(m.aufloesung) ? m.aufloesung : ERLAUBT[0];
+    const C = b.bereiche.filter(c => c.art !== 'pumpenschacht' && (!m.bereich || c.id === m.bereich));
+    const W = ['wolken', 'regen', 'sonne', 'trueb', 'trueb', 'sonne', 'sonne', 'regen', 'trueb', 'wolken', 'trueb', 'schnee'];
+    const tag0 = new Date(heute + 'T12:00:00Z'), iso = d => d.toISOString().slice(0, 10);
+    const n = au === 'stunde' ? (m.zeitraum === 'Woche' ? 168 : 24) : au === 'tag' ? (m.zeitraum === 'Woche' ? 7 : 29) : au === 'woche' ? (m.zeitraum === 'Monat' ? 5 : 13) : (m.zeitraum === 'Gesamt' ? 1 : 7);
+    const punkte = [...Array(n)].map((_, i) => {
+      const t = au === 'stunde' ? 3 + 4 * Math.sin((i % 24 - 8) / 24 * Math.PI) : 14 - i * (au === 'monat' ? 2.5 : au === 'woche' ? 1 : 0.4) + (i % 3);
+      const k = Math.max(0.2, (au === 'stunde' ? (i % 24 >= 5 && i % 24 < 17 ? 4 : 0.3) : au === 'tag' ? 40 : au === 'woche' ? 260 : 1100) * (1 + Math.max(0, 8 - t) * 0.06));
+      const d = new Date(tag0); if (au === 'stunde') d.setUTCDate(d.getUTCDate() - Math.floor((n - 1 - i) / 24)); else if (au === 'tag') d.setUTCDate(d.getUTCDate() - (n - 1 - i)); else if (au === 'woche') d.setUTCDate(d.getUTCDate() - 7 * (n - 1 - i)); else d.setUTCMonth(d.getUTCMonth() - (n - 1 - i), 1);
+      const von = au === 'stunde' ? `${iso(d)}T${String(i % 24).padStart(2, '0')}:00:00+02:00` : iso(d), w = W[i % W.length];
+      const je = Object.fromEntries(C.map((c, j) => [c.id, +(k * (C.length > 1 ? [0.34, 0.28, 0.22, 0.16][j % 4] : 1)).toFixed(2)]));
+      return { von, kwh: +Object.values(je).reduce((a, x) => a + x, 0).toFixed(2), je_container: je, aussen: +t.toFixed(1), wetter: w, wind: 8 + (i % 5) * 3, regen: w === 'regen' ? 3.4 : w === 'schnee' ? 1.2 : 0 }; });
+    const vergleich = m.vergleich && au !== 'stunde' ? punkte.map(p => +(p.kwh * 0.9).toFixed(2)) : null;
+    const zellen = [['unter_m2', 'sonnig', 70, 2], ['unter_m2', 'nass', 88, 3], ['m2_2', 'sonnig', 52, 4], ['m2_2', 'trueb', 60, 5], ['m2_2', 'nass', 63, 2], ['2_6', 'sonnig', 40, 6], ['2_6', 'trueb', 46, 5], ['ueber_6', 'sonnig', 30, 4], ['ueber_6', 'trueb', 35, 3]]
+      .map(([band, gruppe, kwh, anzahl]) => ({ band, gruppe, kwh: au === 'stunde' ? kwh / 24 : kwh, anzahl }));
+    return { zeitraum: { art: m.zeitraum, n }, aufloesung: au, aufloesungen: ERLAUBT, container: C.map(c => ({ id: c.id, name: c.name })), bereich: m.bereich || null, punkte, vergleich,
+      vergleich_zeitraum: vergleich ? { art: m.zeitraum, von: '2026-08-01' } : null, baender: { zellen, kalt_band: 'unter_m2', warm_band: 'ueber_6', kalt_zu_warm: 2.3, trueb_mehr_prozent: 16 }, mit_wetter: true };
+  }
   function fakeAbrechnung(m) {
     const b = welt().find(x => x.baustelle.entry_id === m.entry_id), preis = (b.einstellungen || {}).preis ?? 0;
     const lauf = m.scope === 'alle' ? welt().filter(x => (x.baustelle.status || 'aktiv') !== 'abgeschlossen') : [b];
@@ -182,9 +205,15 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
     const abr = fakeAbrechnung({ ...m, versatz: 0 }), kwh = abr.kwh, pumpen = b.geraete.some(g => g.rolle === 'pumpe');
     const tv = vektorFall('typvergleich', id), w = vektorFall('wetter', id), g = vektorFall('je-geraet', `${id} ${m.zeitraum}`), leer = { kwh_h: null, auf: null, ab: null, tag: null };
     const ende = (b.baustelle.optionen || {}).ende;
-    return { zeitraum: abr.zeitraum, preis,
-      summen: { kwh, eur: kwh * preis, heizzeit: 42.5, pumpzeit: pumpen ? 3.25 : 0, ohne: kwh * 3, vorher: { kwh: kwh * .9, heizzeit: 40, pumpzeit: pumpen ? 3 : 0 },
-        veraenderung: { kwh: kwh ? 11 : null, eur: kwh ? 14 : null, heizzeit: 6, pumpzeit: pumpen ? 8 : null }, ohne_automatik: kwh ? { ohne_eur: kwh * 3 * preis, gespart_eur: kwh * 2 * preis, prozent: 66.7, hinweis: 'grobe Obergrenze, nicht belastbar' } : null },
+    // M13: Vergleich (vorperiode, vorjahr, ohne) und Filter auf einen Container wie auswertung.async_auswertung
+    const vg = m.vergleich || 'vorperiode', ber = m.bereich || null, vgZr = vg === 'ohne' || m.zeitraum === 'Gesamt' ? null : { art: m.zeitraum, von: vg === 'vorjahr' ? '2025-09-01' : '2026-08-01', n: abr.zeitraum.n };
+    const fk = ber ? 0.3 : 1;
+    // Heizperiode und seit Beginn: Grenzen von der Integration (logik/auswertung.zeitraum), hier wie Ende September 2026
+    const zr = { ...abr.zeitraum, ...(m.zeitraum === 'Heizperiode' ? { von: '2025-10-01', bis: '2026-05-01' } : m.zeitraum === 'Gesamt' ? { von: '2026-09-01', bis: '2026-10-01' } : {}) };
+    return { zeitraum: zr, preis, vergleich: { art: vg, zeitraum: vgZr }, bereich: ber,
+      summen: { kwh: kwh * fk, eur: kwh * fk * preis, heizzeit: 42.5 * fk, pumpzeit: pumpen && !ber ? 3.25 : 0, ohne: ber ? 0 : kwh * 3, vorher: { kwh: vg === 'ohne' ? kwh * 3 : kwh * .9 * fk, heizzeit: vg === 'ohne' ? null : 40, pumpzeit: pumpen && vg !== 'ohne' ? 3 : 0 },
+        veraenderung: { kwh: kwh ? (vg === 'ohne' ? -67 : vg === 'vorjahr' ? -6 : 11) : null, eur: kwh && vg !== 'ohne' ? 14 : null, heizzeit: vg === 'ohne' ? null : 6, pumpzeit: pumpen && !ber ? 8 : null },
+        ohne_automatik: kwh && !ber ? { ohne_eur: kwh * 3 * preis, gespart_eur: kwh * 2 * preis, prozent: 66.7, hinweis: 'grobe Obergrenze, nicht belastbar' } : null },
       je_geraet: (g ? g.erwartet.zeilen : b.geraete.map(x => ({ bereich: x.bereich, geraet: x.id, mittel: null, kwh: 1.5, std: null }))).map(z => ({ ...z, eur: z.kwh === null ? null : z.kwh * preis })),
       wetter: w ? { punkte: w.erwartet.punkte, gerade: w.erwartet.regression && { ...w.erwartet.regression, eur_je_grad: w.erwartet.regression.k < 0 ? -w.erwartet.regression.k * preis : null } } : { punkte: [], gerade: null },
       // AN-0008: fairer Vergleich (kWh je Gradstunde, nur Thermostat mit Fühler, ein Typ je Container)
@@ -198,9 +227,9 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
       : { oelradiator: { kwh_gradh: null, auf: null, ab: null, container: [], ids: [] }, konvektor: { kwh_gradh: null, auf: null, ab: null, container: [], ids: [] }, weniger: null, vergleichbar: false, ausgeschlossen: [], ersparnis: null },
       heizperiode: { ende: '2026-04-30', bis: ende && ende < '2026-04-30' ? ende : '2026-04-30' }, heiztage: zl.heiztage ?? 0,
       hochrechnung: beispielHochrechnung(b, preis),
-      gespart_reihen: beispielGespart(m, kwh, preis, b.baustelle.heute || '2026-09-29'),
+      gespart_reihen: ber ? null : beispielGespart(m, kwh, preis, b.baustelle.heute || '2026-09-29'),
       // WU-0005: Rangliste und Erkenntnisse (wie logik/auswertung.rangliste/erkenntnisse)
-      rangliste: b.bereiche.filter(c => c.art !== 'pumpenschacht').map((c, i) => ({ bereich: c.id, name: c.name, baustelle: b.baustelle.titel, kwh: 40 - i * 5, heizzeit: 20 - i, eur: (40 - i * 5) * preis, kwh_h: (40 - i * 5) / (20 - i), anteil: 0 })),
+      rangliste: b.bereiche.filter(c => c.art !== 'pumpenschacht' && (!ber || c.id === ber)).map((c, i) => ({ bereich: c.id, name: c.name, baustelle: b.baustelle.titel, kwh: 40 - i * 5, heizzeit: 20 - i, eur: (40 - i * 5) * preis, kwh_h: (40 - i * 5) / (20 - i), anteil: 0 })),
       erkenntnisse: kwh ? [{ art: 'gespart', eur: kwh * 2 * preis, prozent: 66.7 }, { art: 'groesster', bereich: b.bereiche[0].id, name: b.bereiche[0].name, kwh: 40, anteil: 38 }, { art: 'wetter', kwh_je_grad: 7.2, eur_je_grad: 2, null0: 15.5 }, { art: 'mehr', prozent: 18 }] : [] };
   }
 
@@ -415,6 +444,7 @@ function beispielHass({ STRUKTUR, REFERENZ = false, ZUSTAENDE = null, VEKTOR = {
         case 'recorder/statistics_during_period': case 'baustelle/statistik': return statistik(m);   // BSM-014: Statistik aus der Datenbank (gleiche Form)
         case 'baustelle/auswertung': return fakeAuswertung(m);
         case 'baustelle/abrechnung': return fakeAbrechnung(m);
+        case 'baustelle/verbrauch_wetter': return fakeVerbrauchWetter(m);
         case 'baustelle/tagesverlauf': {   // BSM-033.04: Verlauf 24 h wie hochrechnung.async_tagesverlauf (Beispiel: heute 10 Uhr, Werktag 05–16 Uhr)
           const tag = new Date(m.datum + 'T12:00:00'), wt = tag.getDay() > 0 && tag.getDay() < 6, heute = m.datum === '2026-01-15', vorbei = m.datum < '2026-01-15';
           const ab = vorbei ? 24 : heute ? 10 : 0, w = h => (wt && h >= 5 && h < 16 ? (h === 5 ? 2.6 : 1) : 0.08), t = h => 1 + 3 * Math.sin(2 * Math.PI * (h + 0.5 - 9) / 24);

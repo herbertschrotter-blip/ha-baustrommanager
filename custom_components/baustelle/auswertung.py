@@ -56,6 +56,23 @@ Statistik = dict[str, list[dict[str, Any]]]
 
 
 
+def heizperiode_monate(entry: ConfigEntry) -> tuple[int, int]:
+    """Heizperiode der Baustelle (Monat von, Monat bis) aus den Optionen, Vorgabe Oktober bis April."""
+    return (min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_VON) or 10))),
+            min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_BIS) or 4))))
+
+
+def zeitraum_der_baustelle(entry: ConfigEntry, art: str, heute: date, versatz: int = 0, beginn: date | None = None) -> a.Zeitraum:
+    """`logik/auswertung.zeitraum` mit Heizperiode und Beginn dieser Baustelle (M13: Heizperiode, seit Beginn); `beginn`:
+    ein anderer Beginn (alle laufenden: der früheste)."""
+    return a.zeitraum(art, heute, versatz, heizperiode=heizperiode_monate(entry), beginn=beginn or beginn_der_baustelle(entry)[0])
+
+
+def fruehester_beginn(entries: Iterable[ConfigEntry]) -> date | None:
+    """Frühester Beginn mehrerer Baustellen („seit Beginn“ über alle laufenden)."""
+    return min((beginn_der_baustelle(e)[0] for e in entries), default=None)
+
+
 def beginn_der_baustelle(entry: ConfigEntry) -> tuple[date, bool]:
     """Beginn der Baustelle nach `logik/zeitraum` (leer = Tag der Anlage) und ob er automatisch gilt (AN-0002)."""
     wert = entry.options.get(CONF_BEGINN)
@@ -289,7 +306,8 @@ async def async_abrechnung(
 ) -> dict[str, Any]:
     """Befehl `baustelle/abrechnung`: Tabelle je Firma und Container, Verbrauch je Firma und Periode, beide CSV."""
     zone, heute = _zone(), dt_util.now().date()
-    zr = a.zeitraum(art, heute, versatz)
+    zr = zeitraum_der_baustelle(entry, art, heute, 0 if art == "Gesamt" else versatz,
+                                fruehester_beginn(laufende(hass)) if scope == "alle" and art == "Gesamt" else None)
     haupt = quelle(hass, entry)
     quellen = [haupt] if scope == "diese" else [quelle(hass, e) for e in laufende(hass)]
     preis = haupt.preis if preis_sim is None else preis_sim
@@ -398,7 +416,7 @@ async def _gespart(hass: HomeAssistant, quellen: list[Quelle], jetzt: list[dict[
     for x, s in zip(quellen, jetzt, strict=True):
         if zr.periode == "month":
             g = await _gespart_tage(hass, x, zr.von, zr.bis, preis_sim)
-            teile.append(a.gespart_zusammen([g], zr.n, [(zr.von + timedelta(days=i)).month - 1 for i in range(len(g["mit_kwh"]))]) if g else None)
+            teile.append(a.gespart_zusammen([g], zr.n, [zr.monat_index(zr.von + timedelta(days=i)) for i in range(len(g["mit_kwh"]))]) if g else None)
         else:
             preise = preis_sim if preis_sim is not None else a.perioden_preise(zr, partial(preise_logik.preis_am, x.preise))
             teile.append(a.gespart_reihen(s["mit_je"], s["ohne_je"], preise))
@@ -457,7 +475,7 @@ async def async_ohne(
     Ø-Leistung im Betrieb (je Gerät gemessen oder je Typ gemittelt) 24/7 ab Beginn der Baustelle bis jetzt, dazu der
     tatsächliche Verbrauch und das Gesparte."""
     zone, jetzt = _zone(), dt_util.now()
-    zr = a.zeitraum(art, jetzt.date(), versatz)
+    zr = zeitraum_der_baustelle(entry, art, jetzt.date(), versatz)
     q = quelle(hass, entry)
     heizer_alle = [g for g in q.geraete if g["rolle"] == ROLLE_HEIZKOERPER]
     mittel = {g["id"]: (q.st.zaehler.get(f"mittel:{g['id']}") if q.st is not None else None) for g in heizer_alle}
@@ -480,22 +498,45 @@ async def async_ohne(
             "geraete": [{"id": g["id"], "typ": g["typ"], "kw": kw.get(g["id"])} for g in eigene]}
 
 
+def vergleichs_zeitraum(entry: ConfigEntry, zr: a.Zeitraum, heute: date, versatz: int, vergleich: str) -> a.Zeitraum | None:
+    """Zeitraum, mit dem verglichen wird (M13): der davor (`vorperiode`) oder derselbe ein Jahr früher (`vorjahr`);
+    „seit Beginn“ hat keinen davor, `ohne` (ohne Automatik) keinen Zeitraum."""
+    if vergleich == "vorjahr":
+        tag = a.vorjahr_tag(zr)
+        return zeitraum_der_baustelle(entry, zr.art, tag) if tag is not None else None
+    if vergleich == "vorperiode" and zr.art != "Gesamt":
+        return zeitraum_der_baustelle(entry, zr.art, heute, versatz + 1)
+    return None
+
+
 async def async_auswertung(
-    hass: HomeAssistant, entry: ConfigEntry, art: str, versatz: int = 0, scope: str = "diese", preis_sim: float | None = None
+    hass: HomeAssistant, entry: ConfigEntry, art: str, versatz: int = 0, scope: str = "diese", preis_sim: float | None = None,
+    vergleich: str = "vorperiode", bereich: str | None = None,
 ) -> dict[str, Any]:
-    """Befehl `baustelle/auswertung`: Kennzahlen des Zeitraums (mit Vergleich zum Zeitraum davor), Ohne Automatik, Je
-    Gerät, Wetter-Einfluss, Ölradiator/Konvektor und Heizperiode."""
+    """Befehl `baustelle/auswertung`: Kennzahlen des Zeitraums (mit Vergleich zum Zeitraum davor, zum Vorjahr oder zu
+    „ohne Automatik“), Ohne Automatik, Je Gerät, Wetter-Einfluss, Ölradiator/Konvektor und Heizperiode. `bereich`: nur
+    dieser Container (diese Baustelle)."""
     zone, heute, eid = _zone(), dt_util.now().date(), entry.entry_id
-    zr, zr_vorher = a.zeitraum(art, heute, versatz), a.zeitraum(art, heute, versatz + 1)
+    if art == "Gesamt":
+        versatz = 0   # „seit Beginn“ gibt es nur einmal
+    if bereich is not None:
+        scope = "diese"
+    zr = zeitraum_der_baustelle(entry, art, heute, versatz, fruehester_beginn(laufende(hass)) if scope == "alle" and art == "Gesamt" else None)
+    zr_vorher = vergleichs_zeitraum(entry, zr, heute, versatz, vergleich)
     q = quelle(hass, entry)
     quellen = [q] if scope == "diese" else [q if e.entry_id == eid else quelle(hass, e) for e in laufende(hass)]
     jetzt = [await _summen(hass, x, zr) for x in quellen]
-    vorher = [await _summen(hass, x, zr_vorher) for x in quellen]
+    vorher = [await _summen(hass, x, zr_vorher) for x in quellen] if zr_vorher is not None else []
+    if bereich is not None:
+        jetzt, vorher = [a.nur_bereich(s, bereich) for s in jetzt], [a.nur_bereich(s, bereich) for s in vorher]
     summen = {k: sum(s[k] for s in jetzt) for k in ("kwh", "heizzeit", "pumpzeit", "ohne")}
-    davor = {k: sum(s[k] for s in vorher) for k in ("kwh", "heizzeit", "pumpzeit")}
-    vorher_ganz = all(x.beginn <= zr_vorher.von for x in quellen)   # Zeitraum davor ganz in der Baustelle?
+    if vergleich == "ohne":   # verglichen mit „ohne Automatik“ (24/7) im selben Zeitraum – nur kWh
+        davor: dict[str, float | None] = {"kwh": summen["ohne"] if bereich is None else None, "heizzeit": None, "pumpzeit": None}
+    else:
+        davor = {k: sum(s[k] for s in vorher) if zr_vorher is not None else None for k in ("kwh", "heizzeit", "pumpzeit")}
+    vorher_ganz = zr_vorher is None or all(x.beginn <= zr_vorher.von for x in quellen)   # Zeitraum davor ganz in der Baustelle?
     preis = preis_sim if preis_sim is not None else await _preis_zeitraum(hass, quellen, zr)
-    preis_vorher = preis_sim if preis_sim is not None else await _preis_zeitraum(hass, quellen, zr_vorher)
+    preis_vorher = preis if zr_vorher is None else preis_sim if preis_sim is not None else await _preis_zeitraum(hass, quellen, zr_vorher)
     # Je Gerät (diese Baustelle): kWh aus den Energiezählern der Geräte, Pumpzeit aus der Statistik
     eigene = next((s for x, s in zip(quellen, jetzt, strict=True) if x is q), None) or await _summen(hass, q, zr)
     g_ids = sorted({g["energie"] for g in q.geraete if g["energie"]})
@@ -527,12 +568,15 @@ async def async_auswertung(
     hr_werte, hr_erg = _hochrechnung(q)
     wetter = a.wetter_aus_signatur((hr_erg or {}).get("signatur"), preis)   # BSM-033: Energiesignatur der Baustelle
     gerade = wetter["gerade"]
-    gespart = await _gespart(hass, quellen, jetzt, zr, preis_sim)   # € je Periode zum Preis der Periode (FE-0035)
+    # € je Periode zum Preis der Periode (FE-0035); je Container gibt es „ohne Automatik“ nicht (M13-Filter)
+    gespart = await _gespart(hass, quellen, jetzt, zr, preis_sim) if bereich is None else None
     oa = a.ohne_automatik(gespart)
-    hp_von = min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_VON) or 10)))
-    hp_bis = min(12, max(1, int(entry.options.get(CONF_HEIZPERIODE_BIS) or 4)))
+    hp_von, hp_bis = heizperiode_monate(entry)
     return {
         "zeitraum": _zeitraum_dict(zr), "preis": preis, "simuliert": preis_sim is not None,
+        # M13: womit verglichen wird (Zeitraum für den Text der Seite; „ohne“ ohne Zeitraum) und ob ein Container gefiltert ist
+        "vergleich": {"art": vergleich, "zeitraum": _zeitraum_dict(zr_vorher) if zr_vorher is not None else None},
+        "bereich": bereich,
         "summen": {**summen, "eur": a.geld(summen["kwh"], preis), "vorher": davor,
                    # „eur“: Pfeil bei „Kosten“ – € gegen €, jeder Zeitraum zu seinem Preis (UI-Bericht, Maßnahme 6)
                    "veraenderung": {**{k: a.veraenderung(summen[k], davor[k], vorher_ganz) for k in davor},
@@ -542,7 +586,7 @@ async def async_auswertung(
         "gespart_reihen": gespart,
         # Rangliste der Container und „Was fällt auf“ (WU-0005, logik/auswertung) – über `scope`
         "rangliste": rang,
-        "erkenntnisse": a.erkenntnisse(rang, ohne=oa, gerade=gerade, veraenderung_kwh=a.veraenderung(summen["kwh"], davor["kwh"], vorher_ganz),
+        "erkenntnisse": a.erkenntnisse(rang, ohne=oa, gerade=gerade, veraenderung_kwh=a.veraenderung(summen["kwh"], davor["kwh"], vorher_ganz) if vergleich != "ohne" else None,
                                        typ_weniger=typ.get("weniger") if isinstance(typ, dict) else None,
                                        # Hinweis der Bauart: Heizperiode dieser Baustelle – nur im laufenden Zeitraum dieser Baustelle
                                        bauart=[{**c, "name": next((b["name"] for b in q.bereiche if b["id"] == c["bereich"]), c["bereich"])}
@@ -591,3 +635,64 @@ def _hochrechnung(q: Quelle) -> tuple[dict[str, Any] | None, dict[str, Any] | No
 
     hz = Heizung.von(q.st)
     return werte(hz), hz.hochrechnung
+
+
+# ---------------------------------------------------------------------- Verbrauch & Wetter (M13)
+async def async_verbrauch_wetter(
+    hass: HomeAssistant, entry: ConfigEntry, art: str, versatz: int = 0, aufloesung: str | None = None,
+    bereich: str | None = None, vergleich: str = "",
+) -> dict[str, Any]:
+    """Befehl `baustelle/verbrauch_wetter`: je Zeitschritt kWh je Container, Ø außen, Wetter, Wind und Regen; dazu der Ø
+    Verbrauch je Temperaturband und Wetter (`logik/verbrauch_wetter`) und – mit Vorperiode/Vorjahr – die kWh des
+    Vergleichs je Zeitschritt. Wetter, Wind und Regen kommen aus der eigenen Datenbank (ab Aufbau 11), die kWh aus der
+    Langzeitstatistik der Zähler, außen ohne Datenbank aus der Statistik des Außensensors."""
+    from .db.wetter import async_wetter_stunden  # noqa: PLC0415 – db → auswertung (Kreis beim Import)
+    from .logik import verbrauch_wetter as vw  # noqa: PLC0415
+
+    zone, heute = _zone(), dt_util.now().date()
+    zr = zeitraum_der_baustelle(entry, art, heute, versatz)
+    aufl = vw.aufloesung(art, aufloesung)
+    q = quelle(hass, entry)
+    container = [b for b in q.bereiche if b["art"] == ART_CONTAINER and (bereich is None or b["id"] == bereich)]
+
+    async def stunden(z: a.Zeitraum) -> list[vw.Stunde]:
+        start, ende = a.mitternacht(z.von, zone), min(a.mitternacht(z.bis, zone), dt_util.now() + timedelta(hours=1))
+        if ende <= start:
+            return []
+        periode = "hour" if aufl == "stunde" else "day"
+        ids = {b["id"]: q.energie_ids(b["id"]) for b in container}
+        aid = q.eid(q.entry.entry_id, "aussen")
+        roh = await async_statistik(hass, [i for v in ids.values() for i in v] + ([aid] if aid else []), start, ende, periode, {"change", "mean"})
+        wetter = await async_wetter_stunden(hass, q.entry.entry_id, start, ende) or {}
+        schritte: dict[datetime, vw.Stunde] = {}
+
+        def schritt(t: datetime) -> vw.Stunde:
+            t = vw.schritt_beginn(t, periode == "day")
+            return schritte.setdefault(t, vw.Stunde(t))
+
+        for bid, liste in ids.items():
+            for i in liste:
+                for p in roh.get(i, []):
+                    if a.ist_zahl(p.get("change")):
+                        x = schritt(a.lokal(p["start"], zone))
+                        x.kwh[bid] = x.kwh.get(bid, 0.0) + max(0.0, float(p["change"]))
+        aussen_stat = {a.lokal(p["start"], zone).replace(tzinfo=None): float(p["mean"]) for p in roh.get(aid or "", []) if a.ist_zahl(p.get("mean"))}
+        je_schritt: dict[datetime, list[dict[str, Any]]] = {}
+        for ts, w in wetter.items():
+            je_schritt.setdefault(schritt(a.lokal(ts, zone)).beginn, []).append(w)
+        for t, x in schritte.items():
+            vw.wetter_zusammen(x, je_schritt.get(t, []), aussen_stat.get(t.replace(tzinfo=None)))
+        return [schritte[t] for t in sorted(schritte)]
+
+    namen = [b["id"] for b in container]
+    punkte = vw.punkte(await stunden(zr), aufl, namen)
+    zr_v = vergleichs_zeitraum(entry, zr, heute, versatz, vergleich) if vergleich in ("vorperiode", "vorjahr") and aufl != "stunde" else None
+    vgl = vw.vergleich_angleichen(punkte, vw.punkte(await stunden(zr_v), aufl, namen), aufl, zr.von, zr_v.von) if zr_v is not None else None
+    return {
+        "zeitraum": _zeitraum_dict(zr), "aufloesung": aufl, "aufloesungen": list(vw.AUFLOESUNG_JE_ZEITRAUM.get(art, (aufl,))),
+        "container": [{"id": b["id"], "name": b["name"]} for b in container], "bereich": bereich,
+        "punkte": punkte, "vergleich": vgl, "vergleich_zeitraum": _zeitraum_dict(zr_v) if zr_v is not None else None,
+        "baender": vw.baender(punkte),
+        # Wetterzustand gibt es erst ab Aufbau 11 (0.8.201): ohne ihn zeigt die Seite nur Temperatur und kWh
+        "mit_wetter": any(p["wetter"] for p in punkte),
+    }

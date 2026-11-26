@@ -11,7 +11,7 @@ import { ACHSE_TEXT, ARTEN, AUSNAHME, AUSN_LEGENDE, MODI, TAG_MIN, TEXT, TICKET_
 import { Himmel, himmelLauf, partikel, phaseAusSonne } from './himmel.js';
 import { CHARTS, balken, flaeche, funke, kkBalken, linie, luecke, streu, stufen } from './diagramme.js';
 
-import { MONATE, TAGE, addieren, datum, dauer, de, esc, kurzDatum, minu, plusTage, stdMin, summe, tageZwischen, uhr, verNeuer, wtag, zahl, zrInfo, zrVersatz } from './hilfen.js';
+import { MONATE, MONATE_LANG, TAGE, addieren, datum, dauer, de, esc, kurzDatum, kwNr, minu, plusTage, stdMin, summe, tageZwischen, uhr, verNeuer, wtag, zahl, zrInfo, zrVersatz } from './hilfen.js';
 import { BEREICH_FARBEN, ICON_COG, ICON_MELDEN, SYMBOL_STANDARD, sigHtml, sigStufe } from './symbole.js';
 import { bauen, lokal, minSeitAb, protokollZeile, zoneMs } from './daten.js';
 import { NUR_ANSEHEN, NUR_LESEN_SPERRE, darfSenden, rechteVon } from './rechte.js';
@@ -43,7 +43,7 @@ import { BASELINE_CSS } from './ansichten/baseline.js';
 import { uebersichtVorlage } from './ansichten/uebersicht.js';
 import { katalogEinblendung } from './ansichten/kacheln.js';
 import { UEBERSICHT_EINBLENDUNGEN } from './ansichten/einblendungen-uebersicht.js';
-import { auswertungVorlage, awDetailEinblendung } from './ansichten/auswertung.js';
+import { auswertungVorlage, awDetailEinblendung, awReihe } from './ansichten/auswertung.js';
 import { WISCHEN_CSS, wischTaste, wischenAn } from './ansichten/wischen.js';
 import { START_STIL } from './ansichten/start.js';
 
@@ -739,6 +739,36 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .vl-tab-name { text-align: left; display: flex; flex-direction: column; } .vl-tab-name small { color: var(--ink2); font-size: 11px; }
 @media (max-width: 700px) { .vl-tab-kopf, .vl-tab-zeile { grid-template-columns: 1.6fr repeat(3, 1fr); } .vl-tab-kopf button:nth-child(n+5), .vl-tab-zeile > :nth-child(n+5) { display: none; } }
 /* Auswertung aus Bausteinen (WU-0005) */
+/* M13/M14: Auswertung mit Zeitraumleiste und festen Abschnitten (Mockup auswertung-neu.html) */
+.aw-zrl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; } .aw-zrl > .seg { flex-wrap: wrap; max-width: 100%; }
+.aw-zrl.klebt { position: sticky; top: 74px; z-index: 3; }   /* unter der Reiterleiste */
+.aw-zrl .zr-zeile { margin: 0; } .aw-vg { font-size: 13px; color: var(--ink2); display: flex; gap: 6px; align-items: center; }
+.aw-vg select, .aw-wd-k select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--gridc); background: transparent; color: var(--ink); max-width: 100%; }
+.aw-vg-t { flex-basis: 100%; font-size: 12px; } .aw-filter { font-weight: 600; }
+.aw-sprung { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.aw-ab { padding: 12px 14px; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.aw-anker { display: block; scroll-margin-top: 120px; } .aw-ab-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aw-ab-kopf h3 { margin: 0; font-size: 17px; } .aw-eigen { font-size: 12px; color: var(--amber); }
+.aw-kz { display: flex; flex-wrap: wrap; gap: 10px 26px; } .aw-kz > div { display: flex; flex-direction: column; min-width: 110px; } .aw-gross { font-size: 22px; }
+.aw-delta.gut { font-weight: 600; }
+.aw-erk { display: flex; flex-direction: column; } .aw-karte { gap: 10px; text-align: left; } .aw-fic { font-size: 18px; }
+.aw-rang-liste .zeile { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) auto auto; gap: 8px; align-items: center; text-align: left; }
+.aw-rz em { font-style: normal; color: var(--ink2); margin-right: 4px; } .aw-rb { height: 8px; background: var(--gridc); border-radius: 4px; overflow: hidden; } .aw-rb i { display: block; height: 100%; }
+.aw-balken { display: flex; align-items: flex-end; gap: 2px; height: 70px; } .aw-balken i { flex: 1; background: var(--s3); border-radius: 2px 2px 0 0; min-height: 1px; }
+.aw-zeile2 { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; align-items: center; }
+.aw-hp-voll .hp-karte { margin: 0; } .aw-hp-voll .hp-dia { max-width: none; width: 100%; margin: 6px 0; }
+@container (min-width: 700px) { .aw-hp-voll .hp-dia text { font-size: 4.2px; } .aw-hp-voll .hp-dia path { stroke-width: 1.1; } .aw-hp-voll .hp-dia .hp-ist { stroke-width: 1.4; } }   /* M13: über die volle Breite, Schrift so groß wie bisher */
+.aw-csv { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.aw-anord { margin-top: 8px; } .aw-anord .zeile { display: flex; align-items: center; gap: 10px; } .aw-anord .zeile.aus .aw-zl { opacity: .5; } .aw-zl { flex: 1; min-width: 0; }
+.aw-knoepfe-u { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.aw-wd-box { display: flex; flex-direction: column; gap: 6px; min-width: 0; } .aw-wd-k { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.aw-wd-svg { width: 100%; overflow: hidden; } .aw-wd { width: 100%; height: auto; display: block; }
+.aw-wd .gl { stroke: var(--gridc); stroke-width: .6; } .aw-wd .null { stroke: var(--ink2); stroke-dasharray: 3 3; stroke-width: .7; }
+.aw-wd .ax { font-size: 10px; fill: var(--ink2); } .aw-wd .ax.l { text-anchor: end; } .aw-wd .ax.t { fill: var(--rot); } .aw-wd .ax.m { text-anchor: middle; } .aw-wd .ax.klein { font-size: 8px; } .aw-wd .ax.b { font-weight: 600; }
+.aw-wd .wi { font-size: 11px; text-anchor: middle; } .aw-wd .vg { fill: var(--ink2); opacity: .22; } .aw-wd .hit { fill: transparent; cursor: pointer; }
+.aw-wd .tl { fill: none; stroke: var(--rot); stroke-width: 1.6; } .aw-wd .tp { fill: var(--rot); } .aw-wd .sel { fill: var(--ink); opacity: .08; }
+.aw-wd-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--ink2); } .aw-wd-leg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+.aw-wd-leg i.linie { height: 2px; background: var(--rot); width: 12px; } .aw-wd-pkt { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; } .aw-wd-satz { font-size: 12px; }
 .aw-dia { display: flex; flex-direction: column; height: 100%; box-sizing: border-box; padding: 12px 14px; gap: 6px; }
 .aw-dia-kopf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .aw-dia-kopf .seg { margin: 0 0 0 auto; }
 .aw-dia-svg { flex: 1; width: 100%; min-height: 0; } .aw-dia-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; color: var(--ink2); }
@@ -1371,10 +1401,24 @@ class BaustellePanel extends LitElement {
     const b = (alle ? this.laufende() : [this.d]).map(x => x.beginn).filter(Boolean).sort()[0];
     return b && b <= this.z.HEUTE ? b : plusTage(this.z.HEUTE, -5 * 366);
   }
-  zrMax(z, grenze) { return Math.max(0, zrVersatz(z, grenze, this.z.HEUTE, this.z.WOCHE_ISO[0])); }
-  zrInfo(z, v) { return zrInfo(z, v, this.z.HEUTE, this.z.WOCHE_ISO[0]); }
-  zrText(z, v = 0) { return v === 0 ? { Tag: 'heute', Woche: 'diese Woche' }[z] || this.zrInfo(z, 0).text : v === 1 && z !== 'Monat' && z !== 'Jahr' ? this.zrInfo(z, 1).text.toLowerCase() : this.zrInfo(z, v).text; }
-  zrVgl(z, v = 0) { return z === 'Jahr' ? this.zrInfo('Jahr', v + 1).text : { Tag: v ? 'Vortag' : 'gestern', Woche: 'Vorwoche', Monat: 'Vormonat' }[z]; }
+  /* M13: Heizperiode und „seit Beginn“ – Grenzen und Text kommen aus der Antwort der Integration (zrText mit zr); ‹ ›
+     blättert höchstens so viele Jahre zurück, wie die Baustelle läuft */
+  zrMax(z, grenze) { if (z === 'Gesamt') return 0; return Math.max(0, zrVersatz(z === 'Heizperiode' ? 'Jahr' : z, grenze, this.z.HEUTE, this.z.WOCHE_ISO[0]) + (z === 'Heizperiode' ? 1 : 0)); }
+  zrInfo(z, v) {
+    if (z === 'Heizperiode') return { text: v === 0 ? 'Heizperiode' : `Heizperiode (−${v})`, unter: '', iso: this.z.HEUTE };
+    if (z === 'Gesamt') { const b = this.zrGrenze(this.s.awScope === 'alle'); return { text: `seit ${datum(b)}`, unter: '', iso: b }; }
+    return zrInfo(z, v, this.z.HEUTE, this.z.WOCHE_ISO[0]);
+  }
+  /* zr: Zeitraum aus einer Antwort der Integration (z. B. der Vergleich „Vorjahr“) – Text aus seinen Grenzen */
+  zrText(z, v = 0, zr = null) {
+    if (zr && zr.von) { const t = zr.von, j = +t.slice(0, 4), jb = zr.bis ? +plusTage(zr.bis, -1).slice(0, 4) : j;
+      const kwJ = +plusTage(t, 3).slice(0, 4);   // ISO-Jahr der Woche (Donnerstag)
+      return { Tag: `${wtag(t)} ${datum(t)}`, Woche: `KW ${kwNr(t)} ${kwJ}`, Monat: `${MONATE_LANG[+t.slice(5, 7) - 1]} ${j}`, Jahr: String(j),
+        Heizperiode: `Heizperiode ${j}${jb !== j ? `/${String(jb).slice(2)}` : ''}`, Gesamt: z === 'Gesamt' ? this.zrInfo('Gesamt', 0).text : datum(t) }[z] || datum(t); }
+    if (z === 'Heizperiode' || z === 'Gesamt') return this.zrInfo(z, v).text;
+    return v === 0 ? { Tag: 'heute', Woche: 'diese Woche' }[z] || this.zrInfo(z, 0).text : v === 1 && z !== 'Monat' && z !== 'Jahr' ? this.zrInfo(z, 1).text.toLowerCase() : this.zrInfo(z, v).text;
+  }
+  zrVgl(z, v = 0) { return z === 'Jahr' ? this.zrInfo('Jahr', v + 1).text : z === 'Heizperiode' ? this.zrInfo(z, v + 1).text : { Tag: v ? 'Vortag' : 'gestern', Woche: 'Vorwoche', Monat: 'Vormonat' }[z] || ''; }
   zrSt(ziel) {
     if (ziel === 'aw') return this.s.aw;
     if (ziel === 'sheet') return this.s.sheet || {};
@@ -1385,9 +1429,19 @@ class BaustellePanel extends LitElement {
   /* Preis simulieren (Herbert 04.10.2026): in der Auswertung mit dem Chip „💶 Preis“; die Integration rechnet alle € damit */
   simAktiv() { return !!this.s.awSim && this.s.view === 'auswertung'; }
   simPreis() { if (!zahl(this.s.simPreis)) { let v = null; try { v = parseFloat(localStorage.getItem('baustelle-sim-preis')); } catch (e) { v = null; } this.s.simPreis = zahl(v) ? v : this.d.e.preis; } return this.s.simPreis; }
-  awDaten(z, versatz = 0, scope = this.s.awScope || 'diese', d = this.d, preis = this.simAktiv() ? this.simPreis() : null) {
+  /* M13: `opt` = { vergleich, bereich } – Vergleich (vorperiode, vorjahr, ohne) und Filter auf einen Container */
+  awDaten(z, versatz = 0, scope = this.s.awScope || 'diese', d = this.d, preis = this.simAktiv() ? this.simPreis() : null, opt = {}) {
     if (!d) return null;
-    const r = this._holen(`aw:${d.entry}:${z}:${versatz}:${scope}:${d.z.HEUTE}:${preis ?? ''}`, () => this._hass.callWS({ type: 'baustelle/auswertung', entry_id: d.entry, zeitraum: z, versatz, scope, ...(preis !== null ? { preis } : {}) }));
+    const vg = opt.vergleich && opt.vergleich !== 'vorperiode' ? opt.vergleich : null, ber = opt.bereich || null;
+    const r = this._holen(`aw:${d.entry}:${z}:${versatz}:${scope}:${d.z.HEUTE}:${preis ?? ''}${vg || ber ? `:${vg || ''}:${ber || ''}` : ''}`, () => this._hass.callWS({ type: 'baustelle/auswertung', entry_id: d.entry, zeitraum: z, versatz, scope,
+      ...(preis !== null ? { preis } : {}), ...(vg ? { vergleich: vg } : {}), ...(ber ? { bereich: ber } : {}) }));
+    return r === undefined ? null : r || {};
+  }
+  /* M13 „Verbrauch & Wetter“ (baustelle/verbrauch_wetter): null = lädt, {} = Fehler */
+  vwDaten(z, versatz = 0, aufloesung = null, bereich = null, vergleich = '', d = this.d) {
+    if (!d) return null;
+    const r = this._holen(`vw:${d.entry}:${z}:${versatz}:${aufloesung || ''}:${bereich || ''}:${vergleich}:${d.z.HEUTE}`, () => this._hass.callWS({ type: 'baustelle/verbrauch_wetter', entry_id: d.entry, zeitraum: z, versatz,
+      ...(aufloesung ? { aufloesung } : {}), ...(bereich ? { bereich } : {}), ...(vergleich ? { vergleich } : {}) }));
     return r === undefined ? null : r || {};
   }
   abDaten(z, scope = this.s.awScope || 'diese', d = this.d, versatz = 0, preis = this.simAktiv() ? this.simPreis() : null) {
@@ -1758,10 +1812,18 @@ class BaustellePanel extends LitElement {
   awBearbUmschalten() { const S = this.s; S.awBearb = !S.awBearb; S.awLayout = false; return this.neuZeichnen(); }
   awLayoutUmschalten() { const S = this.s; S.awLayout = !S.awLayout; S.awBearb = false; return this.neuZeichnen(); }
   awAn(i) { const x = this.awAuswahl()[i]; x.an = !x.an; this.awMerken(); return this.neuZeichnen(); }
-  awScopeWahl(v) { const S = this.s; S.awScope = v; S.aw.auswahl = this.quellen(S.aw, 'aw').map(q => q.id); return this.neuZeichnen(); }
+  awScopeWahl(v) { const S = this.s; S.awScope = v; if (v === 'alle' && S.aw) { S.aw.filter = null; if (S.aw.wd) S.aw.wd.wahl = null; } S.aw.auswahl = this.quellen(S.aw, 'aw').map(q => q.id); return this.neuZeichnen(); }
   awStufeWahl(i, v) { const x = this.awAuswahl()[i], st = awStufen(x.k).find(q => q[0] === v); if (!st) return undefined; Object.assign(x, { w: st[1], h: st[2], st: st[0] }); this.awMerken(); return this.neuZeichnen(); }
   awVerschieben(i, j) { const Lg = this.awAuswahl(); if (j < 0 || j >= Lg.length) return undefined; [Lg[i], Lg[j]] = [Lg[j], Lg[i]]; this.awMerken(); return this.neuZeichnen(); }   // ↑ = (i, i − 1), ↓ = (i, i + 1)
   simUmschalten() { this.s.awSim = !this.s.awSim; return this.neuZeichnen(); }
+  /* M13/M14: Vergleich, Filter, Anordnung (aw_reihe/aw_aus in der Integration) */
+  awVergleich(v) { this.s.aw.vergleich = v; return this.neuZeichnen(); }
+  awFilter(bid) { const aw = this.s.aw; aw.filter = bid || null; if (aw.wd) aw.wd.wahl = null; if (bid) this.s.awScope = 'diese'; return this.neuZeichnen(); }
+  awAnordnung() { this.s.aw.anord = !this.s.aw.anord; return this.neuZeichnen(); }
+  awAbschnittAn(k) { const aus = this.d.e.aw_aus || []; return this.setzen(['aw_aus'], aus.includes(k) ? aus.filter(x => x !== k) : [...aus, k]); }
+  awAbschnittSchieben(k, d) { const L = [...awReihe(this)], i = L.indexOf(k), j = i + d; if (i < 0 || j < 0 || j >= L.length) return undefined; [L[i], L[j]] = [L[j], L[i]]; return this.setzen(['aw_reihe'], L); }
+  awAnordnungStandard() { return this.setzen(['aw_aus'], []).then(() => this.setzen(['aw_reihe'], null)); }
+  bereichName(bid) { const b = this.d && this.d.bereiche.find(x => x.id === bid); return b ? b.name : bid; }
   tvWahl(v) { this.s.tv = v; return this.neuZeichnen(); }   // Temperaturen Heute / 7 / 30 Tage
   spSim(dd) { const S = this.s; S.simPreis = Math.max(0, Math.round((this.simPreis() + dd) * 100) / 100); try { localStorage.setItem('baustelle-sim-preis', String(S.simPreis)); } catch (e) { /* egal */ } return this.neuZeichnen(); }
   /* Notprogramm (src/ansichten/notprogramm.js, BSM-022 3e; BSM-019/021) */
@@ -2138,7 +2200,7 @@ class BaustellePanel extends LitElement {
   }
   /* Einblendungen der Container-Ansicht (src/ansichten/einblendungen-container.js, BSM-022 3d) */
   schliessen() { this.s.sheet = (this.s.sheet && this.s.sheet.zurueck) || null; return this.neuZeichnen(); }
-  zeitraumWahl(ziel, z) { const st = ziel === 'aw' ? this.s.aw : this.s.sheet; if (st.zeitraum !== z) st.v = 0; st.zeitraum = z; this.s.zrKal = null; return this.neuZeichnen(); }
+  zeitraumWahl(ziel, z) { const st = ziel === 'aw' ? this.s.aw : this.s.sheet; if (st.zeitraum !== z) st.v = 0; st.zeitraum = z; if (st.wd) st.wd.wahl = null; this.s.zrKal = null; return this.neuZeichnen(); }
   lernZuruecksetzen(x) { this.s.sheet = null; this.neuZeichnen(); return this.aktion('lern_reset', { bereich: x.id }, `${x.name}: Lernstand zurückgesetzt`); }
   terminSpeichern() {
     const S = this.s, d = this.d, f = S.sheet.form; if (!f.titel.trim() || !f.datum || f.bis <= f.von) return this.toast('Bitte Titel, Tag und Uhrzeit prüfen');

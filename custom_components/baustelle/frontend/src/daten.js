@@ -62,7 +62,9 @@ export function bauen(r, hass, ersatzZone) {
     auto: !!e0.automatik,
     frost_aus: v(h.frost_aus, v(h.frost_grenze, 5) + 2), urlaub: FREI_TEXT[h.frei_modus] ? h.frei_modus : 'frost', absenk: v(h.absenk, 10),
     offline_min: v(me.offline_min, 5), erklaer: e0.erklaer !== false, frost_immer: !!h.frost_immer, notprogramm: !!h.notprogramm, taste: !!h.taste,
-    baseline: !!h.baseline, baseline_eur: v(h.baseline_eur_monat, 60) };   // J4b: Baseline-Läufe (startet aus)
+    baseline: !!h.baseline, baseline_eur: v(h.baseline_eur_monat, 60),   // J4b: Baseline-Läufe (startet aus)
+    // M14: Anordnung der Auswertung (Reihenfolge, ausgeblendete Abschnitte) – gespeichert in der Integration
+    aw_reihe: Array.isArray(e0.aw_reihe) ? [...e0.aw_reihe] : null, aw_aus: Array.isArray(e0.aw_aus) ? [...e0.aw_aus] : [] };
   for (const [k, art] of Object.entries(ARTEN)) e[k] = ar[art] !== false;
   const anschluesse = (e0.anschluesse || []).map(a => ({ id: a.id, name: a.name || a.id, ampere: v(a.ampere, 16), phasen: v(a.phasen, 3), reserve: v(a.reserve_kw, 0) }));
   const firmen = (e0.firmen && e0.firmen.length ? e0.firmen : [{ id: 'eigen', name: 'Eigene Firma', eigen: true }]).map(f => ({ ...f }));

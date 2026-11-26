@@ -32,7 +32,7 @@ from typing import Any, TypeGuard
 from .abrechnung import EIGEN, firma_von, zahl as fest
 from . import groesse
 
-ARTEN = ("Tag", "Woche", "Monat", "Jahr")
+ARTEN = ("Tag", "Woche", "Monat", "Jahr", "Heizperiode", "Gesamt")   # M13: Heizperiode und „seit Beginn“ je Monat
 TAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 MONATE = ["Jän", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
 HEIZER = ("heizung", "heizkoerper")
@@ -100,7 +100,8 @@ def lokal(start: float | int | str | datetime, zone: tzinfo) -> datetime:
 
 @dataclass(frozen=True)
 class Zeitraum:
-    """Zeitraum der Auswertung: Tag (je Stunde), Woche/Monat (je Tag), Jahr (je Monat)."""
+    """Zeitraum der Auswertung: Tag (je Stunde), Woche/Monat (je Tag), Jahr, Heizperiode und Gesamt (je Monat ab `von`,
+    dem Ersten eines Monats)."""
 
     art: str
     von: date
@@ -120,7 +121,17 @@ class Zeitraum:
             return (tag - self.von).days
         if self.art == "Monat":
             return tag.day - 1 if (tag.year, tag.month) == (self.von.year, self.von.month) else -1
-        return tag.month - 1 if tag.year == self.jahr else -1
+        i = self.monat_index(tag)
+        return i if 0 <= i < self.n else -1
+
+    def monat_index(self, tag: date) -> int:
+        """Stelle des Monats von `tag`, gezählt ab dem Monat von `von` (Zeiträume je Monat)."""
+        return (tag.year - self.von.year) * 12 + tag.month - self.von.month
+
+    def monat_erster(self, i: int) -> date:
+        """Erster Tag des i-ten Monats ab `von`."""
+        m = self.von.month - 1 + i
+        return date(self.von.year + m // 12, m % 12 + 1, 1)
 
     def beginn(self, i: int, zone: tzinfo) -> datetime:
         """Beginn der i-ten Stunde/Tag/Monat (UTC)."""
@@ -128,19 +139,71 @@ class Zeitraum:
             return mitternacht(self.von, zone) + timedelta(hours=i)
         if self.periode == "day":
             return mitternacht(self.von + timedelta(days=i), zone)
-        return mitternacht(date(self.jahr or self.von.year, i + 1, 1), zone)
+        return mitternacht(self.monat_erster(i), zone)
 
     def label_csv(self, i: int) -> str:
         """Spalte „Zeit“ im CSV: 07:00, 29.09.2026 bzw. Sep 2026."""
         if self.art == "Tag":
             return f"{self.labels[i]}:00"
-        if self.art == "Jahr":
-            return f"{MONATE[i]} {self.jahr}"
+        if self.periode == "month":
+            m = self.monat_erster(i)
+            return f"{MONATE[m.month - 1]} {m.year}"
         return (self.von + timedelta(days=i)).strftime("%d.%m.%Y")
 
 
-def zeitraum(art: str, heute: date, versatz: int = 0) -> Zeitraum:
-    """Zeitraum `art` mit `heute`; `versatz` 1 = der davor (gestern, Vorwoche, Vormonat, Vorjahr)."""
+def _je_monat(art: str, von: date, bis: date) -> Zeitraum:
+    """Zeitraum je Monat von `von` (Monatserster) bis vor `bis` (Monatserster)."""
+    n = max(1, (bis.year - von.year) * 12 + bis.month - von.month)
+    monate = [date(von.year + (von.month - 1 + i) // 12, (von.month - 1 + i) % 12 + 1, 1) for i in range(n)]
+    mit_jahr = monate[0].year != monate[-1].year and art == "Gesamt"
+    labels = tuple(f"{MONATE[m.month - 1]}{f' {m.year % 100:02d}' if mit_jahr else ''}" for m in monate)
+    return Zeitraum(art, von, bis, "month", n, labels, None, von.year)
+
+
+def heizperiode_beginn(heute: date, von: int, bis: int, versatz: int = 0) -> tuple[date, date]:
+    """Heizperiode (Monat `von` bis einschließlich Monat `bis`, über den Jahreswechsel, wenn `bis` < `von`), in der
+    `heute` liegt – im Sommer die letzte; `versatz` 1 = die davor. (erster Tag, erster Tag danach)."""
+    j = heute.year if heute.month >= von else heute.year - 1
+    j -= versatz
+    ende_j = j + (1 if bis < von else 0)
+    m = bis + 1
+    return date(j, von, 1), date(ende_j + m // 13, (m - 1) % 12 + 1, 1)
+
+
+def vorjahr_tag(zr: Zeitraum) -> date | None:
+    """Tag, mit dem derselbe Zeitraum ein Jahr früher gebildet wird (M13 „vergleichen mit Vorjahr“): Woche = dieselbe
+    Kalenderwoche (KW 53 → die letzte des Vorjahres), 29. Februar → 28.; „seit Beginn“ hat kein Vorjahr (None)."""
+    if zr.art == "Gesamt":
+        return None
+    if zr.art == "Woche":
+        j, w, _ = zr.von.isocalendar()
+        return date.fromisocalendar(j - 1, min(w, date(j - 1, 12, 28).isocalendar()[1]), 1)
+    try:
+        return zr.von.replace(year=zr.von.year - 1)
+    except ValueError:
+        return zr.von.replace(year=zr.von.year - 1, day=28)
+
+
+def nur_bereich(summen: Mapping[str, Any], bereich: str) -> dict[str, Any]:
+    """Summen einer Baustelle auf einen Container beschränkt (Filter der Auswertung, M13): kWh und Heizzeit des
+    Containers; Pumpzeit, „ohne Automatik“ und Gespart gibt es je Container nicht (0 bzw. leer)."""
+    c = [x for x in summen["je_container"] if x["bereich"] == bereich]
+    return {**summen, "kwh": sum(x["kwh"] for x in c), "heizzeit": sum(x["heizzeit"] for x in c), "pumpzeit": 0.0, "ohne": 0.0,
+            "mit_je": [None] * len(summen["mit_je"]), "ohne_je": [None] * len(summen["ohne_je"]), "je_container": c}
+
+
+def zeitraum(art: str, heute: date, versatz: int = 0, *, heizperiode: tuple[int, int] = (10, 4),
+             beginn: date | None = None) -> Zeitraum:
+    """Zeitraum `art` mit `heute`; `versatz` 1 = der davor (gestern, Vorwoche, Vormonat, Vorjahr, Heizperiode davor).
+    Heizperiode: Monate `heizperiode` (von, bis); Gesamt: vom Monat des Beginns der Baustelle bis zum laufenden Monat."""
+    if art in ("Jahr", "Heizperiode"):   # nie vor das Jahr 2 (versatz bis 4000 erlaubt)
+        versatz = min(versatz, heute.year - 2)
+    if art == "Heizperiode":
+        return _je_monat(art, *heizperiode_beginn(heute, *heizperiode, versatz))
+    if art == "Gesamt":
+        start = (beginn or heute).replace(day=1)
+        naechster = date(heute.year + heute.month // 12, heute.month % 12 + 1, 1)
+        return _je_monat(art, min(start, heute.replace(day=1)), naechster)
     if art == "Tag":
         tag = heute - timedelta(days=versatz)
         return Zeitraum(art, tag, tag + timedelta(days=1), "hour", 24, tuple(f"{h:02d}" for h in range(24)))
@@ -446,7 +509,7 @@ def perioden_grenzen(zr: Zeitraum, zone: tzinfo) -> list[datetime]:
         return [min(beginn + timedelta(hours=i), ende) for i in range(zr.n)] + [ende]
     if zr.periode == "day":
         return [mitternacht(zr.von + timedelta(days=i), zone) for i in range(zr.n + 1)]
-    return [mitternacht(date(zr.von.year + (i // 12), i % 12 + 1, 1), zone) for i in range(zr.n + 1)]
+    return [mitternacht(zr.monat_erster(i), zone) for i in range(zr.n + 1)]
 
 
 def stunden_je_periode(zr: Zeitraum, ab: datetime, bis: datetime, zone: tzinfo) -> list[float]:
@@ -566,7 +629,7 @@ def perioden_preise(zr: Zeitraum, preis_am: Callable[[date], float], ab: date | 
         return tage_preise((zr.von + timedelta(days=i) for i in range(zr.n)), preis_am)
     aus = []
     for i in range(zr.n):
-        erster = date(zr.jahr or zr.von.year, i + 1, 1)
+        erster = zr.monat_erster(i)
         tage = [erster + timedelta(days=k) for k in range(monthrange(erster.year, erster.month)[1])]
         drin = [t for t in tage if (ab is None or t >= ab) and (bis is None or t < bis)]
         aus.append(sum(tage_preise(drin, preis_am)) / len(drin) if drin else preis_am(erster))

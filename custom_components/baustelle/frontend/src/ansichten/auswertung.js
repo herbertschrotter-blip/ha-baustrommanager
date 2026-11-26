@@ -1,18 +1,18 @@
-// Auswertung mit Lit (BSM-022 Stufe 3f; WU-0005 Bausteine, Mockup glas.html Variante 6). Kopf mit Layout/Anpassen/Preis/CSV,
-// Leiste (Zeitraum, Scope, ‹ Zeitraum ›), Bausteine im Raster (kacheln.js) und die Einblendung „aw-detail“. Alle Zahlen
-// (Summen, Vergleich, Wetter-Gerade, Typvergleich, Ersparnis, Hochrechnung, Abrechnung, je Gerät, Erkenntnisse) kommen von
-// der Integration (p.awDaten, p.abDaten); die Seite ordnet nur an. Diagramme bleiben bis Stufe 4 SVG-Text (unsafeHTML).
+// Auswertung mit Lit – M13/M14 (Mockup mockups/auswertung-neu.html, abgenommen 26.11.2026): eine Zeitraumleiste für alles
+// (Tag … seit Beginn, ‹ ›, vergleichen mit Vorperiode/Vorjahr/ohne Automatik, Filter Container), Sprungleiste und feste
+// Abschnitte Verbrauch & Kosten · Ersparnis · Heizperiode & Wetter · Abrechnung & Export · Geräte & Pumpen; die Anordnung
+// (nur ein/aus und Reihenfolge) speichert die Integration (aw_reihe, aw_aus). Kachel-Raster, Vorlagen und Größen gibt es
+// hier nicht mehr. Alle Zahlen kommen von der Integration (p.awDaten, p.abDaten, p.vwDaten); die Seite ordnet nur an.
 import { html, nothing } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { de, erkl, esc, kurzDatum, summe, wtag, zahl } from '../hilfen.js';
 import { BEREICH_FARBEN } from '../symbole.js';
 import { flaeche, linien } from '../diagramme.js';
-import { AW_BAUSTEINE, AW_VORLAGEN, KK, awStufen } from '../kacheln-daten.js';
 import { kopfVorlage, schalterVorlage } from './allgemein.js';
 import { zeitraumVorlage } from './zeitraum.js';
-import { verbrauchVorlage } from './einblendungen-uebersicht.js';
-import { kachelVorlage, rasterVorlage } from './kacheln.js';
 import { heizperiodeVorlage } from './heizperiode.js';
+import { zuGrundlagen } from './grundlagen.js';
+import { wetterDiagramm } from './verbrauch-wetter.js';
 
 const LAEDT = html`<div class="leer">Lädt …</div>`;
 const STUNDEN = [...Array(24)].map((_, h) => String(h).padStart(2, '0'));
@@ -79,44 +79,15 @@ function erkenntnisse(p, A, z) {
     groesster: ['🔥', `${x.name} verbraucht am meisten`, `${de(x.kwh, 0)} kWh · ${de(x.anteil, 0)} % des Verbrauchs.`, 'geraete'],
     sparsamster: ['⚙', `${x.name} heizt am sparsamsten`, `${de(x.kwh_h, 2)} kWh je Heizstunde.`, 'vergleich'],
     wetter: ['🌡', `Je Grad kälter +${de(x.kwh_je_grad, 1)} kWh am Tag`, [zahl(x.eur_je_grad) ? `≈ ${de(x.eur_je_grad, 2)} € je Grad` : '', zahl(x.null0) ? `unter ${de(x.null0, 0)} °C außen wird geheizt` : ''].filter(Boolean).join(' · '), 'wetter'],
-    mehr: ['📈', `${x.prozent} % mehr als ${awVgl(p, z)}`, 'Verbrauch im Vergleich zum Zeitraum davor.', 'verlauf'],
-    weniger: ['📉', `${x.prozent} % weniger als ${awVgl(p, z)}`, 'Verbrauch im Vergleich zum Zeitraum davor.', 'verlauf'],
+    mehr: ['📈', `${x.prozent} % mehr als ${vglText(p, A) || awVgl(p, z)}`, 'Verbrauch im Vergleich zum Zeitraum davor.', 'verlauf'],
+    weniger: ['📉', `${x.prozent} % weniger als ${vglText(p, A) || awVgl(p, z)}`, 'Verbrauch im Vergleich zum Zeitraum davor.', 'verlauf'],
     bauart: ['🔎', `${x.name} braucht ${Math.abs(x.prozent)} % ${x.prozent > 0 ? 'mehr' : 'weniger'} als gleich gebaute`, x.prozent > 0 ? 'Gleicher Aufbau, gleicher Heizkörper – oft eine offene Tür, eine undichte Stelle oder eine falsch eingetragene Leistung.' : 'Gleicher Aufbau, gleicher Heizkörper – weniger geheizt (z. B. öfter leer oder kühler eingestellt).', 'wetter'],
     typ: ['⚖', x.weniger > 0 ? `Ölradiator ${de(x.weniger, 0)} % sparsamer` : `Konvektor ${de(-x.weniger, 0)} % sparsamer`, 'aus eigenen Messungen je Heizstunde.', 'vergleich'],
   })[x.art]).filter(Boolean);
 }
 
-/* FE-0006: Verbrauch als Kachel – gestapelt je Container/Baustelle oder Firma (quellen wie das große Diagramm), füllt die Kachel.
-   Nur Anordnung der Balken (Pixel); die kWh kommen aus der Statistik bzw. der Integration (quellen). */
-function diagramm(p, z, gr) {
-  const st = p.s.aw, Q = p.quellen(st, 'aw'), werte = Q.map(q => ({ q, v: q.v(z) }));
-  const alle = p.s.awScope === 'alle', firma = st.gruppe === 'firma', kopf = html`<div class="aw-dia-kopf"><b>Verbrauch</b>
-      <div class="seg klein">${[['teil', alle ? 'Baustelle' : 'Container'], ['firma', 'Firma']].map(([k, t]) => html`<button data-v=${k} class=${(firma ? 'firma' : 'teil') === k ? 'on' : ''} @click=${() => p.vbGruppe('aw', k)}>${t}</button>`)}</div></div>`;
-  if (werte.some(x => !x.v)) return html`<div class="glas-panel aw-dia">${kopf}${LAEDT}</div>`;
-  const zr = p.zeitraum(z, st.v || 0), labels = zr.labels, n = labels.length, reihen = werte.map(({ q, v }) => ({ name: q.name, farbe: q.farbe, v }));
-  const summen = labels.map((_, i) => reihen.reduce((a, r) => a + (r.v[i] || 0), 0)), ges = summe(summen);
-  const W = gr.w * 160, H = Math.max(90, gr.h * 110 + (gr.h - 1) * 12 - 78), L = 30, R = 6, T = 6, U = 16, hi = Math.max(...summen, 0) * 1.1 || 1;
-  const stufe = hi > 200 ? 100 : hi > 40 ? 20 : hi > 12 ? 5 : hi > 4 ? 2 : hi > 1.5 ? .5 : .2, y = v => T + (1 - v / hi) * (H - T - U), bw = (W - L - R) / n, jedes = Math.max(1, Math.ceil(n / (gr.w * 4)));
-  const raster = [...Array(Math.floor(hi / stufe) + 1)].map((_, q) => q * stufe).map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="gr"/><text x="${L - 4}" y="${(y(v) + 3).toFixed(1)}" class="ax" text-anchor="end">${de(v, stufe < 1 ? 1 : 0)}</text>`).join('');
-  const bars = labels.map((lab, i) => { let unten = 0;
-    return reihen.map(r => { const v = r.v[i] || 0; if (!(v > 0)) return ''; const y1 = y(unten + v), y0 = y(unten); unten += v;
-      return `<rect x="${(L + i * bw + bw * .12).toFixed(1)}" y="${y1.toFixed(1)}" width="${(bw * .76).toFixed(1)}" height="${Math.max(0, y0 - y1).toFixed(1)}" fill="${r.farbe}" rx="1.5"><title>${esc(String(lab))} · ${esc(r.name)} · ${de(v, 1)} kWh</title></rect>`; }).join('')
-      + (i % jedes === 0 ? `<text x="${(L + i * bw + bw / 2).toFixed(1)}" y="${H - 3}" class="ax" text-anchor="middle">${esc(String(lab))}</text>` : ''); }).join('');
-  // SVG als Ganzes per unsafeHTML (Inhalt eines Lit-<svg> bräuchte unsafeSVG)
-  return html`<div class="glas-panel aw-dia">${kopf}
-      ${unsafeHTML(`<svg class="aw-dia-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${raster}${bars}</svg>`)}
-      <div class="aw-dia-leg">${reihen.map(r => html`<span><i style="background:${r.farbe}"></i>${r.name}</span>`)}<span class="leise">${de(ges, ges < 100 ? 1 : 0)} kWh · kWh je ${{ Tag: 'Stunde', Woche: 'Tag', Monat: 'Tag', Jahr: 'Monat' }[z]}</span></div></div>`;
-}
-
-/* ---- Bausteine (WU-0005): die Seite ordnet sie nach dem eigenen Layout an (Variante 6) ---- */
-function bausteine(p) {
-  const d = p.d, aw = p.s.aw ||= { zeitraum: 'Monat', auswahl: d.bereiche.map(b => b.id) }, z = aw.zeitraum, vs = aw.v || 0;
-  const alle = p.s.awScope === 'alle';
-  // Kennzahlen, Vergleich zum Zeitraum davor, Ohne Automatik, Wetter, Ölradiator/Konvektor, Je Gerät: von der Integration (api §8)
-  const A = p.awDaten(z, vs), S = (A && A.summen) || {}, vd = k => (S.veraenderung || {})[k] ?? null, oa = S.ohne_automatik || null;
-  const kwh = A ? S.kwh : null, hz = A ? S.heizzeit : null, pz = A ? S.pumpzeit : null, ohne = A ? S.ohne : null;
-  const vgl = p.zrVgl(z, vs);
-  const kz = (wert, text, dl) => html`<div><b>${wert}</b><span>${text}</span>${dl !== null ? html`<em class="${dl > 0 ? 'mehr' : 'weniger'}">${dl > 0 ? '▲' : '▼'} ${Math.abs(dl)} %</em>` : nothing}</div>`;
+/* Ölradiator oder Konvektor (AN-0008, fair): Tabelle, Fußsatz, Ersparnis – Werte von der Integration (typ) */
+function vergleichBlock(p, A, z, vs) {
   // AN-0008: fair – nur Zeiten im Modus Thermostat mit Fühler, Container mit einem Typ, kWh je Gradstunde (Integration)
   const T = ['oelradiator', 'konvektor'].map(t => { const x = (A && A.typ && A.typ[t]) || {}; return { kwhG: x.kwh_gradh ?? null, kwhGm2: x.kwh_gradh_m2 ?? null, auf: x.auf ?? null, ab: x.ab ?? null,
     aufKw: x.auf_je_kw ?? null, anzahl: x.anzahl ?? null, kw: x.kw ?? null, m2: x.m2 ?? null, container: x.container || [] }; });
@@ -126,13 +97,13 @@ function bausteine(p) {
   const nurEiner = !!(A && A.typ && A.typ.nur_einer);
   const vglOk = !!(A && A.typ && A.typ.vergleichbar), aussen = (A && A.typ && A.typ.ausgeschlossen) || [];
   // Was die Ölradiatoren gegenüber Konvektoren gespart haben (Integration: typ.ersparnis)
-  const er = A && A.typ && A.typ.ersparnis, zrE = p.zeitraum(z, vs);
+  const er = A && A.typ && A.typ.ersparnis, zrE = A && A.zeitraum && A.zeitraum.labels ? A.zeitraum : p.zeitraum(z, vs);
   const ersparT = !er ? '' : html`<div class="kennz"><div><b>${de(er.oel_kwh, er.oel_kwh < 100 ? 1 : 0)}</b><span>kWh Ölradiatoren</span></div>
         <div><b>${de(er.konvektor_kwh, er.konvektor_kwh < 100 ? 1 : 0)}</b><span>kWh mit Konvektoren</span></div>
         <div><b class="${er.erspart_eur < 0 ? 'rot-t' : ''}">${de(Math.abs(er.erspart_eur), 2)} €</b><span>${er.erspart_eur < 0 ? 'mehr' : 'erspart'}</span></div></div>
-      <div class="leise">${{ Tag: 'kWh je Stunde', Woche: 'kWh je Tag', Monat: 'kWh je Tag', Jahr: 'kWh je Monat' }[z]} · ${p.zrText(z, vs)}</div>
+      <div class="leise">${{ Tag: 'kWh je Stunde', Woche: 'kWh je Tag', Monat: 'kWh je Tag' }[z] || 'kWh je Monat'} · ${p.zrText(z, vs)}</div>
       <div class="chart-wrap">${unsafeHTML(flaeche(`typ-er-${z}-${vs}`, [{ name: 'Ölradiatoren (tatsächlich)', v: er.oel, farbe: 'var(--s1)' }], zrE.labels, 'kWh',
-        z === 'Tag' ? 6 : z === 'Monat' ? 7 : z === 'Woche' ? 1 : 3, { name: 'mit Konvektoren', v: er.konvektor }))}</div>
+        z === 'Tag' ? 6 : z === 'Monat' ? 7 : z === 'Woche' ? 1 : z === 'Jahr' ? 3 : 1, { name: 'mit Konvektoren', v: er.konvektor }))}</div>
       <div class="leise">„Mit Konvektoren“ = der tatsächliche Verbrauch der Ölradiatoren im gewählten Zeitraum mal ${de(er.faktor, 2)} – so viel mehr bzw. weniger brauchen Konvektoren hier je Gradstunde und m².</div>`;
   const f = (v, fn) => zahl(v) ? fn(v) : '–';
   // wie Mockup: fett ist der Nachteil (mehr kWh, langsamer aufheizen, schneller abkühlen); Kosten ohne Hervorhebung
@@ -147,26 +118,7 @@ function bausteine(p) {
   const vb = weniger > 0 ? `verbraucht rund ${weniger} % weniger` : weniger < 0 ? `verbraucht rund ${-weniger} % mehr` : '';
   const teile = [auf, ab, vb].filter(Boolean), fussSatz = !vglOk ? 'Noch nicht vergleichbar – es braucht je einen Container nur mit Ölradiator und nur mit Konvektor, mit Fühler im Modus Thermostat.'
     : teile.length ? `Der Ölradiator ${teile.length > 1 ? `${teile.slice(0, -1).join(', ')} und ${teile.at(-1)}` : teile[0]}.` : 'Noch zu wenige Messungen für einen Vergleich.';
-  // leer ('') = nur für diese Baustelle (Anpassen zeigt den Hinweis, Detail „Nur für diese Baustelle“)
-  const B = {
-    kennzahlen: html`<div class="glas-panel kennz vier">${kz(zahl(kwh) ? de(kwh, 0) : '–', 'kWh', vd('kwh'))}${kz(zahl(kwh) ? `${de(S.eur, 0)} €` : '–', 'Kosten', vd('eur'))}${kz(zahl(hz) ? `${de(hz, 0)} h` : '–', 'Heizzeit', vd('heizzeit'))}${kz(zahl(pz) ? `${de(pz, 1)} h` : '–', 'Pumpzeit', vd('pumpzeit'))}</div>
-      <div class="leise vgl">Pfeile: im Vergleich zu ${vgl}</div>`,
-    verlauf: html`<div class="glas-panel block">${verbrauchVorlage(p, aw, 'aw', false)}</div>`,
-    leistung: alle ? '' : leistungHeute(p),
-    temperaturen: alle ? '' : temperaturen(p),
-    abrechnung: abrechnung(p, z),
-    geraete: alle ? '' : geraeteBlock(p, z, A),
-    // BSM-033.03: „Wetter-Einfluss“ und „Hochrechnung“ sind jetzt die Karte „Heizperiode“ (Reiter Signatur bzw. Hochrechnung)
-    wetter: alle ? '' : heizperiodeVorlage(p, A, 'sig', 'hpReiterSig'),
-    ohne: html`<div class="glas-panel block"><div class="block-kopf"><b>Ohne Automatik</b><span class="leise">wenn alles rund um die Uhr liefe</span></div>
-        ${!zahl(ohne) || !zahl(kwh) ? (ohne === null || kwh === null ? LAEDT : html`<div class="leer">Noch keine Werte</div>`) : !oa ? html`<div class="leer">Noch keine Werte</div>` : html`
-        <div class="hbar"><span class="hb-n">mit Automatik</span><span class="hb-spur"><i style="width:${Math.min(100, kwh / ohne * 100)}%;background:var(--s1)"></i></span><span class="hb-w">${de(S.eur, 0)} €</span></div>
-        <div class="hbar"><span class="hb-n">ohne (24/7)</span><span class="hb-spur"><i style="width:100%;background:var(--s2)"></i></span><span class="hb-w">${de(oa.ohne_eur, 0)} €</span></div>
-        <div class="gespart">gespart <b>${de(oa.gespart_eur, 2)} €</b> · ${de(oa.prozent, 0)} %</div>
-        ${oa.hinweis ? html`<div class="hp-grob">⚠ ${oa.hinweis}</div>` : nothing}`}
-        <div class="leise">So rechnet „ohne Automatik“: jeder Heizkörper mit seiner gemessenen Ø-Leistung im Betrieb (sobald er Strom zieht, ab 5 W) rund um die Uhr seit Beginn der Baustelle; gespart = ohne Automatik − tatsächlich verbraucht, mal Strompreis.</div></div>`,   // AN-0007: woher der Vergleich kommt
-    hochrechnung: alle ? '' : heizperiodeVorlage(p, A),
-    vergleich: html`<div class="glas-panel block"><div class="block-kopf"><b>Ölradiator oder Konvektor</b><span class="leise">fair: gleiche Regelung · aus eigenen Messungen</span></div>
+  return html`<div class="glas-panel block"><div class="block-kopf"><b>Ölradiator oder Konvektor</b><span class="leise">fair: gleiche Regelung · aus eigenen Messungen</span></div>
         <table class="vergleich"><tr><th></th><th>Ölradiator</th><th>Konvektor</th></tr>
           <tr class="vgl-geraete"><td>im Vergleich</td><td class="leise">${seite(T[0])}</td><td class="leise">${seite(T[1])}</td></tr>
           ${zeile('kWh je Gradstunde', 'kwhG', true, v => de(v, 3))}
@@ -180,99 +132,151 @@ function bausteine(p) {
         <div class="leise vgl-bezug">Tabelle: ${seit ? `seit ${seit} (Zählbeginn)` : 'seit Zählbeginn'}, unabhängig vom gewählten Zeitraum; Aufheizen und Abkühlen als gleitendes Mittel der letzten Messungen. Die Prozentzahl rechnet je m².</div>
         ${ersparT}
         ${aussen.length ? html`<div class="leise">Nicht im Vergleich: ${aussen.map(x => `${x.name} (${x.grund})`).join(', ')}.</div>` : nothing}
-        <div class="leise">kWh je Gradstunde = Strom je Stunde und °C, um den es drinnen wärmer ist als draußen. Verglichen wird je Container, nicht je Gerät: Ein Container braucht die Wärme, die er verliert, egal wie viele Heizkörper sie liefern – Elektroheizer setzen Strom gleich in Wärme um, Unterschiede kommen vor allem vom Container und vom Nachheizen. Gezählt werden nur Zeiten, in denen ein Container mit Fühler im Modus Thermostat geregelt wird; Container mit beiden Typen zählen nicht.</div></div>`,
-  };
-  return { B, A, z, alle };
+        <div class="leise">kWh je Gradstunde = Strom je Stunde und °C, um den es drinnen wärmer ist als draußen. Verglichen wird je Container, nicht je Gerät: Ein Container braucht die Wärme, die er verliert, egal wie viele Heizkörper sie liefern – Elektroheizer setzen Strom gleich in Wärme um, Unterschiede kommen vor allem vom Container und vom Nachheizen. Gezählt werden nur Zeiten, in denen ein Container mit Fühler im Modus Thermostat geregelt wird; Container mit beiden Typen zählen nicht.</div></div>`;
 }
 
-/* Ein Baustein im Raster bzw. in der Einblendung; '' = nichts zu zeigen (fällt aus dem Raster) */
-function stueck(p, k, B, A, z, gr = { w: 4, h: 4 }) {
-  const d = p.d, S = (A && A.summen) || {}, oa = S.ohne_automatik, h = A && A.hochrechnung, rang = (A && A.rangliste) || [], preis = d.e.preis;
-  const kachel = (kk, inhalt) => html`<button class="glas-panel aw-k" data-k=${kk} @click=${() => p.awDetail(kk)}>${inhalt}</button>`, laed = !A;
-  const vs = p.zrV('aw'), eur = zahl(S.eur) ? `${de(S.eur, 2)} €` : '–', max = Math.max(1, ...rang.map(c => c.kwh || 0)), wann = (vs ? p.zrText(z, vs) : WANN[z]).toUpperCase();
-  const temp = id => { const b = d.bereiche.find(x => x.id === id); return b && b.t !== null ? `${de(b.t)}°` : '–'; };
-  const hierVon = c => d.bereiche.find(b => b.id === c.bereich);
-  const auf = (hier, c) => hier ? () => p.containerOeffnen(c.bereich) : null;
-  switch (k) {
-    case 'betrag': return laed ? html`<div class="glas-panel block">${LAEDT}</div>` : html`<div class="glas-panel aw-betrag"><div><small>KOSTEN · ${wann}</small><b>${eur}</b>
-          <span>${zahl(S.kwh) ? de(S.kwh, 0) : '–'} kWh ${zahl((S.veraenderung || {}).kwh) ? html`${awDelta(S.veraenderung.kwh)} <span class="leise">zu ${awVgl(p, z)}</span>` : nothing}</span></div>
-        <div class="aw-betrag-r"><div><small>GESPART DURCH AUTOMATIK</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b>${oa && oa.hinweis ? html`<span class="hp-grob">${oa.hinweis}</span>` : nothing}</div>
-          <div><small>HOCHRECHNUNG HEIZPERIODE</small><b>${h && zahl(h.mit_eur) ? `≈ ${de(h.mit_eur, 0)} €` : '–'}</b></div></div></div>`;
-    case 'rangliste': if (gr.w <= 2) return html`<div class="glas-panel block aw-klein"><div class="block-kopf"><b>Wer verbraucht was</b><span class="leise">Top 3</span></div>
-          ${laed ? LAEDT : !rang.length ? html`<div class="leer">Noch kein Verbrauch</div>` : rang.slice(0, 3).map((c, i) => { const hier = hierVon(c);
-            return html`<button class="aw-rang aw-rang-z" data-id=${hier ? c.bereich : nothing} ?disabled=${!hier} @click=${auf(hier, c)}><span><em>${i + 1}</em> ${c.name}</span><i style="width:${(c.kwh || 0) / max * 100}%;background:${farbeVon(hier)}"></i><em>${de(c.kwh, 0)} kWh · ${de(c.eur, 2)} €</em></button>`; })}</div>`;
-      return html`<div class="glas-panel block"><div class="block-kopf"><b>Wer verbraucht was</b><span class="leise">antippen öffnet den Container</span></div>
-        ${laed ? LAEDT : !rang.length ? html`<div class="leer">Noch kein Verbrauch in diesem Zeitraum</div>` : html`<div class="aw-tab-kopf"><span></span><span>kWh</span><span>€</span><span>Heizzeit</span><span>kWh/h</span><span>kWh/m²</span><span>jetzt</span></div>
-        ${rang.map((c, i) => { const hier = hierVon(c);
-          return html`<button class="aw-tab-zeile" data-id=${hier ? c.bereich : nothing} ?disabled=${!hier} @click=${auf(hier, c)}><span class="aw-tab-name"><span><em>${i + 1}</em>${c.name}</span>${p.s.awScope === 'alle' ? html`<small>${c.baustelle || ''}</small>` : nothing}
-            <i style="width:${(c.kwh || 0) / max * 100}%;background:${farbeVon(hier)}"></i></span><b>${de(c.kwh, 0)}</b><span>${de(c.eur, 2)}</span><span>${de(c.heizzeit, 1)} h</span><span>${zahl(c.kwh_h) ? de(c.kwh_h, 2) : '–'}</span><span>${zahl(c.kwh_m2) ? de(c.kwh_m2, 2) : '–'}</span><span>${hier ? temp(c.bereich) : '–'}</span></button>`; })}`}</div>`;
-    case 'erkenntnisse': { const E = erkenntnisse(p, A, z);
-      return laed ? html`<div class="glas-panel block">${LAEDT}</div>` : !E.length ? html`<div class="glas-panel block"><div class="block-kopf"><b>Was fällt auf</b></div><div class="leer">Noch nichts Auffälliges</div></div>`
-        : html`<div class="aw-karten">${E.map(([i, t, x, kk]) => html`<button class="glas-panel aw-karte" data-k=${kk} @click=${() => p.awDetail(kk)}><span>${i}</span><b>${t}</b><small>${x}</small></button>`)}</div>`; }
-    case 'k-kosten': return kachel('abrechnung', html`<small>KOSTEN · ${wann}</small><b>${eur}</b><span>${zahl(S.kwh) ? de(S.kwh, 0) : '–'} kWh ${awDelta((S.veraenderung || {}).kwh)}</span>`);
-    case 'k-gespart': return kachel('ohne', html`<small>GESPART</small><b class="gruen-t">${oa ? `${de(oa.gespart_eur, 0)} €` : '–'}</b><span>${oa ? `${de(oa.prozent, 0)} % durch Automatik` : 'noch keine Werte'}</span>${oa && oa.hinweis ? html`<span class="hp-grob">${oa.hinweis}</span>` : nothing}`);
-    case 'k-hoch': return kachel('hochrechnung', html`<small>HOCHRECHNUNG</small><b>${h && zahl(h.mit_eur) ? `${de(h.mit_eur, 0)} €` : '–'}</b><span>bis Ende Heizperiode</span>`);
-    case 'k-wer': { const W = rang.slice(0, 4);
-      return kachel('geraete', html`<small>WER VERBRAUCHT</small>${W.length ? W.map(c => html`<div class="aw-rang"><span>${c.name}</span><i style="width:${(c.kwh || 0) / max * 100}%;background:${farbeVon(hierVon(c))}"></i><em>${de(c.kwh, 0)} kWh</em></div>`) : html`<span>–</span>`}`); }
-    case 'k-firmen': { const ab = p.abDaten(z, undefined, p.d, vs), F = (ab && ab.firmen) || [];
-      return kachel('abrechnung', html`<small>FIRMEN</small>${F.length ? F.map(f => html`<div class="aw-zeile"><span>${f.firma}</span><b>${de(f.eur ?? (f.kwh || 0) * preis, 2)} €</b></div>`) : html`<span>–</span>`}`); }
-    case 'k-wetter': { const g = A && A.wetter && A.wetter.gerade; return kachel('wetter', html`<small>WETTER</small><b>${g && g.k < 0 ? `+${de(-g.k, 1)}` : '–'}</b><span>kWh je Grad kälter</span>`); }
-    case 'k-oel': { const w = A && A.typ && A.typ.weniger; return kachel('vergleich', html`<small>ÖLRADIATOR</small><b>${zahl(w) ? `${w > 0 ? '−' : '+'}${de(Math.abs(w), 0)} %` : '–'}</b><span>gegenüber Konvektor</span>`); }
-    case 'k-temp': { const C = d.bereiche.filter(b => !b.pumpe && b.t !== null).slice(0, 4);
-      return kachel('temperaturen', html`<small>TEMPERATUREN JETZT</small>${C.length ? C.map(b => html`<div class="aw-zeile"><span>${b.name}</span><b>${de(b.t)} °C</b></div>`) : html`<span>kein Fühler</span>`}`); }
-    case 'links': return html`<div class="glas-panel liste">${[['abrechnung', '💶 Abrechnung nach Firma'], ['geraete', '♨ Je Gerät'], ['temperaturen', '🌡 Temperaturen'], ['wetter', '🌦 Energiesignatur'], ['vergleich', '⚖ Ölradiator oder Konvektor'], ['hochrechnung', '📅 Heizperiode · Hochrechnung']]
-      .filter(([kk]) => B[kk]).map(([kk, t]) => html`<button class="zeile" data-k=${kk} @click=${() => p.awDetail(kk)}><span>${t}</span><span class="chev">›</span></button>`)}</div>`;
-    case 'verlauf': return diagramm(p, z, gr);   // FE-0006: füllt die Kachel, ohne eigene Zeitraum-Leiste
-    case 'wetter': return gr.w <= 1 ? stueck(p, 'k-wetter', B, A, z) : B.wetter;
-    default: return B[k] || '';
-  }
+/* ---- M13/M14: feste Abschnitte ---- */
+export const AW_ABSCHNITTE = [['verbrauch', '⚡ Verbrauch & Kosten', 'Verbrauch & Kosten'], ['ersparnis', '🌱 Ersparnis', 'Ersparnis'],
+  ['heizperiode', '🌡 Heizperiode & Wetter', 'Heizperiode & Wetter'], ['abrechnung', '🧾 Abrechnung & Export', 'Abrechnung & Export'], ['geraete', '🔌 Geräte & Pumpen', 'Geräte & Pumpen']];
+const HERKUNFT = { verbrauch: 'Kosten · Kennzahlen · Verbrauch & Wetter · Was fällt auf · Wer verbraucht was', ersparnis: 'Gespart durch die Automatik · ohne Automatik',
+  heizperiode: 'Heizperiode (Hochrechnung) · Signatur · Temperaturen', abrechnung: 'Abrechnung nach Firma · alle CSV · Baustelle seit Beginn', geraete: 'Je Gerät · Ölradiator oder Konvektor' };
+export const AW_ZEITRAEUME = [['Tag', 'Tag'], ['Woche', 'Woche'], ['Monat', 'Monat'], ['Jahr', 'Jahr'], ['Heizperiode', 'Heizperiode'], ['Gesamt', 'seit Beginn']];
+const VERGLEICHE = [['', 'kein Vergleich'], ['vorperiode', 'Vorperiode'], ['vorjahr', 'Vorjahr'], ['ohne', 'ohne Automatik']];
+/* Reihenfolge und ausgeblendete Abschnitte (Integration: aw_reihe, aw_aus); unbekannte fallen weg, fehlende kommen hinten dazu */
+export function awReihe(p) {
+  const alle = AW_ABSCHNITTE.map(x => x[0]), r = (p.d && Array.isArray(p.d.e.aw_reihe) ? p.d.e.aw_reihe : []).filter(k => alle.includes(k));
+  return [...r, ...alle.filter(k => !r.includes(k))];
+}
+const awAus = p => (p.d && Array.isArray(p.d.e.aw_aus) ? p.d.e.aw_aus : []);
+const vglArt = p => { const v = p.s.aw.vergleich ?? 'vorperiode'; return p.s.aw.zeitraum === 'Gesamt' && v !== 'ohne' ? '' : v; };   // seit Beginn: nur „ohne Automatik“
+/* Text des Vergleichs aus der Antwort der Integration (welcher Zeitraum) – für die Pfeile */
+function vglText(p, A) {
+  const v = A && A.vergleich, z = v && v.zeitraum;
+  if (!v || !vglArt(p)) return '';
+  if (v.art === 'ohne') return 'ohne Automatik';
+  return z ? p.zrText(z.art, 0, z) : '';
+}
+/* Text des gewählten Zeitraums; Heizperiode und „seit Beginn“ aus der Antwort der Integration (Grenzen rechnet sie) */
+const zrTextAw = (p, A, z, v) => ((z === 'Heizperiode' || z === 'Gesamt') && A && A.zeitraum && A.zeitraum.von ? p.zrText(z, v, A.zeitraum) : p.zrText(z, v));
+const delta = (dl, text, gutWennWeniger = true) => !zahl(dl) ? nothing : html`<em class="aw-delta ${dl > 0 ? 'mehr' : 'weniger'} ${(dl < 0) === gutWennWeniger ? 'gut' : ''}">${dl > 0 ? '▲' : '▼'} ${Math.abs(dl)} %${text ? html` <span class="leise">zu ${text}</span>` : nothing}</em>`;
+const kopfAbschnitt = (p, k, t, eigen, A) => html`<span class="aw-anker" data-aw-ab=${k}></span><div class="aw-ab-kopf"><h3>${t}</h3>${eigen
+  ? html`<span class="aw-eigen" title="folgt nicht der Zeitraumleiste">⏱ ${eigen}</span>` : html`<span class="leise">${zrTextAw(p, A, p.s.aw.zeitraum, p.zrV('aw'))}${p.s.aw.filter ? ` · ${p.bereichName(p.s.aw.filter)}` : ''}</span>`}</div>`;
+/* zu einem Abschnitt springen; ist er per Anordnung aus, zeigt die Einblendung „aw-detail“ den Inhalt (`detail`) */
+const springe = (p, k, detail) => { const el = p.renderRoot && p.renderRoot.querySelector(`[data-aw-ab="${k}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); else if (detail) p.awDetail(detail); };
+/* „Was fällt auf“ → der Abschnitt, in dem es steht */
+const ZU_ABSCHNITT = { ohne: 'ersparnis', geraete: 'verbrauch', vergleich: 'geraete', wetter: 'heizperiode', verlauf: 'verbrauch' };
+
+/* „Wer verbraucht was“: Rangliste der Integration, antippen filtert auf den Container */
+function rangListe(p, A) {
+  const rang = (A && A.rangliste) || [], max = Math.max(1, ...rang.map(c => c.kwh || 0));
+  if (!A) return LAEDT;
+  return !rang.length ? html`<div class="leer">Noch kein Verbrauch in diesem Zeitraum</div>` : html`<div class="aw-rang-liste"><div class="gruppe">Wer verbraucht was${p.s.awScope === 'alle' ? '' : ' · antippen filtert'}</div>
+      ${rang.map((c, i) => { const hier = p.d.bereiche.find(b => b.id === c.bereich);
+        return html`<button class="zeile aw-rz" data-id=${c.bereich} ?disabled=${!hier} @click=${() => { if (p.s.sheet) p.schliessen(); p.awFilter(c.bereich); }}><span><em>${i + 1}</em> ${c.name}${p.s.awScope === 'alle' ? html` <small class="leise">${c.baustelle || ''}</small>` : nothing}</span>
+          <span class="aw-rb"><i style="width:${(c.kwh || 0) / max * 100}%;background:${farbeVon(hier)}"></i></span><b>${de(c.kwh, 0)} kWh</b><span class="leise">${de(c.eur, 2)} € · ${zahl(c.kwh_h) ? `${de(c.kwh_h, 2)} kWh/h` : '–'}</span></button>`; })}</div>`;
 }
 
-/* Kopf: Layout, Anpassen, Preis simulieren, CSV, ＋ Kachel (data-aw nur Test-Merkmal) */
+function verbrauchAbschnitt(p, A, z) {
+  const S = (A && A.summen) || {}, mitV = !!vglArt(p), v = mitV ? S.veraenderung || {} : {}, vt = vglText(p, A), filt = p.s.aw.filter;
+  const E = erkenntnisse(p, A, z);
+  return html`<section class="glas-panel aw-ab" data-aw-abschnitt="verbrauch">${kopfAbschnitt(p, 'verbrauch', '⚡ Verbrauch & Kosten', null, A)}
+    ${!A ? LAEDT : html`<div class="aw-kz">
+      <div><span class="leise">Kosten</span><b class="aw-gross">${zahl(S.eur) ? `${de(S.eur, 2)} €` : '–'}</b>${delta(v.eur, vt)}<div class="leise">zum Preis des Tages${A.simuliert ? ' · simuliert' : ''}</div></div>
+      <div><span class="leise">Verbrauch</span><b class="aw-gross">${zahl(S.kwh) ? `${de(S.kwh, 0)} kWh` : '–'}</b>${delta(v.kwh, vt)}</div>
+      <div><span class="leise">Heizzeit</span><b class="aw-gross">${zahl(S.heizzeit) ? `${de(S.heizzeit, 0)} h` : '–'}</b>${delta(v.heizzeit, vglArt(p) === 'ohne' ? '' : vt, false)}</div>
+      ${filt ? nothing : html`<div><span class="leise">Pumpzeit</span><b class="aw-gross">${zahl(S.pumpzeit) ? `${de(S.pumpzeit, 1)} h` : '–'}</b></div>`}</div>`}
+    ${wetterDiagramm(p)}
+    ${A && E.length ? html`<div class="aw-erk"><div class="gruppe">Was fällt auf</div>${E.map(([i, t, x, kk]) => html`<button class="zeile aw-karte" data-k=${kk} @click=${() => springe(p, ZU_ABSCHNITT[kk] || 'verbrauch', kk)}><span class="aw-fic">${i}</span><div><b>${t}</b><div class="leise">${x}</div></div></button>`)}</div>` : nothing}
+    ${filt || !A ? nothing : rangListe(p, A)}
+  </section>`;
+}
+
+function ersparnisAbschnitt(p, A) {
+  const S = (A && A.summen) || {}, oa = S.ohne_automatik, g = A && A.gespart_reihen, filt = p.s.aw.filter, h = A && A.hochrechnung, bl = h && h.baseline;
+  const reihe = g ? (g.gespart_eur || []) : [], hi = Math.max(0, ...reihe.map(x => x || 0)) || 1;
+  return html`<section class="glas-panel aw-ab" data-aw-abschnitt="ersparnis">${kopfAbschnitt(p, 'ersparnis', '🌱 Ersparnis', null, A)}
+    ${!A ? LAEDT : filt ? html`<div class="leer">„Ohne Automatik“ rechnet die Integration für die ganze Baustelle – Filter aufheben, um die Ersparnis zu sehen.</div>`
+      : !oa ? html`<div class="leer">Noch keine Werte</div>` : html`<div class="aw-kz">
+        <div><span class="leise">gespart durch die Automatik</span><b class="aw-gross gruen-t">${de(oa.gespart_eur, 2)} €</b><div class="leise">${de(oa.prozent, 0)} % weniger als ohne Automatik</div></div>
+        <div><span class="leise">mit Automatik</span><b class="aw-gross">${de(S.eur, 0)} €</b></div><div><span class="leise">ohne (24/7)</span><b class="aw-gross">${de(oa.ohne_eur, 0)} €</b></div></div>
+      ${reihe.length ? html`<div class="aw-balken" title="gespart je ${{ hour: 'Stunde', day: 'Tag', month: 'Monat' }[A.zeitraum && A.zeitraum.periode] || 'Zeitschritt'} (€)">${reihe.map((x, i) => html`<i style="height:${Math.max(0, (x || 0) / hi * 100)}%" title="${((A.zeitraum || {}).labels || [])[i] ?? i + 1} · ${de(x || 0, 2)} €"></i>`)}</div>` : nothing}
+      <div class="leise">So rechnet „ohne Automatik“: jeder Heizkörper mit seiner gemessenen Ø-Leistung im Betrieb rund um die Uhr seit Beginn der Baustelle; gespart = ohne Automatik − tatsächlich verbraucht, mal Strompreis des Tages.${oa.hinweis ? ` ⚠ ${oa.hinweis}` : ''}</div>`}
+    <div class="aw-zeile2"><span class="leise">${bl && zahl(bl.laeufe) ? `Baseline-Läufe: ${bl.laeufe}` : 'Baseline-Läufe belegen „ohne Automatik“ mit Messungen'}</span><button class="rv-link" data-k="aw-baseline" @click=${() => zuGrundlagen(p)}>Baseline einstellen ›</button></div>
+  </section>`;
+}
+
+function heizperiodeAbschnitt(p, A) {
+  const alle = p.s.awScope === 'alle';
+  return html`<section class="glas-panel aw-ab" data-aw-abschnitt="heizperiode">${kopfAbschnitt(p, 'heizperiode', '🌡 Heizperiode & Wetter', 'ganze Heizperiode')}
+    ${alle ? html`<div class="leer">Nur für eine Baustelle – „Diese Baustelle“ wählen.</div>` : html`<div class="aw-hp-voll">${heizperiodeVorlage(p, A)}</div>${temperaturen(p)}`}
+  </section>`;
+}
+
+function abrechnungAbschnitt(p, z) {
+  return html`<section class="glas-panel aw-ab" data-aw-abschnitt="abrechnung">${kopfAbschnitt(p, 'abrechnung', '🧾 Abrechnung & Export')}
+    ${abrechnung(p, z)}
+    <div class="aw-csv"><span class="leise">Alle Exporte an einer Stelle:</span><button class="glas-panel chip" data-aw="csv-firma" @click=${() => p.csv('firma')}>⇩ Abrechnung je Firma</button>
+      <button class="glas-panel chip" data-aw="csv" @click=${() => p.csv()}>⇩ Verbrauch je Zeitschritt</button></div>
+  </section>`;
+}
+
+function geraeteAbschnitt(p, A, z) {
+  const alle = p.s.awScope === 'alle';
+  return html`<section class="glas-panel aw-ab" data-aw-abschnitt="geraete">${kopfAbschnitt(p, 'geraete', '🔌 Geräte & Pumpen')}
+    ${alle ? html`<div class="leer">Nur für eine Baustelle – „Diese Baustelle“ wählen.</div>` : html`${geraeteBlock(p, z, A)}${vergleichBlock(p, A, z, p.zrV('aw'))}`}
+  </section>`;
+}
+
+/* Kopf: Diese/Alle, ✎ Anordnung (Einblendung im Kopf), 💶 Preis */
 function kopf(p, alle) {
-  const S = p.s, layout = S.awLayout, bearb = S.awBearb;
-  return kopfVorlage('Auswertung', alle ? 'ALLE LAUFENDEN BAUSTELLEN' : p.d.titel, html`<span class="aw-knoepfe"><button class="glas-panel chip ${layout ? 'amber' : ''}" data-aw="layout" @click=${() => p.awLayoutUmschalten()}>${layout ? '✓ Fertig' : '✥ Layout'}</button>
-        <button class="glas-panel chip ${bearb ? 'amber' : ''}" data-aw="bearb" @click=${() => p.awBearbUmschalten()}>${bearb ? '✓ Fertig' : '✎ Anpassen'}</button><button class="glas-panel chip ${S.awSim ? 'sp-chip-sim' : ''}" data-aw="sim" @click=${() => p.simUmschalten()}>💶 ${S.awSim ? `simuliert ${de(p.simPreis(), 2)} €` : 'Preis: tatsächlich'}</button><button class="glas-panel chip" data-aw="csv" @click=${() => p.csv()}>⇩ CSV</button><button class="glas-panel chip kk-plus" data-aw="kk-plus" @click=${() => p.kkPlus('aw')}>＋ Kachel</button></span>`);
+  const S = p.s, an = !!S.aw.anord, L = awReihe(p), aus = awAus(p);
+  return html`${kopfVorlage('Auswertung', alle ? 'ALLE LAUFENDEN BAUSTELLEN' : p.d.titel, html`<span class="aw-knoepfe">
+      <span class="seg glas-panel klein">${[['diese', 'Diese Baustelle'], ['alle', `Alle laufenden (${p.laufende().length})`]].map(([k, t]) => html`<button data-v=${k} data-aw-scope=${k} class=${(S.awScope || 'diese') === k ? 'on' : ''} @click=${() => p.awScopeWahl(k)}>${t}</button>`)}</span>
+      <button class="glas-panel chip ${an ? 'amber' : ''}" data-aw="anordnung" @click=${() => p.awAnordnung()}>${an ? '✓ Fertig' : '✎ Anordnung'}</button>
+      <button class="glas-panel chip ${S.awSim ? 'sp-chip-sim' : ''}" data-aw="sim" @click=${() => p.simUmschalten()}>💶 ${S.awSim ? `simuliert ${de(p.simPreis(), 2)} €` : 'Preis: tatsächlich'}</button></span>`)}
+    ${an ? html`<div class="glas-panel block aw-anord"><div class="gruppe">Abschnitte · gespeichert in der Integration, gleich auf Handy und PC</div>
+      ${L.map((k, i) => html`<div class="zeile ${aus.includes(k) ? 'aus' : ''}" data-ab=${k}>${schalterVorlage(!aus.includes(k), () => p.awAbschnittAn(k), 'vor-ort')}
+        <div class="aw-zl"><b>${AW_ABSCHNITTE.find(x => x[0] === k)[2]}</b><div class="leise">${HERKUNFT[k]}</div></div>
+        <button class="glas-panel chip" ?disabled=${!i} aria-label="nach oben" @click=${() => p.awAbschnittSchieben(k, -1)}>↑</button><button class="glas-panel chip" ?disabled=${i === L.length - 1} aria-label="nach unten" @click=${() => p.awAbschnittSchieben(k, 1)}>↓</button></div>`)}
+      <div class="aw-knoepfe-u"><button class="knopf" data-aw="standard" @click=${() => p.awAnordnungStandard()}>↺ Standard</button><button class="knopf amber" @click=${() => p.awAnordnung()}>Fertig</button></div></div>` : nothing}`;
 }
 
-/* Leiste: Band „Simuliert“, Zeitraum, Scope, ‹ Zeitraum › */
-function leiste(p, z, alle) {
-  const S = p.s;
-  return html`${S.awSim ? html`<div class="sp-band">🧮 Simuliert: alle € dieser Auswertung mit <span class="sp-sim"><button class="glas-panel chip" data-d="-0.01" @click=${() => p.spSim(-0.01)}>−</button><b>${de(p.simPreis(), 2)} €/kWh</b><button class="glas-panel chip" data-d="0.01" @click=${() => p.spSim(0.01)}>+</button></span> <button class="rv-link" data-aw="sim-zurueck" @click=${() => p.simUmschalten()}>zurück auf tatsächlich</button></div>` : nothing}<div class="aw-leiste"><div class="seg glas-panel">${['Tag', 'Woche', 'Monat', 'Jahr'].map(t => html`<button data-v=${t} class=${z === t ? 'on' : ''} @click=${() => p.zeitraumWahl('aw', t)}>${t}</button>`)}</div>
-      <div class="seg glas-panel">${[['diese', 'Diese Baustelle'], ['alle', `Alle laufenden (${p.laufende().length})`]].map(([k, t]) => html`<button data-v=${k} class=${(S.awScope || 'diese') === k ? 'on' : ''} @click=${() => p.awScopeWahl(k)}>${t}</button>`)}</div></div>
-      ${zeitraumVorlage(p, 'aw', z, p.zrGrenze(alle))}`;
+/* Zeitraumleiste: Simuliert-Band, Zeitraum, ‹ › (Tag … Jahr mit Kalender, Heizperiode blättern, seit Beginn fest), Vergleich, Filter */
+function leiste(p, A, z, alle) {
+  const S = p.s, aw = S.aw, filt = aw.filter, vgl = vglArt(p), v = p.zrV('aw');
+  const nav = z === 'Gesamt' ? html`<div class="zr-zeile"><div class="zr-nav glas-panel"><span class="zr-mitte"><b>${zrTextAw(p, A, 'Gesamt', 0)}</b></span></div></div>`
+    : z === 'Heizperiode' ? html`<div class="zr-zeile" data-ziel="aw"><div class="zr-nav glas-panel"><button class="zr-pf" ?disabled=${v >= p.zrMax('Heizperiode', p.zrGrenze(alle))} aria-label="früher" @click=${() => p.zrSchritt('aw', p.zrMax('Heizperiode', p.zrGrenze(alle)), 1)}>‹</button>
+        <span class="zr-mitte"><b>${zrTextAw(p, A, 'Heizperiode', v)}</b></span><button class="zr-pf" ?disabled=${v <= 0} aria-label="später" @click=${() => p.zrSchritt('aw', 99, -1)}>›</button></div></div>`
+    : zeitraumVorlage(p, 'aw', z, p.zrGrenze(alle));
+  return html`${S.awSim ? html`<div class="sp-band">🧮 Simuliert: alle € dieser Auswertung mit <span class="sp-sim"><button class="glas-panel chip" data-d="-0.01" @click=${() => p.spSim(-0.01)}>−</button><b>${de(p.simPreis(), 2)} €/kWh</b><button class="glas-panel chip" data-d="0.01" @click=${() => p.spSim(0.01)}>+</button></span> <button class="rv-link" data-aw="sim-zurueck" @click=${() => p.simUmschalten()}>zurück auf tatsächlich</button></div>` : nothing}
+    <div class="glas-panel aw-leiste aw-zrl ${p.narrow ? '' : 'klebt'}" data-aw-ab-leiste>
+      <div class="seg klein">${AW_ZEITRAEUME.map(([k, t]) => html`<button data-v=${k} class=${z === k ? 'on' : ''} @click=${() => p.zeitraumWahl('aw', k)}>${t}</button>`)}</div>
+      ${nav}
+      <label class="aw-vg">vergleichen mit <select data-aw="vergleich" @change=${e => p.awVergleich(e.target.value)}>${VERGLEICHE.filter(([k]) => !(z === 'Gesamt' && k !== '' && k !== 'ohne')).map(([k, t]) => html`<option value=${k} ?selected=${vgl === k}>${t}</option>`)}</select></label>
+      ${filt ? html`<button class="glas-panel chip aw-filter" data-aw="filter-weg" @click=${() => p.awFilter(null)}>Container: ${p.bereichName(filt)} ✕</button>` : nothing}
+      ${A && vgl ? html`<span class="leise aw-vg-t">Vergleich: ${vglText(p, A) || 'keiner'}${vgl !== 'ohne' ? ' – graue Balken im Diagramm' : ''}</span>` : nothing}</div>
+    <div class="aw-sprung">${awReihe(p).filter(k => !awAus(p).includes(k)).map(k => html`<button class="glas-panel chip" data-sprung=${k} @click=${() => springe(p, k)}>${AW_ABSCHNITTE.find(x => x[0] === k)[2]}</button>`)}</div>`;
 }
 
-/* Anpassen: Vorlagen, Bausteine ein/aus, Reihenfolge, Größenstufe (gemerkt je Browser über p.awMerken) */
-function anpassen(p, L, B, alle) {
-  return html`<div class="glas-panel block aw-vorlagen"><div class="block-kopf"><b>Vorlage</b><span class="leise">stellt Bausteine, Reihenfolge und Größe ein – danach frei anpassbar</span></div>
-          <div class="aw-vorlagen-k">${Object.entries(AW_VORLAGEN).map(([k, [t]]) => html`<button class="glas-panel chip" data-v=${k} @click=${() => p.awVorlageWahl(k)}>${t}</button>`)}</div></div>
-        <div class="glas-panel liste aw-wahl"><div class="gruppe">Bausteine · ein/aus, Reihenfolge, Größe (nur Stufen, die zum Inhalt passen)</div>
-          ${L.map((x, i) => html`<div class="zeile" data-i=${i}><div><b>${p.kkName(x)}</b><div class="leise">${AW_BAUSTEINE[x.k] ? AW_BAUSTEINE[x.k][1] : `Kachel · ${KK[x.k].text}`}${alle && !B[x.k] && B[x.k] !== undefined ? ' · nur für diese Baustelle' : ''}</div></div>
-            <div class="aw-wahl-k"><button class="glas-panel chip" ?disabled=${!i} aria-label="nach oben" @click=${() => p.awVerschieben(i, i - 1)}>↑</button><button class="glas-panel chip" ?disabled=${i >= L.length - 1} aria-label="nach unten" @click=${() => p.awVerschieben(i, i + 1)}>↓</button>
-              <div class="seg klein">${awStufen(x.k).map(([n, w, h]) => html`<button data-v=${n} class=${x.st === n ? 'on' : ''} title="${w}×${h}" @click=${() => p.awStufeWahl(i, n)}>${n}</button>`)}</div>${schalterVorlage(x.an, () => p.awAn(i), 'vor-ort')}</div></div>`)}
-          <button class="zeile" data-v="misch" @click=${() => p.awVorlageWahl('misch')}><span class="blau">Auf Vorschlag zurücksetzen</span></button></div>`;
+/* Daten der Auswertung für den gewählten Zeitraum, Vergleich und Filter */
+export function awAntwort(p) {
+  const aw = p.s.aw ||= { zeitraum: 'Monat', v: 0 }, z = aw.zeitraum, vs = aw.v || 0;
+  return { A: p.awDaten(z, vs, undefined, p.d, undefined, { vergleich: vglArt(p) || 'vorperiode', bereich: aw.filter || null }), z, vs };
 }
 
 export function auswertungVorlage(p) {
-  const { B, A, z, alle } = bausteine(p), L = p.awAuswahl(), layout = p.s.awLayout;
-  const k = kopf(p, alle), l = leiste(p, z, alle);
-  if (p.s.awBearb) return html`${k}${l}
-      ${anpassen(p, L, B, alle)}`;
-  const an = L.filter(x => x.an), c = p.kkCtx('aw');
-  const alleTeile = an.map((x, i) => ({ x, i, inhalt: KK[x.k] ? kachelVorlage(p, x, i, 'aw', c) : stueck(p, x.k, B, A, z, x) }));
-  const teile = alleTeile.filter(t => t.inhalt);
-  // Alle laufenden: Bausteine nur für eine Baustelle nicht still weglassen, sondern nennen (UI-Bericht, Maßnahme 6)
-  const weg = alle ? alleTeile.filter(t => !t.inhalt && B[t.x.k] === '').map(t => p.kkName(t.x)) : [];
-  return html`${k}${l}
-      ${weg.length ? html`<div class="leise aw-nur-diese">Nur für eine Baustelle, hier ausgeblendet: ${weg.join(', ')} · <button class="rv-link" data-aw="nur-diese" @click=${() => p.awScopeWahl('diese')}>Diese Baustelle zeigen ›</button></div>` : nothing}
-      ${layout ? html`<div class="leise aw-hinweis">Kachel am Griff ⠿ ziehen zum Verschieben · am Griff ◢ ziehen für die Größe (rastet im Raster ein) · 📈 Diagramm der großen Kachel ein/aus · ✕ blendet aus</div>` : nothing}
-      ${teile.length || !layout ? rasterVorlage(p, 'aw', teile, layout) : html`<div class="leer">Nichts ausgewählt – „＋ Kachel“</div>`}`;
+  const { A, z } = awAntwort(p), alle = p.s.awScope === 'alle', aus = awAus(p);
+  const S = { verbrauch: () => verbrauchAbschnitt(p, A, z), ersparnis: () => ersparnisAbschnitt(p, A), heizperiode: () => heizperiodeAbschnitt(p, A),
+    abrechnung: () => abrechnungAbschnitt(p, z), geraete: () => geraeteAbschnitt(p, A, z) };
+  return html`${kopf(p, alle)}${leiste(p, A, z, alle)}${awReihe(p).filter(k => !aus.includes(k)).map(k => S[k]())}`;
 }
 
-/** Einblendung „aw-detail“ (WU-0005): Details einer Kachel/Karte; rechnet die Bausteine selbst (Daten aus dem Zwischenspeicher
-    von p.awDaten/p.abDaten) – vorher über this._awTeile aus dem letzten Zeichnen der Auswertung */
+/** Einblendung „aw-detail“ (Sprung von Kacheln der Übersicht und aus der Baseline): der passende Teil der Auswertung */
 export function awDetailEinblendung(p, s) {
-  const { B, A, z } = bausteine(p), inhalt = stueck(p, s.k, B, A, z);
+  const { A, z } = awAntwort(p), alle = p.s.awScope === 'alle';
+  const T = { abrechnung: () => abrechnung(p, z), geraete: () => (alle ? '' : geraeteBlock(p, z, A)), temperaturen: () => (alle ? '' : temperaturen(p)),
+    wetter: () => (alle ? '' : heizperiodeVorlage(p, A, 'sig', 'hpReiterSig')), hochrechnung: () => (alle ? '' : heizperiodeVorlage(p, A)), vergleich: () => vergleichBlock(p, A, z, p.zrV('aw')),
+    ohne: () => ersparnisAbschnitt(p, A), rangliste: () => html`<div class="glas-panel block">${rangListe(p, A)}</div>`, verlauf: () => html`<div class="glas-panel block">${wetterDiagramm(p)}</div>`, leistung: () => (alle ? '' : leistungHeute(p)) };
+  const inhalt = (T[s.k] || (() => ''))();
   return html`<div class="griff"></div><div class="aw-detail">${inhalt || html`<div class="leer">Nur für diese Baustelle</div>`}</div><button class="knopf leise-k" @click=${() => p.schliessen()}>Schließen</button>`;
 }

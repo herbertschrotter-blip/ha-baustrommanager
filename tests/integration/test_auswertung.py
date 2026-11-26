@@ -250,6 +250,62 @@ async def test_auswertung_befehl(hass: HomeAssistant, baustelle, ws, statistik) 
     assert (await ws("baustelle/auswertung", entry_id="falsch"))["error"]["code"] == "not_found"
 
 
+async def test_auswertung_m13_vergleich_filter_zeitraeume(hass: HomeAssistant, baustelle, ws, statistik) -> None:
+    """M13: Vergleich mit Vorjahr oder „ohne Automatik“, Filter auf einen Container, Heizperiode und „seit Beginn“."""
+    r = (await ws("baustelle/auswertung", zeitraum="Woche"))["result"]
+    assert r["vergleich"]["art"] == "vorperiode" and r["vergleich"]["zeitraum"]["von"] == "2026-09-21" and r["bereich"] is None
+    vj = (await ws("baustelle/auswertung", zeitraum="Monat", vergleich="vorjahr"))["result"]
+    assert vj["vergleich"]["zeitraum"]["von"] == "2025-09-01"
+    assert vj["summen"]["veraenderung"]["kwh"] is None   # vor einem Jahr gab es die Baustelle noch nicht
+    ohne = (await ws("baustelle/auswertung", zeitraum="Woche", vergleich="ohne"))["result"]
+    s = ohne["summen"]
+    assert ohne["vergleich"]["zeitraum"] is None and s["vorher"]["kwh"] == pytest.approx(s["ohne"])
+    assert s["veraenderung"]["kwh"] == round((s["kwh"] - s["ohne"]) / s["ohne"] * 100) < 0
+    assert all(e["art"] not in ("mehr", "weniger") for e in ohne["erkenntnisse"])
+    c = (await ws("baustelle/auswertung", zeitraum="Woche", bereich=C2))["result"]
+    assert c["bereich"] == C2 and [x["bereich"] for x in c["rangliste"]] == [C2]
+    assert c["summen"]["kwh"] == pytest.approx(c["rangliste"][0]["kwh"]) and c["summen"]["kwh"] < r["summen"]["kwh"]
+    assert c["summen"]["pumpzeit"] == 0 and c["summen"]["ohne_automatik"] is None and c["gespart_reihen"] is None   # je Container kein „ohne“
+    j = (await ws("baustelle/auswertung", zeitraum="Jahr", bereich=C2))["result"]
+    assert j["gespart_reihen"] is None and j["summen"]["ohne_automatik"] is None   # auch je Monat nicht die ganze Baustelle
+    hp = (await ws("baustelle/auswertung", zeitraum="Heizperiode"))["result"]["zeitraum"]
+    assert (hp["von"], hp["bis"], hp["n"], hp["labels"][0]) == ("2025-10-01", "2026-05-01", 7, "Okt")   # Ende Sept.: die letzte
+    ges = (await ws("baustelle/auswertung", zeitraum="Gesamt"))["result"]
+    assert ges["zeitraum"]["von"] <= "2026-09-01" and ges["zeitraum"]["bis"] == "2026-10-01" and ges["vergleich"]["zeitraum"] is None
+
+
+async def test_verbrauch_wetter_befehl(hass: HomeAssistant, baustelle, ws, statistik) -> None:
+    """M13 „Verbrauch & Wetter“: Zeitschritte je Auflösung mit kWh je Container und außen, Bänder, Vergleich."""
+    r = (await ws("baustelle/verbrauch_wetter", zeitraum="Woche", aufloesung="tag", vergleich="vorperiode"))["result"]
+    assert r["aufloesung"] == "tag" and r["aufloesungen"] == ["stunde", "tag"]
+    ids = [x["id"] for x in r["container"]]
+    assert ids and C2 in ids and r["punkte"]
+    p = r["punkte"][0]
+    assert p["von"] == "2026-09-28" and p["kwh"] == pytest.approx(sum(p["je_container"].values())) and p["aussen"] is not None
+    assert set(p) == {"von", "kwh", "je_container", "aussen", "wetter", "wind", "regen"}
+    assert len(r["vergleich"]) == len(r["punkte"]) and r["vergleich"][0] > 0 and r["vergleich_zeitraum"]["von"] == "2026-09-21"
+    assert set(r["baender"]) == {"zellen", "kalt_band", "warm_band", "kalt_zu_warm", "trueb_mehr_prozent"}
+    assert r["mit_wetter"] is False   # ohne Wetter-Entität: nur Temperatur und kWh
+    h = (await ws("baustelle/verbrauch_wetter", zeitraum="Tag", aufloesung="monat"))["result"]
+    assert h["aufloesung"] == "stunde" and len(h["punkte"]) >= 1 and h["vergleich"] is None   # passt nicht → Vorgabe des Zeitraums
+    assert (await ws("baustelle/verbrauch_wetter", zeitraum="Woche", bereich="gibt-es-nicht"))["error"]["code"] == "not_found"
+    assert (await ws("baustelle/auswertung", zeitraum="Woche", bereich="gibt-es-nicht"))["error"]["code"] == "not_found"
+    nur = (await ws("baustelle/verbrauch_wetter", zeitraum="Woche", bereich=C2))["result"]
+    assert [x["id"] for x in nur["container"]] == [C2] and set(nur["punkte"][0]["je_container"]) == {C2}
+
+
+async def test_anordnung_der_auswertung(hass: HomeAssistant, baustelle, ws) -> None:
+    """M14: Reihenfolge und ausgeblendete Abschnitte speichert die Integration (gleich auf Handy und PC)."""
+    reihe = ["abrechnung", "verbrauch", "ersparnis", "heizperiode", "geraete"]
+    assert (await ws("baustelle/setzen", pfad=["aw_reihe"], wert=reihe))["success"]
+    assert (await ws("baustelle/setzen", pfad=["aw_aus"], wert=["geraete"]))["success"]
+    st = baustelle.runtime_data
+    assert st.e["aw_reihe"] == reihe and st.e["aw_aus"] == ["geraete"]
+    assert not (await ws("baustelle/setzen", pfad=["aw_reihe"], wert=["verbrauch"]))["success"]   # alle Abschnitte genau einmal
+    assert not (await ws("baustelle/setzen", pfad=["aw_aus"], wert=["kacheln"]))["success"]
+    assert (await ws("baustelle/setzen", pfad=["aw_reihe"], wert=None))["success"] and st.e["aw_reihe"] is None   # ↺ Standard
+
+
 async def test_verlauf_auch_ohne_geladene_baustelle(hass: HomeAssistant, baustelle, ws, statistik) -> None:
     """Verlauf und Detailseite: Kennzahlen, kWh je Monat, Verbrauch je Monat und Container mit CSV – auch für eine
     abgeschlossene Baustelle, die nicht geladen ist (aus der Einrichtung)."""

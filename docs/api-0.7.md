@@ -407,7 +407,8 @@ Diagramm-Reihen (Verbrauch je Container, Temperaturen, Leistung) holt die Seite 
 `recorder/statistics_during_period`.
 
 Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle; unbekannt → `not_found`),
-`zeitraum: Tag|Woche|Monat|Jahr` (Standard `Monat`), `versatz` (0 = laufender, 1 = der davor …, höchstens 4000 – Tage bis zum Beginn der Baustelle, FE-0008), `scope: diese|alle`
+`zeitraum: Tag|Woche|Monat|Jahr|Heizperiode|Gesamt` (Standard `Monat`; M13: `Heizperiode` = Monate der Heizperiode der
+Baustelle, im Sommer die letzte, `Gesamt` = seit Beginn der Baustelle, beide je Monat), `versatz` (0 = laufender, 1 = der davor …, höchstens 4000 – Tage bis zum Beginn der Baustelle, FE-0008), `scope: diese|alle`
 (`alle` = alle laufenden Baustellen; Preis der Baustelle `entry_id`). Zeitraum in der Antwort:
 `{"art", "von", "bis" (erster Tag danach), "periode": "hour|day|month", "n", "labels", "monat" (1–12|null), "jahr"}`.
 
@@ -415,6 +416,30 @@ Gemeinsame Felder: `entry_id` (auch abgeschlossene oder nicht geladene Baustelle
 |---|---|---|
 | `baustelle/auswertung` | gemeinsame, `teil: zeitraum\|verlauf` (Standard `zeitraum`) | siehe unten |
 | `baustelle/abrechnung` | gemeinsame | siehe unten |
+| `baustelle/verbrauch_wetter` | gemeinsame, `aufloesung: stunde\|tag\|woche\|monat` (passt sie nicht zum Zeitraum: dessen Vorgabe), `bereich`, `vergleich: vorperiode\|vorjahr\|""` | siehe unten (M13) |
+
+M13 (Mockup `auswertung-neu.html`): `baustelle/auswertung` nimmt zusätzlich `vergleich: vorperiode|vorjahr|ohne`
+(Standard `vorperiode`; `ohne` = gegen „ohne Automatik“ im selben Zeitraum, nur kWh) und `bereich` (nur dieser Container,
+dann `scope: diese`; Pumpzeit und „ohne Automatik“ gibt es je Container nicht). Die Antwort hat dazu
+`"vergleich": {"art", "zeitraum" (oder null)}` und `"bereich"`. Die Anordnung der Abschnitte speichert `baustelle/setzen`
+mit `aw_reihe` (alle fünf Abschnitte `verbrauch|ersparnis|heizperiode|abrechnung|geraete` genau einmal, `null` = Standard)
+und `aw_aus` (ausgeblendete).
+
+`baustelle/verbrauch_wetter` (Diagramm „Verbrauch & Wetter“, rechnet `logik/verbrauch_wetter`):
+
+```json
+{"zeitraum": {}, "aufloesung": "tag", "aufloesungen": ["tag", "woche"], "container": [{"id": "<bid>", "name": "Polier"}], "bereich": null,
+ "punkte": [{"von": "2026-11-23", "kwh": 62.1, "je_container": {"<bid>": 17.4}, "aussen": 2.4, "wetter": "sonne|wolken|trueb|regen|schnee|null",
+             "wind": 12.0, "regen": 0.0}],
+ "vergleich": [55.0, null], "vergleich_zeitraum": {},
+ "baender": {"zellen": [{"band": "unter_m2|m2_2|2_6|ueber_6", "gruppe": "sonnig|trueb|nass", "kwh": 81.5, "anzahl": 3}],
+             "kalt_band": "unter_m2", "warm_band": "ueber_6", "kalt_zu_warm": 2.0, "trueb_mehr_prozent": 12},
+ "mit_wetter": true}
+```
+
+Wetter, Wind und Regen kommen aus `wetter_minute` (ab Aufbau 11, 0.8.201), kWh aus der Statistik der Zähler, außen ohne
+Datenbank aus dem Außensensor. `vergleich` (kWh des Vergleichszeitraums je Zeitschritt, nach der Stelle) nur mit
+`vorperiode`/`vorjahr` und nicht je Stunde.
 
 `baustelle/auswertung`, `teil: zeitraum` (Reiter Auswertung):
 

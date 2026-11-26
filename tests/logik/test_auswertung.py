@@ -571,3 +571,35 @@ def test_erkenntnis_abweichung_von_gleich_gebauten():
          {"bereich": "d", "name": "ohne", "bauart": None}]
     e = erkenntnisse([], ohne=None, gerade={"k": -2.0}, veraenderung_kwh=None, typ_weniger=None, bauart=c)
     assert [(x["art"], x.get("name"), x.get("prozent")) for x in e] == [("bauart", "005", -40), ("wetter", None, None)]
+
+
+def test_zeitraum_heizperiode_und_gesamt():
+    """M13: Heizperiode je Monat (über den Jahreswechsel, im Sommer die letzte) und „seit Beginn“ bis zum laufenden Monat."""
+    hp = a.zeitraum("Heizperiode", date(2026, 11, 26))
+    assert (hp.von, hp.bis, hp.n, hp.labels) == (date(2026, 10, 1), date(2027, 5, 1), 7, ("Okt", "Nov", "Dez", "Jän", "Feb", "Mär", "Apr"))
+    assert hp.index(datetime(2027, 2, 3, 12)) == 4 and hp.index(datetime(2027, 5, 1)) == -1 and hp.label_csv(3) == "Jän 2027"
+    assert hp.monat_erster(6) == date(2027, 4, 1) and a.zeitraum("Heizperiode", date(2026, 11, 26), 1).von == date(2025, 10, 1)
+    assert a.zeitraum("Heizperiode", date(2026, 7, 1)).von == date(2025, 10, 1)   # Sommer: die letzte
+    assert a.zeitraum("Heizperiode", date(2027, 3, 1), heizperiode=(11, 3)).bis == date(2027, 4, 1)
+    assert a.zeitraum("Heizperiode", date(2026, 11, 1), heizperiode=(1, 12)).bis == date(2027, 1, 1)   # ohne Jahreswechsel
+    g = a.zeitraum("Gesamt", date(2027, 1, 15), beginn=date(2026, 9, 10))
+    assert (g.von, g.bis, g.n, g.labels) == (date(2026, 9, 1), date(2027, 2, 1), 5, ("Sep 26", "Okt 26", "Nov 26", "Dez 26", "Jän 27"))
+    assert a.zeitraum("Gesamt", date(2026, 11, 26)).n == 1   # ohne Beginn: der laufende Monat
+    j = a.zeitraum("Jahr", date(2026, 10, 20))
+    assert j.index(datetime(2026, 3, 5)) == 2 and j.label_csv(2) == "Mär 2026" and j.monat_erster(11) == date(2026, 12, 1)
+    assert a.perioden_grenzen(hp, timezone.utc)[-1] == datetime(2027, 5, 1, tzinfo=timezone.utc)
+
+
+def test_vorjahr_und_nur_ein_container():
+    """M13: Vorjahr (gleiche KW, 29. Februar → 28.; seit Beginn ohne) und die Summen nur eines Containers."""
+    assert a.vorjahr_tag(a.zeitraum("Monat", date(2026, 11, 26))) == date(2025, 11, 1)
+    assert a.vorjahr_tag(a.zeitraum("Woche", date(2026, 11, 26))) == date(2025, 11, 24)   # KW 48
+    assert a.vorjahr_tag(a.zeitraum("Woche", date(2027, 1, 1))) == date(2025, 12, 22)   # KW 53 → letzte KW 2025 (52)
+    assert a.vorjahr_tag(a.zeitraum("Tag", date(2028, 2, 29))) == date(2027, 2, 28)
+    assert a.vorjahr_tag(a.zeitraum("Gesamt", date(2026, 11, 26))) is None
+    s = {"kwh": 100.0, "heizzeit": 50.0, "pumpzeit": 3.0, "ohne": 300.0, "mit_je": [1, 2], "ohne_je": [5, 5],
+         "je_container": [{"bereich": "a", "kwh": 60.0, "heizzeit": 30.0}, {"bereich": "b", "kwh": 40.0, "heizzeit": 20.0}]}
+    n = a.nur_bereich(s, "b")
+    assert (n["kwh"], n["heizzeit"], n["pumpzeit"], n["ohne"], n["mit_je"], [c["bereich"] for c in n["je_container"]]) == (40.0, 20.0, 0.0, 0.0, [None, None], ["b"])
+    assert a.zeitraum("Heizperiode", date(2026, 11, 26), 4000).von == date(2, 10, 1)   # weit zurück: kein Absturz
+    assert a.zeitraum("Jahr", date(2026, 11, 26), 4000).jahr == 2

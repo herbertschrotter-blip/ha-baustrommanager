@@ -1,5 +1,17 @@
 [
   {
+    "version": "0.8.202",
+    "datum": "2026-11-26",
+    "punkte": [
+      "Neu gestaltet (UI-Bericht M13/M14, Mockup `mockups/auswertung-neu.html`, abgenommen 26.11.2026): Die **Auswertung** hat eine **Zeitraumleiste** für alles – Tag, Woche, Monat, Jahr, **Heizperiode** und **seit Beginn**, ‹ › zum Blättern, „vergleichen mit“ **Vorperiode, Vorjahr oder ohne Automatik** – und darunter eine Sprungleiste zu **festen Abschnitten**: Verbrauch & Kosten · Ersparnis · Heizperiode & Wetter · Abrechnung & Export · Geräte & Pumpen.",
+      "Neu: Diagramm **Verbrauch & Wetter** – kWh gestapelt je Container, Außentemperatur als Linie mit eigener °C-Achse, Wetter je Zeitschritt, der Vergleich grau dahinter; Balken antippen zeigt kWh, Wetter, außen, Wind und Regen. Zweite Ansicht **nach Temperatur**: Ø Verbrauch unter −2, −2 bis 2, 2 bis 6 und über 6 °C bei sonnig, trüb und Regen/Schnee. Je Stunde, Tag, Woche oder Monat, für die Baustelle (nach Container oder gesamt) oder einen Container.",
+      "Neu: **Filter auf einen Container** – in der Rangliste „Wer verbraucht was“ antippen, ✕ hebt ihn auf.",
+      "Geändert: **Anordnung** (✎) statt Kachel-Raster, Vorlagen 1–5 und Größen S/M/L – nur noch Abschnitte ein/aus und ↑ ↓, gespeichert in der Integration (gleich auf Handy und PC). Die Kacheln der Übersicht bleiben, wie sie sind.",
+      "Geändert: Die Karte **Heizperiode** (Hochrechnung mit und ohne Automatik, Stand heute) steht über die ganze Breite, darunter die Temperaturen; alle CSV stehen unter Abrechnung & Export.",
+      "Die Integration rechnet dafür Heizperiode und „seit Beginn“ je Monat, Vorjahr und „ohne Automatik“ als Vergleich, die Zahlen eines Containers und neu `baustelle/verbrauch_wetter` (Wetter aus der Aufzeichnung ab 0.8.201)."
+    ]
+  },
+  {
     "version": "0.8.201",
     "datum": "2026-11-26",
     "punkte": [

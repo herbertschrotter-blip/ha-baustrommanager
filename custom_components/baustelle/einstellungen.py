@@ -131,6 +131,9 @@ STANDARD: dict[str, Any] = {
     "melden_knopf": True,
     "auswertung_quelle": "datenbank",   # BSM-014: Auswertung aus der eigenen Datenbank; „statistik“ = HA-Langzeitstatistik
     "erklaer": True,          # Erklärtexte „ⓘ“ auf der Seite (0.7.8)
+    # M14: Anordnung der Auswertung – Reihenfolge der Abschnitte (None = Standard) und ausgeblendete, gleich auf Handy und PC
+    "aw_reihe": None,
+    "aw_aus": [],
     "geraete": {},            # je Gerät {"aktiv": False} = inaktiv: Automatik lässt es aus, keine Warnungen (WU-0004);
                               # {"zusatz": True} = Zusatz-Heizkörper (AN-0006)
     # FE-0029: einmalig nachgetragene Zähler (baustelle/zaehler_korrigieren) – Ausgleich für die Statistik (logik/ruecksprung)

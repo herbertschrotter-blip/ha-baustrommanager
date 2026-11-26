@@ -56,6 +56,9 @@ ZAHL = vol.Coerce(float)
 GANZ = vol.Coerce(int)
 
 
+# Abschnitte der Auswertung (M13/M14, Mockup auswertung-neu.html) in der Standard-Reihenfolge
+AW_ABSCHNITTE = ("verbrauch", "ersparnis", "heizperiode", "abrechnung", "geraete")
+
 # Erlaubte Pfade für `baustelle/setzen` mit Prüfschema (api-0.7 §2)
 SETZEN: dict[tuple[str, ...], Any] = {
     ("automatik",): cv.boolean,
@@ -63,6 +66,9 @@ SETZEN: dict[tuple[str, ...], Any] = {
     ("melden_knopf",): cv.boolean,
     ("auswertung_quelle",): vol.In(["datenbank", "statistik"]),   # BSM-014: Rückweg auf die HA-Statistik
     ("erklaer",): cv.boolean,
+    # M14: Anordnung der Auswertung (feste Abschnitte, nur ein/aus und Reihenfolge)
+    ("aw_reihe",): vol.Any(None, vol.All([vol.In(AW_ABSCHNITTE)], vol.Unique(), vol.Length(len(AW_ABSCHNITTE), len(AW_ABSCHNITTE)))),
+    ("aw_aus",): vol.All([vol.In(AW_ABSCHNITTE)], vol.Unique()),
     ("termine_kalender",): vol.Any(None, cv.entity_domain("calendar")),
     ("heizung", "vorheizen_min"): vol.All(GANZ, vol.Range(0, 240)),
     ("heizung", "nachheizen_min"): vol.All(GANZ, vol.Range(0, 240)),
@@ -286,7 +292,7 @@ async def async_panel_anmelden(hass: HomeAssistant, version: str) -> None:
     hass.data[DATA_MELDUNGEN] = Meldungen(hass)
     hass.async_create_task(hass.data[DATA_MELDUNGEN].async_laden(), "baustelle_meldungen_laden")  # lesbare Kopie beim Start
     for befehl in (ws_struktur, ws_setzen, ws_liste, ws_aktion, ws_bericht, ws_protokoll, ws_meldungen, ws_meldung,
-                   ws_auswertung, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_zaehler_korrigieren, ws_verlauf, ws_oeffnungen, ws_notprogramm_pruefen, ws_notprogramm_probe,
+                   ws_auswertung, ws_verbrauch_wetter, ws_abrechnung, ws_ohne, ws_tagesverlauf, ws_prognose_v2, ws_statistik, ws_zaehler_korrigieren, ws_verlauf, ws_oeffnungen, ws_notprogramm_pruefen, ws_notprogramm_probe,
                    *INVENTAR_BEFEHLE, *UMBENENNEN_BEFEHLE, *GERAETE_BEFEHLE, *ASSISTENT_BEFEHLE):
         websocket_api.async_register_command(hass, befehl)
 
@@ -895,6 +901,14 @@ ZEITRAUM: dict[Any, Any] = {
 }
 
 
+def _bereich_da(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any], entry: Any) -> bool:
+    """Filter `bereich` (M13) muss ein Container dieser Baustelle sein; sonst Fehler `not_found`."""
+    if msg.get("bereich") is None or any(b["id"] == msg["bereich"] for b in auswertung.quelle(hass, entry).bereiche):
+        return True
+    connection.send_error(msg["id"], websocket_api.ERR_NOT_FOUND, "Container nicht gefunden")
+    return False
+
+
 def _eintrag(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> Any:
     """Baustelle auch abgeschlossen oder nicht geladen (Verlauf); unbekannt → Fehler `not_found`."""
     entry = hass.config_entries.async_get_entry(msg["entry_id"])
@@ -908,17 +922,37 @@ def _eintrag(hass: HomeAssistant, connection: websocket_api.ActiveConnection, ms
     vol.Required("type"): "baustelle/auswertung", **ZEITRAUM,
     vol.Optional("preis"): vol.All(vol.Coerce(float), vol.Range(0, 10)),   # Preis simulieren (nichts wird gespeichert)
     vol.Optional("teil", default="zeitraum"): vol.In(["zeitraum", "verlauf"]),
+    vol.Optional("vergleich", default="vorperiode"): vol.In(["vorperiode", "vorjahr", "ohne", ""]),   # M13
+    vol.Optional("bereich"): str,   # M13: nur dieser Container
 })
 @websocket_api.async_response
 async def ws_auswertung(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Auswertung eines Zeitraums bzw. Verlauf einer Baustelle – gerechnet von der Integration, die Seite zeigt nur an."""
     if (entry := _eintrag(hass, connection, msg)) is None:
         return
+    if not _bereich_da(hass, connection, msg, entry):
+        return
     if msg["teil"] == "verlauf":
         ergebnis = await auswertung.async_verlauf(hass, auswertung.quelle(hass, entry))
     else:
-        ergebnis = await auswertung.async_auswertung(hass, entry, msg["zeitraum"], msg["versatz"], msg["scope"], msg.get("preis"))
+        ergebnis = await auswertung.async_auswertung(hass, entry, msg["zeitraum"], msg["versatz"], msg["scope"], msg.get("preis"),
+                                                     msg["vergleich"] or "vorperiode", msg.get("bereich"))
     connection.send_result(msg["id"], ergebnis)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "baustelle/verbrauch_wetter", **ZEITRAUM,
+    vol.Optional("aufloesung"): vol.In(["stunde", "tag", "woche", "monat"]),
+    vol.Optional("bereich"): str,
+    vol.Optional("vergleich", default=""): vol.In(["vorperiode", "vorjahr", ""]),
+})
+@websocket_api.async_response
+async def ws_verbrauch_wetter(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """M13 „Verbrauch & Wetter“: kWh je Container, außen, Wetter, Wind und Regen je Zeitschritt, Bänder nach Temperatur."""
+    if (entry := _eintrag(hass, connection, msg)) is None or not _bereich_da(hass, connection, msg, entry):
+        return
+    connection.send_result(msg["id"], await auswertung.async_verbrauch_wetter(
+        hass, entry, msg["zeitraum"], msg["versatz"], msg.get("aufloesung"), msg.get("bereich"), msg["vergleich"]))
 
 
 @websocket_api.websocket_command({
