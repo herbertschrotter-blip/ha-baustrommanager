@@ -23,7 +23,7 @@
    "beginn": "2026-09-01",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.204",
+   "version": "0.8.205",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00",
@@ -2683,7 +2683,18 @@
    "notprogramm": {
     "an": false,
     "geprueft": "2026-09-29T16:20:00+02:00"
-   }
+   },
+   "offen": [
+    {
+     "key": "fuehler:mannschaft",
+     "ic": "🌡",
+     "titel": "Mannschaft hat keinen Temperaturfühler",
+     "text": "Modus „Bei Bedarf“ braucht einen – ohne ihn heizt er bei Bedarf durch, ohne aufs Soll zu achten",
+     "los": "Fühler zuordnen ›",
+     "ziel": "fuehler",
+     "bereich": "mannschaft"
+    }
+   ]
   },
   "geraete_links": {
    "binary_sensor.tuer_magazin": {
@@ -2916,7 +2927,7 @@
    "beginn": "2025-11-03",
    "beginn_auto": false,
    "geladen": true,
-   "version": "0.8.204",
+   "version": "0.8.205",
    "zeitzone": "Europe/Vienna",
    "heute": "2026-09-29",
    "jetzt": "2026-09-29T16:20:00+02:00",

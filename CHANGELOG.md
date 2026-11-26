@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.205] – 2026-11-26
+
+- Neu (UI-Bericht M15, Mockup `mockups/was-fehlt.html`, abgenommen 26.11.2026): Karte **„Was fehlt noch“** ganz unten in
+  der Übersicht. Sie nennt Container im Modus Thermostat oder Bei Bedarf ohne Temperaturfühler, Shellys in Home Assistant,
+  die zu keinem Container gehören, Container mit Namen abseits des Schemas, Heizkörper-Plugs ohne Notprogramm (wenn es an
+  ist) und eine fehlende Wetter-Entität. Jeder Punkt hat einen Knopf dorthin, wo man ihn erledigt (Assistent, Container-Seite
+  › Namen in HA, Einstellungen › Notprogramm, Wetterquelle). Fehlt nichts, gibt es keine Karte.
+
 ## [0.8.204] – 2026-11-26
 
 - Geändert (Mockup `mockups/auswertung-kompakt.html`, Variante B, abgenommen 26.11.2026): Die **Auswertung hat Reiter** –

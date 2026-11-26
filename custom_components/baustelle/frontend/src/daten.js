@@ -109,7 +109,8 @@ export function bauen(r, hass, ersatzZone) {
     bereiche, anschluesse, firmen, zuordnung, arbeitszeiten, ausnahmen: (e0.ausnahmen || []).map(a => ({ datum: a.datum, art: a.art in AUSNAHME ? a.art : 'zeiten', von: a.von || '07:00', bis: a.bis || '16:30', notiz: a.notiz || '' })),
     warnungen, termine, plan, frei, freiName, abschnitte: lz.abschnitte || {}, staffel: lz.staffel || null, heute: Array.isArray(lz.heute) ? lz.heute : [], abweichung: lz.plan_abweichung || {}, trocknen: lz.trocknen || null, regenAz, sollG: lz.soll_gleitend || null, wetter: lz.wetter || {}, heizgrenze: lz.heizgrenze || {},
     status: lz.status || (aktiv ? 'bereit' : 'abgeschlossen'), statusText: lz.status_text || '', jetztBis: lz.jetzt_bis ? lokalZ(lz.jetzt_bis, zone).slice(11, 16) : null,
-    np: lz.notprogramm || null, baseline: lz.baseline || null, protokoll: (lz.protokoll || []).map(p => protokollZeile(p, z, ersatzZone)), zaehler: zl, termineKal: e0.termine_kalender || null, wetterEid,
+    np: lz.notprogramm || null, baseline: lz.baseline || null, offen: Array.isArray(lz.offen) ? lz.offen : [],   // M15: „Was fehlt noch“ (Integration)
+    protokoll: (lz.protokoll || []).map(p => protokollZeile(p, z, ersatzZone)), zaehler: zl, termineKal: e0.termine_kalender || null, wetterEid,
     beginn: bs.beginn || opt.beginn || null, beginnAuto: bs.beginn_auto === true, ende: opt.ende || null,   // Beginn leer = Tag der Anlage (AN-0002)
     hp: [Math.min(12, Math.max(1, parseInt(opt.heizperiode_von, 10) || 10)), Math.min(12, Math.max(1, parseInt(opt.heizperiode_bis, 10) || 4))] };
 }

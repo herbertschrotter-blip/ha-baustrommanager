@@ -1027,6 +1027,33 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     erwarte('nur Funktion Heizung: kein Reiter Pumpen, auch mit Schacht', nav().includes('data-v="heizung"') && !nav().includes('data-v="pumpen"') && panel.s.view === 'uebersicht');
     pruefe('nur Heizung');
     struktur = alt; panel.cache = {}; await panel._laden(); await ruhe(20); }
+  /* M15 (Mockup was-fehlt.html): Karte „Was fehlt noch“ ganz unten in der Übersicht – Punkte und Ziele von der Integration
+     (laufzeit.offen, logik/offen); leer = keine Karte; jeder Knopf führt dorthin, wo man den Punkt erledigt */
+  { const alt = struktur, dobl = () => struktur.find(x => x.baustelle.entry_id === 'dobl');
+    const mitOffen = async offen => { struktur = JSON.parse(JSON.stringify(alt)); dobl().laufzeit.offen = offen; panel.cache = {}; await panel._laden(); await ruhe(20); };
+    const P = [{ key: 'fuehler:polier', ic: '🌡', titel: 'Polier hat keinen Temperaturfühler', text: 'Modus „Thermostat“ braucht einen', los: 'Fühler zuordnen ›', ziel: 'fuehler', bereich: 'polier' },
+      { key: 'zuordnen:dev9', ic: '🔌', titel: 'Shelly Plug S Gen3 gehört zu keinem Container', text: 'neu in HA seit heute 10:42', los: 'Zuordnen ›', ziel: 'zuordnen', device_id: 'dev9', schalter: 'switch.plug9' },
+      { key: 'namen:polier', ic: '🏷', titel: 'Polier: 1 Name weicht ab', text: 'in Home Assistant anders benannt', los: 'Einheitlich benennen ›', ziel: 'namen', bereich: 'polier' },
+      { key: 'notprogramm:g', ic: '🛟', titel: 'Plug hat kein Notprogramm', text: 'kein Shelly Gen2+', los: 'Ansehen ›', ziel: 'notprogramm' },
+      { key: 'wetter', ic: '🌦', titel: 'Keine Wetter-Entität eingestellt', text: 'ohne sie kein Wetter', los: 'Einstellen ›', ziel: 'wetterquelle' }];
+    const los = async k => { await klick({ act: 'tab', v: 'uebersicht' }, 20); panel.s.sheet = null; litEl(`[data-k="offen"] [data-key="${k}"] button`).click(); await ruhe(20); };
+    await mitOffen([]); await klick({ act: 'tab', v: 'uebersicht' }, 20);
+    erwarte('M15: ohne offene Punkte keine Karte', !litEl('[data-k="offen"]'));
+    await mitOffen(P); await klick({ act: 'tab', v: 'uebersicht' }, 20); pruefe('Übersicht Was fehlt noch');
+    const h = ui.innerHTML;
+    erwarte('M15: Karte „Was fehlt noch · 5“ ganz unten (nach den Containern und Kacheln)', !!litEl('[data-k="offen"]') && h.includes('Was fehlt noch · 5')
+      && h.lastIndexOf('data-k="offen"') > h.lastIndexOf('glas-raster') && litEls('[data-k="offen"] .or-fz').length === 5 && h.includes('Shelly Plug S Gen3 gehört zu keinem Container'));
+    await los('fuehler:polier');
+    erwarte('M15: Fühler zuordnen › öffnet den Assistenten für den Container', panel.s.sheet && panel.s.sheet.art === 'geraet-assistent' && panel.s.sheet.bid === 'polier' && panel.s.sheet.vorgabe === true);
+    await los('zuordnen:dev9');
+    erwarte('M15: Zuordnen › öffnet den Assistenten mit dem Shelly gewählt', panel.s.sheet && panel.s.sheet.art === 'geraet-assistent' && panel.s.sheet.dev === 'dev9' && panel.s.sheet.schalter === 'switch.plug9');
+    await los('namen:polier');
+    erwarte('M15: Einheitlich benennen › öffnet die Container-Seite bei „Namen in HA“', panel.s.sheet && panel.s.sheet.art === 'bereich' && panel.s.sheet.tab === 'namen' && panel.s.cid === 'polier');
+    await los('notprogramm:g');
+    erwarte('M15: Ansehen › führt zu Einstellungen › Notprogramm', panel.s.view === 'einst' && panel.s.evGruppe === 'notprogramm');
+    await los('wetter');
+    erwarte('M15: Einstellen › öffnet die Wetterquelle', panel.s.sheet && panel.s.sheet.art === 'wetterquelle');
+    panel.s.sheet = null; struktur = alt; panel.cache = {}; await panel._laden(); await ruhe(20); }
   await klick({ act: 'container', id: 'polier' }, 30);
   erwarte('Container: Modus-Auswahl-Chip in der Gruppe Steuerung statt Automatik-Schalter, Auswahl erst beim Antippen',
     /data-g="Steuerung"[^]*?class="ck-chip modus[^]*?⚙[^]*?▾/.test(ui.innerHTML) && !litEl('.ck-modi') && !ui.innerHTML.includes('Automatik für diesen Container'));

@@ -35,5 +35,15 @@ export function uebersichtVorlage(p) {
       </div>
       <div class="glas-raster">${B.map(karte)}
         <button class="glas-panel glas-k neu nur-admin" @click=${p.nurAdmin(() => p.einblenden('container-neu'))}><span>+</span>Container</button></div>
-      ${bereichVorlage(p)}`;
+      ${bereichVorlage(p)}${offenKarte(p)}`;
+}
+
+/* UI-Bericht M15 (Mockup was-fehlt.html): Karte „Was fehlt noch“ ganz unten. Punkte, Texte und Knöpfe liefert die Integration
+   (laufzeit.offen, logik/offen); die Seite bildet nur `ziel` auf ihre Navigation ab (p.offenLos). Leer = keine Karte. */
+function offenKarte(p) {
+  const L = p.d.offen;
+  if (!L.length) return nothing;
+  return html`<div class="glas-panel or-fehlt" data-k="offen"><div class="or-fehlt-k"><b>Was fehlt noch · ${L.length}</b><span class="leise">prüft die Integration laufend</span></div>
+    ${L.map(x => html`<div class="or-fz" data-key=${x.key}><span class="or-fic">${x.ic}</span><div class="or-zl"><b>${x.titel}</b><div class="leise">${x.text}</div></div>
+      <button class="chip glas-panel nur-admin" @click=${p.nurAdmin(() => p.offenLos(x))}>${x.los}</button></div>`)}</div>`;
 }

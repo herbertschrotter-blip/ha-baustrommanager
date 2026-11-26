@@ -763,6 +763,12 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .aw-ab-kopf h3 { margin: 0; font-size: 17px; } .aw-eigen { font-size: 12px; color: var(--amber); }
 .aw-kz { display: flex; flex-wrap: wrap; gap: 10px 26px; } .aw-kz > div { display: flex; flex-direction: column; min-width: 110px; } .aw-gross { font-size: 22px; }
 .aw-delta.gut { font-weight: 600; }
+.or-fehlt { padding: 12px 16px; margin-top: 14px; }   /* M15: Was fehlt noch (Mockup was-fehlt.html) */
+.or-fehlt-k { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.or-fehlt-k .leise { margin-left: auto; font-size: 11.5px; }
+.or-fz { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--gridc); }
+.or-fic { font-size: 20px; flex: none; } .or-fz .or-zl { min-width: 0; flex: 1; }
+@media (max-width: 520px) { .or-fehlt-k .leise { margin-left: 0; flex-basis: 100%; } .or-fz { flex-wrap: wrap; } .or-fz .chip { margin-left: 30px; } }
 .aw-erk { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; } .aw-erk.schmal { grid-template-columns: 1fr 1fr; }   /* Mockup auswertung-kompakt.html */
 .aw-erk .gruppe { grid-column: 1 / -1; margin: 0; }
 .aw-erk .aw-karte { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; min-height: 0; border: 1px solid var(--gridc); border-radius: 12px; text-align: left; }
@@ -2156,6 +2162,15 @@ class BaustellePanel extends LitElement {
   /* Reiter ⚙: am Handy ein zweites Antippen zeigt wieder die Liste der Gruppen (UI-Bericht Maßnahme 5) */
   navEinst(schonDa) { if (schonDa && this._narrow) this.s.evGruppe = null; return this.gehe('einst'); }
   einstGruppeWahl(k) { this.s.evGruppe = k; this.s.evDev = null; return this.neuZeichnen(true); }
+  /* M15: Knopf eines Punkts aus „Was fehlt noch“ – `ziel` kommt von der Integration (logik/offen), hier nur die Navigation */
+  offenLos(x) {
+    if (x.ziel === 'fuehler') return this.assistentAuf({ bid: x.bereich, vorgabe: true, zurueck: null });
+    if (x.ziel === 'zuordnen') return this.assistentAuf({ dev: x.device_id, schalter: x.schalter || null, zurueck: null });
+    if (x.ziel === 'namen') { this.bereichEinst(x.bereich); return this.csTab('namen'); }
+    if (x.ziel === 'notprogramm') return this.einstGruppe('notprogramm');
+    if (x.ziel === 'wetterquelle') return this.einblenden('wetterquelle');
+    return undefined;
+  }
   bereichEinst(id) { this.s.cid = id; this.s.sheet = { art: 'bereich' }; return this.neuZeichnen(); }
   /* „+ Gerät“ (Einstellungen › Container & Geräte): Container gewählt → „Bearbeiten“ mit einer neuen Gerätezeile */
   geraetNeuIn(id) { return this.d.bereiche.some(x => x.id === id) ? this.assistentAuf({ bid: id, vorgabe: true }) : undefined; }   // UI-Bericht M12: in den Assistenten

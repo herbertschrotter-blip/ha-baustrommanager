@@ -1129,6 +1129,8 @@ function bauen(r5, hass, ersatzZone) {
     jetztBis: lz.jetzt_bis ? lokalZ(lz.jetzt_bis, zone).slice(11, 16) : null,
     np: lz.notprogramm || null,
     baseline: lz.baseline || null,
+    offen: Array.isArray(lz.offen) ? lz.offen : [],
+    // M15: „Was fehlt noch“ (Integration)
     protokoll: (lz.protokoll || []).map((p4) => protokollZeile(p4, z2, ersatzZone)),
     zaehler: zl,
     termineKal: e0.termine_kalender || null,
@@ -5603,7 +5605,14 @@ function uebersichtVorlage(p4) {
       </div>
       <div class="glas-raster">${B2.map(karte)}
         <button class="glas-panel glas-k neu nur-admin" @click=${p4.nurAdmin(() => p4.einblenden("container-neu"))}><span>+</span>Container</button></div>
-      ${bereichVorlage(p4)}`;
+      ${bereichVorlage(p4)}${offenKarte(p4)}`;
+}
+function offenKarte(p4) {
+  const L2 = p4.d.offen;
+  if (!L2.length) return A;
+  return b2`<div class="glas-panel or-fehlt" data-k="offen"><div class="or-fehlt-k"><b>Was fehlt noch · ${L2.length}</b><span class="leise">prüft die Integration laufend</span></div>
+    ${L2.map((x2) => b2`<div class="or-fz" data-key=${x2.key}><span class="or-fic">${x2.ic}</span><div class="or-zl"><b>${x2.titel}</b><div class="leise">${x2.text}</div></div>
+      <button class="chip glas-panel nur-admin" @click=${p4.nurAdmin(() => p4.offenLos(x2))}>${x2.los}</button></div>`)}</div>`;
 }
 
 // src/ansichten/einblendungen-uebersicht.js
@@ -6936,6 +6945,12 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .aw-ab-kopf h3 { margin: 0; font-size: 17px; } .aw-eigen { font-size: 12px; color: var(--amber); }
 .aw-kz { display: flex; flex-wrap: wrap; gap: 10px 26px; } .aw-kz > div { display: flex; flex-direction: column; min-width: 110px; } .aw-gross { font-size: 22px; }
 .aw-delta.gut { font-weight: 600; }
+.or-fehlt { padding: 12px 16px; margin-top: 14px; }   /* M15: Was fehlt noch (Mockup was-fehlt.html) */
+.or-fehlt-k { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.or-fehlt-k .leise { margin-left: auto; font-size: 11.5px; }
+.or-fz { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--gridc); }
+.or-fic { font-size: 20px; flex: none; } .or-fz .or-zl { min-width: 0; flex: 1; }
+@media (max-width: 520px) { .or-fehlt-k .leise { margin-left: 0; flex-basis: 100%; } .or-fz { flex-wrap: wrap; } .or-fz .chip { margin-left: 30px; } }
 .aw-erk { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; } .aw-erk.schmal { grid-template-columns: 1fr 1fr; }   /* Mockup auswertung-kompakt.html */
 .aw-erk .gruppe { grid-column: 1 / -1; margin: 0; }
 .aw-erk .aw-karte { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; min-height: 0; border: 1px solid var(--gridc); border-radius: 12px; text-align: left; }
@@ -7362,7 +7377,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.204";
+var SEITE_VERSION = "0.8.205";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail", "aw-einstellen"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(VERLAUF_DETAIL_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
@@ -9296,6 +9311,18 @@ var BaustellePanel = class extends i4 {
     this.s.evGruppe = k2;
     this.s.evDev = null;
     return this.neuZeichnen(true);
+  }
+  /* M15: Knopf eines Punkts aus „Was fehlt noch“ – `ziel` kommt von der Integration (logik/offen), hier nur die Navigation */
+  offenLos(x2) {
+    if (x2.ziel === "fuehler") return this.assistentAuf({ bid: x2.bereich, vorgabe: true, zurueck: null });
+    if (x2.ziel === "zuordnen") return this.assistentAuf({ dev: x2.device_id, schalter: x2.schalter || null, zurueck: null });
+    if (x2.ziel === "namen") {
+      this.bereichEinst(x2.bereich);
+      return this.csTab("namen");
+    }
+    if (x2.ziel === "notprogramm") return this.einstGruppe("notprogramm");
+    if (x2.ziel === "wetterquelle") return this.einblenden("wetterquelle");
+    return void 0;
   }
   bereichEinst(id) {
     this.s.cid = id;

@@ -588,3 +588,21 @@ async def test_nur_admins_aendern(hass: HomeAssistant, baustelle, ws, shellys, f
     assert (await ws.rufe("baustelle/aktion", aktion="boost", bereich=C1, an=True))["success"]
     assert (await ws.rufe("baustelle/aktion", aktion="jetzt_heizen", minuten=60))["success"]
     assert (await ws.rufe("baustelle/aktion", aktion="warnung_stumm", key="kein_wetter"))["success"]
+
+
+async def test_struktur_offen(hass: HomeAssistant, baustelle, ws) -> None:
+    """M15 (Mockup was-fehlt.html): `laufzeit.offen` – Fühler je Modus, Wetter, nur Container, ohne Heizung keine
+    Heizungs-Punkte, abgeschlossene Baustelle ohne Karte."""
+    async def lz() -> dict:
+        return (await ws.rufe("baustelle/struktur", mit_entry=False))["result"][0]["laufzeit"]
+    assert [p["key"] for p in (await lz())["offen"]] == ["wetter"]   # C1 Thermostat mit Fühler, C2 Zeitplan, Schacht zählt nicht
+    assert (await ws.rufe("baustelle/setzen", pfad=["bereiche", C2, "modus"], wert="bedarf"))["success"]
+    await hass.async_block_till_done()
+    p = (await lz())["offen"]
+    assert [x["key"] for x in p] == [f"fuehler:{C2}", "wetter"] and (p[0]["ziel"], p[0]["bereich"]) == ("fuehler", C2)
+    hass.config_entries.async_update_entry(baustelle, options={**baustelle.options, "heizung": False})   # nur Pumpen
+    await hass.async_block_till_done()
+    assert (await lz())["offen"] == []   # kein Fühler-, kein Wetter-Punkt (nur die Heizung braucht Wetter)
+    hass.config_entries.async_update_entry(baustelle, options={**baustelle.options, "heizung": True, "status": "abgeschlossen"})
+    await hass.async_block_till_done()
+    assert "offen" not in await lz()

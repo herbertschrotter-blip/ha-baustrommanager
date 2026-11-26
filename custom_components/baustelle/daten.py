@@ -13,12 +13,13 @@ from homeassistant.util import dt as dt_util
 
 from .auswertung import beginn_der_baustelle
 from .const import (
-    ART_CONTAINER, CONF_ENERGIE, CONF_FEIERTAG_KALENDER, CONF_LEISTUNG, CONF_REGEN_SENSOR, CONF_STATUS, CONF_TEMP_SENSOR, CONF_WETTER, STATUS_AKTIV,
+    ART_CONTAINER, CONF_ENERGIE, CONF_FEIERTAG_KALENDER, CONF_LEISTUNG, CONF_REGEN_SENSOR, CONF_STATUS, CONF_TEMP_SENSOR, CONF_WETTER, ROLLE_HEIZKOERPER,
+    STATUS_AKTIV,
 )
 from .funktionen import aktive
 from .funktionen.heizung import Heizung
 from .funktionen.pumpen import Pumpen
-from .logik import groesse, symbol as symbol_logik
+from .logik import groesse, offen as offen_logik, symbol as symbol_logik
 from .logik.abrechnung import EIGEN, firma_von
 from .logik import heute as heute_logik
 from .logik.arbeitszeit import Plan, abweichung, gueltige_arbeitszeit, uhrzeit
@@ -292,6 +293,39 @@ def laufzeit(st: Steuerung) -> dict[str, Any]:
         "notprogramm": {"an": np.an, "geprueft": np.geprueft.isoformat(timespec="seconds") if np.geprueft else None}
         if np is not None else None,   # BSM-019
     }
+
+
+def freie_schalter(hass: HomeAssistant) -> list[Any]:
+    """Freie Schalter für „Was fehlt noch“ (M15), einmal je `baustelle/struktur` für alle Baustellen: wie Schritt 1 des
+    Assistenten, dazu ob es ein Shelly ist und ob ein anderer Kanal des Geräts schon auf einer Baustelle steckt.
+    Auswahl (nur Shellys, je Gerät einmal) in logik/offen."""
+    from .inventar_geraete import _belegt, assistent_kandidaten   # erst hier: inventar_geraete lädt die Datenbank-Helfer
+
+    reg = er.async_get(hass)
+    belegte_geraete = {e.device_id for eid in _belegt(hass) if (e := reg.async_get(eid)) is not None and e.device_id}
+    return [offen_logik.FreierSchalter(
+                k["device_id"], k["schalter"], k.get("name") or k.get("modell") or k["schalter"],
+                dt_util.as_local(z) if (z := dt_util.parse_datetime(k.get("seit") or "")) else None,
+                shelly=bool(k.get("shelly")), kanal_belegt=k["device_id"] in belegte_geraete)
+            for k in assistent_kandidaten(hass, {}) if k.get("schalter")]
+
+
+def offen(st: Steuerung, namen: dict[str, dict[str, Any]] | None, freie: list[Any]) -> list[dict[str, Any]]:
+    """Karte „Was fehlt noch“ (UI-Bericht M15, `laufzeit.offen`; Regeln in logik/offen). `namen`: Stand der Namen je
+    Container aus dem Inventar (wie `bereiche[].namen`), None ohne Datenbank; `freie`: `freie_schalter`."""
+    from .notprogramm import shelly_host
+
+    heizung = Heizung.von(st)
+    hz = heizung.aktiv()
+    container = [offen_logik.Container(b.id, b.name, heizung.modus(b.id) if hz else None, bool(b.fuehler),
+                                       ((namen or {}).get(b.id) or {}).get("abweichend"))
+                 for b in st.bereiche.values() if b.art == ART_CONTAINER]
+    np = st.hass.data.get(DATA_NOTPROGRAMM, {}).get(st.entry.entry_id)
+    plugs = [offen_logik.Plug(g.id, g.name) for g in st.geraete.values()
+             if g.rolle == ROLLE_HEIZKOERPER and shelly_host(st.hass, g.schalter) is None]
+    return offen_logik.offen(container, freie, plugs, heizung=hz, notprogramm_an=bool(np is not None and np.an),
+                             wetter=bool(st.entry.options.get(CONF_WETTER)),
+                             braucht_wetter=any(f.braucht_wetter and f.aktiv() for f in st.funktionen), jetzt=dt_util.now())
 
 
 def struktur(hass: HomeAssistant, entry: ConfigEntry, version: str = "") -> dict[str, Any]:

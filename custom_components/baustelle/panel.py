@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import logging
 import os
 
 from datetime import date, datetime, timedelta
@@ -21,8 +22,8 @@ from homeassistant.util import dt as dt_util
 
 from .abgleich import async_abgleich
 from . import auswertung
-from .const import ART_CONTAINER, CONF_FUEHLER, DOMAIN, EVENT_PROTOKOLL
-from .daten import struktur
+from .const import ART_CONTAINER, CONF_FUEHLER, DOMAIN, EVENT_PROTOKOLL, STATUS_AKTIV
+from .daten import freie_schalter, offen, struktur
 from .db import DATA_DB, async_spiegeln, einstellung_merken, ereignis_merken
 from .einstellungen import ART_TEXT, EIGEN, TICKET_OFFEN, TICKET_STATUS, Meldungen
 from .funktionen.heizung import Heizung
@@ -39,6 +40,8 @@ from .logik import hochrechnung as hochrechnung_logik, oeffnungen as oeffnungen_
 from .logik.rechte import AKTIONEN_ALLE, darf, rechte
 from .notprogramm import DATA_NOTPROGRAMM
 from .logik.warnungen import Art
+
+_LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .steuerung import Steuerung
@@ -345,6 +348,15 @@ async def ws_struktur(hass: HomeAssistant, connection: websocket_api.ActiveConne
     if namen is not None:
         for b in (b for x in aus for b in x["bereiche"] if b["art"] == ART_CONTAINER):
             b["namen"] = namen.get(b["id"], {"container_id": None, "container": None, "abweichend": None})
+    freie: list[Any] | None = None   # M15: Karte „Was fehlt noch“ (ganz unten in der Übersicht); fällt nur die Karte aus
+    for entry, x in zip(hass.config_entries.async_entries(DOMAIN), aus, strict=True):
+        if (st := getattr(entry, "runtime_data", None)) is not None and x["laufzeit"] and x["baustelle"]["status"] == STATUS_AKTIV:
+            try:
+                freie = freie_schalter(hass) if freie is None else freie
+                x["laufzeit"]["offen"] = offen(st, namen, freie)
+            except Exception:  # noqa: BLE001  (die Seite muss trotzdem laden)
+                _LOGGER.exception("Was fehlt noch: %s", entry.title)
+                x["laufzeit"]["offen"] = []
     connection.send_result(msg["id"], aus)
 
 
