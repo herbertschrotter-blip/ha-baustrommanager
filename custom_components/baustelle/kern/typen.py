@@ -62,6 +62,7 @@ class WetterWerte:
     regen_heute: float | None = None
     zustand: str | None = None
     zustand_anzeige: str | None = None   # logik/regen.anzeige_zustand
+    wind_kmh: float | None = None   # Wind der Wetter-Entität in km/h (M13: Verbrauch & Wetter)
 
     # Namen wie 0.6 für die Wetter-Sensoren
     @property

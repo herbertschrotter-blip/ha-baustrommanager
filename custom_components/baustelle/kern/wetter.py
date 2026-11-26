@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
-from homeassistant.const import ATTR_TEMPERATURE, STATE_UNAVAILABLE, STATE_UNKNOWN
+from homeassistant.components.weather import ATTR_WEATHER_WIND_SPEED, ATTR_WEATHER_WIND_SPEED_UNIT
+from homeassistant.const import ATTR_TEMPERATURE, STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfSpeed
 from homeassistant.core import ServiceResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import SpeedConverter
 
 from ..const import CONF_REGEN_SENSOR, CONF_TEMP_SENSOR, CONF_WETTER
 from ..funktionen.basis import ZAEHLER_SPEICHERN_S, zahl as _zahl
@@ -99,10 +102,11 @@ def _wetter_tag(st: Steuerung, tag: date) -> dict[str, Any]:
 def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     o = st.entry.options
     heute = jetzt.date()
-    zustand = None
+    zustand, wind = None, None
     aussen = _zahl(st.hass.states.get(o[CONF_TEMP_SENSOR])) if o.get(CONF_TEMP_SENSOR) else None
     if o.get(CONF_WETTER) and (w := st.hass.states.get(o[CONF_WETTER])):
         zustand = w.state if w.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN) else None
+        wind = _wind_kmh(w.attributes)
         if aussen is None and isinstance(w.attributes.get(ATTR_TEMPERATURE), (int, float)):
             aussen = float(w.attributes[ATTR_TEMPERATURE])
     # Außenwert fehlt ganz: der letzte gemessene gilt bis 6 h (logik/regelung, Szenarien), sonst „unbekannt“
@@ -140,8 +144,20 @@ def _wetter(st: Steuerung, jetzt: datetime) -> WetterWerte:
     return WetterWerte(
         aussen=aussen, aussen_max=aussen_max, frueh=frueh,
         regen_vortag=regen_des_tages(st._wetter_tag(heute - timedelta(days=1))),
-        regen_heute=regen, zustand=zustand, zustand_anzeige=anzeige_zustand(zustand, mm_jetzt, REGEN_AB_H_MM),
+        regen_heute=regen, zustand=zustand, zustand_anzeige=anzeige_zustand(zustand, mm_jetzt, REGEN_AB_H_MM), wind_kmh=wind,
     )
+
+
+def _wind_kmh(attr: Mapping[str, Any]) -> float | None:
+    """Wind der Wetter-Entität in km/h (Einheit aus `wind_speed_unit`, eingebauter Umrechner von HA)."""
+    v = attr.get(ATTR_WEATHER_WIND_SPEED)
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return None
+    einheit = attr.get(ATTR_WEATHER_WIND_SPEED_UNIT) or UnitOfSpeed.KILOMETERS_PER_HOUR
+    try:
+        return round(SpeedConverter.convert(float(v), einheit, UnitOfSpeed.KILOMETERS_PER_HOUR), 1)
+    except HomeAssistantError:
+        return None
 
 
 def regen_az(st: Steuerung, tag: date) -> float | None:

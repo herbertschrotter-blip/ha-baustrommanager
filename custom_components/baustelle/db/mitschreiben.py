@@ -335,7 +335,8 @@ class Mitschreiber:
         dauer = max(dauern, default=60)
         w = d.wetter
         wetter = {"baustelle_id": self.bid, "zeit": ende - _sek(dauer), "dauer_s": dauer, "aussen_temp": w.aussen,
-                  "regen_mm": w.regen_heute, "hoechst_heute": w.aussen_max, "quelle": "ha"}
+                  "regen_mm": w.regen_heute, "hoechst_heute": w.aussen_max, "quelle": "ha",
+                  "wetter": w.zustand, "wind_kmh": w.wind_kmh}
         zustand = self._zustand_aenderungen(ende)
         lernen = self._lernen(ende) if stunde else []
         self.db.schreiber.dazu(arbeit("minute", self.bid, geraete, bereiche, wetter, [list(z) for z in zustand], lernen, ende))

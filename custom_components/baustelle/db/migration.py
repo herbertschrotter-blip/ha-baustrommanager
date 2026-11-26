@@ -120,9 +120,22 @@ def _schritt_10(verbindung: Connection) -> None:
             verbindung.execute(text(f'ALTER TABLE "{tabelle}" ADD COLUMN "{spalte}" INTEGER'))
 
 
+# Aufbau 11 (M13, Herbert 26.11.2026): Wetterzustand und Wind je Minute für „Verbrauch & Wetter“ – HA hält den Zustand nur
+# rund 10 Tage; alte Zeilen bleiben NULL
+WETTER_SPALTEN = (("wetter", "VARCHAR(30)"), ("wind_kmh", "FLOAT"))
+
+
+def _schritt_11(verbindung: Connection) -> None:
+    """`wetter_minute` bekommt Zustand und Wind; alte Zeilen bleiben NULL."""
+    vorhanden = {c["name"] for c in inspect(verbindung).get_columns("wetter_minute")}
+    for spalte, typ in WETTER_SPALTEN:
+        if spalte not in vorhanden:
+            verbindung.execute(text(f'ALTER TABLE "wetter_minute" ADD COLUMN "{spalte}" {typ}'))
+
+
 SCHRITTE: dict[int, Callable[[Connection], None]] = {1: _schritt_1, 2: _schritt_2, 3: _schritt_3, 4: _schritt_4, 5: _schritt_5,
                                                      6: _schritt_6, 7: _schritt_7, 8: _schritt_8, 9: _schritt_9,
-                                                     10: _schritt_10}
+                                                     10: _schritt_10, 11: _schritt_11}
 
 
 ALT_INTEGRATION = "_integration"   # bis Aufbau 7: Daten der ganzen Integration (Ticket-Zähler, Merker) ohne Instanz

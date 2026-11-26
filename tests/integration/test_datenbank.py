@@ -157,6 +157,48 @@ async def test_minutenwerte(hass: HomeAssistant, baustelle, freezer) -> None:
     assert len(_zeilen(hass, "wetter_minute")) == 2 and _zeilen(hass, "wetter_minute")[0]["aussen_temp"] == pytest.approx(4.5)
 
 
+async def test_wetterzustand_und_wind_je_minute(hass: HomeAssistant, baustelle, freezer) -> None:
+    """M13 (Aufbau 11): jede Minute merkt Zustand und Wind der Wetter-Entität, Wind in km/h umgerechnet; ohne Wind leer."""
+    hass.states.async_set("weather.baustelle", "rainy", {"temperature": 4.0, "wind_speed": 5.0, "wind_speed_unit": "m/s"})
+    hass.config_entries.async_update_entry(baustelle, options={**baustelle.options, "wetter": "weather.baustelle"})
+    await hass.async_block_till_done()
+    await _minute(hass, freezer, 2)
+    w = _zeilen(hass, "wetter_minute")[-1]
+    assert w["wetter"] == "rainy" and w["wind_kmh"] == pytest.approx(18.0)
+    hass.states.async_set("weather.baustelle", "sunny", {"temperature": 4.0})
+    await _minute(hass, freezer, 2)
+    w = _zeilen(hass, "wetter_minute")[-1]
+    assert w["wetter"] == "sunny" and w["wind_kmh"] is None
+
+
+async def test_aufbau_11_wetter_spalten(hass: HomeAssistant, freezer) -> None:
+    """Aufbau 10 → 11: `wetter_minute` bekommt `wetter` und `wind_kmh` (nullable), alte Zeilen bleiben NULL, wiederholbar."""
+    from sqlalchemy import delete, inspect, text   # noqa: PLC0415
+
+    from custom_components.baustelle.db.migration import WETTER_SPALTEN, _schritt_11   # noqa: PLC0415
+
+    from .conftest import pg_url   # noqa: PLC0415
+    pfad = Path(hass.config.path(DATEI))
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    engine = create_engine(pg_url() if TEST_PG else f"sqlite:///{pfad}")
+    zeit = dt_util.parse_datetime("2026-11-20 08:00:00+00:00")
+    try:
+        assert migrieren(engine, None if TEST_PG else pfad) == SCHEMA_VERSION
+        with engine.begin() as v:   # zurück auf Aufbau 10 mit einer alten Minute
+            for spalte, _typ in WETTER_SPALTEN:
+                v.execute(text(f'ALTER TABLE "wetter_minute" DROP COLUMN "{spalte}"'))
+            v.execute(delete(s.schema_version).where(s.schema_version.c.version == 11))
+            v.execute(insert(s.wetter_minute).values(baustelle_id="alt", zeit=zeit, dauer_s=60, aussen_temp=2.0, quelle="ha"))
+        assert migrieren(engine, None if TEST_PG else pfad) == SCHEMA_VERSION
+        with engine.begin() as v:
+            spalten = {c["name"]: c for c in inspect(v).get_columns("wetter_minute")}
+            assert all(spalten[sp]["nullable"] for sp, _t in WETTER_SPALTEN)
+            assert v.execute(text("SELECT wetter, wind_kmh FROM wetter_minute WHERE baustelle_id = 'alt'")).one() == (None, None)
+            _schritt_11(v)   # wiederholt: ändert nichts
+    finally:
+        engine.dispose()
+
+
 async def test_prognose_nachweise_je_minute(hass: HomeAssistant, baustelle, freezer) -> None:
     """BSM-033.06 (P1): Anforderung/Sperre je Gerät, Sperre und Alter des Innenwerts je Container, Kontext als Ereignis
     nur bei Änderung. Automatik aus: keine Anforderung, keine Sperre (0, nicht NULL)."""
@@ -270,7 +312,7 @@ async def test_aufbau_10_nachgezogen_alte_zeilen_und_puffer(hass: HomeAssistant,
         with engine.begin() as v:   # zurück auf Aufbau 9 mit einer alten Minute
             for tabelle, spalte in NACHWEISE:
                 v.execute(text(f'ALTER TABLE "{tabelle}" DROP COLUMN "{spalte}"'))
-            v.execute(delete(s.schema_version).where(s.schema_version.c.version == 10))
+            v.execute(delete(s.schema_version).where(s.schema_version.c.version >= 10))   # 10 und die folgenden laufen neu
             v.execute(insert(s.geraet_minute).values(geraet_id="alt", zeit=zeit, baustelle_id="b", dauer_s=60, quelle="ha"))
         assert migrieren(engine, None if TEST_PG else pfad) == SCHEMA_VERSION
         with engine.begin() as v:

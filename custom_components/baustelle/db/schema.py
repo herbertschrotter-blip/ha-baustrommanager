@@ -27,7 +27,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Dialect
 
-SCHEMA_VERSION = 10   # 10: Prognose-Nachweise (BSM-033.06); 9: Inventar (BSM-031); 8: Meldungen je Instanz (BSM-026 8d); 2: JSON als Text; 3: strom_min; 4: sekunden_strom; 5: messwert (BSM-014); 6: Meldung vollständig (BSM-015); 7: Ansichten (BSM-026)
+SCHEMA_VERSION = 11   # 11: Wetterzustand und Wind je Minute (M13); 10: Prognose-Nachweise (BSM-033.06); 9: Inventar (BSM-031); 8: Meldungen je Instanz (BSM-026 8d); 2: JSON als Text; 3: strom_min; 4: sekunden_strom; 5: messwert (BSM-014); 6: Meldung vollständig (BSM-015); 7: Ansichten (BSM-026)
 
 metadata = MetaData()
 
@@ -311,6 +311,8 @@ wetter_minute = Table(
     Column("regen_mm", Float),
     Column("hoechst_heute", Float),
     Column("quelle", String(20), nullable=False),
+    Column("wetter", String(30), nullable=True),     # Aufbau 11 (M13): Zustand der Wetter-Entität (sunny, rainy …); NULL = unbekannt
+    Column("wind_kmh", Float, nullable=True),        # Aufbau 11 (M13): Wind in km/h
 )
 
 messwert = Table(   # Aufbau 5 (Herbert 05.10.2026): jeder gemeldete Wert der Leistung, für immer

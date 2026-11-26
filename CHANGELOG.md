@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.201] – 2026-11-26
+
+- Neu (Vorbereitung M13 „Verbrauch & Wetter“, Herbert 26.11.2026): Die Integration schreibt jede Minute auch den
+  **Wetterzustand** (sonnig, Regen, Schnee …) und den **Wind** (km/h) der eingestellten Wetter-Entität in die eigene
+  Datenbank (Aufbau 11). Home Assistant hebt den Zustand nur rund 10 Tage auf – so steht er der Auswertung auch für Woche,
+  Monat und Heizperiode zur Verfügung. Gilt ab dem Einspielen; ältere Minuten haben nur Temperatur und Regen.
+
 ## [0.8.200] – 2026-11-25
 
 - Neu gestaltet (UI-Bericht M11, Mockup `mockups/baustellen-detail.html`, abgenommen 25.11.2026): Das **Baustellen-Detail**
