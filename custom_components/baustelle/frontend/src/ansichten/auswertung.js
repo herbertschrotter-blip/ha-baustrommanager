@@ -162,7 +162,14 @@ const delta = (dl, text, gutWennWeniger = true) => !zahl(dl) ? nothing : html`<e
 const kopfAbschnitt = (p, k, t, eigen, A) => html`<span class="aw-anker" data-aw-ab=${k}></span><div class="aw-ab-kopf"><h3>${t}</h3>${eigen
   ? html`<span class="aw-eigen" title="folgt nicht der Zeitraumleiste">⏱ ${eigen}</span>` : html`<span class="leise">${zrTextAw(p, A, p.s.aw.zeitraum, p.zrV('aw'))}${p.s.aw.filter ? ` · ${p.bereichName(p.s.aw.filter)}` : ''}</span>`}</div>`;
 /* zu einem Abschnitt springen; ist er per Anordnung aus, zeigt die Einblendung „aw-detail“ den Inhalt (`detail`) */
-const springe = (p, k, detail) => { const el = p.renderRoot && p.renderRoot.querySelector(`[data-aw-ab="${k}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); else if (detail) p.awDetail(detail); };
+/* Reiter (Mockup auswertung-kompakt.html, Variante B, abgenommen 26.11.2026): immer nur ein Abschnitt sichtbar; der gewählte,
+   sonst der erste der Anordnung */
+const sichtbar = p => awReihe(p).filter(k => !awAus(p).includes(k));
+export const awReiter = p => { const L = sichtbar(p), r = p.s.aw && p.s.aw.reiter; return L.includes(r) ? r : L[0]; };
+/* zu einem Abschnitt wechseln; ist er per Anordnung aus, zeigt die Einblendung „aw-detail“ den Inhalt (`detail`) */
+const springe = (p, k, detail) => { if (sichtbar(p).includes(k)) { p.s.aw.reiter = k; Promise.resolve(p.neuZeichnen()).then(() => { const el = p.renderRoot && p.renderRoot.querySelector(`[data-aw-ab="${k}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }
+  else if (detail) p.awDetail(detail); };
+const reiterLeiste = (p, cls) => html`<div class=${cls} role="tablist">${sichtbar(p).map(k => html`<button class="glas-panel chip ${awReiter(p) === k ? 'on' : ''}" role="tab" aria-selected=${awReiter(p) === k} data-sprung=${k} @click=${() => springe(p, k)}>${((t) => (cls === 'aw-sprung' ? t : t.split(' ')[0]))(AW_ABSCHNITTE.find(x => x[0] === k)[2])}</button>`)}</div>`;
 /* „Was fällt auf“ → der Abschnitt, in dem es steht */
 const ZU_ABSCHNITT = { ohne: 'ersparnis', geraete: 'verbrauch', vergleich: 'geraete', wetter: 'heizperiode', verlauf: 'verbrauch' };
 
@@ -186,7 +193,7 @@ function verbrauchAbschnitt(p, A, z) {
       <div><span class="leise">Heizzeit</span><b class="aw-gross">${zahl(S.heizzeit) ? `${de(S.heizzeit, 0)} h` : '–'}</b>${delta(v.heizzeit, vglArt(p) === 'ohne' ? '' : vt, false)}</div>
       ${filt ? nothing : html`<div><span class="leise">Pumpzeit</span><b class="aw-gross">${zahl(S.pumpzeit) ? `${de(S.pumpzeit, 1)} h` : '–'}</b></div>`}</div>`}
     ${wetterDiagramm(p)}
-    ${A && E.length ? html`<div class="aw-erk"><div class="gruppe">Was fällt auf</div>${E.map(([i, t, x, kk]) => html`<button class="zeile aw-karte" data-k=${kk} @click=${() => springe(p, ZU_ABSCHNITT[kk] || 'verbrauch', kk)}><span class="aw-fic">${i}</span><div><b>${t}</b><div class="leise">${x}</div></div></button>`)}</div>` : nothing}
+    ${A && E.length ? html`<div class="aw-erk ${p.narrow ? 'schmal' : ''}"><div class="gruppe">Was fällt auf</div>${E.map(([i, t, x, kk]) => html`<button class="zeile aw-karte" data-k=${kk} @click=${() => springe(p, ZU_ABSCHNITT[kk] || 'verbrauch', kk)}><span class="aw-fic">${i}</span><div><b>${t}</b><div class="leise">${x}</div></div></button>`)}</div>` : nothing}
     ${filt || !A ? nothing : rangListe(p, A)}
   </section>`;
 }
@@ -258,7 +265,7 @@ function leiste(p, A, z, alle) {
       <label class="aw-vg">vergleichen mit <select data-aw="vergleich" @change=${e => p.awVergleich(e.target.value)}>${VERGLEICHE.filter(([k]) => !(z === 'Gesamt' && k !== '' && k !== 'ohne')).map(([k, t]) => html`<option value=${k} ?selected=${vgl === k}>${t}</option>`)}</select></label>
       ${filt ? html`<button class="glas-panel chip aw-filter" data-aw="filter-weg" @click=${() => p.awFilter(null)}>Container: ${p.bereichName(filt)} ✕</button>` : nothing}
       ${A && vgl ? html`<span class="leise aw-vg-t">Vergleich: ${vglText(p, A) || 'keiner'}${vgl !== 'ohne' ? ' – graue Balken im Diagramm' : ''}</span>` : nothing}</div>
-    <div class="aw-sprung">${awReihe(p).filter(k => !awAus(p).includes(k)).map(k => html`<button class="glas-panel chip" data-sprung=${k} @click=${() => springe(p, k)}>${AW_ABSCHNITTE.find(x => x[0] === k)[2]}</button>`)}</div>`;
+    ${reiterLeiste(p, 'aw-sprung')}`;
 }
 
 /* Daten der Auswertung für den gewählten Zeitraum, Vergleich und Filter */
@@ -279,7 +286,7 @@ function handyLeiste(p, A, z, alle) {
         <button aria-label="später" ?disabled=${v <= 0} @click=${() => p.zrSchritt('aw', max, -1)}>›</button></span>` : html`<span class="aw-hl-kal">${zeitraumVorlage(p, 'aw', z, p.zrGrenze(alle))}</span>`}
       <button class="glas-panel chip aw-hl-ein" data-aw="einstellen" aria-label="Auswertung einstellen" @click=${auf}>⚙</button></div>
     <div class="leise aw-hl-unter">${alle ? 'alle laufenden' : p.d.titel} · ${vgKurz(p, A)}${p.s.awSim ? ` · 💶 ${de(p.simPreis(), 2)} €` : ''}${filt ? html` · <button class="rv-link" data-aw="filter-weg" @click=${() => p.awFilter(null)}>${p.bereichName(filt)} ✕</button>` : nothing}</div>
-    <div class="aw-hl-sprung">${awReihe(p).filter(k => !awAus(p).includes(k)).map(k => html`<button class="glas-panel chip" data-sprung=${k} @click=${() => springe(p, k)}>${AW_ABSCHNITTE.find(x => x[0] === k)[2].split(' ')[0]}</button>`)}</div></div>`;
+    ${reiterLeiste(p, 'aw-hl-sprung')}</div>`;
 }
 
 /** Einblendung „aw-einstellen“ (Handy): Zeitraum, vergleichen mit, Diese/Alle, Anordnung, Preis */
@@ -298,7 +305,7 @@ export function auswertungVorlage(p) {
   const { A, z } = awAntwort(p), alle = p.s.awScope === 'alle', aus = awAus(p);
   const S = { verbrauch: () => verbrauchAbschnitt(p, A, z), ersparnis: () => ersparnisAbschnitt(p, A), heizperiode: () => heizperiodeAbschnitt(p, A),
     abrechnung: () => abrechnungAbschnitt(p, z), geraete: () => geraeteAbschnitt(p, A, z) };
-  const teile = awReihe(p).filter(k => !aus.includes(k)).map(k => S[k]());
+  const r = awReiter(p), teile = r ? [S[r]()] : [];
   if (p.narrow) return html`${p.s.aw.anord ? kopf(p, alle) : nothing}${simBand(p)}${handyLeiste(p, A, z, alle)}${teile}`;
   return html`${kopf(p, alle)}${leiste(p, A, z, alle)}${teile}`;
 }

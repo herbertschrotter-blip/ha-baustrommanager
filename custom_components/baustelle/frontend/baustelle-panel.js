@@ -6054,11 +6054,21 @@ function vglText(p4, A2) {
 var zrTextAw = (p4, A2, z2, v2) => (z2 === "Heizperiode" || z2 === "Gesamt") && A2 && A2.zeitraum && A2.zeitraum.von ? p4.zrText(z2, v2, A2.zeitraum) : p4.zrText(z2, v2);
 var delta = (dl, text2, gutWennWeniger = true) => !zahl(dl) ? A : b2`<em class="aw-delta ${dl > 0 ? "mehr" : "weniger"} ${dl < 0 === gutWennWeniger ? "gut" : ""}">${dl > 0 ? "▲" : "▼"} ${Math.abs(dl)} %${text2 ? b2` <span class="leise">zu ${text2}</span>` : A}</em>`;
 var kopfAbschnitt = (p4, k2, t5, eigen, A2) => b2`<span class="aw-anker" data-aw-ab=${k2}></span><div class="aw-ab-kopf"><h3>${t5}</h3>${eigen ? b2`<span class="aw-eigen" title="folgt nicht der Zeitraumleiste">⏱ ${eigen}</span>` : b2`<span class="leise">${zrTextAw(p4, A2, p4.s.aw.zeitraum, p4.zrV("aw"))}${p4.s.aw.filter ? ` · ${p4.bereichName(p4.s.aw.filter)}` : ""}</span>`}</div>`;
-var springe = (p4, k2, detail2) => {
-  const el = p4.renderRoot && p4.renderRoot.querySelector(`[data-aw-ab="${k2}"]`);
-  if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  else if (detail2) p4.awDetail(detail2);
+var sichtbar2 = (p4) => awReihe(p4).filter((k2) => !awAus(p4).includes(k2));
+var awReiter = (p4) => {
+  const L2 = sichtbar2(p4), r5 = p4.s.aw && p4.s.aw.reiter;
+  return L2.includes(r5) ? r5 : L2[0];
 };
+var springe = (p4, k2, detail2) => {
+  if (sichtbar2(p4).includes(k2)) {
+    p4.s.aw.reiter = k2;
+    Promise.resolve(p4.neuZeichnen()).then(() => {
+      const el = p4.renderRoot && p4.renderRoot.querySelector(`[data-aw-ab="${k2}"]`);
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  } else if (detail2) p4.awDetail(detail2);
+};
+var reiterLeiste = (p4, cls) => b2`<div class=${cls} role="tablist">${sichtbar2(p4).map((k2) => b2`<button class="glas-panel chip ${awReiter(p4) === k2 ? "on" : ""}" role="tab" aria-selected=${awReiter(p4) === k2} data-sprung=${k2} @click=${() => springe(p4, k2)}>${((t5) => cls === "aw-sprung" ? t5 : t5.split(" ")[0])(AW_ABSCHNITTE.find((x2) => x2[0] === k2)[2])}</button>`)}</div>`;
 var ZU_ABSCHNITT = { ohne: "ersparnis", geraete: "verbrauch", vergleich: "geraete", wetter: "heizperiode", verlauf: "verbrauch" };
 function rangListe(p4, A2) {
   const rang = A2 && A2.rangliste || [], max = Math.max(1, ...rang.map((c4) => c4.kwh || 0));
@@ -6083,7 +6093,7 @@ function verbrauchAbschnitt(p4, A2, z2) {
       <div><span class="leise">Heizzeit</span><b class="aw-gross">${zahl(S3.heizzeit) ? `${de(S3.heizzeit, 0)} h` : "–"}</b>${delta(v2.heizzeit, vglArt(p4) === "ohne" ? "" : vt, false)}</div>
       ${filt ? A : b2`<div><span class="leise">Pumpzeit</span><b class="aw-gross">${zahl(S3.pumpzeit) ? `${de(S3.pumpzeit, 1)} h` : "–"}</b></div>`}</div>`}
     ${wetterDiagramm(p4)}
-    ${A2 && E2.length ? b2`<div class="aw-erk"><div class="gruppe">Was fällt auf</div>${E2.map(([i7, t5, x2, kk]) => b2`<button class="zeile aw-karte" data-k=${kk} @click=${() => springe(p4, ZU_ABSCHNITT[kk] || "verbrauch", kk)}><span class="aw-fic">${i7}</span><div><b>${t5}</b><div class="leise">${x2}</div></div></button>`)}</div>` : A}
+    ${A2 && E2.length ? b2`<div class="aw-erk ${p4.narrow ? "schmal" : ""}"><div class="gruppe">Was fällt auf</div>${E2.map(([i7, t5, x2, kk]) => b2`<button class="zeile aw-karte" data-k=${kk} @click=${() => springe(p4, ZU_ABSCHNITT[kk] || "verbrauch", kk)}><span class="aw-fic">${i7}</span><div><b>${t5}</b><div class="leise">${x2}</div></div></button>`)}</div>` : A}
     ${filt || !A2 ? A : rangListe(p4, A2)}
   </section>`;
 }
@@ -6142,7 +6152,7 @@ function leiste(p4, A2, z2, alle) {
       <label class="aw-vg">vergleichen mit <select data-aw="vergleich" @change=${(e6) => p4.awVergleich(e6.target.value)}>${VERGLEICHE.filter(([k2]) => !(z2 === "Gesamt" && k2 !== "" && k2 !== "ohne")).map(([k2, t5]) => b2`<option value=${k2} ?selected=${vgl === k2}>${t5}</option>`)}</select></label>
       ${filt ? b2`<button class="glas-panel chip aw-filter" data-aw="filter-weg" @click=${() => p4.awFilter(null)}>Container: ${p4.bereichName(filt)} ✕</button>` : A}
       ${A2 && vgl ? b2`<span class="leise aw-vg-t">Vergleich: ${vglText(p4, A2) || "keiner"}${vgl !== "ohne" ? " – graue Balken im Diagramm" : ""}</span>` : A}</div>
-    <div class="aw-sprung">${awReihe(p4).filter((k2) => !awAus(p4).includes(k2)).map((k2) => b2`<button class="glas-panel chip" data-sprung=${k2} @click=${() => springe(p4, k2)}>${AW_ABSCHNITTE.find((x2) => x2[0] === k2)[2]}</button>`)}</div>`;
+    ${reiterLeiste(p4, "aw-sprung")}`;
 }
 function awAntwort(p4) {
   const aw = p4.s.aw ||= { zeitraum: "Monat", v: 0 }, z2 = aw.zeitraum, vs = aw.v || 0;
@@ -6165,7 +6175,7 @@ function handyLeiste(p4, A2, z2, alle) {
         <button aria-label="später" ?disabled=${v2 <= 0} @click=${() => p4.zrSchritt("aw", max, -1)}>›</button></span>` : b2`<span class="aw-hl-kal">${zeitraumVorlage(p4, "aw", z2, p4.zrGrenze(alle))}</span>`}
       <button class="glas-panel chip aw-hl-ein" data-aw="einstellen" aria-label="Auswertung einstellen" @click=${auf}>⚙</button></div>
     <div class="leise aw-hl-unter">${alle ? "alle laufenden" : p4.d.titel} · ${vgKurz(p4, A2)}${p4.s.awSim ? ` · 💶 ${de(p4.simPreis(), 2)} €` : ""}${filt ? b2` · <button class="rv-link" data-aw="filter-weg" @click=${() => p4.awFilter(null)}>${p4.bereichName(filt)} ✕</button>` : A}</div>
-    <div class="aw-hl-sprung">${awReihe(p4).filter((k2) => !awAus(p4).includes(k2)).map((k2) => b2`<button class="glas-panel chip" data-sprung=${k2} @click=${() => springe(p4, k2)}>${AW_ABSCHNITTE.find((x2) => x2[0] === k2)[2].split(" ")[0]}</button>`)}</div></div>`;
+    ${reiterLeiste(p4, "aw-hl-sprung")}</div>`;
 }
 function awEinstellenEinblendung(p4) {
   const z2 = p4.s.aw.zeitraum, vgl = vglArt(p4);
@@ -6189,7 +6199,7 @@ function auswertungVorlage(p4) {
     abrechnung: () => abrechnungAbschnitt(p4, z2),
     geraete: () => geraeteAbschnitt(p4, A2, z2)
   };
-  const teile = awReihe(p4).filter((k2) => !aus.includes(k2)).map((k2) => S3[k2]());
+  const r5 = awReiter(p4), teile = r5 ? [S3[r5]()] : [];
   if (p4.narrow) return b2`${p4.s.aw.anord ? kopf5(p4, alle) : A}${simBand(p4)}${handyLeiste(p4, A2, z2, alle)}${teile}`;
   return b2`${kopf5(p4, alle)}${leiste(p4, A2, z2, alle)}${teile}`;
 }
@@ -6922,11 +6932,16 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 .aw-vg-t { flex-basis: 100%; font-size: 12px; } .aw-filter { font-weight: 600; }
 .aw-sprung { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
 .aw-ab { padding: 12px 14px; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.aw-anker { display: block; scroll-margin-top: 120px; } .aw-ab-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aw-anker { display: block; scroll-margin-top: 190px; }   /* unter Reiterleiste und klebender Zeitraumleiste */ .aw-ab-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .aw-ab-kopf h3 { margin: 0; font-size: 17px; } .aw-eigen { font-size: 12px; color: var(--amber); }
 .aw-kz { display: flex; flex-wrap: wrap; gap: 10px 26px; } .aw-kz > div { display: flex; flex-direction: column; min-width: 110px; } .aw-gross { font-size: 22px; }
 .aw-delta.gut { font-weight: 600; }
-.aw-erk { display: flex; flex-direction: column; } .aw-karte { gap: 10px; text-align: left; } .aw-fic { font-size: 18px; }
+.aw-erk { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; } .aw-erk.schmal { grid-template-columns: 1fr 1fr; }   /* Mockup auswertung-kompakt.html */
+.aw-erk .gruppe { grid-column: 1 / -1; margin: 0; }
+.aw-erk .aw-karte { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; min-height: 0; border: 1px solid var(--gridc); border-radius: 12px; text-align: left; }
+.aw-erk .aw-karte > div { min-width: 0; text-align: left; } .aw-erk .aw-karte b { font-size: 13px; display: block; } .aw-erk .aw-karte .leise { font-size: 11px; line-height: 1.3; }
+.aw-erk .aw-fic { font-size: 20px; flex: 0 0 auto; }
+.aw-sprung .chip.on, .aw-hl-sprung .chip.on { background: var(--amber); color: #000; font-weight: 600; }
 .aw-rang-liste .zeile { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) auto auto; gap: 8px; align-items: center; text-align: left; }
 .aw-rz em { font-style: normal; color: var(--ink2); margin-right: 4px; } .aw-rb { height: 8px; background: var(--gridc); border-radius: 4px; overflow: hidden; } .aw-rb i { display: block; height: 100%; }
 .aw-balken { display: flex; align-items: flex-end; gap: 2px; height: 70px; } .aw-balken i { flex: 1; background: var(--s3); border-radius: 2px 2px 0 0; min-height: 1px; }
@@ -7347,7 +7362,7 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.203";
+var SEITE_VERSION = "0.8.204";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail", "aw-einstellen"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(VERLAUF_DETAIL_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];

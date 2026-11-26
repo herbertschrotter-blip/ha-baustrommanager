@@ -759,11 +759,16 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 .aw-vg-t { flex-basis: 100%; font-size: 12px; } .aw-filter { font-weight: 600; }
 .aw-sprung { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
 .aw-ab { padding: 12px 14px; margin: 10px 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.aw-anker { display: block; scroll-margin-top: 120px; } .aw-ab-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.aw-anker { display: block; scroll-margin-top: 190px; }   /* unter Reiterleiste und klebender Zeitraumleiste */ .aw-ab-kopf { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .aw-ab-kopf h3 { margin: 0; font-size: 17px; } .aw-eigen { font-size: 12px; color: var(--amber); }
 .aw-kz { display: flex; flex-wrap: wrap; gap: 10px 26px; } .aw-kz > div { display: flex; flex-direction: column; min-width: 110px; } .aw-gross { font-size: 22px; }
 .aw-delta.gut { font-weight: 600; }
-.aw-erk { display: flex; flex-direction: column; } .aw-karte { gap: 10px; text-align: left; } .aw-fic { font-size: 18px; }
+.aw-erk { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; } .aw-erk.schmal { grid-template-columns: 1fr 1fr; }   /* Mockup auswertung-kompakt.html */
+.aw-erk .gruppe { grid-column: 1 / -1; margin: 0; }
+.aw-erk .aw-karte { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; min-height: 0; border: 1px solid var(--gridc); border-radius: 12px; text-align: left; }
+.aw-erk .aw-karte > div { min-width: 0; text-align: left; } .aw-erk .aw-karte b { font-size: 13px; display: block; } .aw-erk .aw-karte .leise { font-size: 11px; line-height: 1.3; }
+.aw-erk .aw-fic { font-size: 20px; flex: 0 0 auto; }
+.aw-sprung .chip.on, .aw-hl-sprung .chip.on { background: var(--amber); color: #000; font-weight: 600; }
 .aw-rang-liste .zeile { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) auto auto; gap: 8px; align-items: center; text-align: left; }
 .aw-rz em { font-style: normal; color: var(--ink2); margin-right: 4px; } .aw-rb { height: 8px; background: var(--gridc); border-radius: 4px; overflow: hidden; } .aw-rb i { display: block; height: 100%; }
 .aw-balken { display: flex; align-items: flex-end; gap: 2px; height: 70px; } .aw-balken i { flex: 1; background: var(--s3); border-radius: 2px 2px 0 0; min-height: 1px; }

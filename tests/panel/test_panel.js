@@ -115,6 +115,11 @@ const AW = { sim: '.aw-knoepfe [data-aw="sim"]', anord: '.aw-knoepfe [data-aw="a
 const awScope = async (v, n = 10) => { if (litEl(AW.scope(v))) await klick(AW.scope(v), n); else { panel.awScopeWahl(v); await ruhe(n); } };
 // 💶 Preis: am PC im Kopf, am Handy in „Auswertung einstellen“
 const awSim = async (n = 10) => { if (litEl(AW.sim)) return klick(AW.sim, n); await klick('[data-aw="einstellen"]', 5); await klick('.sheet [data-aw="sim"]', n); await klick({ act: 'zu' }, 5); };
+// Reiter der Auswertung (Mockup auswertung-kompakt.html B): immer nur ein Abschnitt sichtbar
+const awReiter = async (k, n = 10) => { panel.s.aw ||= { zeitraum: 'Monat', v: 0 }; panel.s.aw.reiter = k; await panel.neuZeichnen(); await ruhe(n); };
+const awReiterListe = () => litEls('.aw-sprung [data-sprung], .aw-hl-sprung [data-sprung]').map(x => x.dataset.sprung);
+/* HTML aller Abschnitte nacheinander (je Reiter einmal gezeichnet), danach wieder der erste */
+const awAlleHtml = async (n = 20) => { let h = ''; for (const k of awReiterListe()) { await awReiter(k, n); h += ui.innerHTML; } await awReiter(null, 5); return h; };
 const ML = { fehler: '.sheet .seg button:nth-child(1)', text: '.sheet textarea[name="ml-text"]', senden: '.sheet .ml-senden', bildWeg: '.sheet .mb-bild button.x' };
 /* „Über“ ist ein Lit-Bereich (BSM-022 2a.1): Verlauf-Eintrag über den echten Knopf aufklappen (kein data-act) */
 const clAuf = async i => { const b = panel.shadowRoot.querySelectorAll('button.cl-v')[i]; if (!b) return erwarte(`Verlauf-Eintrag ${i} in „Über“`, false);
@@ -398,7 +403,7 @@ async function allgemein() {
   await gesendet('auth/sign_path', 'Diagnose', DEV.diagnose);
   await klick({ act: 'tab', v: 'verlauf' }); await klick('[data-vr=\"prot\"]'); panel.cache = {}; await gesendet('baustelle/protokoll', 'Protokoll', '.vl-filter [data-pf="warnung"]');
   await klick('[data-vr=\"bs\"]');
-  await klick({ act: 'tab', v: 'auswertung' }, 30);
+  await klick({ act: 'tab', v: 'auswertung' }, 30); await awReiter('abrechnung', 30);   // Reiter: die Abrechnung lädt, wenn sie offen ist
   const csvF = panel.csv('firma'), csvV = panel.csv();
   erwarte('CSV Abrechnung', csvF && csvF.length > 1 && !csvF.join().includes('NaN') && !csvF.join().includes('undefined'));
   erwarte('CSV Verbrauch', csvV && csvV.length > 1 && !csvV.join().includes('NaN') && !csvV.join().includes('undefined'));
@@ -627,10 +632,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { await klick({ act: 'tab', v: 'auswertung' }, 20); await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Monat' }, 20);
     const h = panel.z.HEUTE, mo = panel.z.WOCHE_ISO[0], seit = n => alleAufrufe.slice(n);
     erwarte('FE-0008: Auswertung zeigt ‹ Monat ›', !!litEl('.zr-zeile[data-ziel="aw"]') && ui.innerHTML.includes(`<b>${MONATE_LANG_T[+h.slice(5, 7) - 1]} ${h.slice(0, 4)}</b>`));
-    let n0 = alleAufrufe.length; await klick({ act: 'zr-schritt', ziel: 'aw', max: '99', d: '1' }, 30);
+    await awReiter('abrechnung', 20); let n0 = alleAufrufe.length; await klick({ act: 'zr-schritt', ziel: 'aw', max: '99', d: '1' }, 30);
     erwarte('FE-0008: ‹ fragt Auswertung und Abrechnung mit Versatz 1', panel.s.aw.v === 1 && seit(n0).some(m => m.type === 'baustelle/auswertung' && m.versatz === 1)
       && seit(n0).some(m => m.type === 'baustelle/abrechnung' && m.versatz === 1) && !!litEl('.zr-zeile[data-ziel="aw"] .zr-akt'));
     const vormonat = (() => { let m = +h.slice(5, 7) - 2, j = +h.slice(0, 4); if (m < 0) { m = 11; j--; } return `${j}-${String(m + 1).padStart(2, '0')}-01`; })();
+    await awReiter('verbrauch', 30);
     erwarte('FE-0008/M13: Verbrauch & Wetter holt den Vormonat', !!vormonat && seit(n0).some(m => m.type === 'baustelle/verbrauch_wetter' && m.zeitraum === 'Monat' && m.versatz === 1));
     { const oid = panel.eid(panel.d, panel.d.entry, 'energie_ohne_automatik'), st = alleAufrufe.filter(m => m.type === 'baustelle/statistik');   // Gespart liest gespart_reihen (0.8.152)
       erwarte('Statistik ohne „energie_ohne_automatik“ (Gespart kommt aus baustelle/auswertung)', !!oid && st.length > 0 && st.every(m => !(m.statistic_ids || []).includes(oid))); }
@@ -880,7 +886,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'tab', v: 'verlauf' }); await klick('[data-vr=\"prot\"]'); neu(); panel.cache = {}; await klick('.vl-filter [data-pf="warnung"]', 30);
   erwarte('Protokoll gefiltert über baustelle/protokoll', (a => a && a.entry_id === 'dobl' && a.filter === 'alle')(letzte('baustelle/protokoll').at(-1)) && /nicht erreichbar/.test(ui.innerHTML) && !/Vorheizen – alle Container ein/.test(ui.innerHTML));
   // CSV
-  await klick({ act: 'tab', v: 'auswertung' }, 30);
+  await klick({ act: 'tab', v: 'auswertung' }, 30); await awReiter('abrechnung', 30);   // Reiter: die Abrechnung lädt, wenn sie offen ist
   const csvF = panel.csv('firma'), csvV = panel.csv();
   erwarte('CSV Abrechnung', csvF && csvF[0] === 'Zeitraum;Firma;Baustelle;Container;kWh;Preis €/kWh;Betrag €' && csvF.length > 3 && !csvF.join().includes('NaN'));
   erwarte('CSV Verbrauch', csvV && csvV[0].startsWith('Zeit;Baustelle;Firma') && csvV.length > 20 && !csvV.join().includes('NaN'));
@@ -1562,12 +1568,15 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   { const schmalM13 = panel.narrow; panel.narrow = false;   // PC-Ansicht; das Handy prüft der Block „Handy A“ unten
     await klick({ act: 'tab', v: 'auswertung' }, 30); pruefe('Auswertung M13');
     const ab = () => litEls('[data-aw-abschnitt]').map(x => x.dataset.awAbschnitt);
-    erwarte('M13: fünf feste Abschnitte in der Standard-Reihenfolge, Sprungleiste gleich', ab().join() === 'verbrauch,ersparnis,heizperiode,abrechnung,geraete'
-      && litEls('.aw-sprung [data-sprung]').map(x => x.dataset.sprung).join() === ab().join());
+    erwarte('M13/B: fünf Reiter in der Standard-Reihenfolge, nur einer sichtbar', awReiterListe().join() === 'verbrauch,ersparnis,heizperiode,abrechnung,geraete'
+      && ab().join() === 'verbrauch' && !!litEl('.aw-sprung [data-sprung="verbrauch"].on'));
+    await klick('.aw-sprung [data-sprung="geraete"]', 20); erwarte('B: Reiter wechselt den Abschnitt', ab().join() === 'geraete' && panel.s.aw.reiter === 'geraete'); await awReiter(null);
+    erwarte('B: „Was fällt auf“ als Raster kleiner Karten', getComputedStyle(litEl('.aw-erk')).display === 'grid');
     erwarte('M14: kein Kachel-Raster, keine Vorlagen, kein Layout', !litEl('.aw-raster[data-ort="aw"]') && !litEl('.aw-vorlagen-k') && !litEl('[data-aw="layout"]') && !litEl('[data-aw="bearb"]'));
     erwarte('M13: Zeitraumleiste mit Heizperiode und seit Beginn', ['Tag', 'Woche', 'Monat', 'Jahr', 'Heizperiode', 'Gesamt'].every(v => !!litEl(`.aw-zrl .seg [data-v="${v}"]`)) && !!litEl('.aw-zrl select[data-aw="vergleich"]'));
     erwarte('M13: Verbrauch & Wetter im Abschnitt Verbrauch', !!litEl(`${AW.ab('verbrauch')} [data-aw-wd] svg.aw-wd`) && Object.keys(panel.cache).some(k => k.startsWith('vw:dobl:Monat:')));
-    erwarte('BSM-033.05: gespart in der Auswertung als grobe Obergrenze', (ui.innerHTML.match(/grobe Obergrenze, nicht belastbar/g) || []).length >= 1);
+    await awReiter('ersparnis'); erwarte('BSM-033.05: gespart in der Auswertung als grobe Obergrenze', (ui.innerHTML.match(/grobe Obergrenze, nicht belastbar/g) || []).length >= 1);
+    await awReiter(null);
     // Verbrauch & Wetter: nach Temperatur, Auflösung, Punkt antippen, ein Container
     await klick('[data-aw-wd] [data-wd="band"]', 20); pruefe('Verbrauch & Wetter nach Temperatur');
     erwarte('M13: nach Temperatur – Bänder mit Anzahl und Satz der Integration', ui.innerHTML.includes('−2 bis 2 °C') && ui.innerHTML.includes('über 6 °C') && /\d+×/.test(ui.innerHTML) && ui.innerHTML.includes('rund 2,3-mal so viel'));
@@ -1603,11 +1612,11 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     await klick(AW.anord, 10); pruefe('Auswertung Anordnung');
     erwarte('M14: Anordnung mit Schalter und ↑↓ je Abschnitt', litEls('.aw-anord .zeile[data-ab]').length === 5);
     await klick('.aw-anord .zeile[data-ab="verbrauch"] [aria-label="nach unten"]', 20);
-    erwarte('M14: ↓ speichert die Reihenfolge in der Integration', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["aw_reihe"]' && a.wert.join() === 'ersparnis,verbrauch,heizperiode,abrechnung,geraete') && ab()[0] === 'ersparnis');
+    erwarte('M14: ↓ speichert die Reihenfolge in der Integration', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["aw_reihe"]' && a.wert.join() === 'ersparnis,verbrauch,heizperiode,abrechnung,geraete') && awReiterListe()[0] === 'ersparnis');
     await klick('.aw-anord .zeile[data-ab="geraete"] .sw', 20);
-    erwarte('M14: aus blendet den Abschnitt aus (aw_aus)', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["aw_aus"]' && a.wert.includes('geraete')) && !ab().includes('geraete') && !litEl('.aw-sprung [data-sprung="geraete"]'));
+    erwarte('M14: aus blendet den Abschnitt aus (aw_aus)', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["aw_aus"]' && a.wert.includes('geraete')) && !awReiterListe().includes('geraete') && !litEl('.aw-sprung [data-sprung="geraete"]'));
     await klick('[data-aw="standard"]', 30);
-    erwarte('M14: ↺ Standard', ab().join() === 'verbrauch,ersparnis,heizperiode,abrechnung,geraete');
+    erwarte('M14: ↺ Standard', awReiterListe().join() === 'verbrauch,ersparnis,heizperiode,abrechnung,geraete');
     await klick(AW.anord, 10);
     /* Handy (Mockup auswertung-handy.html A): eine Leiste, alles Weitere in „Auswertung einstellen“ */
     { const schmal0 = panel.narrow; panel.narrow = true; await panel.neuZeichnen(); await ruhe(10); pruefe('Auswertung Handy');
@@ -1812,29 +1821,31 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
         svg.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, composed: true, clientX: 60, clientY: 60 })); }
       panel.tip = alt; erwarte('Gespart L: Hover zeigt gespart, mit Automatik und ohne (24/7)', /gespart <b>[\d,.]+ €/.test(t) && t.includes('mit Automatik') && t.includes('ohne (24/7)') && !/NaN|undefined/.test(t), t); }
     // Tag: je Stunde; alle laufenden: Reihen über alle
-    await klick({ act: 'tab', v: 'auswertung' }, 30); await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Tag' }, 30); pruefe('Gespart Auswertung Tag');
+    await klick({ act: 'tab', v: 'auswertung' }, 30); await awReiter('ersparnis'); await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Tag' }, 30); pruefe('Gespart Auswertung Tag');
     erwarte('Gespart Tag: 24 Werte je Stunde im Abschnitt Ersparnis', panel.awDaten('Tag', 0).gespart_reihen.gespart_eur.length === 24 && litEls(`${AW.ab('ersparnis')} .aw-balken i`).length === 24);
     await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Monat' }, 30); await awScope('alle', 30); pruefe('Gespart alle laufenden');
     erwarte('Gespart alle laufenden: Reihen über alle', !!panel.awDaten('Monat', 0, 'alle').gespart_reihen && litEls(`${AW.ab('ersparnis')} .aw-balken i`).length > 0);
-    await awScope('diese', 30); panel.s.kkUe = null; }
+    await awScope('diese', 30); await awReiter(null); panel.s.kkUe = null; }
   await klick({ act: 'tab', v: 'auswertung' }, 30);
-  erwarte('Auswertung: Verbrauch & Wetter, Temperaturen, Je Gerät, Heizperiode', ['data-aw-wd', 'Temperaturen', 'Je Gerät', 'hp-karte'].every(t => ui.innerHTML.includes(t)));
+  { const alle = await awAlleHtml(); erwarte('Auswertung: Verbrauch & Wetter, Temperaturen, Je Gerät, Heizperiode', ['data-aw-wd', 'Temperaturen', 'Je Gerät', 'hp-karte'].every(t => alle.includes(t))); }
+  await awReiter('heizperiode', 20);
   for (const v of ['7', '30', 'heute']) { await klick(`.seite .seg [data-v="${v}"]`, 30); pruefe('Temperaturen ' + v); }
   erwarte('Temperaturen: alle Container mit Fühler und außen', ['Poliercontainer', 'Mannschaft', 'Außen'].every(t => ui.innerHTML.includes(t)) && ui.innerHTML.includes('data-chart="tp-heute"'));
   { /* UI-Bericht, Maßnahme 6 */
-    const kosten = [...panel.shadowRoot.querySelectorAll('.aw-kz > div')].find(x => /Kosten/.test(x.textContent));
+    await awReiter('verbrauch'); const kosten = [...panel.shadowRoot.querySelectorAll('.aw-kz > div')].find(x => /Kosten/.test(x.textContent));
     erwarte('Kennzahlen: Pfeil bei Kosten zeigt die Veränderung der € (eur), nicht der kWh', kosten && /14 %/.test(kosten.textContent) && !/11 %/.test(kosten.textContent));
-    const jg = [...panel.shadowRoot.querySelectorAll('.block')].find(x => x.querySelector('.je-geraet')), z = panel.s.aw.zeitraum;
+    await awReiter('geraete'); const jg = [...panel.shadowRoot.querySelectorAll('.block')].find(x => x.querySelector('.je-geraet')), z = panel.s.aw.zeitraum;
     erwarte('Je Gerät: Kopf nennt den gewählten Zeitraum samt Blättern', jg && jg.querySelector('.block-kopf .leise').textContent === panel.zrText(z, panel.zrV('aw')) && !/dieser Monat/.test(jg.textContent));
     const hp = () => [...panel.shadowRoot.querySelectorAll('.hp-karte .hp-reiter button.on')].map(b => b.dataset.v);
-    panel.awDetail('wetter'); await ruhe();   // Signatur aus der Übersicht: eigene Karte über der Heizperiode des Abschnitts
+    await awReiter('heizperiode'); panel.awDetail('wetter'); await ruhe();   // Signatur aus der Übersicht: eigene Karte über der Heizperiode des Abschnitts
     erwarte('Heizperiode zweimal: getrennte Reiter (Hochrechnung und Signatur)', hp().length === 2 && hp().includes('hoch') && hp().includes('sig'));
     await klick(`${AW.ab('heizperiode')} .hp-karte .hp-reiter [data-v="klima"]`, 20);
     erwarte('Heizperiode: ein Klick schaltet nur die eigene Karte um', hp().length === 2 && hp().filter(v => v === 'klima').length === 1);
-    await klick({ act: 'zu' }); panel.s.hpReiter = panel.s.hpReiterSig = null; await panel.neuZeichnen(); }
+    await klick({ act: 'zu' }); panel.s.hpReiter = panel.s.hpReiterSig = null; await awReiter(null); }
   await awScope('alle', 30); pruefe('Auswertung alle');
   erwarte('Alle laufenden: ohne Je Gerät und Temperaturen', !litEl('.je-geraet') && !litEl('.seite .seg [data-v="30"]'));
-  erwarte('Alle laufenden: Heizperiode und Geräte sagen „nur für eine Baustelle“', ['heizperiode', 'geraete'].every(k => /Nur für eine Baustelle/.test((litEl(`${AW.ab(k)} .leer`) || {}).textContent || '')));
+  { const leer = []; for (const k of ['heizperiode', 'geraete']) { await awReiter(k); leer.push(/Nur für eine Baustelle/.test((litEl(`${AW.ab(k)} .leer`) || {}).textContent || '')); } await awReiter(null);
+    erwarte('Alle laufenden: Heizperiode und Geräte sagen „nur für eine Baustelle“', leer.every(Boolean)); }
   await awScope('diese', 30);
   await klick({ act: 'tab', v: 'einst' }, 30);
   /* heizung-neu.html (Herbert 29.10.2026): AN-0019 C Übersichtskarten aus laufzeit.heute, „Wann heizt was“ eine Spur je Container,
@@ -2383,7 +2394,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   const vorher = struktur; struktur = JSON.parse(JSON.stringify(STRUKTUR)); panel.cache = {}; await panel._laden(); await ruhe(20);   // unveränderte Beispieldaten
   global.location = { search: '' }; await klick({ act: 'bs-wahl', id: 'dobl' }, 30); await klick({ act: 'tab', v: 'uebersicht' }, 30);
   erwarte('Strombalken sitzt wie im Mockup im Baustellen-Kopf (.klickbar)', /<div class="klickbar"[^]*?class="strom-knopf"[^]*?<\/button>\s*<\/div>\s*<button class="kopf-wetter/.test(ui.innerHTML.replace(/<!--[^]*?-->/g, '')));
-  await klick({ act: 'tab', v: 'auswertung' }, 40); const aw = ui.innerHTML;
+  await klick({ act: 'tab', v: 'auswertung' }, 40); const aw = await awAlleHtml(30);
   erwarte('Ölradiator/Konvektor: Fußsatz wie im Mockup, Kosten nicht fett', /Der Ölradiator [^<]*(braucht länger|heizt schneller auf|verbraucht rund)/.test(aw) && !/<td><b>[^<]*€<\/b><\/td>/.test(aw));
 
   /* Auswertung, Abrechnung, Verlauf: die Seite zeigt die Zahlen der Integration (api §8, Werte aus tests/vektoren) */
@@ -2391,7 +2402,7 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
     const deT = (x, d = 1) => Number(x).toLocaleString('de-AT', { minimumFractionDigits: d, maximumFractionDigits: d });
     const fall = (art, name) => VEKTOR[art].find(f => f.name === `struktur-0.7 ${name}`).erwartet;
     await awScope('diese'); await klick({ act: 'vb-zeitraum', ziel: 'aw', v: 'Monat' }, 40);
-    const h0 = ui.innerHTML; panel.s.hpReiter = 'sig'; await panel.neuZeichnen(); const h = h0 + ui.innerHTML; panel.s.hpReiter = null; await panel.neuZeichnen();   // M13: Signatur = Reiter der Heizperiode
+    const h0 = await awAlleHtml(30); await awReiter('heizperiode'); panel.s.hpReiter = 'sig'; await panel.neuZeichnen(); const h = h0 + ui.innerHTML; panel.s.hpReiter = null; await awReiter(null);   // M13: Signatur = Reiter der Heizperiode
     erwarte('Auswertung über baustelle/auswertung (Zeitraum, Versatz, Scope)', letzte('baustelle/auswertung').some(a => a.entry_id === 'dobl' && a.zeitraum === 'Monat' && a.versatz === 0 && a.scope === 'diese'));
     erwarte('Abrechnung über baustelle/abrechnung', letzte('baustelle/abrechnung').some(a => a.entry_id === 'dobl' && a.zeitraum === 'Monat' && a.scope === 'diese'));
     // AN-0008: fairer Vergleich – kWh je Gradstunde, zählende und ausgeschlossene Container (Werte des Beispiel-hass)

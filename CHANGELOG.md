@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.204] – 2026-11-26
+
+- Geändert (Mockup `mockups/auswertung-kompakt.html`, Variante B, abgenommen 26.11.2026): Die **Auswertung hat Reiter** –
+  die Sprungleiste (Verbrauch · Ersparnis · Heizperiode · Abrechnung · Geräte) zeigt immer nur einen Abschnitt, langes
+  Scrollen entfällt. **„Was fällt auf“** sind kleine Karten nebeneinander (am PC 3–4 je Reihe, am Handy 2), antippen
+  wechselt zum passenden Reiter.
+
 ## [0.8.203] – 2026-11-26
 
 - Geändert (Mockup `mockups/auswertung-handy.html`, Variante A, abgenommen 26.11.2026): Die **Auswertung am Handy** ist
