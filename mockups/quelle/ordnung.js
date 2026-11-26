@@ -290,11 +290,17 @@ function browser(R) {
     { ic: '🔌', t: 'Shelly Plug S Gen3 gehört zu keinem Container', s: 'neu in HA seit heute 10:42', los: 'Zuordnen ›', f: () => assistent({ schritt: 1, geraet: 'plug9', vorgabe: false }) },
     { ic: '🏷', t: 'Poliercontainer: 1 Name weicht ab', s: 'Heizung 03 – freier Name', los: 'Einheitlich benennen ›', f: () => { G.tab = 'namen'; G.namenVorschau = true; for (const q of R.P()) { q.containerOeffnen(BID); q.s.sheet = { art: 'bereich' }; q.neuZeichnen(); } } },
     { ic: '🛟', t: 'Plug Lager 09 hat kein Notprogramm', s: 'Gen1 – kann kein Skript', los: 'Ansehen ›', f: zeigeSprung('Einstellungen › Notprogramm') },
+    { ic: '🌦', t: 'Keine Wetter-Entität eingestellt', s: 'ohne sie kein Wetter in der Auswertung und kein Frühstart nach Vorhersage', los: 'Einstellen ›', f: zeigeSprung('Einstellungen › Wetterquelle') },
   ];
+  // DATEN (M15): die Liste stellt die Integration zusammen (struktur › laufzeit.offen), die Seite zeigt sie nur an. Quellen:
+  // Container ohne Fühler, dessen Modus einen braucht · Shelly in HA, keinem Container zugeordnet (wie „+ Gerät“, Kandidaten) ·
+  // Namen, die vom Schema abweichen (Inventar) · Plug ohne Notprogramm, wenn das Notprogramm an ist · keine Wetter-Entität.
+  // Leer = die Karte fehlt ganz. „Nicht mehr zeigen“ je Punkt ist nicht Teil der Abnahme (26.11.2026).
   const fehltKarte = () => html`<div class="glas-panel or-fehlt" data-or="fehlt"><div class="or-fehlt-k"><b>Was fehlt noch · ${FEHLT.length}</b>${R.marke}<span class="leise">prüft die Integration beim Start und täglich</span></div>
       ${FEHLT.map(x => html`<div class="or-fz"><span class="or-fic">${x.ic}</span><div class="or-zl"><b>${x.t}</b><div class="leise">${x.s}</div></div><button class="chip glas-panel" @click=${x.f}>${x.los}</button></div>`)}
       ${sprung('Einstellungen › Notprogramm')}</div>`;
-  R.abschnitt({ ansicht: 'uebersicht', wann: () => G.fehlt !== false, nach: () => fehltKarte() });
+  const m15gebaut = !!(R.proto.offenLos && window.baustelleBeispiel);   // gebaut in 0.8.205 (laufzeit.offen)
+  R.abschnitt({ ansicht: 'uebersicht', wann: () => !m15gebaut && G.fehlt !== false, nach: () => fehltKarte() });
 
   /* ================= Container-Ansicht: Kennzahlen springen gefiltert in die Auswertung (M13) ================= */
   const auswertungFilter = () => { G.aw = { ...G.aw, filter: 'Poliercontainer' }; for (const q of R.P()) { q.s.sheet = null; hpAn(q); q.gehe('auswertung'); } };
@@ -712,11 +718,13 @@ const NUR = (process.argv.find(a => a.startsWith('--nur=')) || '').slice(6);
 const DATEIEN = { M8: ['container-seite.html', 'Baustelle – Container-Seite (M8)', 'Schritt M8 · „Bearbeiten“ ist die eine Container-Seite'],
   M11: ['baustellen-detail.html', 'Baustelle – Baustellen-Detail (M11)', 'Schritt M11 · Baustellen-Detail auch während die Baustelle läuft'],
   M13: ['auswertung-neu.html', 'Baustelle – Auswertung (M13/M14)', 'Schritt M13/M14 · Auswertung mit einer Zeitraumleiste und festen Abschnitten'],
+  M15: ['was-fehlt.html', 'Baustelle – Was fehlt noch (M15)', 'Schritt M15 · Karte „Was fehlt noch“ ganz unten in der Übersicht'],
   M9: ['grundlagen.html', 'Baustelle – Grundlagen (M9)', 'Schritt M9 · Heizperiode, Klimamittel, Baseline im Reiter Heizung'] };
 if (NUR && !DATEIEN[NUR]) throw new Error(`--nur=${NUR}: unbekannter Schritt`);
 if (NUR) ZEIGEN.splice(0, ZEIGEN.length, ...ZEIGEN.filter(([, t]) => t.startsWith(NUR + ' ') || t.startsWith(NUR + '/')));
 const faelle = ZEIGEN.map(([z]) => ({ name: z, werte: { zeigen: z } }));
 faelle.push(...['aw-wetter-band', 'aw-wetter-hp', 'aw-wetter-container'].map(z => ({ name: z + '-dia', werte: { zeigen: z }, scroll: '[data-or="wetterdia"]' })), { name: 'aw-dia', werte: { zeigen: 'aw' }, scroll: '[data-or="wetterdia"]' }, { name: 'aw-tag-dia', werte: { zeigen: 'aw-tag' }, scroll: '[data-or="wetterdia"]' });
+faelle.push({ name: 'fehlt-unten', werte: { zeigen: 'fehlt' }, scroll: '[data-or="fehlt"]' });
 faelle.push({ name: 'aw-ersparnis', werte: { zeigen: 'aw' }, scroll: '[data-or="ersparnis"]' }, { name: 'aw-heizperiode', werte: { zeigen: 'aw' }, scroll: '[data-or="heizperiode"]' },
   { name: 'aw-abrechnung', werte: { zeigen: 'aw' }, scroll: '[data-or="abrechnung"]' }, { name: 'aw-geraete', werte: { zeigen: 'aw' }, scroll: '[data-or="geraete"]' },
   { name: 'heizung-karte', werte: { zeigen: 'heizung' }, scroll: '[data-or="grundlagen"]' }, { name: 'cs-heizung-unten', werte: { zeigen: 'cs-heizung' }, scroll: '[data-k="stufen"]' },
