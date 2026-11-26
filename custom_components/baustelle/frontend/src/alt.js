@@ -43,7 +43,7 @@ import { BASELINE_CSS } from './ansichten/baseline.js';
 import { uebersichtVorlage } from './ansichten/uebersicht.js';
 import { katalogEinblendung } from './ansichten/kacheln.js';
 import { UEBERSICHT_EINBLENDUNGEN } from './ansichten/einblendungen-uebersicht.js';
-import { auswertungVorlage, awDetailEinblendung, awReihe } from './ansichten/auswertung.js';
+import { auswertungVorlage, awDetailEinblendung, awEinstellenEinblendung, awReihe } from './ansichten/auswertung.js';
 import { WISCHEN_CSS, wischTaste, wischenAn } from './ansichten/wischen.js';
 import { START_STIL } from './ansichten/start.js';
 
@@ -742,6 +742,18 @@ ${NUR_LESEN_SPERRE.map(x => `.nur-lesen ${x}`).join(', ')} { opacity: .45; filte
 /* M13/M14: Auswertung mit Zeitraumleiste und festen Abschnitten (Mockup auswertung-neu.html) */
 .aw-zrl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; } .aw-zrl > .seg { flex-wrap: wrap; max-width: 100%; }
 .aw-zrl.klebt { position: sticky; top: 74px; z-index: 3; }   /* unter der Reiterleiste */
+/* Handy (Mockup auswertung-handy.html A): eine Leiste */
+.aw-hl { padding: 8px 10px 6px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; } .aw-hl.klebt { position: sticky; top: 0; z-index: 3; }
+.aw-hl-z1 { display: flex; align-items: center; gap: 6px; } .aw-hl-zr { white-space: nowrap; font-weight: 600; }
+.aw-hl-nav { flex: 1; display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.aw-hl-nav b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aw-hl-nav button { background: none; border: 0; color: var(--ink); font-size: 22px; padding: 0 8px; } .aw-hl-nav button:disabled { opacity: .3; }
+.aw-hl-kal { flex: 1; min-width: 0; } .aw-hl-kal .zr-zeile { margin: 0; flex-wrap: nowrap; } .aw-hl-kal .zr-nav { flex: 1; min-width: 0; box-sizing: border-box; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+.aw-hl-kal .zr-mitte { min-height: 30px; min-width: 0; } .aw-hl-kal .zr-mitte b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; } .aw-hl-kal .zr-mitte small, .aw-hl-kal .zr-akt, .aw-hl-kal .zr-pfeil { display: none; } .aw-hl-kal .zr-pf { width: 26px; height: 30px; } .aw-hl-kal .zr-mitte { padding: 0 2px; }
+.aw-hl-ein { padding: 4px 10px; font-size: 16px; } .aw-hl-unter { font-size: 12px; padding: 0 2px; }
+.aw-hl-sprung { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; } .aw-hl-sprung::-webkit-scrollbar { display: none; }
+.aw-hl-sprung .chip { white-space: nowrap; font-size: 12px; padding: 4px 10px; }
+.aw-es-seg { flex-wrap: wrap; margin-bottom: 8px; } .aw-es-liste { margin: 8px 0 12px; }
 .aw-zrl .zr-zeile { margin: 0; } .aw-vg { font-size: 13px; color: var(--ink2); display: flex; gap: 6px; align-items: center; }
 .aw-vg select, .aw-wd-k select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--gridc); background: transparent; color: var(--ink); max-width: 100%; }
 .aw-vg-t { flex-basis: 100%; font-size: 12px; } .aw-filter { font-weight: 600; }
@@ -1069,7 +1081,7 @@ function einblendungen(s) {
 /* ---------- Seite ---------- */
 const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
-const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
+const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail', 'aw-einstellen'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
   static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(GRUNDLAGEN_CSS), unsafeCSS(VERLAUF_DETAIL_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
@@ -2384,6 +2396,7 @@ class BaustellePanel extends LitElement {
     else if (S.sheet && HEIZPERIODE_EINBLENDUNGEN[S.sheet.art]) sheet = HEIZPERIODE_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
     else if (S.sheet && S.sheet.art === 'kk-katalog') sheet = katalogEinblendung(this, S.sheet);
     else if (S.sheet && S.sheet.art === 'aw-detail') sheet = awDetailEinblendung(this, S.sheet);
+    else if (S.sheet && S.sheet.art === 'aw-einstellen') sheet = awEinstellenEinblendung(this, S.sheet);
     else if (S.sheet && UEBERSICHT_EINBLENDUNGEN[S.sheet.art]) sheet = UEBERSICHT_EINBLENDUNGEN[S.sheet.art](this, S.sheet);
     const meldenKnopf = (cls, fn) => html`<button class="melden-knopf ${cls}" title="Fehler, Wunsch oder Anregung melden" aria-label="Melden" @click=${fn}>${unsafeHTML(ICON_MELDEN)}</button>`;
     return html`<div class="scroll">${keyed(`${S.view}:${S.cid || ''}`, html`<div class="seite ${neu ? 'rein' : ''}">${this.versionHinweis()}${this.nurLesenHinweis()}${seite}</div>`)}</div>

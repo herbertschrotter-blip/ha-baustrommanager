@@ -241,6 +241,9 @@ function kopf(p, alle) {
       <div class="aw-knoepfe-u"><button class="knopf" data-aw="standard" @click=${() => p.awAnordnungStandard()}>↺ Standard</button><button class="knopf amber" @click=${() => p.awAnordnung()}>Fertig</button></div></div>` : nothing}`;
 }
 
+/* Band „Simuliert“ (Preis simulieren) – am PC über der Zeitraumleiste, am Handy über der Leiste */
+const simBand = p => p.s.awSim ? html`<div class="sp-band">🧮 Simuliert: alle € dieser Auswertung mit <span class="sp-sim"><button class="glas-panel chip" data-d="-0.01" @click=${() => p.spSim(-0.01)}>−</button><b>${de(p.simPreis(), 2)} €/kWh</b><button class="glas-panel chip" data-d="0.01" @click=${() => p.spSim(0.01)}>+</button></span> <button class="rv-link" data-aw="sim-zurueck" @click=${() => p.simUmschalten()}>zurück auf tatsächlich</button></div>` : nothing;
+
 /* Zeitraumleiste: Simuliert-Band, Zeitraum, ‹ › (Tag … Jahr mit Kalender, Heizperiode blättern, seit Beginn fest), Vergleich, Filter */
 function leiste(p, A, z, alle) {
   const S = p.s, aw = S.aw, filt = aw.filter, vgl = vglArt(p), v = p.zrV('aw');
@@ -248,7 +251,7 @@ function leiste(p, A, z, alle) {
     : z === 'Heizperiode' ? html`<div class="zr-zeile" data-ziel="aw"><div class="zr-nav glas-panel"><button class="zr-pf" ?disabled=${v >= p.zrMax('Heizperiode', p.zrGrenze(alle))} aria-label="früher" @click=${() => p.zrSchritt('aw', p.zrMax('Heizperiode', p.zrGrenze(alle)), 1)}>‹</button>
         <span class="zr-mitte"><b>${zrTextAw(p, A, 'Heizperiode', v)}</b></span><button class="zr-pf" ?disabled=${v <= 0} aria-label="später" @click=${() => p.zrSchritt('aw', 99, -1)}>›</button></div></div>`
     : zeitraumVorlage(p, 'aw', z, p.zrGrenze(alle));
-  return html`${S.awSim ? html`<div class="sp-band">🧮 Simuliert: alle € dieser Auswertung mit <span class="sp-sim"><button class="glas-panel chip" data-d="-0.01" @click=${() => p.spSim(-0.01)}>−</button><b>${de(p.simPreis(), 2)} €/kWh</b><button class="glas-panel chip" data-d="0.01" @click=${() => p.spSim(0.01)}>+</button></span> <button class="rv-link" data-aw="sim-zurueck" @click=${() => p.simUmschalten()}>zurück auf tatsächlich</button></div>` : nothing}
+  return html`${simBand(p)}
     <div class="glas-panel aw-leiste aw-zrl ${p.narrow ? '' : 'klebt'}" data-aw-ab-leiste>
       <div class="seg klein">${AW_ZEITRAEUME.map(([k, t]) => html`<button data-v=${k} class=${z === k ? 'on' : ''} @click=${() => p.zeitraumWahl('aw', k)}>${t}</button>`)}</div>
       ${nav}
@@ -264,11 +267,40 @@ export function awAntwort(p) {
   return { A: p.awDaten(z, vs, undefined, p.d, undefined, { vergleich: vglArt(p) || 'vorperiode', bereich: aw.filter || null }), z, vs };
 }
 
+/* Handy (Mockup auswertung-handy.html, Variante A, abgenommen 26.11.2026): eine klebende Leiste „Monat ▾ ‹ Zeitraum › ⚙“,
+   darunter klein Baustelle · Vergleich (· Filter ✕) und die Sprungleiste als eine Zeile zum Wischen; alles Weitere in der
+   Einblendung „aw-einstellen“. Der große Kopf erscheint nur für die Anordnung. */
+const vgKurz = (p, A) => { const v = vglArt(p); if (!v) return 'kein Vergleich'; const t = vglText(p, A); return t ? `vs. ${t}` : v === 'vorjahr' ? 'vs. Vorjahr' : 'vs. davor'; };
+function handyLeiste(p, A, z, alle) {
+  const v = p.zrV('aw'), max = z === 'Gesamt' ? 0 : p.zrMax(z, p.zrGrenze(alle)), filt = p.s.aw.filter, auf = () => { p.s.sheet = { art: 'aw-einstellen' }; return p.neuZeichnen(); };
+  return html`<div class="glas-panel aw-hl klebt" data-aw-ab-leiste>
+    <div class="aw-hl-z1"><button class="glas-panel chip aw-hl-zr" data-aw="zr-wahl" @click=${auf}>${(AW_ZEITRAEUME.find(x => x[0] === z) || [z, z])[1]} ▾</button>
+      ${z === 'Heizperiode' || z === 'Gesamt' ? html`<span class="aw-hl-nav"><button aria-label="früher" ?disabled=${v >= max} @click=${() => p.zrSchritt('aw', max, 1)}>‹</button><b>${zrTextAw(p, A, z, v)}</b>
+        <button aria-label="später" ?disabled=${v <= 0} @click=${() => p.zrSchritt('aw', max, -1)}>›</button></span>` : html`<span class="aw-hl-kal">${zeitraumVorlage(p, 'aw', z, p.zrGrenze(alle))}</span>`}
+      <button class="glas-panel chip aw-hl-ein" data-aw="einstellen" aria-label="Auswertung einstellen" @click=${auf}>⚙</button></div>
+    <div class="leise aw-hl-unter">${alle ? 'alle laufenden' : p.d.titel} · ${vgKurz(p, A)}${p.s.awSim ? ` · 💶 ${de(p.simPreis(), 2)} €` : ''}${filt ? html` · <button class="rv-link" data-aw="filter-weg" @click=${() => p.awFilter(null)}>${p.bereichName(filt)} ✕</button>` : nothing}</div>
+    <div class="aw-hl-sprung">${awReihe(p).filter(k => !awAus(p).includes(k)).map(k => html`<button class="glas-panel chip" data-sprung=${k} @click=${() => springe(p, k)}>${AW_ABSCHNITTE.find(x => x[0] === k)[2].split(' ')[0]}</button>`)}</div></div>`;
+}
+
+/** Einblendung „aw-einstellen“ (Handy): Zeitraum, vergleichen mit, Diese/Alle, Anordnung, Preis */
+export function awEinstellenEinblendung(p) {
+  const z = p.s.aw.zeitraum, vgl = vglArt(p);
+  return html`<div class="griff"></div><div class="block-kopf"><h3>Auswertung einstellen</h3></div>
+    <div class="gruppe">Zeitraum</div><div class="seg aw-es-seg">${AW_ZEITRAEUME.map(([k, t]) => html`<button data-v=${k} class=${z === k ? 'on' : ''} @click=${() => p.zeitraumWahl('aw', k)}>${t}</button>`)}</div>
+    <div class="gruppe">vergleichen mit</div><div class="seg aw-es-seg">${VERGLEICHE.filter(([k]) => !(z === 'Gesamt' && k !== '' && k !== 'ohne')).map(([k, t]) => html`<button data-vg=${k} class=${vgl === k ? 'on' : ''} @click=${() => p.awVergleich(k)}>${t}</button>`)}</div>
+    <div class="gruppe">Baustellen</div><div class="seg aw-es-seg">${[['diese', 'Diese Baustelle'], ['alle', `Alle laufenden (${p.laufende().length})`]].map(([k, t]) => html`<button data-aw-scope=${k} class=${(p.s.awScope || 'diese') === k ? 'on' : ''} @click=${() => p.awScopeWahl(k)}>${t}</button>`)}</div>
+    <div class="glas-panel liste aw-es-liste"><button class="zeile" data-aw="anordnung" @click=${() => { p.schliessen(); if (!p.s.aw.anord) p.awAnordnung(); }}><span>✎ Anordnung der Abschnitte</span><span class="chev">›</span></button>
+      <button class="zeile" data-aw="sim" @click=${() => p.simUmschalten()}><span>💶 Preis</span><span class="leise">${p.s.awSim ? `simuliert ${de(p.simPreis(), 2)} €` : 'tatsächlich'}</span></button></div>
+    <button class="knopf amber" @click=${() => p.schliessen()}>Fertig</button>`;
+}
+
 export function auswertungVorlage(p) {
   const { A, z } = awAntwort(p), alle = p.s.awScope === 'alle', aus = awAus(p);
   const S = { verbrauch: () => verbrauchAbschnitt(p, A, z), ersparnis: () => ersparnisAbschnitt(p, A), heizperiode: () => heizperiodeAbschnitt(p, A),
     abrechnung: () => abrechnungAbschnitt(p, z), geraete: () => geraeteAbschnitt(p, A, z) };
-  return html`${kopf(p, alle)}${leiste(p, A, z, alle)}${awReihe(p).filter(k => !aus.includes(k)).map(k => S[k]())}`;
+  const teile = awReihe(p).filter(k => !aus.includes(k)).map(k => S[k]());
+  if (p.narrow) return html`${p.s.aw.anord ? kopf(p, alle) : nothing}${simBand(p)}${handyLeiste(p, A, z, alle)}${teile}`;
+  return html`${kopf(p, alle)}${leiste(p, A, z, alle)}${teile}`;
 }
 
 /** Einblendung „aw-detail“ (Sprung von Kacheln der Übersicht und aus der Baseline): der passende Teil der Auswertung */

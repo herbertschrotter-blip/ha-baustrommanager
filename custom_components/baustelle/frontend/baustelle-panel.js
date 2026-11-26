@@ -6130,11 +6130,12 @@ function kopf5(p4, alle) {
         <button class="glas-panel chip" ?disabled=${!i7} aria-label="nach oben" @click=${() => p4.awAbschnittSchieben(k2, -1)}>↑</button><button class="glas-panel chip" ?disabled=${i7 === L2.length - 1} aria-label="nach unten" @click=${() => p4.awAbschnittSchieben(k2, 1)}>↓</button></div>`)}
       <div class="aw-knoepfe-u"><button class="knopf" data-aw="standard" @click=${() => p4.awAnordnungStandard()}>↺ Standard</button><button class="knopf amber" @click=${() => p4.awAnordnung()}>Fertig</button></div></div>` : A}`;
 }
+var simBand = (p4) => p4.s.awSim ? b2`<div class="sp-band">🧮 Simuliert: alle € dieser Auswertung mit <span class="sp-sim"><button class="glas-panel chip" data-d="-0.01" @click=${() => p4.spSim(-0.01)}>−</button><b>${de(p4.simPreis(), 2)} €/kWh</b><button class="glas-panel chip" data-d="0.01" @click=${() => p4.spSim(0.01)}>+</button></span> <button class="rv-link" data-aw="sim-zurueck" @click=${() => p4.simUmschalten()}>zurück auf tatsächlich</button></div>` : A;
 function leiste(p4, A2, z2, alle) {
   const S3 = p4.s, aw = S3.aw, filt = aw.filter, vgl = vglArt(p4), v2 = p4.zrV("aw");
   const nav = z2 === "Gesamt" ? b2`<div class="zr-zeile"><div class="zr-nav glas-panel"><span class="zr-mitte"><b>${zrTextAw(p4, A2, "Gesamt", 0)}</b></span></div></div>` : z2 === "Heizperiode" ? b2`<div class="zr-zeile" data-ziel="aw"><div class="zr-nav glas-panel"><button class="zr-pf" ?disabled=${v2 >= p4.zrMax("Heizperiode", p4.zrGrenze(alle))} aria-label="früher" @click=${() => p4.zrSchritt("aw", p4.zrMax("Heizperiode", p4.zrGrenze(alle)), 1)}>‹</button>
         <span class="zr-mitte"><b>${zrTextAw(p4, A2, "Heizperiode", v2)}</b></span><button class="zr-pf" ?disabled=${v2 <= 0} aria-label="später" @click=${() => p4.zrSchritt("aw", 99, -1)}>›</button></div></div>` : zeitraumVorlage(p4, "aw", z2, p4.zrGrenze(alle));
-  return b2`${S3.awSim ? b2`<div class="sp-band">🧮 Simuliert: alle € dieser Auswertung mit <span class="sp-sim"><button class="glas-panel chip" data-d="-0.01" @click=${() => p4.spSim(-0.01)}>−</button><b>${de(p4.simPreis(), 2)} €/kWh</b><button class="glas-panel chip" data-d="0.01" @click=${() => p4.spSim(0.01)}>+</button></span> <button class="rv-link" data-aw="sim-zurueck" @click=${() => p4.simUmschalten()}>zurück auf tatsächlich</button></div>` : A}
+  return b2`${simBand(p4)}
     <div class="glas-panel aw-leiste aw-zrl ${p4.narrow ? "" : "klebt"}" data-aw-ab-leiste>
       <div class="seg klein">${AW_ZEITRAEUME.map(([k2, t5]) => b2`<button data-v=${k2} class=${z2 === k2 ? "on" : ""} @click=${() => p4.zeitraumWahl("aw", k2)}>${t5}</button>`)}</div>
       ${nav}
@@ -6147,6 +6148,38 @@ function awAntwort(p4) {
   const aw = p4.s.aw ||= { zeitraum: "Monat", v: 0 }, z2 = aw.zeitraum, vs = aw.v || 0;
   return { A: p4.awDaten(z2, vs, void 0, p4.d, void 0, { vergleich: vglArt(p4) || "vorperiode", bereich: aw.filter || null }), z: z2, vs };
 }
+var vgKurz = (p4, A2) => {
+  const v2 = vglArt(p4);
+  if (!v2) return "kein Vergleich";
+  const t5 = vglText(p4, A2);
+  return t5 ? `vs. ${t5}` : v2 === "vorjahr" ? "vs. Vorjahr" : "vs. davor";
+};
+function handyLeiste(p4, A2, z2, alle) {
+  const v2 = p4.zrV("aw"), max = z2 === "Gesamt" ? 0 : p4.zrMax(z2, p4.zrGrenze(alle)), filt = p4.s.aw.filter, auf = () => {
+    p4.s.sheet = { art: "aw-einstellen" };
+    return p4.neuZeichnen();
+  };
+  return b2`<div class="glas-panel aw-hl klebt" data-aw-ab-leiste>
+    <div class="aw-hl-z1"><button class="glas-panel chip aw-hl-zr" data-aw="zr-wahl" @click=${auf}>${(AW_ZEITRAEUME.find((x2) => x2[0] === z2) || [z2, z2])[1]} ▾</button>
+      ${z2 === "Heizperiode" || z2 === "Gesamt" ? b2`<span class="aw-hl-nav"><button aria-label="früher" ?disabled=${v2 >= max} @click=${() => p4.zrSchritt("aw", max, 1)}>‹</button><b>${zrTextAw(p4, A2, z2, v2)}</b>
+        <button aria-label="später" ?disabled=${v2 <= 0} @click=${() => p4.zrSchritt("aw", max, -1)}>›</button></span>` : b2`<span class="aw-hl-kal">${zeitraumVorlage(p4, "aw", z2, p4.zrGrenze(alle))}</span>`}
+      <button class="glas-panel chip aw-hl-ein" data-aw="einstellen" aria-label="Auswertung einstellen" @click=${auf}>⚙</button></div>
+    <div class="leise aw-hl-unter">${alle ? "alle laufenden" : p4.d.titel} · ${vgKurz(p4, A2)}${p4.s.awSim ? ` · 💶 ${de(p4.simPreis(), 2)} €` : ""}${filt ? b2` · <button class="rv-link" data-aw="filter-weg" @click=${() => p4.awFilter(null)}>${p4.bereichName(filt)} ✕</button>` : A}</div>
+    <div class="aw-hl-sprung">${awReihe(p4).filter((k2) => !awAus(p4).includes(k2)).map((k2) => b2`<button class="glas-panel chip" data-sprung=${k2} @click=${() => springe(p4, k2)}>${AW_ABSCHNITTE.find((x2) => x2[0] === k2)[2].split(" ")[0]}</button>`)}</div></div>`;
+}
+function awEinstellenEinblendung(p4) {
+  const z2 = p4.s.aw.zeitraum, vgl = vglArt(p4);
+  return b2`<div class="griff"></div><div class="block-kopf"><h3>Auswertung einstellen</h3></div>
+    <div class="gruppe">Zeitraum</div><div class="seg aw-es-seg">${AW_ZEITRAEUME.map(([k2, t5]) => b2`<button data-v=${k2} class=${z2 === k2 ? "on" : ""} @click=${() => p4.zeitraumWahl("aw", k2)}>${t5}</button>`)}</div>
+    <div class="gruppe">vergleichen mit</div><div class="seg aw-es-seg">${VERGLEICHE.filter(([k2]) => !(z2 === "Gesamt" && k2 !== "" && k2 !== "ohne")).map(([k2, t5]) => b2`<button data-vg=${k2} class=${vgl === k2 ? "on" : ""} @click=${() => p4.awVergleich(k2)}>${t5}</button>`)}</div>
+    <div class="gruppe">Baustellen</div><div class="seg aw-es-seg">${[["diese", "Diese Baustelle"], ["alle", `Alle laufenden (${p4.laufende().length})`]].map(([k2, t5]) => b2`<button data-aw-scope=${k2} class=${(p4.s.awScope || "diese") === k2 ? "on" : ""} @click=${() => p4.awScopeWahl(k2)}>${t5}</button>`)}</div>
+    <div class="glas-panel liste aw-es-liste"><button class="zeile" data-aw="anordnung" @click=${() => {
+    p4.schliessen();
+    if (!p4.s.aw.anord) p4.awAnordnung();
+  }}><span>✎ Anordnung der Abschnitte</span><span class="chev">›</span></button>
+      <button class="zeile" data-aw="sim" @click=${() => p4.simUmschalten()}><span>💶 Preis</span><span class="leise">${p4.s.awSim ? `simuliert ${de(p4.simPreis(), 2)} €` : "tatsächlich"}</span></button></div>
+    <button class="knopf amber" @click=${() => p4.schliessen()}>Fertig</button>`;
+}
 function auswertungVorlage(p4) {
   const { A: A2, z: z2 } = awAntwort(p4), alle = p4.s.awScope === "alle", aus = awAus(p4);
   const S3 = {
@@ -6156,7 +6189,9 @@ function auswertungVorlage(p4) {
     abrechnung: () => abrechnungAbschnitt(p4, z2),
     geraete: () => geraeteAbschnitt(p4, A2, z2)
   };
-  return b2`${kopf5(p4, alle)}${leiste(p4, A2, z2, alle)}${awReihe(p4).filter((k2) => !aus.includes(k2)).map((k2) => S3[k2]())}`;
+  const teile = awReihe(p4).filter((k2) => !aus.includes(k2)).map((k2) => S3[k2]());
+  if (p4.narrow) return b2`${p4.s.aw.anord ? kopf5(p4, alle) : A}${simBand(p4)}${handyLeiste(p4, A2, z2, alle)}${teile}`;
+  return b2`${kopf5(p4, alle)}${leiste(p4, A2, z2, alle)}${teile}`;
 }
 function awDetailEinblendung(p4, s4) {
   const { A: A2, z: z2 } = awAntwort(p4), alle = p4.s.awScope === "alle";
@@ -6870,6 +6905,18 @@ ${NUR_LESEN_SPERRE.map((x2) => `.nur-lesen ${x2}`).join(", ")} { opacity: .45; f
 /* M13/M14: Auswertung mit Zeitraumleiste und festen Abschnitten (Mockup auswertung-neu.html) */
 .aw-zrl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; } .aw-zrl > .seg { flex-wrap: wrap; max-width: 100%; }
 .aw-zrl.klebt { position: sticky; top: 74px; z-index: 3; }   /* unter der Reiterleiste */
+/* Handy (Mockup auswertung-handy.html A): eine Leiste */
+.aw-hl { padding: 8px 10px 6px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; } .aw-hl.klebt { position: sticky; top: 0; z-index: 3; }
+.aw-hl-z1 { display: flex; align-items: center; gap: 6px; } .aw-hl-zr { white-space: nowrap; font-weight: 600; }
+.aw-hl-nav { flex: 1; display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.aw-hl-nav b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aw-hl-nav button { background: none; border: 0; color: var(--ink); font-size: 22px; padding: 0 8px; } .aw-hl-nav button:disabled { opacity: .3; }
+.aw-hl-kal { flex: 1; min-width: 0; } .aw-hl-kal .zr-zeile { margin: 0; flex-wrap: nowrap; } .aw-hl-kal .zr-nav { flex: 1; min-width: 0; box-sizing: border-box; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; }
+.aw-hl-kal .zr-mitte { min-height: 30px; min-width: 0; } .aw-hl-kal .zr-mitte b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; } .aw-hl-kal .zr-mitte small, .aw-hl-kal .zr-akt, .aw-hl-kal .zr-pfeil { display: none; } .aw-hl-kal .zr-pf { width: 26px; height: 30px; } .aw-hl-kal .zr-mitte { padding: 0 2px; }
+.aw-hl-ein { padding: 4px 10px; font-size: 16px; } .aw-hl-unter { font-size: 12px; padding: 0 2px; }
+.aw-hl-sprung { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; } .aw-hl-sprung::-webkit-scrollbar { display: none; }
+.aw-hl-sprung .chip { white-space: nowrap; font-size: 12px; padding: 4px 10px; }
+.aw-es-seg { flex-wrap: wrap; margin-bottom: 8px; } .aw-es-liste { margin: 8px 0 12px; }
 .aw-zrl .zr-zeile { margin: 0; } .aw-vg { font-size: 13px; color: var(--ink2); display: flex; gap: 6px; align-items: center; }
 .aw-vg select, .aw-wd-k select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--gridc); background: transparent; color: var(--ink); max-width: 100%; }
 .aw-vg-t { flex-basis: 100%; font-size: 12px; } .aw-filter { font-weight: 600; }
@@ -7300,8 +7347,8 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.202";
-var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail"];
+var SEITE_VERSION = "0.8.203";
+var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail", "aw-einstellen"];
 var BaustellePanel = class extends i4 {
   static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(VERLAUF_DETAIL_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
@@ -9752,6 +9799,7 @@ var BaustellePanel = class extends i4 {
     else if (S3.sheet && HEIZPERIODE_EINBLENDUNGEN[S3.sheet.art]) sheet = HEIZPERIODE_EINBLENDUNGEN[S3.sheet.art](this, S3.sheet);
     else if (S3.sheet && S3.sheet.art === "kk-katalog") sheet = katalogEinblendung(this, S3.sheet);
     else if (S3.sheet && S3.sheet.art === "aw-detail") sheet = awDetailEinblendung(this, S3.sheet);
+    else if (S3.sheet && S3.sheet.art === "aw-einstellen") sheet = awEinstellenEinblendung(this, S3.sheet);
     else if (S3.sheet && UEBERSICHT_EINBLENDUNGEN[S3.sheet.art]) sheet = UEBERSICHT_EINBLENDUNGEN[S3.sheet.art](this, S3.sheet);
     const meldenKnopf = (cls, fn) => b2`<button class="melden-knopf ${cls}" title="Fehler, Wunsch oder Anregung melden" aria-label="Melden" @click=${fn}>${o5(ICON_MELDEN)}</button>`;
     return b2`<div class="scroll">${i6(`${S3.view}:${S3.cid || ""}`, b2`<div class="seite ${neu ? "rein" : ""}">${this.versionHinweis()}${this.nurLesenHinweis()}${seite}</div>`)}</div>

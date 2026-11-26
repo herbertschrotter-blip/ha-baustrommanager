@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.203] – 2026-11-26
+
+- Geändert (Mockup `mockups/auswertung-handy.html`, Variante A, abgenommen 26.11.2026): Die **Auswertung am Handy** ist
+  oben kompakt – eine Leiste `Monat ▾ ‹ November 2026 › ⚙`, darunter klein Baustelle und Vergleich, die Sprungleiste als
+  eine Zeile zum Wischen. Zeitraum, „vergleichen mit“, Diese/Alle, ✎ Anordnung und 💶 Preis stehen in „Auswertung
+  einstellen“ (⚙ oder „Monat ▾“). Am PC bleibt alles wie in 0.8.202.
+
 ## [0.8.202] – 2026-11-26
 
 - Neu gestaltet (UI-Bericht M13/M14, Mockup `mockups/auswertung-neu.html`, abgenommen 26.11.2026): Die **Auswertung** hat
