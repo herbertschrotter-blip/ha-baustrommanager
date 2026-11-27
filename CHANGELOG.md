@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.206] – 2026-11-27
+
+- Geändert (UI-Bericht M16, Mockup `mockups/kontaktwahl.html`, abgenommen 27.11.2026): **Wahl mit Suche überall**, wo eine
+  Entität gewählt wird. In „Gerät bearbeiten“ (Shelly, Leistungs- und Energiesensor) und „Wetter und Kalender“ (Wetter,
+  Außentemperatur, Regenmenge, Urlaub, Feiertage, Termine) zeigt jedes Feld Name, Entity-ID und Zustand; „ändern“ klappt
+  die Liste mit Suche über Name und Entity-ID auf, wie unter Fühler & Kontakte. Dort gilt die Wahl weiter erst mit
+  „Speichern“.
+- Geändert: In **„Aussehen“** werden Tür-, Fenstersensor und Licht nur noch angezeigt; „ändern ›“ öffnet Container-Seite ›
+  Fühler & Kontakte mit der Liste für genau diesen Platz. Ein gerade hinzugefügtes Fenster oder eine Tür bekommt den
+  Sensor nach dem Speichern.
+
 ## [0.8.205] – 2026-11-26
 
 - Neu (UI-Bericht M15, Mockup `mockups/was-fehlt.html`, abgenommen 26.11.2026): Karte **„Was fehlt noch“** ganz unten in

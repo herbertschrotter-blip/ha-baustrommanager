@@ -36,6 +36,7 @@ import { npPlugEinblendung } from './ansichten/notprogramm.js';
 import { INVENTAR_EINBLENDUNGEN, INV_BREIT, INV_CSS } from './ansichten/inventar.js';
 import { ASSISTENT_BREIT, ASSISTENT_CSS, ASSISTENT_EINBLENDUNGEN } from './ansichten/assistent.js';
 import { CS_BREIT, CS_CSS } from './ansichten/container-seite.js';
+import { WAHL_CSS } from './ansichten/wahl.js';
 import { GERAETE_CSS, GERAETE_EINBLENDUNGEN } from './ansichten/geraete.js';
 import { HEIZPERIODE_CSS, HEIZPERIODE_EINBLENDUNGEN, hochrechnungSvg } from './ansichten/heizperiode.js';
 import { GRUNDLAGEN_CSS } from './ansichten/grundlagen.js';
@@ -1094,7 +1095,7 @@ const STATISCH = '/baustelle_static';
 const SEITE_VERSION = __BAUSTELLE_VERSION__;   // Version dieser Seite – beim Bauen aus version.json (tools/changelog.py → bauen.mjs, BSM-022)
 const LIT_SHEETS = ['melden', 'leistung', 'heizzeit-c', 'bedarf', 'termin', 'lernen', 'hz', 'heizplan', 'az', 'ausnahme', 'az-neu', ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), 'np-plug', ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), 'kk-katalog', ...Object.keys(UEBERSICHT_EINBLENDUNGEN), 'aw-detail', 'aw-einstellen'];   // Einblendungen, die Lit zeichnet (BSM-022 2a.2, 3d)
 class BaustellePanel extends LitElement {
-  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(GRUNDLAGEN_CSS), unsafeCSS(VERLAUF_DETAIL_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
+  static styles = [unsafeCSS(CSS), unsafeCSS(GLAS_CSS), unsafeCSS(INV_CSS), unsafeCSS(ASSISTENT_CSS), unsafeCSS(CS_CSS), unsafeCSS(WAHL_CSS), unsafeCSS(GERAETE_CSS), unsafeCSS(HEIZPERIODE_CSS), unsafeCSS(GRUNDLAGEN_CSS), unsafeCSS(VERLAUF_DETAIL_CSS), unsafeCSS(BASELINE_CSS), unsafeCSS(WISCHEN_CSS), unsafeCSS(START_STIL)];   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
     this.s = einblendungen({ view: 'uebersicht', cid: null, sheet: null, chart: 'temp', verlauf: 'aktiv' });
@@ -2061,6 +2062,9 @@ class BaustellePanel extends LitElement {
   geraetNennKw(f, g, dd) { f.nennKw = Math.max(0, Math.min(10, Math.round(((f.nennKw ?? g.kw) + dd) * 10) / 10)); return this.neuZeichnen(); }   // Szenarien: Nennleistung ohne Messung
   unterDialog(sheet) { const s = this.s.sheet; this.s.sheet = { ...sheet, zurueck: s && s.art === 'bereich' ? s : null }; return this.neuZeichnen(); }   // aus „Bearbeiten“: danach dorthin zurück, Entwurf bleibt
   aussehenAuf(x) { return this.unterDialog({ art: 'aussehen', id: x.id }); }   // BSM-032
+  /* M16: Sensor im Symbol ändern = Container-Seite › Fühler & Kontakte mit offener Liste für den Platz (tuer:i, fenster:i, licht);
+     ein nicht gespeicherter Entwurf des Aussehens verfällt (Sensoren gelten dort sofort) */
+  aussehenZuKontakt(x, platz) { this.s.cid = x.id; this.s.sheet = { art: 'bereich', tab: 'fuehler', wahl: platz, q: '' }; return this.neuZeichnen(); }
   /* Container-Seite (UI-Bericht M8, Mockup container-seite.html, Herbert 24.11.2026): jede Änderung gilt sofort, kein Entwurf */
   csTab(t) { const s = this.s.sheet; if (s) { s.tab = t; s.wahl = null; s.q = ''; } return this.neuZeichnen(); }
   csSetzen(x, k, w, ok) { return this.setzen(['bereiche', x.id, k], w, ok); }

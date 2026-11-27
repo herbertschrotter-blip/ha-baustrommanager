@@ -10,6 +10,7 @@ import { de } from '../hilfen.js';
 import { BEREICH_FARBEN, SYMBOL_STANDARD, bcContainer } from '../symbole.js';
 import { schalterVorlage } from './allgemein.js';
 import { optionenVorlage } from './einblendungen-baustelle.js';
+import { wahlFeld, zustandText } from './wahl.js';
 
 const GRIFF = html`<div class="griff"></div>`;
 const knopf = (t, fn, art = '') => html`<button class="knopf ${art}" @click=${fn}>${t}</button>`;
@@ -61,14 +62,17 @@ function aussehen(p, s) {
   const c = p.symKonfig(b), ist = b.symbol || SYMBOL_STANDARD, std = BEREICH_FARBEN[b.f % BEREICH_FARBEN.length], aendern = x => p.symAendern(b, x);
   const vorschau = { ...c, licht_an: ist.licht_an, tueren: c.tueren.map((t, i) => ({ ...t, offen: !!(ist.tueren[i] && ist.tueren[i].offen) })),
     fenster: c.fenster.map((f, i) => ({ ...f, zustand: (ist.fenster[i] && ist.fenster[i].zustand) || 'zu' })) };
-  const kontakte = p.entitaeten(x => x.entity_id.startsWith('binary_sensor.') && ['door', 'window', 'opening', 'garage_door'].includes(x.attributes.device_class));
-  const lichter = p.entitaeten(x => /^(light|switch)\./.test(x.entity_id) || (x.entity_id.startsWith('binary_sensor.') && x.attributes.device_class === 'light') || (x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'illuminance'));
+  /* M16: Sensoren werden hier nur gezeigt; gewählt wird unter Container-Seite › Fühler & Kontakte (Liste mit Suche, gilt sofort).
+     Ein Element, das erst im Entwurf steht, hat dort noch keinen Platz – erst speichern. */
+  const gespeichert = p.symAus(b);
+  const sensor = (eid, platz, da, leer) => html`<span class="kw-r">${eid ? html`<span><b>${p.name(eid) || eid}</b> <span class="leise">· ${zustandText(p, eid)}</span></span>` : html`<span class="leise">${leer}</span>`}
+      ${da ? html`<button class="cs-link nur-admin" data-kontakt=${platz} @click=${p.nurAdmin(e => { e.preventDefault(); p.aussehenZuKontakt(b, platz); })}>ändern ›</button>` : html`<span class="leise">erst speichern</span>`}</span>`;
   const seg = (fn, wert, opts) => html`<div class="seg klein">${opts.map(([v, t]) => html`<button data-v=${v} class=${String(wert) === String(v) ? 'on' : ''} @click=${() => fn(v)}>${t}</button>`)}</div>`;
-  const wahl = (wert, fn, marke) => html`<select data-f=${marke || nothing} @change=${e => fn(e.target.value)}>${wert}</select>`;
   const element = (art, x, i, n) => html`<div class="zeile"><b>${art === 'tueren' ? '🚪 Tür' : '🪟 Fenster'} ${i + 1}</b>${n > 1 ? html`<button class="knopf klein" aria-label="entfernen" @click=${() => aendern(k => { if (k[art].length > 1) k[art].splice(i, 1); })}>✕</button>` : nothing}</div>
       <div class="zeile unter"><span>Wand</span>${seg(v => aendern(k => { k[art][i].wand = v; }), x.wand, [['front', 'Front'], ['seite', 'Seite']])}</div>
       <div class="zeile unter" data-z="lage" data-art=${art} data-i=${i}><span>${art === 'tueren' ? 'Sitzt' : 'Lage'}</span>${art === 'tueren' ? seg(v => aendern(k => { k[art][i].pos = +v; }), x.pos < .4 ? .15 : x.pos > .6 ? .85 : .5, [[.15, 'links'], [.5, 'Mitte'], [.85, 'rechts']]) : seg(v => aendern(k => { k[art][i].pos = +v; }), x.pos, [[.15, 'links'], [.33, '◧'], [.5, 'Mitte'], [.67, '◨'], [.85, 'rechts']])}</div>
-      <label class="zeile unter"><span>${art === 'tueren' ? 'Türsensor' : 'Fenstersensor'}</span>${wahl(optionenVorlage(kontakte, x.sensor || '', art === 'tueren' && i === 0 ? 'wie Türkontakt des Containers' : 'keiner'), v => aendern(k => { k[art][i].sensor = v || null; }))}</label>`;
+      <div class="zeile unter" data-z="sensor" data-art=${art} data-i=${i}><span>${art === 'tueren' ? 'Türsensor' : 'Fenstersensor'}</span>${sensor(art === 'tueren' && i === 0 ? (x.sensor || (b.tuer && b.tuer.eid) || null) : x.sensor,
+        `${art === 'tueren' ? 'tuer' : 'fenster'}:${i}`, !!(gespeichert[art] && gespeichert[art][i]), art === 'tueren' && i === 0 ? 'wie Türkontakt des Containers' : 'keiner')}</div>`;
   const neu = art => aendern(k => { if (k[art].length < (art === 'tueren' ? 2 : 4)) { const frei = [.15, .33, .5, .67, .85].find(v => !k[art].some(y => y.wand === 'front' && y.pos === v)) ?? .5; k[art].push({ wand: 'front', pos: frei, sensor: null }); } });
   const farbe = (fb, an, fn, label) => html`<button data-v=${fb} class="sym-farbe ${an ? 'on' : ''}" style="background:${fb}" aria-label="${label} ${fb}" @click=${fn}></button>`;
   return html`${GRIFF}<div class="block-kopf"><h3>🏠 Aussehen · ${b.name}</h3></div><div class="sym-vorschau">${unsafeHTML(bcContainer(std, b.z === 'pause' || b.z === 'bereit' ? 'aus' : b.z, { symbol: vorschau }))}</div>
@@ -77,8 +81,8 @@ function aussehen(p, s) {
         <div class="zeile"><div><span>Rahmen</span><div class="leise">Stahlrahmen an Ecken, oben und unten (20 cm)</div></div><span class="sym-farben"><button data-v="" class="knopf klein ${c.rahmen ? '' : 'on'}" @click=${() => aendern(k => { k.rahmen = null; })}>kein</button>${['#c62828', '#37474f', '#eceff1', '#1565c0', '#f9a825', '#2e7d32'].map(fb => farbe(fb, c.rahmen === fb, () => aendern(k => { k.rahmen = fb; }), 'Rahmen'))}<input type="color" value=${c.rahmen || '#37474f'} .value=${live(c.rahmen || '#37474f')} aria-label="eigene Rahmenfarbe" @change=${e => aendern(k => { k.rahmen = e.target.value; })}></span></div></div>
       <div class="glas-panel liste"><div class="gruppe">Türen · ${c.tueren.length} von 2</div>${c.tueren.map((x, i) => element('tueren', x, i, c.tueren.length))}${c.tueren.length < 2 ? html`<button class="zeile" data-art="tueren" @click=${() => neu('tueren')}><span class="blau">+ Tür</span></button>` : nothing}</div>
       <div class="glas-panel liste"><div class="gruppe">Fenster · ${c.fenster.length} von 4</div>${c.fenster.map((x, i) => element('fenster', x, i, c.fenster.length))}${c.fenster.length < 4 ? html`<button class="zeile" data-art="fenster" @click=${() => neu('fenster')}><span class="blau">+ Fenster</span></button>` : nothing}</div>
-      <div class="glas-panel liste"><div class="gruppe">Licht im Symbol</div><label class="zeile"><div><span>Licht kommt von</span><div class="leise">Fenster leuchten, wenn im Container Licht brennt</div></div>${wahl(optionenVorlage(lichter, c.licht || '', 'keins'), v => aendern(k => { k.licht = v || null; }), 'licht')}</label></div>
-      <div class="leise p-fuss">Türen sitzen links, mittig oder rechts an ihrer Wand; mehrere Fenster verteilen sich gleichmäßig auf den Platz daneben. Tür offen/zu, Fenster offen/gekippt/zu und Licht kommen von den zugeordneten Sensoren; ohne Sensor bleibt das Element zu bzw. dunkel.</div>
+      <div class="glas-panel liste"><div class="gruppe">Licht im Symbol</div><div class="zeile" data-z="licht"><div><span>Licht kommt von</span><div class="leise">Fenster leuchten, wenn im Container Licht brennt</div></div>${sensor(c.licht, 'licht', true, 'keins')}</div></div>
+      <div class="leise p-fuss">Türen sitzen links, mittig oder rechts an ihrer Wand; mehrere Fenster verteilen sich gleichmäßig auf den Platz daneben. Tür offen/zu, Fenster offen/gekippt/zu und Licht kommen von den zugeordneten Sensoren (gewählt unter Fühler & Kontakte); ohne Sensor bleibt das Element zu bzw. dunkel.</div>
       ${b.symbol && b.symbol.eigen && !s.std ? html`<button class="knopf" @click=${() => p.symStandard()}>Standard (eine Tür, ein Fenster)</button>` : nothing}
       ${knopf('Speichern', p.nurAdmin(() => p.symSpeichern(b)), 'amber nur-admin')}${knopf('Abbrechen', () => p.schliessen(), 'leise-k')}`;
 }
@@ -95,11 +99,11 @@ function geraetEdit(p, s) {
         ${x ? jetztVorlage(p, x) : nothing}
         <div class="gruppe-t">Einstellungen</div>
         <label class="feld">Name${text(f, 'n')}</label>
-        <label class="feld">Shelly (Schalter)${auswahl(f, 'schalter', optionenVorlage(p.freieSchalter(g.schalter).map(([v, n]) => [v, `${n} (${v})`]), f.schalter))}</label>
+        <div class="feld">Shelly (Schalter)${wahlFeld(p, s, f, 'schalter', p.freieSchalter(g.schalter), null)}</div>
         <div class="raster-2"><label class="feld">Typ${auswahl(f, 'typ', typen.map(t => html`<option ?selected=${f.typ === t}>${t}</option>`))}</label>
           <label class="feld">${b.pumpe ? 'Pumpenschacht' : 'Container'}${auswahl(f, 'bereich', optionenVorlage(d.bereiche.filter(x => !!x.pumpe === !!b.pumpe).map(x => [x.id, x.name]), f.bereich))}</label></div>
-        <label class="feld">Leistungssensor${auswahl(f, 'leistung', optionenVorlage(leistung, f.leistung, auto(g.leistung, g.leistungEigen)))}</label>
-        <label class="feld">Energiesensor${auswahl(f, 'energie', optionenVorlage(energie, f.energie, auto(g.energie, g.energieEigen)))}</label>
+        <div class="feld">Leistungssensor${wahlFeld(p, s, f, 'leistung', leistung, auto(g.leistung, g.leistungEigen))}</div>
+        <div class="feld">Energiesensor${wahlFeld(p, s, f, 'energie', energie, auto(g.energie, g.energieEigen))}</div>
         <div class="zeile" data-zeile="status"><div><b>Status</b><div class="leise">nur „aktiv“ schaltet die Automatik, zählt in der Staffelung und meldet Warnungen; gilt auch im Inventar</div></div>
           <div class="seg klein">${[['aktiv', 'aktiv'], ['inaktiv', 'inaktiv'], ['verliehen', 'verliehen'], ['defekt', 'defekt']].map(([v, t]) => html`<button data-v=${v} class=${f.status === v ? 'on' : ''} @click=${() => { f.status = v; p.neuZeichnen(); }}>${t}</button>`)}</div></div>
         ${g.heizer || !g.leistung ? html`<div class="zeile" data-zeile="nenn"><div>${g.heizer   // 28.10.2026: Typenschild für jeden Heizkörper (P_ref der Prognose), auch mit Leistungssensor

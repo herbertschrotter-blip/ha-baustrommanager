@@ -18,6 +18,7 @@ function browser(R) {
   const { html, nothing } = R;
   const BID = 'polier';
   const G = window.KW = { offen: null, q: '' };
+  const gebaut = !!R.proto.aussehenZuKontakt;   // gebaut in 0.8.206: dann zeigt die Datei die echte Seite
   const neu = () => R.neuAlle();
   const zustand = (p, eid) => { const z = eid && p._hass && p._hass.states[eid]; if (!z) return '';
     if (['unavailable', 'unknown'].includes(z.state)) return 'nicht erreichbar';
@@ -59,7 +60,7 @@ function browser(R) {
   };
 
   /* Gerät bearbeiten, Wetter und Kalender: <select data-f=k> der Entitäten → Wahlfeld */
-  R.vorlage({ merkmal: '<select data-f=', wann: p => !!(p.s.sheet && FELDER[p.s.sheet.art]), fn: (t, p) => {
+  R.vorlage({ merkmal: '<select data-f=', wann: p => !gebaut && !!(p.s.sheet && FELDER[p.s.sheet.art]), fn: (t, p) => {
     const k = t.values[0], F = FELDER[p.s.sheet.art][k]; if (!F) return undefined;
     const [liste, leer] = F(p); return html`<div class="kw-feld">${wahlfeld(p, k, liste, leer)}</div>`; } });
 
@@ -67,13 +68,13 @@ function browser(R) {
   const zuFuehler = (p, platz) => { G.offen = null; for (const q of R.P()) { q.containerOeffnen(BID); q.s.sheet = { art: 'bereich' }; if (q.csTab) q.csTab('fuehler'); q.neuZeichnen(); } };
   const sensorZeile = (p, eid, platz, leer) => html`<span class="kw-r">${eid ? html`<span><b>${p.name(eid) || eid}</b>${zustand(p, eid) ? html` <span class="leise">· ${zustand(p, eid)}</span>` : nothing}</span>` : html`<span class="leise">${leer}</span>`}
       <button class="cs-link" data-kw=${platz} @click=${e => { e.preventDefault(); zuFuehler(p, platz); }}>ändern ›</button>${R.marke}</span>`;
-  R.vorlage({ merkmal: '<label class="zeile unter"><span>', wann: p => !!(p.s.sheet && p.s.sheet.art === 'aussehen'), fn: (t, p) => {
+  R.vorlage({ merkmal: '<label class="zeile unter"><span>', wann: p => !gebaut && !!(p.s.sheet && p.s.sheet.art === 'aussehen'), fn: (t, p) => {
     const b = p.d.bereiche.find(x => x.id === p.s.sheet.id); if (!b) return undefined;
     const n = { ...t, values: [...t.values] }, art = n.values[4], i = n.values[5], c = p.symKonfig(b), x = c[art] && c[art][i]; if (!x) return undefined;
     const eid = x.sensor || (art === 'tueren' && i === 0 && b.tuer && b.tuer.eid) || null;
     n.values[n.values.length - 1] = sensorZeile(p, eid, `${art === 'tueren' ? 'tuer' : 'fenster'}${i}`, art === 'tueren' && i === 0 ? 'wie Türkontakt des Containers' : 'keiner');
     return n; } });
-  R.vorlage({ merkmal: 'Licht kommt von', wann: p => !!(p.s.sheet && p.s.sheet.art === 'aussehen'), fn: (t, p) => {
+  R.vorlage({ merkmal: 'Licht kommt von', wann: p => !gebaut && !!(p.s.sheet && p.s.sheet.art === 'aussehen'), fn: (t, p) => {
     const k = t.strings.findIndex(s => s.includes('Licht kommt von')); if (k < 0) return undefined;
     const b = p.d.bereiche.find(x => x.id === p.s.sheet.id); if (!b) return undefined;
     const n = { ...t, values: [...t.values] }; n.values[k] = sensorZeile(p, p.symKonfig(b).licht, 'licht', 'keins');
@@ -93,9 +94,10 @@ function browser(R) {
     for (const q of R.P()) {
       if (!q.d) continue;
       q.s.sheet = null;
+      const kw = k => { if (gebaut) q.s.sheet.wahl = k, q.s.sheet.q = G.q; else G.offen = k; };
       if (z.startsWith('geraet')) { q.containerOeffnen(BID); const b = q.d.bereiche.find(x => x.id === BID); q.geraetBearbeiten(b, 0); q.s.sheet.zurueck = null;
-        if (z === 'geraet-leistung') G.offen = 'leistung'; if (z === 'geraet-shelly') { G.offen = 'schalter'; G.q = 'heizung'; } }
-      else if (z.startsWith('wetter')) { q.gehe('einstellungen'); q.einblenden('wetterquelle'); if (z === 'wetter-temp') G.offen = 'temp_sensor'; if (z === 'wetter-kal') G.offen = 'urlaub_kalender'; }
+        if (z === 'geraet-leistung') kw('leistung'); if (z === 'geraet-shelly') { G.q = 'heizung'; kw('schalter'); } }
+      else if (z.startsWith('wetter')) { q.gehe('einstellungen'); q.einblenden('wetterquelle'); if (z === 'wetter-temp') kw('temp_sensor'); if (z === 'wetter-kal') kw('urlaub_kalender'); }
       else if (z === 'aussehen') { q.containerOeffnen(BID); q.aussehenAuf({ id: BID }); q.s.sheet.zurueck = null; }
       else if (z === 'fuehler') { q.containerOeffnen(BID); q.s.sheet = { art: 'bereich' }; if (q.csTab) q.csTab('fuehler'); }
       await q.neuZeichnen();
@@ -109,6 +111,6 @@ const ZEIGEN = [
   ['aussehen', 'M16 Aussehen · Sensoren nur anzeigen, ändern › Fühler & Kontakte'], ['fuehler', 'M16 Ziel: Container-Seite › Fühler & Kontakte (gebaut)'],
 ];
 const faelle = ZEIGEN.map(([z]) => ({ name: z, werte: { zeigen: z } }));
-faelle.push({ name: 'aussehen-unten', werte: { zeigen: 'aussehen' }, scroll: '[data-kw="licht"]' });
+faelle.push({ name: 'aussehen-unten', werte: { zeigen: 'aussehen' }, scroll: '[data-kontakt="licht"], [data-kw="licht"]' });
 rahmen.bauen({ datei: 'kontaktwahl.html', titel: 'Baustelle – Kontaktwahl mit Suche (M16)', leiste: 'Schritt M16 · Wahl mit Suche überall, wo Entitäten gewählt werden',
   browser, faelle, auswahl: [{ id: 'zeigen', t: 'zeigen', optionen: ZEIGEN }] });

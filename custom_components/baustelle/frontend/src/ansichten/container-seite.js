@@ -12,6 +12,7 @@ import { MODI, MODUS_TEXT } from '../tabellen.js';
 import { schalterVorlage } from './allgemein.js';
 import { eiSpringen, kostenHeute } from './container.js';
 import { namenChip, zustand } from './inventar.js';
+import { wahlListe, zustandText } from './wahl.js';
 
 const GRIFF = html`<div class="griff"></div>`;
 const knopf = (t, fn, art = '') => html`<button class="knopf ${art}" @click=${fn}>${t}</button>`;
@@ -78,23 +79,11 @@ function tabHeizung(p, s, b, E) {
 }
 
 /* ---------- Reiter Fühler & Kontakte (mit Suche, M16) ---------- */
-function zustandText(p, eid) {
-  const z = eid && p._hass && p._hass.states[eid]; if (!z) return 'nicht gefunden';
-  if (['unavailable', 'unknown'].includes(z.state)) return 'nicht erreichbar';
-  if (eid.startsWith('binary_sensor.')) return z.attributes.device_class === 'light' ? (z.state === 'on' ? 'an' : 'aus') : z.state === 'on' ? 'offen' : 'zu';
-  if (eid.startsWith('climate.')) return z.attributes.current_temperature !== undefined ? `${de(Number(z.attributes.current_temperature), 1)} °C` : z.state;
-  return `${z.state}${z.attributes.unit_of_measurement ? ` ${z.attributes.unit_of_measurement}` : ''}`;
-}
-
-function wahlListe(p, s, b, platz, filter) {
-  const q = (s.q || '').trim().toLowerCase(), alle = p.entitaeten(filter);
-  const treffer = q ? alle.filter(([eid, n]) => n.toLowerCase().includes(q) || eid.toLowerCase().includes(q)) : alle;
+function csWahl(p, s, b, platz, filter, wert) {
   const nimm = eid => platz === 'fuehler' ? p.csFuehler(b, eid) : p.csKontakt(b, platz, eid);
-  return html`<div class="cs-picker" data-wahl=${platz}><input type="search" placeholder="Suchen: Name oder Entity-ID" data-f="suche" .value=${live(s.q || '')} @input=${ev => { s.q = ev.target.value; p.neuZeichnen(); }}>
-      ${treffer.slice(0, 30).map(([eid, n]) => html`<button class="zeile cs-pk" data-eid=${eid} @click=${p.nurAdmin(() => nimm(eid))}><div><b>${n}</b><div class="cs-id">${eid}</div></div><span class="leise">${zustandText(p, eid)}</span></button>`)}
-      ${treffer.length > 30 ? html`<div class="leise">… ${treffer.length - 30} weitere – genauer suchen</div>` : treffer.length ? nothing : html`<div class="leer">Nichts gefunden</div>`}
-      <div class="cs-pk-fuss"><button class="cs-link" @click=${p.nurAdmin(() => p.assistentAuf({ bid: b.id, vorgabe: true }))}>Neues Gerät mit dem Assistenten ›</button>
-        <button class="cs-link" data-k="keiner" @click=${p.nurAdmin(() => nimm(null))}>keiner</button><button class="cs-link" @click=${() => { s.wahl = null; s.q = ''; p.neuZeichnen(); }}>schließen</button></div></div>`;
+  return wahlListe(p, s, { platz, liste: p.entitaeten(filter), wert: wert || null, leer: null, nimm, schliessen: () => { s.wahl = null; s.q = ''; p.neuZeichnen(); },
+    fuss: html`<button class="cs-link" @click=${p.nurAdmin(() => p.assistentAuf({ bid: b.id, vorgabe: true }))}>Neues Gerät mit dem Assistenten ›</button>
+      <button class="cs-link" data-k="keiner" @click=${p.nurAdmin(() => nimm(null))}>keiner</button>` });
 }
 
 function tabFuehler(p, s, b, E) {
@@ -107,7 +96,7 @@ function tabFuehler(p, s, b, E) {
   return html`<div class="glas-panel liste cs-gr">
       ${plaetze.map(([k, ic, t, eid, filter, sub]) => html`${zeile(k.replace(':', ''), html`${ic} ${t}`, eid ? html`${p.name(eid)} · ${zustandText(p, eid)}<div class="cs-id">${eid}</div>` : (sub || 'keiner zugeordnet'),
           eid ? html`<button class="chip glas-panel nur-admin" @click=${p.nurAdmin(() => auf(k))}>ändern</button>` : html`<button class="chip glas-panel cs-plus nur-admin" @click=${p.nurAdmin(() => auf(k))}>+ zuordnen</button>`)}
-        ${s.wahl === k ? wahlListe(p, s, b, k, filter) : nothing}`)}
+        ${s.wahl === k ? csWahl(p, s, b, k, filter, eid) : nothing}`)}
       ${zeile('tuerpause', 'Tür-Pause', 'Tür oder Fenster offen → die Heizung pausiert', html`<span class="cs-wert">${E.tuer ? E.tuer.text : '–'}</span>`, E.tuer, marke(p, E.tuer))}
     </div>
     <div class="leise cs-fuss">Wie viele Türen und Fenster das Symbol hat und wo sie sitzen, steht unter 🏠 Aussehen. Die Suche geht über alle passenden Entitäten in Home Assistant.</div>`;

@@ -5,6 +5,7 @@ import { html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { MONATE, TAGE, datum, de, plusTage, uhr, zahl } from '../hilfen.js';
 import { BEREICH_FARBEN } from '../symbole.js';
+import { wahlFeld } from './wahl.js';
 
 const GRIFF = html`<div class="griff"></div>`;
 const LAEDT = html`<div class="leer">Lädt …</div>`;
@@ -13,8 +14,6 @@ const knopf = (t, fn, art = '') => html`<button class="knopf ${art}" @click=${fn
 const feld = (ziel, k, typ, ph, extra = {}) => html`<input type=${typ || nothing} step=${extra.step || nothing} min=${extra.min ?? nothing} value=${ziel[k] ?? ''} .value=${live(String(ziel[k] ?? ''))} placeholder=${ph || nothing} data-f=${k} @input=${e => { ziel[k] = e.target.value; }}>`;
 /** Auswahlliste aus [wert, name] (wie BaustellePanel.optionen, als Vorlage) */
 export const optionenVorlage = (liste, aktuell, leer) => html`${leer ? html`<option value="">${leer}</option>` : nothing}${liste.map(([v, n]) => html`<option value=${v} ?selected=${v === aktuell}>${n}</option>`)}`;
-const auswahl = (ziel, k, liste, leer) => { const setze = e => { ziel[k] = e.target.value; };
-  return html`<select data-f=${k} @input=${setze} @change=${setze}>${optionenVorlage(liste, ziel[k], leer)}</select>`; };
 
 /** Strompreise mit Gültigkeit (Einstellungen › Strom und „Baustelle bearbeiten“) */
 export function preisListeVorlage(p) {
@@ -52,14 +51,14 @@ function wetterquelle(p, s) {
   const f = s.form, kal = p.entitaeten(x => x.entity_id.startsWith('calendar.')), urlaubKal = p.entitaeten(beschreibbar);
   const alt = f.urlaub_kalender && !urlaubKal.some(([v]) => v === f.urlaub_kalender) ? [[f.urlaub_kalender, `${p.name(f.urlaub_kalender) || f.urlaub_kalender} (nicht beschreibbar)`]] : [];
   return html`${GRIFF}<h3>Wetter und Kalender</h3>
-        <label class="feld">Wetter${auswahl(f, 'wetter', p.entitaeten(x => x.entity_id.startsWith('weather.')), '– keins –')}</label>
-        <label class="feld">Außentemperatur${auswahl(f, 'temp_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'temperature'), 'aus der Vorhersage')}</label>
-        <label class="feld">Regenmenge${auswahl(f, 'regen_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'precipitation'), 'aus der Vorhersage')}</label>
+        <div class="feld">Wetter${wahlFeld(p, s, f, 'wetter', p.entitaeten(x => x.entity_id.startsWith('weather.')), 'keins')}</div>
+        <div class="feld">Außentemperatur${wahlFeld(p, s, f, 'temp_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'temperature'), 'aus der Vorhersage')}</div>
+        <div class="feld">Regenmenge${wahlFeld(p, s, f, 'regen_sensor', p.entitaeten(x => x.entity_id.startsWith('sensor.') && x.attributes.device_class === 'precipitation'), 'aus der Vorhersage')}</div>
         <div class="gruppe-t">Kalender</div>
-        <label class="feld">Urlaub${auswahl(f, 'urlaub_kalender', [...urlaubKal, ...alt], '– keiner –')}</label>
+        <div class="feld">Urlaub${wahlFeld(p, s, f, 'urlaub_kalender', [...urlaubKal, ...alt], 'keiner')}</div>
         ${!urlaubKal.length ? html`<div class="leise kal-hinweis" data-k="kein-urlaubskalender">${KEIN_URLAUBSKALENDER}</div>` : alt.length ? html`<div class="leise kal-hinweis amber-t">Der gewählte Kalender kann keine Termine anlegen – Urlaub eintragen geht damit nicht.</div>` : nothing}
-        <label class="feld">Feiertage${auswahl(f, 'feiertag_kalender', kal, '– keiner –')}</label>
-        <label class="feld">Termine (Container nur bei Bedarf)${auswahl(f, 'termine_kalender', kal, '– keiner –')}</label>
+        <div class="feld">Feiertage${wahlFeld(p, s, f, 'feiertag_kalender', kal, 'keiner')}</div>
+        <div class="feld">Termine (Container nur bei Bedarf)${wahlFeld(p, s, f, 'termine_kalender', kal, 'keiner')}</div>
         ${knopf('Speichern', p.nurAdmin(() => p.wetterquelleSpeichern()), 'amber nur-admin')}`;
 }
 

@@ -102,6 +102,8 @@ const KAT = { gk: (k, st) => `.sheet .kk-tr-zeile[data-k="${k}"] .kk-tr-gr [data
   treffer: () => (litEl('.sheet .kk-treffer') || { innerHTML: '' }).innerHTML };
 const klick = async (ds, n) => { if (typeof ds === 'string') { const e = litEl(ds); if (!e) erwarte(`Element ${ds}`, false); else e.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })); }
   else ereignis.klick(ds); await ruhe(n); };
+/* M16: Wahl mit Suche – Feld k aufklappen und Eintrag eid wählen (null = Zeile „keiner/automatisch“) */
+const waehle = async (k, eid, n = 10) => { await klick(`.sheet [data-kw="${k}"]`, 5); await klick(eid ? `.sheet [data-wahl="${k}"] [data-eid="${eid}"]` : `.sheet [data-wahl="${k}"] [data-k="leer"]`, n); };
 const eingabe = (ds, value) => { if (typeof ds !== 'string') return ereignis.feld(ds, value, 'input');
   const e = litEl(ds); if (!e) return erwarte(`Feld ${ds}`, false); e.value = value; e.dispatchEvent(new Event('input', { bubbles: true, composed: true })); };
 // Entwicklung (Lit, BSM-022 3a): Knöpfe je Meldung über data-meldung
@@ -507,26 +509,28 @@ async function allgemein() {
     await klick({ act: 'container', id: y.id }, 20); await klick({ act: 'sheet', s: 'bereich' }); await klick('.sheet [data-tab="aussehen"]', 10);
     erwarte('BSM-032: Aussehen auf der Container-Seite (Reiter Aussehen)', ui.innerHTML.includes('sym-zeile'));
     await klick('.sheet .sym-zeile', 10);
-    erwarte('BSM-032: Dialog Aussehen mit Vorschau', ui.innerHTML.includes('class="sym-vorschau"') && ui.innerHTML.includes('Doppelcontainer') && ui.innerHTML.includes('data-f="licht"'));
+    erwarte('BSM-032: Dialog Aussehen mit Vorschau', ui.innerHTML.includes('class="sym-vorschau"') && ui.innerHTML.includes('Doppelcontainer') && !!litEl('.sheet [data-kontakt="licht"]') && !litEl('.sheet select'));
     neu(); const dop = !!(y.symbol && y.symbol.doppel); await klick('.sheet .liste .zeile .sw', 10);
     erwarte('BSM-034.01: Aussehen ändert nur den Entwurf', !sy() && panel.s.sheet.sym.doppel === !dop);
     await klick('.sheet [aria-label=\"Rahmen #c62828\"]', 10); erwarte('BSM-032: Rahmenfarbe in der Vorschau', ui.innerHTML.includes('Rahmen #c62828'));
     await klick('.sheet button.zeile[data-art=\"fenster\"]', 10);
     await klick('.sheet [data-z=\"lage\"][data-art=\"tueren\"][data-i=\"0\"] [data-v=\"0.85\"]', 10);
-    { const l = litEl('.sheet select[data-f="licht"]'); if (!l.querySelector('option[value="switch.licht"]')) l.insertAdjacentHTML('beforeend', '<option value="switch.licht">x</option>'); l.value = 'switch.licht'; l.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } await ruhe(10);
     erwarte('BSM-034.01: bis „Speichern“ nichts gesendet', !sy());
     await klick({ act: 'zu' }, 5); erwarte('BSM-034.01: Abbrechen führt zurück auf die Container-Seite', panel.s.sheet && panel.s.sheet.art === 'bereich' && !sy());
     await klick('.sheet .sym-zeile', 10); erwarte('BSM-034.01: Abbrechen hat den Entwurf verworfen', panel.s.sheet.sym === undefined || panel.s.sheet.sym.doppel === dop);
     await klick('.sheet .liste .zeile .sw', 10); await klick('.sheet [aria-label=\"Rahmen #c62828\"]', 10); await klick('.sheet button.zeile[data-art=\"fenster\"]', 10);
     await klick('.sheet [data-z=\"lage\"][data-art=\"tueren\"][data-i=\"0\"] [data-v=\"0.85\"]', 10);
-    { const l = litEl('.sheet select[data-f="licht"]'); if (!l.querySelector('option[value="switch.licht"]')) l.insertAdjacentHTML('beforeend', '<option value="switch.licht">x</option>'); l.value = 'switch.licht'; l.dispatchEvent(new Event('change', { bubbles: true, composed: true })); } await ruhe(10);
+    erwarte('M16: neues Fenster im Entwurf – Sensor erst nach dem Speichern', /erst speichern/.test(litEls('.sheet [data-z="sensor"][data-art="fenster"]').at(-1).textContent));
     await klick({ act: 'sym-speichern' }, 10);
     erwarte('BSM-032: Doppel über baustelle/setzen', sy() && sy().wert.doppel === !dop);
     erwarte('BSM-032: Rahmenfarbe', sy() && sy().wert.rahmen === '#c62828');
     erwarte('BSM-032: Fenster dazu', sy() && sy().wert.fenster.length >= 2);
     erwarte('BSM-032: Lage der Tür', sy() && sy().wert.tueren[0].pos === 0.85);
-    erwarte('BSM-032: Licht-Quelle', sy() && sy().wert.licht === 'switch.licht');
     erwarte('BSM-034.01: nach „Speichern“ zurück auf die Container-Seite', panel.s.sheet && panel.s.sheet.art === 'bereich');
+    await klick('.sheet .sym-zeile', 10); await klick('.sheet [data-kontakt="licht"]', 10);
+    erwarte('M16: Aussehen › Licht „ändern ›“ öffnet Fühler & Kontakte mit der Liste', panel.s.sheet.art === 'bereich' && panel.s.sheet.tab === 'fuehler' && !!litEl('.sheet .cs-picker[data-wahl="licht"] input[type="search"]'));
+    { const e = litEl('.sheet .cs-picker[data-wahl="licht"] [data-eid]'), eid = e && e.dataset.eid; await klick(`.sheet .cs-picker[data-wahl="licht"] [data-eid="${eid}"]`, 20);
+      erwarte('M16/BSM-032: Licht-Quelle gilt sofort', !!eid && sy() && sy().wert.licht === eid); }
     await klick({ act: 'zu' }, 5);
     if (REFERENZ) { await klick({ act: 'tab', v: 'uebersicht' }, 20);
       erwarte('BSM-032: Doppelcontainer, offene Tür und gekipptes Fenster im Symbol', ui.innerHTML.includes('viewBox="0 0 200 131"') && ui.innerHTML.includes('l-7 ') && ui.innerHTML.includes('class="bc-licht"')); }
@@ -914,21 +918,27 @@ const plusTageT = (iso, n) => { const t = new Date(iso + 'T12:00:00Z'); t.setUTC
   await klick({ act: 'container', id: 'lager' }, 20); neu(); await klick({ act: 'sheet', s: 'bereich' }); await klick({ act: 'b-weg' }, 40);
   erwarte('Container entfernen: Geräte über baustelle/geraet (Inventar), Container über den Subentry',
     letzte('baustelle/geraet').some(m => m.schritte.some(s => s.aktion === 'entfernen' && s.geraet === 'lager_r')) && letzte('config_entries/subentries/delete').some(a => a.subentry_id === 'lager'));
-  neu(); await klick({ act: 'sheet', s: 'wetterquelle' }); eingabe({ f: 'regen_sensor' }, 'sensor.regen_dobl'); eingabe({ f: 'termine_kalender' }, 'calendar.baustelle_urlaub'); await klick({ act: 'wetterquelle-speichern' }, 40);
+  neu(); await klick({ act: 'sheet', s: 'wetterquelle' }); await waehle('regen_sensor', 'sensor.regen_dobl'); await waehle('termine_kalender', 'calendar.baustelle_urlaub');
+  erwarte('M16: Wahl im Dialog ändert nur den Entwurf', panel.s.sheet.form.regen_sensor === 'sensor.regen_dobl' && !letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["termine_kalender"]'));
+  await klick({ act: 'wetterquelle-speichern' }, 40);
   const opt = api.find(a => /options\/flow\/F/.test(a[1]));
   erwarte('Wetter über den Options-Dialog', opt && opt[2].wetter === 'weather.dobl' && opt[2].regen_sensor === 'sensor.regen_dobl' && opt[2].status === 'aktiv');
   erwarte('Termine-Kalender über baustelle/setzen', letzte('baustelle/setzen').some(a => JSON.stringify(a.pfad) === '["termine_kalender"]' && a.wert === 'calendar.baustelle_urlaub'));
   /* AN-0022: Kalender für Urlaub – nur beschreibbare (supported_features mit CREATE_EVENT), sonst der Hinweis auf „Lokaler Kalender“ */
-  { await klick({ act: 'sheet', s: 'wetterquelle' }); const sel = () => litEl('.sheet select[data-f="urlaub_kalender"]'), opts = () => [...sel().options].map(o => o.value);
-    erwarte('AN-0022: Urlaub nur mit beschreibbarem Kalender (kein Feiertags-Kalender)', opts().includes('calendar.baustelle_urlaub') && opts().includes('calendar.besprechungen') && !opts().includes('calendar.feiertage_oesterreich')
-      && [...litEl('.sheet select[data-f="feiertag_kalender"]').options].some(o => o.value === 'calendar.feiertage_oesterreich') && !litEl('.sheet [data-k="kein-urlaubskalender"]'));
+  { const liste = k => litEls(`.sheet [data-wahl="${k}"] [data-eid]`), opts = () => liste('urlaub_kalender').map(e => e.dataset.eid);
+    await klick({ act: 'sheet', s: 'wetterquelle' }); await klick('.sheet [data-kw="urlaub_kalender"]', 5);
+    const urlaub = opts(); await klick('.sheet [data-kw="feiertag_kalender"]', 5);
+    erwarte('AN-0022: Urlaub nur mit beschreibbarem Kalender (kein Feiertags-Kalender)', urlaub.includes('calendar.baustelle_urlaub') && urlaub.includes('calendar.besprechungen') && !urlaub.includes('calendar.feiertage_oesterreich')
+      && liste('feiertag_kalender').some(e => e.dataset.eid === 'calendar.feiertage_oesterreich') && !litEl('.sheet [data-k="kein-urlaubskalender"]'));
+    eingabe('.sheet [data-wahl="feiertag_kalender"] input[type="search"]', 'oesterreich'); await ruhe(5);
+    erwarte('M16: Suche filtert nach Name oder Entity-ID', liste('feiertag_kalender').length === 1 && liste('feiertag_kalender')[0].dataset.eid === 'calendar.feiertage_oesterreich');
     await klick({ act: 'zu' });
     const H = panel._hass.states, alt = Object.fromEntries(['calendar.baustelle_urlaub', 'calendar.besprechungen'].map(k => [k, H[k]]));
     for (const [k, z] of Object.entries(alt)) if (z) H[k] = { ...z, attributes: { ...z.attributes, supported_features: 0 } };
     await klick({ act: 'sheet', s: 'wetterquelle' });
     const hinweis = litEl('.sheet [data-k="kein-urlaubskalender"]');
     erwarte('AN-0022: ohne beschreibbaren Kalender Hinweis „Lokaler Kalender“', hinweis && hinweis.textContent.includes('Lokaler Kalender') && hinweis.textContent.includes('Baustelle Urlaub')
-      && opts().filter(v => v).every(v => /nicht beschreibbar/.test([...sel().options].find(o => o.value === v).textContent)));
+      && (await klick('.sheet [data-kw="urlaub_kalender"]', 5), liste('urlaub_kalender').every(e => /nicht beschreibbar/.test(e.textContent))));
     await klick({ act: 'sheet', s: 'urlaub' }); erwarte('AN-0022: Urlaub eintragen zeigt den Hinweis statt des Formulars', ui.innerHTML.includes('Lokaler Kalender') && !litEl('.sheet input[type="date"]'));
     await klick({ act: 'zu' }); for (const [k, z] of Object.entries(alt)) if (z) H[k] = z; await panel.neuZeichnen(); }
   neu(); await klick({ act: 'sheet', s: 'name' }); eingabe({ f: 'name' }, 'ÖWG Dobl'); await klick({ act: 'name-speichern' });

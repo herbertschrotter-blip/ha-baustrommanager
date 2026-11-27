@@ -2956,6 +2956,57 @@ var GRUNDLAGEN_CSS = `
 .gl-bl { margin-top: 12px; } .gl-bl .bl-regeln { margin-top: 0; }
 `;
 
+// src/ansichten/wahl.js
+var TREFFER = 30;
+function zustandText(p4, eid) {
+  const z2 = eid && p4._hass && p4._hass.states[eid];
+  if (!z2) return "nicht gefunden";
+  if (["unavailable", "unknown"].includes(z2.state)) return "nicht erreichbar";
+  if (eid.startsWith("binary_sensor.")) return z2.attributes.device_class === "light" ? z2.state === "on" ? "an" : "aus" : z2.state === "on" ? "offen" : "zu";
+  if (eid.startsWith("climate.")) return z2.attributes.current_temperature !== void 0 ? `${de(Number(z2.attributes.current_temperature), 1)} °C` : z2.state;
+  if (eid.startsWith("weather.")) return z2.attributes.temperature !== void 0 ? `${z2.state} · ${de(Number(z2.attributes.temperature), 1)} °C` : z2.state;
+  if (eid.startsWith("calendar.")) return z2.state === "on" ? "Termin läuft" : "kein Termin jetzt";
+  return `${z2.state}${z2.attributes.unit_of_measurement ? ` ${z2.attributes.unit_of_measurement}` : ""}`;
+}
+function wahlListe(p4, s4, o6) {
+  const q = (s4.q || "").trim().toLowerCase(), alle = o6.liste;
+  const treffer2 = q ? alle.filter(([eid, n4]) => String(n4).toLowerCase().includes(q) || eid.toLowerCase().includes(q)) : alle;
+  return b2`<div class="cs-picker" data-wahl=${o6.platz}><input type="search" placeholder="Suchen: Name oder Entity-ID" data-f="suche" .value=${l3(s4.q || "")} @input=${(ev) => {
+    s4.q = ev.target.value;
+    p4.neuZeichnen();
+  }}>
+      ${o6.leer ? b2`<button class="zeile cs-pk" data-k="leer" @click=${p4.nurAdmin(() => o6.nimm(null))}><div><b>${o6.leer}</b></div><span class="leise">${o6.wert ? "" : "✓"}</span></button>` : A}
+      ${treffer2.slice(0, TREFFER).map(([eid, n4]) => b2`<button class="zeile cs-pk ${eid === o6.wert ? "kw-an" : ""}" data-eid=${eid} @click=${p4.nurAdmin(() => o6.nimm(eid))}><div><b>${n4}</b><div class="cs-id">${eid}</div></div><span class="leise">${eid === o6.wert ? "✓ " : ""}${zustandText(p4, eid)}</span></button>`)}
+      ${treffer2.length > TREFFER ? b2`<div class="leise">… ${treffer2.length - TREFFER} weitere – genauer suchen</div>` : treffer2.length ? A : b2`<div class="leer">Nichts gefunden</div>`}
+      <div class="cs-pk-fuss">${o6.fuss || b2`<span class="leise">${treffer2.length} von ${alle.length}</span>`}<button class="cs-link" @click=${() => o6.schliessen()}>schließen</button></div></div>`;
+}
+function wahlFeld(p4, s4, ziel2, k2, liste2, leer2) {
+  const eid = ziel2[k2] || "", auf = s4.wahl === k2;
+  const zu = () => {
+    s4.wahl = null;
+    s4.q = "";
+    p4.neuZeichnen();
+  };
+  return b2`<div class="kw-feld" data-f=${k2}><button class="zeile kw-wert" data-kw=${k2} @click=${() => {
+    s4.wahl = auf ? null : k2;
+    s4.q = "";
+    p4.neuZeichnen();
+  }}>
+      <div>${eid ? b2`<b>${p4.name(eid) || eid}</b><div class="cs-id">${eid}</div>` : b2`<b class="leise">${leer2 || "keiner"}</b>`}</div>
+      <span class="kw-r">${eid ? b2`<span class="leise">${zustandText(p4, eid)}</span>` : A}<span class="blau">${auf ? "schließen" : "ändern"}</span></span></button>
+    ${auf ? wahlListe(p4, s4, { platz: k2, liste: liste2, wert: eid, leer: leer2, nimm: (v2) => {
+    ziel2[k2] = v2 || "";
+    zu();
+  }, schliessen: zu }) : A}</div>`;
+}
+var WAHL_CSS = `
+.kw-feld { margin-top: 4px; }
+.kw-feld > .kw-wert { width: 100%; box-sizing: border-box; border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 8px 10px; background: rgba(127,127,127,.06); text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.kw-r { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; text-align: right; }
+.kw-feld .cs-picker { margin: 6px 0 4px; }
+.cs-pk.kw-an b { color: var(--blau); }
+@container (max-width: 520px) { .kw-feld > .kw-wert { flex-wrap: wrap; } .kw-r { justify-content: flex-start; } }`;
+
 // src/ansichten/einblendungen-baustelle.js
 var GRIFF3 = b2`<div class="griff"></div>`;
 var LAEDT3 = b2`<div class="leer">Lädt …</div>`;
@@ -2964,12 +3015,6 @@ var feld = (ziel2, k2, typ, ph, extra = {}) => b2`<input type=${typ || A} step=$
   ziel2[k2] = e6.target.value;
 }}>`;
 var optionenVorlage = (liste2, aktuell, leer2) => b2`${leer2 ? b2`<option value="">${leer2}</option>` : A}${liste2.map(([v2, n4]) => b2`<option value=${v2} ?selected=${v2 === aktuell}>${n4}</option>`)}`;
-var auswahl = (ziel2, k2, liste2, leer2) => {
-  const setze = (e6) => {
-    ziel2[k2] = e6.target.value;
-  };
-  return b2`<select data-f=${k2} @input=${setze} @change=${setze}>${optionenVorlage(liste2, ziel2[k2], leer2)}</select>`;
-};
 function preisListeVorlage(p4) {
   const e6 = p4.d.e, H2 = p4.z.HEUTE, L2 = (e6.preise.length ? e6.preise : [{ ab: null, preis: e6.preis }]).slice().sort((a3, b3) => String(b3.ab).localeCompare(String(a3.ab))), jetzt = L2.find((x2) => !x2.ab || x2.ab <= H2);
   return b2`<div class="gruppe-t">Strompreis</div>${L2.map((x2, i7) => {
@@ -3006,14 +3051,14 @@ function wetterquelle(p4, s4) {
   const f3 = s4.form, kal = p4.entitaeten((x2) => x2.entity_id.startsWith("calendar.")), urlaubKal = p4.entitaeten(beschreibbar);
   const alt = f3.urlaub_kalender && !urlaubKal.some(([v2]) => v2 === f3.urlaub_kalender) ? [[f3.urlaub_kalender, `${p4.name(f3.urlaub_kalender) || f3.urlaub_kalender} (nicht beschreibbar)`]] : [];
   return b2`${GRIFF3}<h3>Wetter und Kalender</h3>
-        <label class="feld">Wetter${auswahl(f3, "wetter", p4.entitaeten((x2) => x2.entity_id.startsWith("weather.")), "– keins –")}</label>
-        <label class="feld">Außentemperatur${auswahl(f3, "temp_sensor", p4.entitaeten((x2) => x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "temperature"), "aus der Vorhersage")}</label>
-        <label class="feld">Regenmenge${auswahl(f3, "regen_sensor", p4.entitaeten((x2) => x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "precipitation"), "aus der Vorhersage")}</label>
+        <div class="feld">Wetter${wahlFeld(p4, s4, f3, "wetter", p4.entitaeten((x2) => x2.entity_id.startsWith("weather.")), "keins")}</div>
+        <div class="feld">Außentemperatur${wahlFeld(p4, s4, f3, "temp_sensor", p4.entitaeten((x2) => x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "temperature"), "aus der Vorhersage")}</div>
+        <div class="feld">Regenmenge${wahlFeld(p4, s4, f3, "regen_sensor", p4.entitaeten((x2) => x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "precipitation"), "aus der Vorhersage")}</div>
         <div class="gruppe-t">Kalender</div>
-        <label class="feld">Urlaub${auswahl(f3, "urlaub_kalender", [...urlaubKal, ...alt], "– keiner –")}</label>
+        <div class="feld">Urlaub${wahlFeld(p4, s4, f3, "urlaub_kalender", [...urlaubKal, ...alt], "keiner")}</div>
         ${!urlaubKal.length ? b2`<div class="leise kal-hinweis" data-k="kein-urlaubskalender">${KEIN_URLAUBSKALENDER}</div>` : alt.length ? b2`<div class="leise kal-hinweis amber-t">Der gewählte Kalender kann keine Termine anlegen – Urlaub eintragen geht damit nicht.</div>` : A}
-        <label class="feld">Feiertage${auswahl(f3, "feiertag_kalender", kal, "– keiner –")}</label>
-        <label class="feld">Termine (Container nur bei Bedarf)${auswahl(f3, "termine_kalender", kal, "– keiner –")}</label>
+        <div class="feld">Feiertage${wahlFeld(p4, s4, f3, "feiertag_kalender", kal, "keiner")}</div>
+        <div class="feld">Termine (Container nur bei Bedarf)${wahlFeld(p4, s4, f3, "termine_kalender", kal, "keiner")}</div>
         ${knopf2("Speichern", p4.nurAdmin(() => p4.wetterquelleSpeichern()), "amber nur-admin")}`;
 }
 var abschliessen = (p4) => b2`${GRIFF3}<h3>Baustelle abschließen?</h3><div class="leise">Die Heizung wird abgeschaltet. Als Ende wird heute (${datum(p4.z.HEUTE)}) eingetragen. Werte und Diagramme bleiben im Verlauf, gelöscht wird nichts.</div>${knopf2("Abschließen", p4.nurAdmin(() => p4.abschliessen()), "rot nur-admin")}${knopf2("Abbrechen", () => p4.schliessen(), "leise-k")}`;
@@ -4492,30 +4537,22 @@ function tabHeizung(p4, s4, b3, E2) {
       ${G ? zeile3("groesse", "Größe", `${gArt === "doppel" ? "Doppelcontainer" : gArt === "frei" ? "eigene Fläche" : "Einzelcontainer"} ≈ ${de(G.m2, 1)} m² · ${de(G.hoehe, 2)} m hoch – für kWh je m² und als Startwert der lernenden Regelung`, groesse) : A}
     </div>`;
 }
-function zustandText(p4, eid) {
-  const z2 = eid && p4._hass && p4._hass.states[eid];
-  if (!z2) return "nicht gefunden";
-  if (["unavailable", "unknown"].includes(z2.state)) return "nicht erreichbar";
-  if (eid.startsWith("binary_sensor.")) return z2.attributes.device_class === "light" ? z2.state === "on" ? "an" : "aus" : z2.state === "on" ? "offen" : "zu";
-  if (eid.startsWith("climate.")) return z2.attributes.current_temperature !== void 0 ? `${de(Number(z2.attributes.current_temperature), 1)} °C` : z2.state;
-  return `${z2.state}${z2.attributes.unit_of_measurement ? ` ${z2.attributes.unit_of_measurement}` : ""}`;
-}
-function wahlListe(p4, s4, b3, platz, filter) {
-  const q = (s4.q || "").trim().toLowerCase(), alle = p4.entitaeten(filter);
-  const treffer2 = q ? alle.filter(([eid, n4]) => n4.toLowerCase().includes(q) || eid.toLowerCase().includes(q)) : alle;
+function csWahl(p4, s4, b3, platz, filter, wert2) {
   const nimm = (eid) => platz === "fuehler" ? p4.csFuehler(b3, eid) : p4.csKontakt(b3, platz, eid);
-  return b2`<div class="cs-picker" data-wahl=${platz}><input type="search" placeholder="Suchen: Name oder Entity-ID" data-f="suche" .value=${l3(s4.q || "")} @input=${(ev) => {
-    s4.q = ev.target.value;
-    p4.neuZeichnen();
-  }}>
-      ${treffer2.slice(0, 30).map(([eid, n4]) => b2`<button class="zeile cs-pk" data-eid=${eid} @click=${p4.nurAdmin(() => nimm(eid))}><div><b>${n4}</b><div class="cs-id">${eid}</div></div><span class="leise">${zustandText(p4, eid)}</span></button>`)}
-      ${treffer2.length > 30 ? b2`<div class="leise">… ${treffer2.length - 30} weitere – genauer suchen</div>` : treffer2.length ? A : b2`<div class="leer">Nichts gefunden</div>`}
-      <div class="cs-pk-fuss"><button class="cs-link" @click=${p4.nurAdmin(() => p4.assistentAuf({ bid: b3.id, vorgabe: true }))}>Neues Gerät mit dem Assistenten ›</button>
-        <button class="cs-link" data-k="keiner" @click=${p4.nurAdmin(() => nimm(null))}>keiner</button><button class="cs-link" @click=${() => {
-    s4.wahl = null;
-    s4.q = "";
-    p4.neuZeichnen();
-  }}>schließen</button></div></div>`;
+  return wahlListe(p4, s4, {
+    platz,
+    liste: p4.entitaeten(filter),
+    wert: wert2 || null,
+    leer: null,
+    nimm,
+    schliessen: () => {
+      s4.wahl = null;
+      s4.q = "";
+      p4.neuZeichnen();
+    },
+    fuss: b2`<button class="cs-link" @click=${p4.nurAdmin(() => p4.assistentAuf({ bid: b3.id, vorgabe: true }))}>Neues Gerät mit dem Assistenten ›</button>
+      <button class="cs-link" data-k="keiner" @click=${p4.nurAdmin(() => nimm(null))}>keiner</button>`
+  });
 }
 function tabFuehler(p4, s4, b3, E2) {
   const c4 = p4.symAus(b3), tuer1 = c4.tueren[0] && c4.tueren[0].sensor || b3.tuer && b3.tuer.eid || null;
@@ -4537,7 +4574,7 @@ function tabFuehler(p4, s4, b3, E2) {
     eid ? b2`${p4.name(eid)} · ${zustandText(p4, eid)}<div class="cs-id">${eid}</div>` : sub || "keiner zugeordnet",
     eid ? b2`<button class="chip glas-panel nur-admin" @click=${p4.nurAdmin(() => auf(k2))}>ändern</button>` : b2`<button class="chip glas-panel cs-plus nur-admin" @click=${p4.nurAdmin(() => auf(k2))}>+ zuordnen</button>`
   )}
-        ${s4.wahl === k2 ? wahlListe(p4, s4, b3, k2, filter) : A}`)}
+        ${s4.wahl === k2 ? csWahl(p4, s4, b3, k2, filter, eid) : A}`)}
       ${zeile3("tuerpause", "Tür-Pause", "Tür oder Fenster offen → die Heizung pausiert", b2`<span class="cs-wert">${E2.tuer ? E2.tuer.text : "–"}</span>`, E2.tuer, marke2(p4, E2.tuer))}
     </div>
     <div class="leise cs-fuss">Wie viele Türen und Fenster das Symbol hat und wo sie sitzen, steht unter 🏠 Aussehen. Die Suche geht über alle passenden Entitäten in Home Assistant.</div>`;
@@ -4674,7 +4711,7 @@ var text = (ziel2, k2, ph, nach, extra = {}) => b2`<input type=${extra.typ || A}
   ziel2[k2] = e6.target.value;
   if (nach) nach();
 }}>`;
-var auswahl2 = (ziel2, k2, inhalt, nach, marke3, i7) => {
+var auswahl = (ziel2, k2, inhalt, nach, marke3, i7) => {
   const setze = (e6) => {
     ziel2[k2] = e6.target.value;
     if (nach) nach();
@@ -4749,10 +4786,13 @@ function aussehen(p4, s4) {
     tueren: c4.tueren.map((t5, i7) => ({ ...t5, offen: !!(ist.tueren[i7] && ist.tueren[i7].offen) })),
     fenster: c4.fenster.map((f3, i7) => ({ ...f3, zustand: ist.fenster[i7] && ist.fenster[i7].zustand || "zu" }))
   };
-  const kontakte = p4.entitaeten((x2) => x2.entity_id.startsWith("binary_sensor.") && ["door", "window", "opening", "garage_door"].includes(x2.attributes.device_class));
-  const lichter = p4.entitaeten((x2) => /^(light|switch)\./.test(x2.entity_id) || x2.entity_id.startsWith("binary_sensor.") && x2.attributes.device_class === "light" || x2.entity_id.startsWith("sensor.") && x2.attributes.device_class === "illuminance");
+  const gespeichert = p4.symAus(b3);
+  const sensor2 = (eid, platz, da, leer2) => b2`<span class="kw-r">${eid ? b2`<span><b>${p4.name(eid) || eid}</b> <span class="leise">· ${zustandText(p4, eid)}</span></span>` : b2`<span class="leise">${leer2}</span>`}
+      ${da ? b2`<button class="cs-link nur-admin" data-kontakt=${platz} @click=${p4.nurAdmin((e6) => {
+    e6.preventDefault();
+    p4.aussehenZuKontakt(b3, platz);
+  })}>ändern ›</button>` : b2`<span class="leise">erst speichern</span>`}</span>`;
   const seg2 = (fn, wert2, opts) => b2`<div class="seg klein">${opts.map(([v2, t5]) => b2`<button data-v=${v2} class=${String(wert2) === String(v2) ? "on" : ""} @click=${() => fn(v2)}>${t5}</button>`)}</div>`;
-  const wahl2 = (wert2, fn, marke3) => b2`<select data-f=${marke3 || A} @change=${(e6) => fn(e6.target.value)}>${wert2}</select>`;
   const element = (art, x2, i7, n4) => b2`<div class="zeile"><b>${art === "tueren" ? "🚪 Tür" : "🪟 Fenster"} ${i7 + 1}</b>${n4 > 1 ? b2`<button class="knopf klein" aria-label="entfernen" @click=${() => aendern((k2) => {
     if (k2[art].length > 1) k2[art].splice(i7, 1);
   })}>✕</button>` : A}</div>
@@ -4764,9 +4804,12 @@ function aussehen(p4, s4) {
   }), x2.pos < 0.4 ? 0.15 : x2.pos > 0.6 ? 0.85 : 0.5, [[0.15, "links"], [0.5, "Mitte"], [0.85, "rechts"]]) : seg2((v2) => aendern((k2) => {
     k2[art][i7].pos = +v2;
   }), x2.pos, [[0.15, "links"], [0.33, "◧"], [0.5, "Mitte"], [0.67, "◨"], [0.85, "rechts"]])}</div>
-      <label class="zeile unter"><span>${art === "tueren" ? "Türsensor" : "Fenstersensor"}</span>${wahl2(optionenVorlage(kontakte, x2.sensor || "", art === "tueren" && i7 === 0 ? "wie Türkontakt des Containers" : "keiner"), (v2) => aendern((k2) => {
-    k2[art][i7].sensor = v2 || null;
-  }))}</label>`;
+      <div class="zeile unter" data-z="sensor" data-art=${art} data-i=${i7}><span>${art === "tueren" ? "Türsensor" : "Fenstersensor"}</span>${sensor2(
+    art === "tueren" && i7 === 0 ? x2.sensor || b3.tuer && b3.tuer.eid || null : x2.sensor,
+    `${art === "tueren" ? "tuer" : "fenster"}:${i7}`,
+    !!(gespeichert[art] && gespeichert[art][i7]),
+    art === "tueren" && i7 === 0 ? "wie Türkontakt des Containers" : "keiner"
+  )}</div>`;
   const neu = (art) => aendern((k2) => {
     if (k2[art].length < (art === "tueren" ? 2 : 4)) {
       const frei = [0.15, 0.33, 0.5, 0.67, 0.85].find((v2) => !k2[art].some((y3) => y3.wand === "front" && y3.pos === v2)) ?? 0.5;
@@ -4792,10 +4835,8 @@ function aussehen(p4, s4) {
   })}></span></div></div>
       <div class="glas-panel liste"><div class="gruppe">Türen · ${c4.tueren.length} von 2</div>${c4.tueren.map((x2, i7) => element("tueren", x2, i7, c4.tueren.length))}${c4.tueren.length < 2 ? b2`<button class="zeile" data-art="tueren" @click=${() => neu("tueren")}><span class="blau">+ Tür</span></button>` : A}</div>
       <div class="glas-panel liste"><div class="gruppe">Fenster · ${c4.fenster.length} von 4</div>${c4.fenster.map((x2, i7) => element("fenster", x2, i7, c4.fenster.length))}${c4.fenster.length < 4 ? b2`<button class="zeile" data-art="fenster" @click=${() => neu("fenster")}><span class="blau">+ Fenster</span></button>` : A}</div>
-      <div class="glas-panel liste"><div class="gruppe">Licht im Symbol</div><label class="zeile"><div><span>Licht kommt von</span><div class="leise">Fenster leuchten, wenn im Container Licht brennt</div></div>${wahl2(optionenVorlage(lichter, c4.licht || "", "keins"), (v2) => aendern((k2) => {
-    k2.licht = v2 || null;
-  }), "licht")}</label></div>
-      <div class="leise p-fuss">Türen sitzen links, mittig oder rechts an ihrer Wand; mehrere Fenster verteilen sich gleichmäßig auf den Platz daneben. Tür offen/zu, Fenster offen/gekippt/zu und Licht kommen von den zugeordneten Sensoren; ohne Sensor bleibt das Element zu bzw. dunkel.</div>
+      <div class="glas-panel liste"><div class="gruppe">Licht im Symbol</div><div class="zeile" data-z="licht"><div><span>Licht kommt von</span><div class="leise">Fenster leuchten, wenn im Container Licht brennt</div></div>${sensor2(c4.licht, "licht", true, "keins")}</div></div>
+      <div class="leise p-fuss">Türen sitzen links, mittig oder rechts an ihrer Wand; mehrere Fenster verteilen sich gleichmäßig auf den Platz daneben. Tür offen/zu, Fenster offen/gekippt/zu und Licht kommen von den zugeordneten Sensoren (gewählt unter Fühler & Kontakte); ohne Sensor bleibt das Element zu bzw. dunkel.</div>
       ${b3.symbol && b3.symbol.eigen && !s4.std ? b2`<button class="knopf" @click=${() => p4.symStandard()}>Standard (eine Tür, ein Fenster)</button>` : A}
       ${knopf8("Speichern", p4.nurAdmin(() => p4.symSpeichern(b3)), "amber nur-admin")}${knopf8("Abbrechen", () => p4.schliessen(), "leise-k")}`;
 }
@@ -4814,11 +4855,11 @@ function geraetEdit(p4, s4) {
         ${x2 ? jetztVorlage(p4, x2) : A}
         <div class="gruppe-t">Einstellungen</div>
         <label class="feld">Name${text(f3, "n")}</label>
-        <label class="feld">Shelly (Schalter)${auswahl2(f3, "schalter", optionenVorlage(p4.freieSchalter(g2.schalter).map(([v2, n4]) => [v2, `${n4} (${v2})`]), f3.schalter))}</label>
-        <div class="raster-2"><label class="feld">Typ${auswahl2(f3, "typ", typen.map((t5) => b2`<option ?selected=${f3.typ === t5}>${t5}</option>`))}</label>
-          <label class="feld">${b3.pumpe ? "Pumpenschacht" : "Container"}${auswahl2(f3, "bereich", optionenVorlage(d3.bereiche.filter((x3) => !!x3.pumpe === !!b3.pumpe).map((x3) => [x3.id, x3.name]), f3.bereich))}</label></div>
-        <label class="feld">Leistungssensor${auswahl2(f3, "leistung", optionenVorlage(leistung, f3.leistung, auto(g2.leistung, g2.leistungEigen)))}</label>
-        <label class="feld">Energiesensor${auswahl2(f3, "energie", optionenVorlage(energie, f3.energie, auto(g2.energie, g2.energieEigen)))}</label>
+        <div class="feld">Shelly (Schalter)${wahlFeld(p4, s4, f3, "schalter", p4.freieSchalter(g2.schalter), null)}</div>
+        <div class="raster-2"><label class="feld">Typ${auswahl(f3, "typ", typen.map((t5) => b2`<option ?selected=${f3.typ === t5}>${t5}</option>`))}</label>
+          <label class="feld">${b3.pumpe ? "Pumpenschacht" : "Container"}${auswahl(f3, "bereich", optionenVorlage(d3.bereiche.filter((x3) => !!x3.pumpe === !!b3.pumpe).map((x3) => [x3.id, x3.name]), f3.bereich))}</label></div>
+        <div class="feld">Leistungssensor${wahlFeld(p4, s4, f3, "leistung", leistung, auto(g2.leistung, g2.leistungEigen))}</div>
+        <div class="feld">Energiesensor${wahlFeld(p4, s4, f3, "energie", energie, auto(g2.energie, g2.energieEigen))}</div>
         <div class="zeile" data-zeile="status"><div><b>Status</b><div class="leise">nur „aktiv“ schaltet die Automatik, zählt in der Staffelung und meldet Warnungen; gilt auch im Inventar</div></div>
           <div class="seg klein">${[["aktiv", "aktiv"], ["inaktiv", "inaktiv"], ["verliehen", "verliehen"], ["defekt", "defekt"]].map(([v2, t5]) => b2`<button data-v=${v2} class=${f3.status === v2 ? "on" : ""} @click=${() => {
     f3.status = v2;
@@ -7377,10 +7418,10 @@ function einblendungen(s4) {
   return s4;
 }
 var STATISCH = "/baustelle_static";
-var SEITE_VERSION = "0.8.205";
+var SEITE_VERSION = "0.8.206";
 var LIT_SHEETS = ["melden", "leistung", "heizzeit-c", "bedarf", "termin", "lernen", "hz", "heizplan", "az", "ausnahme", "az-neu", ...Object.keys(BAUSTELLE_EINBLENDUNGEN), ...Object.keys(EINRICHTUNG_EINBLENDUNGEN), "np-plug", ...Object.keys(INVENTAR_EINBLENDUNGEN), ...Object.keys(ASSISTENT_EINBLENDUNGEN), ...Object.keys(GERAETE_EINBLENDUNGEN), ...Object.keys(HEIZPERIODE_EINBLENDUNGEN), "kk-katalog", ...Object.keys(UEBERSICHT_EINBLENDUNGEN), "aw-detail", "aw-einstellen"];
 var BaustellePanel = class extends i4 {
-  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(VERLAUF_DETAIL_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
+  static styles = [r(CSS), r(GLAS_CSS), r(INV_CSS), r(ASSISTENT_CSS), r(CS_CSS), r(WAHL_CSS), r(GERAETE_CSS), r(HEIZPERIODE_CSS), r(GRUNDLAGEN_CSS), r(VERLAUF_DETAIL_CSS), r(BASELINE_CSS), r(WISCHEN_CSS), r(START_STIL)];
   // BSM-022 2b: Stile über Lit (adoptedStyleSheets)
   constructor() {
     super();
@@ -9099,6 +9140,13 @@ var BaustellePanel = class extends i4 {
     return this.unterDialog({ art: "aussehen", id: x2.id });
   }
   // BSM-032
+  /* M16: Sensor im Symbol ändern = Container-Seite › Fühler & Kontakte mit offener Liste für den Platz (tuer:i, fenster:i, licht);
+     ein nicht gespeicherter Entwurf des Aussehens verfällt (Sensoren gelten dort sofort) */
+  aussehenZuKontakt(x2, platz) {
+    this.s.cid = x2.id;
+    this.s.sheet = { art: "bereich", tab: "fuehler", wahl: platz, q: "" };
+    return this.neuZeichnen();
+  }
   /* Container-Seite (UI-Bericht M8, Mockup container-seite.html, Herbert 24.11.2026): jede Änderung gilt sofort, kein Entwurf */
   csTab(t5) {
     const s4 = this.s.sheet;
